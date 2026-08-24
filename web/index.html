@@ -1205,6 +1205,7 @@ async function boot(){
   try{
     // 신원은 서버가 파생 — 표시 라벨 1회 + 등록 계정의 저장 설정 적용
     window.__whoami = await (await fetch("/api/whoami")).json();
+    updateTitle();
     refreshUsage();
     setInterval(() => { if (!document.hidden) refreshUsage(); }, 60000);
     renderWhoami();
@@ -1500,6 +1501,7 @@ function filtered(skipQ){
 }
 
 function render(){
+  updateTitle();
   // L0 (REQ-040): 살아있는 terminal 셸은 절대 재빌드하지 않는다 — 15s catalog
   // 갱신(refreshCatalog→render)이 입력줄 DOM을 파괴해 타이핑을 날리던 치명
   // 결함의 차단점. 터미널 갱신은 자체 SSE/폴이 append로만 수행한다.
@@ -2031,6 +2033,14 @@ async function refreshUsage(){
       (L.weekly_scoped
         ? ` · ${esc((L.weekly_scoped.scope_name || "model").toLowerCase())} ${pct(L.weekly_scoped)}` : "");
   }catch(e){ /* 다음 폴 */ }
+}
+
+/* 브라우저 탭 제목 = 워크스페이스명 · 선택 프로젝트 (REQ-20260824-064) —
+   다중 워크스페이스 대시보드를 브라우저 탭에서 구분한다. */
+function updateTitle(){
+  const ws = (window.__whoami || {}).workspace || "section9";
+  const pj = ($("#f-project") || {}).value || "";
+  document.title = pj ? `${ws} · ${pj}` : ws;
 }
 
 function stopChat(){

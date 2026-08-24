@@ -219,6 +219,7 @@ def whoami_info():
     raw = resolve_user()
     users = registered_users()
     name = raw if raw in users else ""
+    workspace = os.path.basename(ROOT.rstrip("/")) or "section9"
     if not name:
         for u in users:
             accts = user_profile(u).get("os_accounts") or []
@@ -226,7 +227,7 @@ def whoami_info():
                 name = u
                 break
     if name:
-        return {"user": name, "display": user_profile(name).get("display", ""),
+        return {"workspace": workspace, "user": name, "display": user_profile(name).get("display", ""),
                 "role": user_role(name), "machine": current_machine(),
                 "registered": True}
     return {"user": raw, "display": "", "role": "",
@@ -941,11 +942,17 @@ def rework_claimed(req_id, win=120):
 
 # ------------------------------------------------- dashboard chat (REQ-032)
 # 세션 간 메시징 없이 파일 수신함으로 세션을 깨운다: 각 세션은 자기 수신함
-# state/chat/inbox-<sid8>.jsonl 을 Monitor(tail -f)로 감시하고(SessionStart 훅이
+# state/terminal/inbox-<sid8>.jsonl 을 Monitor(tail -f)로 감시하고(SessionStart 훅이
 # arming 지시 주입), 대시보드/서버는 JSON 한 줄 append만 한다.
 
 def chat_inbox_path(sid8, make=False):
-    d = os.path.join(ROOT, "state", "chat")
+    d = os.path.join(ROOT, "state", "terminal")
+    legacy = os.path.join(ROOT, "state", "chat")
+    if os.path.isdir(legacy) and not os.path.isdir(d):
+        try:
+            os.rename(legacy, d)   # 1회 이전 (REQ-20260824-063: Terminal 개명 정합)
+        except OSError:
+            pass
     if make:
         os.makedirs(d, exist_ok=True)
     return os.path.join(d, f"inbox-{safe_name(sid8)}.jsonl")
@@ -4213,7 +4220,7 @@ def cmd_serve(args):
                         raise ValueError("base64 디코딩 실패")
                     if not blob:
                         raise ValueError("빈 첨부")
-                    updir = os.path.join(ROOT, "state", "chat", "uploads")
+                    updir = os.path.join(ROOT, "state", "terminal", "uploads")
                     os.makedirs(updir, exist_ok=True)
                     stamp = now_iso().replace(":", "").replace("-", "")[:15]
                     path = os.path.join(updir, f"{stamp}-{name}")

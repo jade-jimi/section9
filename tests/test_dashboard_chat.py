@@ -1,6 +1,6 @@
 """대시보드 채팅 테스트 (REQ-20260824-032 아키텍처 v3).
 
-세션 간 메시징 없이 수신함 파일(state/chat/inbox-<sid8>.jsonl) append로
+세션 간 메시징 없이 수신함 파일(state/terminal/inbox-<sid8>.jsonl) append로
 세션을 깨운다. 서버 라우트(/api/chat*)·대상 자동 선택·전이 즉시 통지·훅의
 arming 지시 주입을 검증한다.
 
@@ -101,7 +101,7 @@ class TestDashboardChat(unittest.TestCase):
             return e.code, json.loads(e.read().decode())
 
     def inbox(self, sid):
-        p = os.path.join(self.tmp, "state", "chat", f"inbox-{sid}.jsonl")
+        p = os.path.join(self.tmp, "state", "terminal", f"inbox-{sid}.jsonl")
         if not os.path.exists(p):
             return []
         with open(p, encoding="utf-8") as f:
@@ -254,7 +254,7 @@ class TestDashboardChat(unittest.TestCase):
         env_t = {"S9_SESSION": "tailsess"}
         self.cli("log", "session start", env_extra=env_t)
         self.cli("bind", "attach_pid", "999999996", env_extra=env_t)
-        inbox = os.path.join(self.tmp, "state", "chat", "inbox-tailsess.jsonl")
+        inbox = os.path.join(self.tmp, "state", "terminal", "inbox-tailsess.jsonl")
         os.makedirs(os.path.dirname(inbox), exist_ok=True)
         open(inbox, "a").close()
         tail = subprocess.Popen(["tail", "-f", inbox],
@@ -297,7 +297,7 @@ class TestDashboardChat(unittest.TestCase):
         self.assertIn("tail -f", r.stdout)
         # 수신함 파일이 미리 생성됨
         self.assertTrue(os.path.exists(os.path.join(
-            self.tmp, "state", "chat", "inbox-hooksess.jsonl")))
+            self.tmp, "state", "terminal", "inbox-hooksess.jsonl")))
         # resume에도 arming 지시는 주입된다 (Monitor는 재개 후 다시 arm 필요)
         r2 = subprocess.run([HOOK, "start"],
                             input=json.dumps({"session_id": "hooksess-full-id",

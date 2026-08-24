@@ -118,7 +118,8 @@ def main():
         try:
             root = os.environ.get("S9_ROOT") or os.path.dirname(
             os.path.dirname(os.path.realpath(__file__)))
-            inbox = os.path.join(root, "state", "chat", f"inbox-{session}.jsonl")
+            inbox = os.path.join(root, "state", "terminal",
+                                 f"inbox-{session}.jsonl")
             os.makedirs(os.path.dirname(inbox), exist_ok=True)
             open(inbox, "a").close()
             chat_ctx = (

@@ -125,7 +125,7 @@ class TestTerminalApi(unittest.TestCase):
         self.assertTrue(os.path.isabs(res["path"]))
         with open(res["path"], "rb") as f:
             self.assertEqual(f.read(), b"\x89PNG fakeimg")
-        self.assertIn(os.path.join("state", "chat", "uploads"), res["path"])
+        self.assertIn(os.path.join("state", "terminal", "uploads"), res["path"])
         code, res = self.post("/api/chat/upload",
                               {"name": "bad.bin", "data": "@@not-base64@@"})
         self.assertEqual(code, 400)
