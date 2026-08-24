@@ -28,11 +28,11 @@ git이 머신 간 전송 계층이 된다.
 
 ```bash
 # 관리자: 인스턴스 생성 (한 번)
-s9 instance init git@github.com:me/itcen-work.git        # --create 시 gh로 리포 자동 생성
+s9 instance init git@github.com:your-org/your-org-work.git        # --create 시 gh로 리포 자동 생성
 # 팀원: 합류
-git clone <인스턴스URL> ~/itcen-work && cd ~/itcen-work && bin/s9-install && bin/s9 code
+git clone <인스턴스URL> ~/your-org-work && cd ~/your-org-work && bin/s9-install && bin/s9 code
 # 관리자: 하네스 업그레이드 배포
-cd ~/itcen-work && git fetch upstream && git merge upstream/main && git push
+cd ~/your-org-work && git fetch upstream && git merge upstream/main && git push
 ```
 
 충돌이 구조적으로 없는 이유: 데이터 파일은 업스트림에 없고, 코어 경로는 인스턴스에서
