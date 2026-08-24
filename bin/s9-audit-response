@@ -21,6 +21,18 @@ S9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
 MAX_CHARS = 12000
 
 
+
+def _detect_root(data):
+    """세션 cwd가 s9 리포(인스턴스)면 그 루트를 S9_ROOT로 승격 — 한 머신에서
+    업스트림 카피와 인스턴스를 병행할 때 기록이 세션 위치를 따라간다
+    (REQ-20260824-053). 명시된 S9_ROOT가 항상 우선."""
+    if os.environ.get("S9_ROOT"):
+        return
+    cwd = (data.get("cwd") or "").strip()
+    if cwd and os.path.exists(os.path.join(cwd, "bin", "s9")) \
+            and os.path.isdir(os.path.join(cwd, "vault")):
+        os.environ["S9_ROOT"] = cwd
+
 def mirror_transcript(tp):
     """transcript를 section9/streams/ 로 복사 — 파일명은 원본 basename(=전체SID.jsonl).
     resume이 찾는 이름과 100% 일치해 크로스머신 resume 가능(DOC-20260823-002).
@@ -66,6 +78,7 @@ def main():
     if os.environ.get("S9_AUDIT", "").lower() == "off":
         return
     data = json.load(sys.stdin)
+    _detect_root(data)
     if data.get("stop_hook_active"):
         return
     tp = data.get("transcript_path")

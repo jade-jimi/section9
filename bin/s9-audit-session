@@ -18,6 +18,18 @@ import sys
 S9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
 
 
+
+def _detect_root(data):
+    """세션 cwd가 s9 리포(인스턴스)면 그 루트를 S9_ROOT로 승격 — 한 머신에서
+    업스트림 카피와 인스턴스를 병행할 때 기록이 세션 위치를 따라간다
+    (REQ-20260824-053). 명시된 S9_ROOT가 항상 우선."""
+    if os.environ.get("S9_ROOT"):
+        return
+    cwd = (data.get("cwd") or "").strip()
+    if cwd and os.path.exists(os.path.join(cwd, "bin", "s9")) \
+            and os.path.isdir(os.path.join(cwd, "vault")):
+        os.environ["S9_ROOT"] = cwd
+
 def ensure_serve():
     """대시보드 서버 보장 (REQ-20260824-020) — 세션이 시작될 때 서버가 죽어 있으면
     되살린다(멱등: 포트 응답하면 아무것도 안 함). 실수로 꺼도 다음 세션 시작에 복구."""
@@ -45,6 +57,7 @@ def main():
         return
     event = sys.argv[1] if len(sys.argv) > 1 else "event"
     data = json.load(sys.stdin)
+    _detect_root(data)
     session = (data.get("session_id") or "unknown")[:8]
     env = dict(os.environ)
     env["S9_SESSION"] = session

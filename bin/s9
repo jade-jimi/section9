@@ -2892,6 +2892,93 @@ def cmd_project(args):
     die("usage: s9 project <add|ls|show|set|member|authz> ...")
 
 
+INSTANCE_TRACK_GITIGNORE = """# section9 인스턴스 리포 — 데이터(vault 등)를 track한다.
+# 하네스 코드 개선은 업스트림(section9)에서만 하고 merge로 받는다 (docs/08).
+.s9.lock
+index/
+state/*
+!state/sessions
+!state/sessions/**
+scratchpad/
+.claude/
+*.log
+__pycache__/
+*.pyc
+nul
+"""
+
+
+def cmd_instance(args):
+    """인스턴스 리포 초기화 (REQ-20260824-053, 플로우는 DOC-20260824-003):
+    section9(업스트림)을 베이스로 데이터를 track하는 사설 작업 리포를 만든다.
+    일반 사용자는 이 명령을 몰라도 된다 — 인스턴스를 clone해서 쓸 뿐."""
+    import subprocess
+    if args.action != "init":
+        die("usage: s9 instance init <사설리포URL> [--dir 경로] [--create]")
+    url = args.url or die("사설 리포 URL이 필요하다 — 예: s9 instance init "
+                          "git@github.com:me/itcen-work.git")
+    name = re.sub(r"\.git$", "", url.rstrip("/").rsplit("/", 1)[-1]) or "s9-instance"
+    target = os.path.abspath(os.path.expanduser(args.dir or
+                                                os.path.join("~", name)))
+    if os.path.exists(target) and os.listdir(target):
+        die(f"대상 디렉토리가 비어있지 않다: {target}")
+
+    def git(*argv, cwd=target, check=True):
+        r = subprocess.run(["git", *argv], cwd=cwd, capture_output=True,
+                           text=True)
+        if check and r.returncode != 0:
+            die(f"git {' '.join(argv)} 실패:\n{r.stderr.strip()}")
+        return r
+
+    # 업스트림 URL: 이 리포(ROOT)의 origin — 없으면 로컬 경로 자체
+    up = subprocess.run(["git", "remote", "get-url", "origin"], cwd=ROOT,
+                        capture_output=True, text=True)
+    upstream_url = up.stdout.strip() if up.returncode == 0 else ROOT
+    print(f"① 베이스 클론: {ROOT} → {target}")
+    git("clone", "--quiet", ROOT, target, cwd=None)
+    git("remote", "rename", "origin", "upstream")
+    git("remote", "set-url", "upstream", upstream_url)
+    git("remote", "add", "origin", url)
+    print(f"② 리모트: upstream={upstream_url}  origin={url}")
+
+    with open(os.path.join(target, ".gitignore"), "w", encoding="utf-8") as f:
+        f.write(INSTANCE_TRACK_GITIGNORE)
+    # 데이터 디렉토리 뼈대 — s9 init 상당 (인스턴스 ROOT 기준)
+    subprocess.run([os.path.join(target, "bin", "s9"), "init"],
+                   env={**os.environ, "S9_ROOT": target},
+                   capture_output=True, text=True)
+    git("add", "-A")
+    git("-c", "user.name=s9-instance", "-c", "user.email=s9@local",
+        "commit", "-q", "-m", "instance init — 데이터 track 전환 (s9 instance init)")
+    print("③ 데이터 track 전환 + 초기 커밋 완료")
+
+    if getattr(args, "create", False):
+        gh = shutil.which("gh") or os.path.expanduser("~/.local/bin/gh")
+        if os.path.exists(gh):
+            r = subprocess.run([gh, "repo", "create", name, "--private"],
+                               capture_output=True, text=True)
+            print("④ gh 사설 리포 생성: " +
+                  (r.stdout.strip() or r.stderr.strip()))
+        else:
+            print("④ gh 미설치 — --create 무시 (아래 가이드로 수동 생성)")
+    pushed = git("push", "-u", "origin", "main", check=False)
+    if pushed.returncode == 0:
+        print(f"⑤ 푸시 완료 → {url}")
+    else:
+        print(f"""⑤ 푸시 실패 — 원격 리포가 아직 없을 가능성이 크다. 절차:
+  1. https://github.com/new 에서 리포 생성 — 이름 {name}, Private,
+     'Add a README/.gitignore/license' 전부 체크하지 말 것
+  2. 서버측 보호(코어 경로): Settings > Branches > main 보호 규칙 +
+     .github/CODEOWNERS 의 @OWNER 를 admin 계정으로 교체
+  3. 다시 푸시: cd {target} && git push -u origin main""")
+    print(f"""
+다음 단계(사용 시작):
+  cd {target} && bin/s9-install        # 이 머신의 훅·스킬 설치(멱등)
+  bin/s9 code                          # 세션 시작 — 이후 평소처럼 프롬프트
+팀원 합류: git clone {url} 후 위 두 줄과 동일.
+업그레이드(관리자): cd {target} && git fetch upstream && git merge upstream/main && git push""")
+
+
 def cmd_code(args):
     """통합 진입 명령 (REQ-20260824-032): 대시보드를 보장(이미 떠 있으면 스킵)하고
     이 터미널에서 claude를 실행한다 — 한 명령으로 관제(대시보드)+대화(터미널) 시작.
@@ -4190,6 +4277,14 @@ def main():
     sh.add_argument("--wait", default="3000",
                     help="캡처 전 대기 ms (async 렌더용, 기본 3000)")
     sh.set_defaults(fn=cmd_shot)
+
+    ins = sub.add_parser("instance", help="인스턴스 리포 초기화 (업스트림-인스턴스 플로우, docs/08)")
+    ins.add_argument("action", choices=["init"])
+    ins.add_argument("url", nargs="?", help="사설 인스턴스 리포 URL")
+    ins.add_argument("--dir", help="생성 위치 (기본 ~/<리포명>)")
+    ins.add_argument("--create", action="store_true",
+                     help="gh 로 사설 리포까지 자동 생성")
+    ins.set_defaults(fn=cmd_instance)
 
     cd2 = sub.add_parser("code", help="대시보드 보장 + 이 터미널에서 claude 실행 (통합 진입)")
     cd2.add_argument("--no-claude", action="store_true", help="대시보드만 보장(테스트용)")

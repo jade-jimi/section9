@@ -20,6 +20,26 @@ git이 머신 간 전송 계층이 된다.
 `.git/hooks/post-merge` 와 `post-checkout` 이 `s9 index rebuild` 를 실행한다.
 **git hook은 리포에 동기화되지 않으므로** 새 머신 셋업 시 수동 설치 필요 (아래).
 
+## 업스트림-인스턴스 플로우 (권장 운영 구조, DOC-20260824-003)
+
+- **section9 리포 = 업스트림(프레임워크)**: 하네스 코드만. 개선은 여기서만.
+- **인스턴스 리포 = 작업 공간(사설)**: 데이터(vault/users/projects/streams/state-sessions)를
+  track. 일반 사용자는 인스턴스만 알면 된다 — 코드는 이미 그 안에 들어 있다.
+
+```bash
+# 관리자: 인스턴스 생성 (한 번)
+s9 instance init git@github.com:me/itcen-work.git        # --create 시 gh로 리포 자동 생성
+# 팀원: 합류
+git clone <인스턴스URL> ~/itcen-work && cd ~/itcen-work && bin/s9-install && bin/s9 code
+# 관리자: 하네스 업그레이드 배포
+cd ~/itcen-work && git fetch upstream && git merge upstream/main && git push
+```
+
+충돌이 구조적으로 없는 이유: 데이터 파일은 업스트림에 없고, 코어 경로는 인스턴스에서
+수정 금지(pre-commit s9-guard + 서버측 CODEOWNERS/branch protection이 강제) — 교집합 0.
+한 머신에서 업스트림 카피와 인스턴스를 병행하면, 훅이 **세션 cwd 기준으로 해당
+인스턴스의 vault에 기록**한다(cwd에 bin/s9+vault가 있으면 그 루트를 S9_ROOT로 승격).
+
 ## 새 머신/계정 셋업 절차
 
 ```bash
