@@ -1037,7 +1037,29 @@ def chat_send(text, sid8=None, sender="", kind="chat"):
 
 
 # ------------------------------------------- claude usage (REQ-20260824-043)
-_usage_cache = {"ts": 0.0, "data": None, "cred_mtime": 0.0}
+_usage_cache = {"ts": 0.0, "data": None, "cred_mtime": 0.0, "fail_ts": 0.0}
+# 머신 공유 파일 캐시 (REQ-20260824-062): 여러 워크스페이스의 serve가 각자
+# 폴링하면 업스트림 429 — 계정은 머신 단위(HOME)이므로 캐시도 머신 공유가 맞다.
+_USAGE_FILE = os.path.join(os.path.expanduser("~"), ".cache", "s9",
+                           "usage.json")
+
+
+def _usage_file_read():
+    try:
+        with open(_USAGE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _usage_file_write(ts, cred_mtime, data):
+    try:
+        os.makedirs(os.path.dirname(_USAGE_FILE), exist_ok=True)
+        with open(_USAGE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"ts": ts, "cred_mtime": cred_mtime, "data": data}, f,
+                      ensure_ascii=False)
+    except OSError:
+        pass
 
 
 def claude_usage(ttl=60):
@@ -1056,6 +1078,18 @@ def claude_usage(ttl=60):
     if (_usage_cache["data"] and now - _usage_cache["ts"] < ttl
             and cred_mtime == _usage_cache["cred_mtime"]):
         return _usage_cache["data"]
+    # 머신 공유 캐시: 다른 serve 프로세스가 방금 조회했다면 재사용 (429 방지)
+    fc = _usage_file_read()
+    if (fc and fc.get("data") and now - fc.get("ts", 0) < ttl
+            and fc.get("cred_mtime") == cred_mtime):
+        _usage_cache.update({"ts": fc["ts"], "data": fc["data"],
+                             "cred_mtime": cred_mtime})
+        return fc["data"]
+    # 실패 백오프: 직전 실패 후 120s 내엔 업스트림을 다시 때리지 않는다
+    if now - _usage_cache["fail_ts"] < 120:
+        stale = _usage_cache["data"] or (fc or {}).get("data")
+        if stale:
+            return {**stale, "stale": True}
     _usage_cache["cred_mtime"] = cred_mtime
     home = os.path.expanduser("~")
     out = {"ok": False}
@@ -1095,9 +1129,11 @@ def claude_usage(ttl=60):
                            "severity": L.get("severity", ""),
                            "resets_at": L.get("resets_at", "")})
         out.update({"ok": True, "limits": limits, "fetched_at": now_iso()})
-        _usage_cache.update({"ts": now, "data": out})
+        _usage_cache.update({"ts": now, "data": out, "fail_ts": 0.0})
+        _usage_file_write(now, cred_mtime, out)
     except Exception as e:
-        stale = _usage_cache["data"]
+        _usage_cache["fail_ts"] = now
+        stale = _usage_cache["data"] or (_usage_file_read() or {}).get("data")
         if stale:
             return {**stale, "stale": True}
         out["error"] = f"usage 조회 실패: {type(e).__name__}"

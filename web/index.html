@@ -2296,6 +2296,7 @@ async function termTargetLoop(T){
   const tick = async () => {
     const nt = await ccFetch("/api/chat/target", 4000);
     if (TERM !== T) return;
+    if (nt && nt.hint) T.hint = nt.hint;   // 빈 상태 안내용 실행 명령(실경로)
     if (!nt){ termStatus(T, null); return; }
     if (nt.sid && nt.sid !== T.sid){ termAttach(T, nt); return; }
     termStatus(T, nt.sid ? nt : null);
@@ -2344,12 +2345,15 @@ function termStatus(T, nt){
 function termWaitingGuide(T){
   const w = $("#cc-wait");
   if (!w) return;
+  // 실행 안내는 서버가 준 힌트(이 워크스페이스의 실제 경로) 우선 — 인스턴스마다
+  // 루트가 다르다 (REQ-20260824-062 인접 결함: ~/section9 하드코딩)
+  const cmd = esc((T.hint || "").match(/`([^`]+)`/)?.[1] || "cd ~/section9 && bin/s9 code");
   w.insertAdjacentHTML("beforebegin",
     ccLine("✻", "var(--cc-dim)",
       '<span style="color:var(--cc-dim)">Waiting for a live Claude session…</span>') +
     ccLine("⎿", null, `라이브 클로드 세션이 없습니다 — 세션이 뜨면 이 화면이 자동 전환됩니다.
   1. 터미널을 연다
-  2. <span class="cccode">cd ~/section9 &amp;&amp; bin/s9 code</span> 실행
+  2. <span class="cccode">${cmd}</span> 실행
   3. 세션이 뜨면 이 탭에서 전송`, "sub"));
   const ta = $("#chat-in");
   ta.disabled = true;
