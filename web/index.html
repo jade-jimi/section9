@@ -2487,9 +2487,34 @@ function termAppendBatch(T, evs){
   const nearBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 140;
   if (hadWait) termSpinnerFinalize(T, waitStart);   // 스피너 자리 → 완료줄 확정
   w.insertAdjacentHTML("beforebegin", html);
+  termTrim(T, out, nearBottom);   // DOM 무한 누적 방지 (REQ-20260824-059)
   termSpinnerEval(T);
   termAgentsRender(T);
   if (nearBottom) out.scrollTop = out.scrollHeight;  // 위로 읽는 중이면 방해 안 함
+}
+
+/* 타임라인 상한 (REQ-059): 브라우저 탭이 장시간 열려 있어도 메모리·레이아웃
+   비용이 상수로 유지되게, 오래된 줄을 정리하고 생략 안내 한 줄만 남긴다.
+   전체 이력은 Stream 탭(서버 증분)과 transcript가 원본이다. */
+const TERM_MAX_LINES = 1500;
+function termTrim(T, out, nearBottom){
+  const lines = out.querySelectorAll(":scope > .ln:not(.cctrim)");
+  if (lines.length <= TERM_MAX_LINES) return;
+  const drop = lines.length - TERM_MAX_LINES;
+  // 위로 스크롤해 읽는 중(append 직전 기준)이면 이번 틱은 건너뛴다 —
+  // 읽던 줄이 사라지면 안 됨. follow 중일 때만 정리.
+  if (!nearBottom) return;
+  for (let i = 0; i < drop; i++) lines[i].remove();
+  T.trimmed = (T.trimmed || 0) + drop;
+  let n = out.querySelector(":scope > .cctrim");
+  if (!n){
+    n = document.createElement("div");
+    n.className = "ln ccdim cctrim";
+    out.prepend(n);
+  }
+  n.innerHTML = `<span class="g" style="color:var(--cc-faint)">·</span>` +
+    `<span class="b" style="color:var(--cc-faint)">이전 ${T.trimmed}줄 생략 — ` +
+    `전체 이력은 Stream 탭, 화면 정리는 Ctrl+L</span>`;
 }
 function termMeta(T){
   const m = $("#cc-meta");
