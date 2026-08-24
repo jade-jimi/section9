@@ -297,7 +297,13 @@ def start_dashboard():
     이후에는 Claude 세션 시작 훅(s9-audit-session)이 죽은 서버를 되살린다."""
     import socket
     import subprocess
-    port = int(os.environ.get("S9_PORT", "9909"))
+    port = int(os.environ.get("S9_PORT") or 0)
+    if not port:
+        try:
+            with open(os.path.join(ROOT, "state", "port")) as f:
+                port = int(f.read().strip())
+        except (OSError, ValueError):
+            port = 9909
     try:
         socket.create_connection(("127.0.0.1", port), 0.5).close()
         say(f"대시보드 이미 실행 중: http://127.0.0.1:{port}/")

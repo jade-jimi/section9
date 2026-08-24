@@ -34,7 +34,15 @@ def ensure_serve():
     """대시보드 서버 보장 (REQ-20260824-020) — 세션이 시작될 때 서버가 죽어 있으면
     되살린다(멱등: 포트 응답하면 아무것도 안 함). 실수로 꺼도 다음 세션 시작에 복구."""
     import socket
-    port = int(os.environ.get("S9_PORT", "9909"))
+    root0 = os.environ.get("S9_ROOT") or os.path.dirname(
+        os.path.dirname(os.path.realpath(__file__)))
+    port = int(os.environ.get("S9_PORT") or 0)
+    if not port:
+        try:
+            with open(os.path.join(root0, "state", "port")) as f:
+                port = int(f.read().strip())
+        except (OSError, ValueError):
+            port = 9909
     try:
         socket.create_connection(("127.0.0.1", port), 0.5).close()
         return  # 이미 실행 중
