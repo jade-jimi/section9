@@ -2008,6 +2008,9 @@ async function loadStream(s){
    연속 실패 시 2.5s 폴링 폴백(30s마다 SSE 복귀 시도). 키 입력·로컬 에코는
    네트워크 왕복과 결합하지 않는다. ------- */
 let TERM = null;          // 터미널 탭 생존 상태 — stopChat()이 전량 정리
+// 컴포저 보존 (REQ-20260825-001): 탭 이탈 시 #view innerHTML 교체로 textarea가
+// 파괴돼 쓰다 만 메시지·첨부·히스토리가 사라지던 결함 — 여기 담아 복귀 시 복원
+let termKeep = {draft: "", atts: [], hist: []};
 let termCmdCache = null;  // /api/chat/commands 캐시 (탭 재진입 시 재사용)
 const CC_BUILTINS = [     // CC CLI 빌트인 — 대시보드에선 실행 불가, 구분 표시(L4)
   ["clear","대화 히스토리 클리어"],["compact","컨텍스트 압축"],["help","도움말"],
@@ -2045,6 +2048,10 @@ function updateTitle(){
 
 function stopChat(){
   if (!TERM) return;
+  const ta = $("#chat-in");                        // 컴포저 보존 — 복귀 시 복원
+  if (ta) termKeep.draft = ta.value;
+  termKeep.atts = (TERM.atts || []).filter(a => a.path && !a.up);
+  termKeep.hist = TERM.hist || [];
   TERM.timers.forEach(clearInterval);
   if (TERM.es){ try{ TERM.es.close(); }catch(e){} }
   if (TERM.esRetryT) clearTimeout(TERM.esRetryT);
@@ -2277,7 +2284,8 @@ function renderTerminal(){
     sid: null, live: false, offset: 0, evCount: 0, chatCount: 0,
     es: null, esFails: 0, esRetryT: null, poll: false, pollT: null,
     timers: [], raf: 0, buf: [],
-    atts: [], hist: [], histIdx: null, agents: [],
+    atts: termKeep.atts.slice(), hist: termKeep.hist.slice(),
+    histIdx: null, agents: [],
     lastRole: null, lastToolName: "", waitOn: false, waitT: null,
     waitBase: Date.now(),
     pal: {open: false, idx: 0, items: []},
@@ -2297,6 +2305,13 @@ function renderTerminal(){
     </div></div>`;
   termBindInput(T);
   termStripBind(T);
+  const ta0 = $("#chat-in");                       // 이탈 전 draft·첨부 복원
+  if (ta0 && termKeep.draft){
+    ta0.value = termKeep.draft;
+    ta0.style.height = "auto";
+    ta0.style.height = Math.min(ta0.scrollHeight, 120) + "px";
+  }
+  if (T.atts.length) termAttRender(T);
   termTargetLoop(T);
 }
 
@@ -2347,8 +2362,15 @@ function termStatus(T, nt){
     return;
   }
   T.live = !!nt.live;
-  lv.textContent = T.live ? "live" : "stale";
-  lv.className = T.live ? "ccok" : "ccwarn";
+  // listening = 세션이 수신함 tail(Monitor)을 실제로 돌리는 중.
+  // live인데 미가동이면 idle — 메시지는 큐잉+REQ 기록만 되고 즉답이 없다
+  // (REQ-20260825-001: 유휴 세션이 live로 보여 무응답이 침묵으로 빠지던 결함)
+  const listen = nt.listening !== false;
+  lv.textContent = !T.live ? "stale" : (listen ? "live" : "idle");
+  lv.className = (T.live && listen) ? "ccok" : "ccwarn";
+  lv.title = (T.live && !listen)
+    ? "세션이 유휴 상태(수신 대기 미가동) — 보낸 메시지는 요청 문서로 즉시 기록되고, 세션 터미널에서 아무 입력이나 하면 밀린 메시지를 소화합니다"
+    : "";
   if (tg) tg.innerHTML = ` · target <span class="cccyan">${esc(nt.sid)}</span> <span class="cccyan">@${esc(nt.user || "?")}</span>`;
 }
 
@@ -2794,10 +2816,11 @@ function termKeydown(T, e){
     if (e.key === "Escape"){ e.preventDefault(); termPalClose(T); return; }
   }
   if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendChat(); return; }
-  if (e.key === "Escape"){                       // L7 — 첨부 → 입력 순 클리어
+  if (e.key === "Escape"){       // L7 — 첨부 → 입력 → (비었으면) 세션 중단 요청
     e.preventDefault();
     if (T.atts.length){ T.atts = []; termAttRender(T); }
-    else { ta.value = ""; ta.style.height = "auto"; T.histIdx = null; }
+    else if (ta.value){ ta.value = ""; ta.style.height = "auto"; T.histIdx = null; }
+    else if (T.waitOn) termInterrupt(T);
     return;
   }
   // L7 — ↑/↓ 히스토리: 입력이 비어있거나 탐색 중일 때만. 편집 중엔 커서 이동.
@@ -2957,6 +2980,32 @@ function termErrClear(){
   if (err) err.hidden = true;
 }
 
+/* Esc 중단 (REQ-20260825-001): 대시보드는 CC 프로세스에 키를 보낼 수 없다 —
+   수신함에 kind=interrupt 줄을 남기면 세션이 다음 도구 경계에서 읽고 멈춘다.
+   즉시 강제 중단은 세션이 떠 있는 터미널에서만 가능하다. */
+async function termInterrupt(T){
+  if (!T.sid || T.intBusy) return;
+  T.intBusy = true;
+  const out = $("#ccout"), w = $("#cc-wait");
+  try{
+    const r = await fetch("/api/chat", {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({kind: "interrupt", sid: T.sid})});
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "중단 요청 실패");
+    if (TERM === T && out && w){
+      w.insertAdjacentHTML("beforebegin",
+        ccLine("⨯", "var(--cc-dim)",
+          `<span style="color:var(--cc-dim)">중단 요청 전송됨 — 세션은 다음 도구 경계에서 멈춘다 (즉시 강제 중단은 세션 터미널의 Esc)</span>`));
+      out.scrollTop = out.scrollHeight;
+    }
+  }catch(ex){
+    if (TERM === T) termErr("✗ " + ((ex && ex.message) || "중단 요청 실패"));
+  }finally{
+    T.intBusy = false;
+  }
+}
+
 async function sendChat(){
   const T = TERM, ta = $("#chat-in");
   if (!T || !T.sid || !ta || ta.disabled) return;
@@ -2993,6 +3042,12 @@ async function sendChat(){
     if (TERM !== T) return;
     if (!d.ok) throw new Error(d.error || "전송 실패");
     termErrClear();
+    // 서버측 audit가 REQ를 만들었으면 표시 — 세션 유휴여도 기록은 남았다는 확증
+    if (d.req && out && w){
+      w.insertAdjacentHTML("beforebegin",
+        ccLine("⎿", null, `<span style="color:var(--cc-dim)">${esc(d.req)} 로 기록됨</span>`, "sub"));
+      out.scrollTop = out.scrollHeight;
+    }
     refreshTermChat(T);
   }catch(ex){
     if (TERM !== T) return;

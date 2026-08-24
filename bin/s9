@@ -1025,8 +1025,10 @@ def chat_target(sid8=None):
     return best
 
 
-def chat_send(text, sid8=None, sender="", kind="chat"):
-    """수신함에 한 줄 append — 대상 세션의 Monitor가 즉시 깨어난다."""
+def chat_send(text, sid8=None, sender="", kind="chat", req=""):
+    """수신함에 한 줄 append — 대상 세션의 Monitor가 즉시 깨어난다.
+    req: 서버측 audit(chat_audit)이 만든 REQ id — 수신 세션이 중복 생성 없이
+    그 id로 상태를 관리하도록 줄에 동봉한다 (REQ-20260825-001)."""
     text = (text or "").strip()
     if not text:
         raise ValueError("빈 메시지")
@@ -1037,10 +1039,61 @@ def chat_send(text, sid8=None, sender="", kind="chat"):
             f"로 세션을 시작한 뒤 다시 보내라")
     line = {"ts": now_iso(), "from": sender or "dashboard", "kind": kind,
             "text": text}
+    if req:
+        line["req"] = req
     with open(chat_inbox_path(b["session"], make=True), "a",
               encoding="utf-8") as f:
         f.write(json.dumps(line, ensure_ascii=False) + "\n")
     return b["session"]
+
+
+_chat_classifier = None
+
+
+def chat_audit(text, sender, sid8):
+    """대시보드 채팅 원문을 서버가 즉시 audit (REQ-20260825-001) — 수신 세션이
+    유휴(tail 미가동)면 채팅이 수신함에만 쌓이고 아무 기록도 남지 않던 결함의
+    영속성 보장: Request 분류면 REQ 문서를 즉시 생성한다. 분류 휴리스틱은
+    s9-audit-prompt의 classify를 로드해 단일 출처를 유지한다.
+    반환: 생성한 REQ id 또는 None. 실패해도 전송을 막지 않는다."""
+    global _chat_classifier
+    t = (text or "").strip()
+    if not t or t.startswith(("/", "!")):
+        return None
+    try:
+        import subprocess  # s9 최상단은 stdlib 최소 import — 지역 import 관례
+        if _chat_classifier is None:
+            import importlib.util
+            import importlib.machinery
+            hp = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                              "s9-audit-prompt")
+            spec = importlib.util.spec_from_loader(
+                "_s9_audit_prompt",
+                importlib.machinery.SourceFileLoader("_s9_audit_prompt", hp))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _chat_classifier = mod.classify
+        env = dict(os.environ)
+        env["S9_SESSION"] = sid8
+        me = os.path.realpath(__file__)
+        first = t.splitlines()[0].strip()
+        if _chat_classifier(t) != "request":
+            subprocess.run([me, "log", f"chat: {first[:60]}"],
+                           capture_output=True, text=True, env=env, timeout=15)
+            return None
+        title = first[:24] + ("…" if len(first) > 24 else "")
+        out = subprocess.run(
+            [me, "new", "request", "--title", title, "--tag", "auto-audit",
+             "--user", sender or "dashboard"],
+            input=t, capture_output=True, text=True, env=env, timeout=15)
+        if out.returncode != 0:
+            return None
+        doc_id = out.stdout.split()[0]
+        subprocess.run([me, "log", f"dashboard chat {doc_id} 기록: {title}"],
+                       capture_output=True, text=True, env=env, timeout=15)
+        return doc_id
+    except Exception:
+        return None  # audit 실패가 채팅 전달을 막으면 안 된다
 
 
 # ------------------------------------------- claude usage (REQ-20260824-043)
@@ -4080,9 +4133,16 @@ def cmd_serve(args):
                     self._json({"sid": None, "hint":
                                 f"터미널에서 `cd {ROOT} && bin/s9 code` 실행"})
                 else:
+                    # user: 바인딩 미지정("")이면 서버 파생 whoami 폴백 —
+                    # '@?' 표기 결함 (REQ-20260825-001). listening: inbox tail
+                    # 실가동 여부 — live여도 tail이 없으면 세션이 유휴라
+                    # 메시지가 큐잉만 된다는 사실을 프런트가 표시해야 한다.
                     self._json({"sid": b.get("session"),
-                                "user": b.get("user", ""),
-                                "live": chat_live(b)})
+                                "user": b.get("user")
+                                or whoami_info().get("user", ""),
+                                "live": chat_live(b),
+                                "listening": _inbox_watch_alive(
+                                    b.get("session", ""))})
             elif parsed.path == "/api/chat/log":
                 sid = qs.get("sid", [""])[0]
                 lines = []
@@ -4200,11 +4260,26 @@ def cmd_serve(args):
                                        actor=f"{actor} via dashboard")
                     self._json({"ok": True})
                 elif parsed.path == "/api/chat":
-                    # 대시보드 → 세션 채팅 (REQ-032): 수신함 append가 곧 전달
-                    sid = chat_send(str(req.get("text") or ""),
-                                    sid8=str(req.get("sid") or "") or None,
-                                    sender=actor)
-                    self._json({"ok": True, "sid": sid})
+                    # 대시보드 → 세션 채팅 (REQ-032): 수신함 append가 곧 전달.
+                    # kind=interrupt 는 Esc 중단 요청 (REQ-20260825-001) —
+                    # audit 없이 줄만 남긴다. kind=chat 은 서버측 audit로
+                    # 세션 유휴 여부와 무관하게 REQ를 즉시 영속화한다.
+                    kind = str(req.get("kind") or "chat")
+                    if kind not in ("chat", "interrupt"):
+                        raise ValueError(f"unknown kind: {kind}")
+                    text = str(req.get("text") or "")
+                    if kind == "interrupt" and not text.strip():
+                        text = ("(Esc) 진행 중 작업 중단 요청 — 지금 하던 "
+                                "작업을 멈추고 현재 상태를 보고하라")
+                    sid_arg = str(req.get("sid") or "") or None
+                    req_id = None
+                    if kind == "chat":
+                        b = chat_target(sid_arg)
+                        if b:
+                            req_id = chat_audit(text, actor, b["session"])
+                    sid = chat_send(text, sid8=sid_arg, sender=actor,
+                                    kind=kind, req=req_id or "")
+                    self._json({"ok": True, "sid": sid, "req": req_id})
                 elif parsed.path == "/api/chat/upload":
                     # 이미지/파일 첨부 (REQ-040): base64 저장 → 절대경로 반환.
                     # 세션은 CC 터미널 첨부처럼 [Image: <경로>] 참조를 Read한다.

@@ -298,7 +298,8 @@ class TestDashboardChat(unittest.TestCase):
                            env={**self.env, "S9_PORT": "1"}, timeout=20)
         self.assertIn("inbox-hooksess.jsonl", r.stdout)
         self.assertIn("Monitor", r.stdout)
-        self.assertIn("tail -f", r.stdout)
+        # 오프셋 arm (REQ-20260825-001): 빈 수신함이면 +1부터 follow
+        self.assertIn("tail -c +1 -f", r.stdout)
         # 수신함 파일이 미리 생성됨
         self.assertTrue(os.path.exists(os.path.join(
             self.tmp, "state", "terminal", "inbox-hooksess.jsonl")))
@@ -309,6 +310,100 @@ class TestDashboardChat(unittest.TestCase):
                             capture_output=True, text=True,
                             env={**self.env, "S9_PORT": "1"}, timeout=20)
         self.assertIn("inbox-hooksess.jsonl", r2.stdout)
+
+    # ---- REQ-20260825-001: 서버측 chat audit — 세션이 유휴여도 REQ 영속화 ----
+
+    # C10. 명령형 채팅 → REQ 즉시 생성: 응답·inbox 줄에 req id, user=발신자
+    def test_c10_chat_request_creates_req(self):
+        self.touch_stream()
+        code, res = self.api("/api/chat", {"text": "터미널 렌더러 색상 매핑 고쳐줘"})
+        self.assertEqual(code, 200, res)
+        req_id = res.get("req") or ""
+        self.assertTrue(req_id.startswith("REQ-"), res)
+        last = self.inbox(self.sid)[-1]
+        self.assertEqual(last.get("req"), req_id)
+        r = self.cli("show", req_id, "--meta")
+        self.assertIn("user: tester", r.stdout)      # 발신자 귀속
+        self.assertIn("auto-audit", r.stdout)
+        self.assertIn(f"session: {self.sid}", r.stdout)
+
+    # C11. 질문/파편/커맨드는 REQ 미생성 — 전송은 성공
+    def test_c11_chat_question_no_req(self):
+        self.touch_stream()
+        for text in ("이 구조가 왜 이렇게 되어 있지?", "ㅇㅋ", "/compact"):
+            code, res = self.api("/api/chat", {"text": text})
+            self.assertEqual(code, 200, res)
+            self.assertFalse(res.get("req"), (text, res))
+
+    # C12. kind=interrupt (Esc 중단): 줄만 append, REQ 미생성. 미지 kind 거부.
+    def test_c12_interrupt_kind(self):
+        self.touch_stream()
+        code, res = self.api("/api/chat", {"kind": "interrupt"})
+        self.assertEqual(code, 200, res)
+        self.assertFalse(res.get("req"))
+        last = self.inbox(self.sid)[-1]
+        self.assertEqual(last["kind"], "interrupt")
+        self.assertTrue(last["text"])                # 기본 중단 문구
+        code, _res = self.api("/api/chat", {"kind": "bogus", "text": "x"})
+        self.assertNotEqual(code, 200)
+
+    # C13. target 응답: listening(tail 실가동) + user 폴백(빈 바인딩 → whoami)
+    def test_c13_target_listening_and_user(self):
+        self.touch_stream()
+        code, res = self.api("/api/chat/target")
+        self.assertEqual(code, 200)
+        self.assertIn("listening", res)
+        self.assertFalse(res["listening"])           # 테스트 환경엔 tail 없음
+        self.assertEqual(res["user"], "tester")      # binding user="" → whoami
+
+    # C14. SessionStart: 유휴 중 쌓인 미처리 줄 주입 + EOF 오프셋 arm + seen 갱신
+    def test_c14_hook_pending_injection(self):
+        sid = "pendsess"
+        inbox = os.path.join(self.tmp, "state", "terminal",
+                             f"inbox-{sid}.jsonl")
+        os.makedirs(os.path.dirname(inbox), exist_ok=True)
+        with open(inbox, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"ts": "t1", "from": "tester", "kind": "chat",
+                                "text": "밀린 대시보드 메시지"},
+                               ensure_ascii=False) + "\n")
+        payload = json.dumps({"session_id": sid + "-full", "source": "startup"})
+        r = subprocess.run([HOOK, "start"], input=payload,
+                           capture_output=True, text=True,
+                           env={**self.env, "S9_PORT": "1"}, timeout=20)
+        self.assertIn("밀린 대시보드 메시지", r.stdout)
+        size = os.path.getsize(inbox)
+        self.assertIn(f"tail -c +{size + 1} -f", r.stdout)
+        with open(inbox + ".seen") as f:
+            self.assertEqual(int(f.read().strip()), size)
+        # 재시작: 신규 줄 없음 → 재주입 없음 (중복 처리 방지)
+        r2 = subprocess.run([HOOK, "start"], input=payload,
+                            capture_output=True, text=True,
+                            env={**self.env, "S9_PORT": "1"}, timeout=20)
+        self.assertNotIn("밀린 대시보드 메시지", r2.stdout)
+        # 훅이 만든 바인딩이 다른 테스트의 자동 대상 선택을 오염시키지 않게 종료
+        self.cli("bind", "ended", "1", env_extra={"S9_SESSION": sid})
+
+    # C15. UserPromptSubmit: tail 미가동이면 미처리 줄을 컨텍스트로 주입
+    #      ("ㅇㅋ" = nothing 분류라도 pending이 있으면 emit 되어야 한다)
+    def test_c15_prompt_hook_pending(self):
+        sid = "pdsess2x"   # 정확히 8자 — session_id[:8] 절단과 일치해야 한다
+        inbox = os.path.join(self.tmp, "state", "terminal",
+                             f"inbox-{sid}.jsonl")
+        os.makedirs(os.path.dirname(inbox), exist_ok=True)
+        with open(inbox, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"ts": "t1", "from": "tester", "kind": "chat",
+                                "text": "유휴 중 온 채팅"},
+                               ensure_ascii=False) + "\n")
+        env = {**self.env, "S9_PORT": "1"}
+        env.pop("S9_AUTO_RESUME", None)
+        r = subprocess.run([PHOOK],
+                           input=json.dumps({"session_id": sid + "-full",
+                                             "prompt": "ㅇㅋ"}),
+                           capture_output=True, text=True, env=env, timeout=20)
+        self.assertIn("유휴 중 온 채팅", r.stdout)
+        with open(inbox + ".seen") as f:
+            self.assertEqual(int(f.read().strip()), os.path.getsize(inbox))
+        self.cli("bind", "ended", "1", env_extra={"S9_SESSION": sid})
 
 
 if __name__ == "__main__":

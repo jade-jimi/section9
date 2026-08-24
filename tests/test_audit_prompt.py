@@ -131,6 +131,55 @@ class TestAutoResumeTurn(unittest.TestCase):
         self.assertIn("s9 last REQ-20260823-078 --add --session eeee5555", printed)
 
 
+class TestAttachments(unittest.TestCase):
+    # A1. 프롬프트의 [Image #N] → 이미지 캐시 실경로 매핑 (REQ-20260825-002:
+    #     첨부도 요청 원문 — REQ body에 경로가 보존돼야 한다)
+    def test_a1_image_refs_resolved(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as home:
+            sid_full = "abcd1234-aaaa-bbbb"
+            cache = os.path.join(home, ".claude", "image-cache", sid_full)
+            os.makedirs(cache)
+            p1 = os.path.join(cache, "1.png")
+            open(p1, "wb").close()
+            got = hook.attachment_paths("[Image #1] 이 화면 고쳐줘", sid_full,
+                                        home=home)
+            self.assertEqual(got, [p1])
+            # 캐시에 없는 번호·참조 없는 프롬프트는 빈 목록
+            self.assertEqual(
+                hook.attachment_paths("[Image #2] x", sid_full, home=home), [])
+            self.assertEqual(
+                hook.attachment_paths("그냥 텍스트", sid_full, home=home), [])
+
+    # A2. request 분류 시 REQ body에 첨부 경로가 덧붙는다
+    def test_a2_request_body_carries_attachments(self):
+        import tempfile
+        calls = []
+
+        def fake_run(env, *argv, inp=None):
+            calls.append((argv, inp))
+            return mock.Mock(returncode=0, stdout="REQ-20990101-001 x")
+
+        with tempfile.TemporaryDirectory() as home:
+            sid_full = "ffff0000-1111-2222"
+            cache = os.path.join(home, ".claude", "image-cache", sid_full)
+            os.makedirs(cache)
+            open(os.path.join(cache, "1.png"), "wb").close()
+            payload = json.dumps({
+                "prompt": "[Image #1] 대시보드 헤더 정렬 고쳐줘",
+                "session_id": sid_full})
+            with mock.patch.object(hook, "run", fake_run), \
+                 mock.patch.dict(hook.os.environ, {"HOME": home}), \
+                 mock.patch.object(sys, "stdin", io.StringIO(payload)), \
+                 mock.patch.object(sys, "stdout", io.StringIO()):
+                hook.main()
+        new_calls = [(a, i) for a, i in calls if a[:2] == ("new", "request")]
+        self.assertTrue(new_calls, calls)
+        body = new_calls[0][1] or ""
+        self.assertIn("[첨부]", body)
+        self.assertIn("1.png", body)
+
+
 class TestUserPrefs(unittest.TestCase):
     """개인 선호 자동 반영 (REQ-20260824-006)."""
 
