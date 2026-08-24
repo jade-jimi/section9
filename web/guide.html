@@ -145,6 +145,7 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
     <a href="#terminal"><span class="n">5</span>터미널에서 쓰기</a>
     <a href="#faq"><span class="n">6</span>FAQ</a>
     <a href="#projects"><span class="n">7</span>프로젝트</a>
+    <a href="#ops"><span class="n">8</span>운영(관리자)</a>
   </nav>
 </aside>
 
@@ -169,8 +170,12 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
 <!-- ═══════════════ 2 ═══════════════ -->
 <section id="install">
 <h2><span class="no">2</span>최초 설치</h2>
-<p>새 머신(또는 새 계정)에서 다섯 단계면 끝납니다. 관리자가 이미 설치해 둔 환경이라면
-4·5단계만 확인하시면 됩니다.</p>
+<p>출발점은 <b>관리자가 알려 준 팀 저장소(인스턴스 리포) URL</b>입니다 —
+예: <code>git@github.com:your-org/your-org-work.git</code>. 필요한 코드는 그 안에 전부 들어 있으므로,
+그 하나만 받으면 됩니다. 새 머신(또는 새 계정)에서 다섯 단계면 끝납니다.
+관리자가 이미 설치해 둔 환경이라면 4·5단계만 확인하시면 됩니다.</p>
+<p class="dim">이 가이드의 예시는 클론 위치를 <code>~/your-org-work</code> 로 통일합니다.
+실제로는 아무 경로나 됩니다 — 클론한 그 디렉토리가 곧 여러분 팀의 작업 공간이 됩니다.</p>
 
 <div class="step"><div class="num">0</div><div class="body">
   <b>선행 조건 — Claude Code CLI</b>
@@ -180,19 +185,20 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
   <pre><code>npm install -g @anthropic-ai/claude-code   # 또는 공식 네이티브 인스톨러</code></pre>
 </div></div>
 <div class="step"><div class="num">1</div><div class="body">
-  <b>저장소를 홈 디렉토리에 받습니다</b>
-  <pre><code>git clone &lt;repo-url&gt; ~/section9</code></pre>
+  <b>팀 저장소를 받습니다</b>
+  <p>관리자에게 받은 인스턴스 리포 URL을 클론합니다. 위치는 자유입니다(예시는 <code>~/your-org-work</code>).</p>
+  <pre><code>git clone git@github.com:your-org/your-org-work.git ~/your-org-work</code></pre>
 </div></div>
 <div class="step"><div class="num">2</div><div class="body">
   <b>설치 스크립트를 실행합니다</b>
   <p>Claude Code 훅(자동 기록 장치)·스킬·역할 에이전트를 설치하고, <b>대시보드 서버가 자동으로 기동됩니다.</b></p>
-  <pre><code>~/section9/bin/s9-install</code></pre>
+  <pre><code>cd ~/your-org-work &amp;&amp; bin/s9-install</code></pre>
   <p>Windows(WSL 아님)에서는 <code>bin\s9-install.cmd</code> 를 실행합니다.</p>
 </div></div>
 <div class="step"><div class="num">3</div><div class="body">
   <b>Claude Code 세션을 재시작합니다</b>
   <p>스킬과 역할 에이전트는 세션 시작 시 로드되므로, 열려 있던 세션은 한 번 껐다 켭니다.
-  켜는 방법은 터미널에서 <code>~/section9/bin/s9 code</code> 실행 —
+  켜는 방법은 터미널에서 <code>~/your-org-work/bin/s9 code</code> 실행 —
   자세한 사용법은 <a href="#terminal">5장 '터미널에서 Claude Code 쓰기'</a>를 보세요.</p>
 </div></div>
 <div class="step"><div class="num">4</div><div class="body">
@@ -201,16 +207,20 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
 </div></div>
 <div class="step"><div class="num">5</div><div class="body">
   <b>사용자를 등록합니다</b>
-  <pre><code>~/section9/bin/s9 user add &lt;이름&gt;</code></pre>
+  <pre><code>~/your-org-work/bin/s9 user add &lt;이름&gt;</code></pre>
   <p>대시보드는 <b>서버를 띄운 OS 계정으로 나를 자동 인식</b>합니다 — 고를 것이 없습니다.
   우상단에 <b>이름 @ 머신 [역할]</b> 라벨이 표시되고, 승인/반려가 이 이름으로 기록됩니다.
   미등록 계정이면 라벨 자리에 등록 안내가 뜹니다. OS 계정명과 다른 이름으로 등록했다면
-  <code>~/section9/bin/s9 user attach &lt;이름&gt;</code> 으로 한 번만 연결하세요.</p>
+  <code>~/your-org-work/bin/s9 user attach &lt;이름&gt;</code> 으로 한 번만 연결하세요.</p>
 </div></div>
 
 <div class="callout"><b>서버가 꺼져도 걱정 없습니다.</b> 대시보드 서버는 머신을 재부팅하는 등으로
 꺼져 있어도, 다음 Claude Code 세션이 시작될 때 자동으로 되살아납니다.
-수동으로 띄우려면 <code>~/section9/bin/s9 serve</code>.</div>
+수동으로 띄우려면 <code>~/your-org-work/bin/s9 serve</code>.</div>
+<div class="callout"><b>동료와의 공유는 git입니다.</b> 카드·문서·프로젝트 자료는 전부 이 디렉토리 안의
+파일이고, <code>git push</code> / <code>git pull</code> 로 팀 저장소와 오갑니다
+(시스템이 스스로 push하지는 않습니다). 저장소를 만들고 운영하는 쪽 이야기는
+<a href="#ops">8장 '운영(관리자)'</a>에 있습니다 — 팀원은 몰라도 됩니다.</div>
 </section>
 
 <!-- ═══════════════ 3 ═══════════════ -->
@@ -380,15 +390,15 @@ Settings › 사용자 관리의 <b>시점 미리보기</b>로 다른 사용자�
 
 <h3>먼저: Claude Code 실행하기 — <code>s9 code</code> 한 줄</h3>
 <p>터미널을 열고 아래 한 줄만 실행하면 됩니다. 어느 디렉토리에서 실행해도 됩니다.</p>
-<pre><code>~/section9/bin/s9 code</code></pre>
+<pre><code>~/your-org-work/bin/s9 code</code></pre>
 <p><code>s9 code</code> 는 실행 전에 스스로 점검합니다 — <b>대시보드가 꺼져 있으면 켜고</b>,
 훅이 설치돼 있지 않으면 <b>자동으로 설치</b>하고, 사용자가 등록돼 있지 않으면 이름을 물어 등록한 뒤,
-Claude Code를 <code>~/section9</code> 기준으로 띄웁니다(규약·스킬·역할 에이전트가 이 폴더에서 로드됩니다).
+Claude Code를 인스턴스 디렉토리(<code>~/your-org-work</code>) 기준으로 띄웁니다(규약·스킬·역할 에이전트가 이 폴더에서 로드됩니다).
 <b>Claude에 로그인돼 있지 않아도 괜찮습니다</b> — 이어서 뜨는 화면에서 안내대로 로그인하면 그대로 세션이 시작됩니다.</p>
 <p class="dim">권한 모드 등 claude 인자가 필요하면 뒤에 그대로 붙입니다:
 <code>s9 code --permission-mode acceptEdits</code>. 계정 기본값으로 저장하려면
 <code>s9 user config &lt;이름&gt; s9code_args '--permission-mode acceptEdits'</code>.
-(직접 <code>cd ~/section9 &amp;&amp; claude</code> 로 열어도 되지만, 위 자가 점검은 건너뜁니다.)</p>
+(직접 <code>cd ~/your-org-work &amp;&amp; claude</code> 로 열어도 되지만, 위 자가 점검은 건너뜁니다.)</p>
 <p>실행하면 프롬프트 입력창이 나옵니다. 특별한 명령어 없이 <b>평소 말하듯 한국어로</b> 입력하면 됩니다:</p>
 <div class="tblwrap"><table>
   <tr><th style="width:340px">이렇게 치면</th><th>이렇게 됩니다</th></tr>
@@ -410,7 +420,7 @@ WSL 사용자는 Windows 터미널에서 WSL 셸에 들어온 뒤 실행합니�
 </ul>
 
 <h3>알아 두면 좋은 CLI 다섯 가지</h3>
-<p class="dim">전부 선택 사항입니다. 대시보드로도 같은 것을 볼 수 있습니다. (<code>~/section9/bin/s9</code>, PATH에 넣어 두면 <code>s9</code>)</p>
+<p class="dim">전부 선택 사항입니다. 대시보드로도 같은 것을 볼 수 있습니다. (<code>~/your-org-work/bin/s9</code>, PATH에 넣어 두면 <code>s9</code>)</p>
 <div class="tblwrap"><table>
   <tr><th style="width:250px">명령</th><th>용도</th></tr>
   <tr><td><code>s9 digest</code></td><td>지금 진행 중인 작업의 전체 요약 — "어디까지 됐지?"의 답</td></tr>
@@ -449,7 +459,7 @@ WSL 사용자는 Windows 터미널에서 WSL 셸에 들어온 뒤 실행합니�
 
 <div class="faq"><div class="q">대시보드 서버가 꺼졌어요.</div>
 <div class="a">다음 Claude Code 세션이 시작될 때 자동으로 되살아납니다. 지금 바로 필요하면
-<code>~/section9/bin/s9 serve</code> 로 수동 기동하세요 (기본 포트 9909).</div></div>
+<code>~/your-org-work/bin/s9 serve</code> 로 수동 기동하세요 (기본 포트 9909).</div></div>
 
 <div class="faq"><div class="q">사람마다 보이는 문서가 달라요.</div>
 <div class="a">정상입니다. 서버가 자동 인식한 계정 기준으로 열람이 격리됩니다 — 일반 사용자는
@@ -457,7 +467,7 @@ WSL 사용자는 Windows 터미널에서 WSL 셸에 들어온 뒤 실행합니�
 추가되었는지(프로젝트 정보 패널) 확인하세요.</div></div>
 
 <div class="faq"><div class="q">우상단에 "미등록 계정" 경고가 떠요.</div>
-<div class="a">이 OS 계정이 아직 등록되지 않았습니다. 터미널에서 <code>~/section9/bin/s9 user add &lt;이름&gt;</code> 으로
+<div class="a">이 OS 계정이 아직 등록되지 않았습니다. 터미널에서 <code>~/your-org-work/bin/s9 user add &lt;이름&gt;</code> 으로
 등록하세요. 이미 다른 이름으로 등록해 둔 계정이 있다면 <code>s9 user attach &lt;이름&gt;</code> 으로
 현재 OS 계정을 그 계정에 연결하면 됩니다.</div></div>
 
@@ -474,11 +484,13 @@ WSL 사용자는 Windows 터미널에서 WSL 셸에 들어온 뒤 실행합니�
 프로젝트가 그 묶음입니다 — 요청·문서·화면을 프로젝트 단위로 모아 보고,
 <b>멤버가 아닌 사람에게는 그 프로젝트의 문서가 아예 보이지 않게</b> 격리합니다.</p>
 <p class="dim">4장의 '프로젝트 정보 패널과 열람 격리'가 바로 이 기능의 화면입니다.
-이 장에서는 만드는 것부터 운영까지 순서대로 다룹니다.</p>
+이 장에서는 만드는 것부터 운영까지 순서대로 다룹니다.
+프로젝트는 어디까지나 인스턴스(팀 저장소) <b>안</b>의 묶음입니다 — 보안 경계 자체가 다른 조직·고객이라면
+프로젝트가 아니라 <a href="#ops">인스턴스를 분리(8장)</a>하는 것이 맞습니다.</p>
 
 <h3>프로젝트 만들기</h3>
 <p>터미널에서 한 줄이면 됩니다 (예시는 <code>pay</code> 라는 이름의 결제 프로젝트):</p>
-<pre><code>~/section9/bin/s9 project add pay --name "결제 시스템"</code></pre>
+<pre><code>~/your-org-work/bin/s9 project add pay --name "결제 시스템"</code></pre>
 <p>이렇게 출력되면 성공입니다:</p>
 <pre><code>PRJ-20260824-002  (pay)  owner=sjpark1
   ↳ 에셋 공간: projects/pay/ — CONTEXT.md(진입점) + assets/</code></pre>
@@ -491,7 +503,7 @@ WSL 사용자는 Windows 터미널에서 WSL 셸에 들어온 뒤 실행합니�
 <h3>요청을 프로젝트에 넣기</h3>
 <p>터미널에서 일을 시킬 때 <i>"이건 pay 프로젝트 건이야"</i>처럼 프로젝트를 밝히면,
 AI가 카드를 기록하면서 그 프로젝트로 귀속시킵니다. 직접 넣을 때는 <code>--project</code> 를 씁니다:</p>
-<pre><code>~/section9/bin/s9 new request --title "환불 API 추가" --project pay --size M --body "..."</code></pre>
+<pre><code>~/your-org-work/bin/s9 new request --title "환불 API 추가" --project pay --size M --body "..."</code></pre>
 <p class="dim">프로젝트로 귀속된 요청이 접수되면 그 프로젝트의 <b>CONTEXT.md가 세션에 자동 주입</b>됩니다 —
 배경 설명을 매번 반복하지 않아도 AI가 프로젝트 맥락을 알고 시작한다는 뜻입니다.</p>
 
@@ -511,7 +523,7 @@ AI가 카드를 기록하면서 그 프로젝트로 귀속시킵니다. 직접 �
 </table></div>
 <p class="dim">패널의 <b>직무</b>(PM·개발자 등)는 권한과 무관한 표시용 자유 텍스트이고,
 <b>만료</b>일을 지정하면 그 날짜가 지난 멤버는 자동으로 비활성됩니다(문서에서 사라져 보임).
-터미널로도 같은 일을 할 수 있습니다: <code>~/section9/bin/s9 project member pay add bob --role maintainer</code></p>
+터미널로도 같은 일을 할 수 있습니다: <code>~/your-org-work/bin/s9 project member pay add bob --role maintainer</code></p>
 
 <h3>프로젝트 공간 — projects/&lt;slug&gt;/</h3>
 <p>프로젝트를 만들면 생기는 파일 공간입니다. 규약은 딱 세 자리입니다:</p>
@@ -529,7 +541,7 @@ AI가 카드를 기록하면서 그 프로젝트로 귀속시킵니다. 직접 �
 세션 도중에 넣은 파일은 <b>다음 세션부터</b> 보입니다.</p>
 <ul>
   <li><b><code>agents/worker.md</code> 는 특별합니다</b> — 반려 후 무인 재작업 워커가 뜰 때, 이 파일이 워커의 프롬프트 봉투로 자동 주입됩니다. "우리 프로젝트의 재작업은 이런 규칙으로 해라"를 적어 두는 자리입니다.</li>
-  <li>지금 상태 확인·즉시 동기화: <code>~/section9/bin/s9 project agents ls</code> / <code>sync</code></li>
+  <li>지금 상태 확인·즉시 동기화: <code>~/your-org-work/bin/s9 project agents ls</code> / <code>sync</code></li>
 </ul>
 
 <h3>화면에서 프로젝트 단위로 보기</h3>
@@ -550,6 +562,83 @@ AI가 카드를 기록하면서 그 프로젝트로 귀속시킵니다. 직접 �
 <div class="callout"><b>마지막 owner를 제거·강등하려고 하지 마세요.</b> 어차피 차단됩니다 —
 <i>"마지막 owner는 제거할 수 없다 (다른 owner를 먼저 지정하라)"</i>.
 인수인계할 때는 새 owner를 먼저 지정한 뒤에 기존 owner를 내리면 됩니다.</div>
+</section>
+
+<!-- ═══════════════ 8 ═══════════════ -->
+<section id="ops">
+<h2><span class="no">8</span>운영(관리자) — 인스턴스 만들기와 배포</h2>
+<p class="lead">이 장의 독자는 <b>팀 저장소를 만들고 관리하는 사람</b>입니다.
+1~7장으로 충분한 일반 팀원은 읽지 않아도 됩니다.</p>
+<p>section9은 두 종류의 리포로 운영합니다. 팀원에게는 인스턴스 하나만 알려 주면 됩니다 —
+코드는 이미 그 안에 들어 있습니다.</p>
+<div class="tblwrap"><table>
+  <tr><th style="width:190px">리포</th><th>무엇인가</th><th>누가 아는가</th></tr>
+  <tr><td><b>업스트림</b> = section9</td><td>프레임워크(하네스 코드만: bin·web·harness·docs). 개선은 여기서만 일어납니다</td><td>관리자·하네스 개발자</td></tr>
+  <tr><td><b>인스턴스</b> = 팀 저장소</td><td>작업 공간(사설). 데이터(vault·users·projects·streams)를 track하고, 코드는 업스트림에서 머지로 받습니다</td><td>모든 팀원</td></tr>
+</table></div>
+<p class="dim">인스턴스는 리모트를 둘 가집니다: <code>origin</code>(팀 사설 리포, push/pull 대상) +
+<code>upstream</code>(section9, 하네스 업그레이드 수신용).</p>
+
+<h3>인스턴스 만들기 — <code>s9 instance init</code> 한 번</h3>
+<p>관리자 머신의 section9 카피(예: <code>~/section9</code>)에서 실행합니다.
+사설 리포 URL 하나만 주면 클론 → 리모트 구성 → 데이터 track 전환 → 초기 커밋 → 푸시까지 자동입니다.</p>
+<pre><code>cd ~/section9 &amp;&amp; bin/s9 instance init git@github.com:your-org/your-org-work.git</code></pre>
+<p>실제 출력입니다 (경로·URL은 각자 환경에 따라 다르게 표시됩니다):</p>
+<pre><code>① 베이스 클론: /home/admin/section9 → /home/admin/your-org-work
+② 리모트: upstream=git@github.com:your-org/section9.git  origin=git@github.com:your-org/your-org-work.git
+③ 데이터 track 전환 + 초기 커밋 완료
+⑤ 푸시 실패 — 원격 리포가 아직 없을 가능성이 크다. 절차:
+  1. https://github.com/new 에서 리포 생성 — 이름 your-org-work, Private,
+     'Add a README/.gitignore/license' 전부 체크하지 말 것
+  2. 서버측 보호(코어 경로): Settings &gt; Branches &gt; main 보호 규칙 +
+     .github/CODEOWNERS 의 @OWNER 를 admin 계정으로 교체
+  3. 다시 푸시: cd /home/admin/your-org-work &amp;&amp; git push -u origin main
+
+다음 단계(사용 시작):
+  cd /home/admin/your-org-work &amp;&amp; bin/s9-install    # 이 머신의 훅·스킬 설치(멱등)
+  bin/s9 code                          # 세션 시작 — 이후 평소처럼 프롬프트
+팀원 합류: git clone git@github.com:your-org/your-org-work.git 후 위 두 줄과 동일.
+업그레이드(관리자): cd /home/admin/your-org-work &amp;&amp; git fetch upstream &amp;&amp; git merge upstream/main &amp;&amp; git push</code></pre>
+<ul>
+  <li>⑤의 "푸시 실패"는 원격 사설 리포를 아직 안 만든 첫 실행의 정상 경로입니다 — 출력이 알려 주는 세 단계대로 리포를 만들고 다시 푸시하면 끝.</li>
+  <li><code>gh</code> CLI가 설치돼 있다면 <code>--create</code> 를 붙여 사설 리포 생성까지 한 번에 할 수 있습니다.</li>
+  <li>클론 위치를 바꾸려면 <code>--dir &lt;경로&gt;</code> (기본은 <code>~/&lt;리포이름&gt;</code>).</li>
+</ul>
+
+<h3>팀원 초대</h3>
+<p>인스턴스 리포 URL과 아래 세 줄만 전달하면 됩니다 (<a href="#install">2장</a>과 같은 내용입니다):</p>
+<pre><code>git clone git@github.com:your-org/your-org-work.git ~/your-org-work
+cd ~/your-org-work &amp;&amp; bin/s9-install
+bin/s9 code</code></pre>
+<p class="dim">팀원이 사설 리포에 접근할 수 있도록 GitHub에서 collaborator(또는 팀)로 추가하는 것을 잊지 마세요.</p>
+
+<h3>하네스 업그레이드 배포</h3>
+<p>업스트림(section9)에 개선이 올라오면, 관리자가 인스턴스에서 세 명령으로 배포합니다:</p>
+<pre><code>cd ~/your-org-work
+git fetch upstream &amp;&amp; git merge upstream/main
+git push</code></pre>
+<p><b>팀원은 <code>git pull</code> 만 하면 됩니다.</b> pull 후에는 post-merge 훅이
+<code>s9 index rebuild</code> 와 <code>s9-install --quiet</code> 를 자동 실행해
+인덱스·훅·스킬·에이전트까지 최신으로 맞춥니다 — 팀원이 따로 할 일은 없습니다.</p>
+
+<h3>보호 설정 — 코어 경로를 팀원이 못 고치게</h3>
+<p>인스턴스에서 하네스 코드(<code>bin/</code>·<code>web/</code>·<code>harness/</code>·<code>.github/</code>·<code>.gitignore</code>)가
+수정되면 업스트림 머지가 깨끗하지 않게 됩니다. 두 겹으로 막습니다:</p>
+<ul>
+  <li><b>로컬 1차 — pre-commit 가드</b>: <code>s9-install</code> 이 설치하는 pre-commit 훅(s9-guard)이 admin이 아닌 커밋의 코어 경로 변경을 차단합니다.</li>
+  <li><b>서버측 최종 — CODEOWNERS + branch protection</b>: 리포의 <code>.github/CODEOWNERS</code> 에서 <code>@OWNER</code> 를 실제 admin GitHub 계정(또는 팀)으로 교체하고, Settings › Branches › main 에 보호 규칙을 추가합니다 — "Require a pull request before merging" + "Require review from Code Owners". 이러면 코어 경로 변경은 admin 승인 없이 main에 들어갈 수 없습니다.</li>
+</ul>
+
+<h3>충돌 시 대처 — 업스트림 cherry-pick 원칙</h3>
+<p>업스트림 머지가 늘 깨끗한 이유는 교집합이 없기 때문입니다: 데이터 파일은 업스트림에 없고,
+코어 파일은 인스턴스에서 수정하지 않습니다. 이 원칙이 깨졌을 때의 대처는 하나입니다:</p>
+<ul>
+  <li><b>하네스 결함을 발견하면</b> 인스턴스에서 고치지 마세요. 업스트림(section9 카피)에서 수정·테스트·푸시하고, 각 인스턴스는 다음 <code>merge upstream/main</code> 으로 수령합니다.</li>
+  <li><b>실수로 인스턴스에서 코어를 고쳤다면</b> — 비admin은 가드가 커밋을 차단하니 그 자리에서 되돌리면 됩니다. admin 커밋이 들어갔다면 그 커밋을 <b>업스트림에 cherry-pick</b>한 뒤, 인스턴스는 merge로 다시 정렬합니다.</li>
+</ul>
+<div class="callout"><b>하네스 자체를 개발하는 사람만</b> section9 업스트림 카피(<code>~/section9</code>)에서 작업합니다.
+한 머신에서 업스트림 카피와 인스턴스를 병행해도 됩니다 — 훅은 세션의 현재 디렉토리 기준으로
+해당 인스턴스의 vault에 기록합니다.</div>
 </section>
 
 <footer>
