@@ -1,12 +1,12 @@
 # section9 harness 보호 — GitHub 서버측 인가 (우회 불가능한 최종 게이트)
 # 사용법: 리포를 GitHub에 올린 뒤,
-#   1. 아래 @OWNER 를 실제 admin GitHub 계정/팀으로 교체
+#   1. (인스턴스 리포에서는) @nicehugepark 를 그 조직의 admin 계정/팀으로 교체
 #   2. Settings > Branches > main 에 branch protection rule 추가:
 #      "Require a pull request before merging" + "Require review from Code Owners"
 # 그러면 아래 경로의 변경은 admin 승인 없이 main에 들어갈 수 없다.
 
-/bin/       @OWNER
-/web/       @OWNER
-/harness/   @OWNER
-/.github/   @OWNER
-/.gitignore @OWNER
+/bin/       @nicehugepark
+/web/       @nicehugepark
+/harness/   @nicehugepark
+/.github/   @nicehugepark
+/.gitignore @nicehugepark
