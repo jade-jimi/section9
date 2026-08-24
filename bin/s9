@@ -1715,6 +1715,29 @@ def cmd_digest(args):
     """
     user = resolve_user(args.user)
     budget = int(args.budget or user_config(user).get("digest_budget") or 2500)
+    # 프로필 필수 권장 필드 촉구 (REQ-20260824-055): 회사 이메일·GitHub 미기재면
+    # 세션 시작 컨텍스트(digest)로 1회 촉구 — 협업(코드오너·알림)의 전제 데이터.
+    profile_nag = ""
+    try:
+        pp = os.path.join(USERS, user, "profile.md")
+        if os.path.exists(pp):
+            with open(pp, encoding="utf-8") as f:
+                pmeta, _ = fm_parse(f.read())
+            missing = []
+            if not (pmeta.get("emails") or pmeta.get("email")):
+                missing.append("회사 이메일(--emails a@b,c@d)")
+            if not pmeta.get("github"):
+                missing.append("개인 GitHub(--github 계정)")
+            if not pmeta.get("github_org"):
+                missing.append("조직 GitHub(--github-org 계정)")
+            if missing:
+                profile_nag = (
+                    f"⚠ 프로필 미완성({user}): {', '.join(missing)} — "
+                    f"`s9 user update {user} --emails .. --github .. "
+                    f"--github-org ..` 로 기입하라. 사용자가 값을 말하면 "
+                    f"리드가 즉시 실행해 채워라.")
+    except Exception:
+        pass
     rows = load_catalog()
     reqs = [r for r in rows if r["type"] == "request"]
     active_states = ("open", "in-progress", "blocked", "review")
@@ -1785,6 +1808,8 @@ def cmd_digest(args):
             text = build(caps)
             break
         text = build(caps)
+    if profile_nag:
+        text = profile_nag + "\n" + text
     print(text)
 
 
@@ -2079,8 +2104,35 @@ def user_role(name):
         return ""  # 미등록
 
 
-def do_user_add(name, role="member", display="", email="", machine=None):
-    """사용자 등록의 단일 코드 경로 (CLI + 웹)."""
+GH_ACCT = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})"
+EMAIL_RE = r"[^@\s]+@[^@\s]+\.[^@\s]+"
+
+
+def _valid_emails(emails):
+    out = []
+    for e in emails or []:
+        e = (e or "").strip()
+        if not e:
+            continue
+        if not re.fullmatch(EMAIL_RE, e):
+            raise ValueError(f"invalid email: {e!r}")
+        if e not in out:
+            out.append(e)
+    return out
+
+
+def _valid_gh(v, label):
+    v = (v or "").strip().lstrip("@")
+    if v and not re.fullmatch(GH_ACCT, v):
+        raise ValueError(f"invalid {label}: {v!r} (GitHub 계정 형식)")
+    return v
+
+
+def do_user_add(name, role="member", display="", email="", machine=None,
+                emails=None, github="", github_org=""):
+    """사용자 등록의 단일 코드 경로 (CLI + 웹).
+    emails(회사 이메일 N개)·github(개인)·github_org(조직 계정)는 프로필 필수
+    권장 필드 — 미기재면 세션 시작 digest가 입력을 촉구한다 (REQ-20260824-055)."""
     if not name or not re.fullmatch(r"[A-Za-z0-9._-]+", name):
         raise ValueError(f"invalid user name: {name!r} (허용: 영문/숫자/._-)")
     if role not in ROLES:
@@ -2095,6 +2147,15 @@ def do_user_add(name, role="member", display="", email="", machine=None):
         lines.append(f"display: {display}")
     if email:
         lines.append(f"email: {email}")
+    emails = _valid_emails(emails)
+    github = _valid_gh(github, "github")
+    github_org = _valid_gh(github_org, "github_org")
+    if emails:
+        lines.append(f"emails: {json.dumps(emails, ensure_ascii=False)}")
+    if github:
+        lines.append(f"github: {github}")
+    if github_org:
+        lines.append(f"github_org: {github_org}")
     # 현재 OS 계정을 자동 기록 — whoami 파생 매칭의 근거 (REQ-20260824-027).
     # 타인 계정을 admin이 대신 등록하는 경우엔 등록자 계정이 남지만, 매칭은
     # 이름 직접 일치가 우선이라 오인 파생으로 이어지지 않는다.
@@ -2130,8 +2191,10 @@ def do_user_attach(name, machine=None):
     return acct, machine, changed
 
 
-def do_user_update(name, display=None, email=None, role=None, actor=""):
-    """프로필 수정 — 변경 내역을 profile.md Notes에 audit."""
+def do_user_update(name, display=None, email=None, role=None, actor="",
+                   emails=None, github=None, github_org=None):
+    """프로필 수정 — 변경 내역을 profile.md Notes에 audit.
+    emails는 리스트 전체 교체(빈 리스트 = 비움), github/github_org는 개별 갱신."""
     if not user_role(name):
         raise ValueError(f"not registered: {name}")
     ppath = os.path.join(USERS, name, "profile.md")
@@ -2142,6 +2205,18 @@ def do_user_update(name, display=None, email=None, role=None, actor=""):
         if v is not None and meta.get(k, "") != v:
             meta[k] = v
             changed.append(k)
+    if emails is not None:
+        ve = _valid_emails(emails)
+        if meta.get("emails") != ve:
+            meta["emails"] = ve
+            changed.append(f"emails({len(ve)})")
+    for k, v, lbl in (("github", github, "github"),
+                      ("github_org", github_org, "github_org")):
+        if v is not None:
+            vv = _valid_gh(v, lbl)
+            if meta.get(k, "") != vv:
+                meta[k] = vv
+                changed.append(k)
     if role is not None and role != meta.get("role", "member"):
         if role not in ROLES:
             raise ValueError(f"invalid role: {role}")
@@ -2227,11 +2302,30 @@ def cmd_user(args):
             print(json.dumps(cfg, ensure_ascii=False, indent=1))
         return
 
+    if args.action == "update":
+        name = args.name or die("usage: s9 user update <name> [--emails a@b,c@d]"
+                                " [--github 계정] [--github-org 계정] ...")
+        try:
+            changed = do_user_update(
+                name, display=args.display, email=args.email,
+                emails=(args.emails.split(",") if args.emails is not None
+                        else None),
+                github=args.github, github_org=args.github_org,
+                actor=resolve_user())
+        except ValueError as e:
+            die(str(e))
+        print(f"{name}: " + (", ".join(changed) if changed else "(변경 없음)"))
+        return
+
     if args.action == "add":
         name = args.name or die("usage: s9 user add <name>")
         try:
             udir = do_user_add(name, role=args.role, display=args.display or "",
-                               email=args.email or "", machine=machine)
+                               email=args.email or "", machine=machine,
+                               emails=(args.emails.split(",") if args.emails
+                                       else None),
+                               github=args.github or "",
+                               github_org=args.github_org or "")
         except ValueError as e:
             die(str(e))
         print(f"user registered: {name}  ({os.path.relpath(udir, ROOT)}/)")
@@ -3884,6 +3978,9 @@ def cmd_serve(args):
                     out.append({"name": u, "role": meta.get("role", "member"),
                                 "display": meta.get("display", ""),
                                 "email": meta.get("email", ""),
+                                "emails": meta.get("emails", []),
+                                "github": meta.get("github", ""),
+                                "github_org": meta.get("github_org", ""),
                                 "registered": meta.get("registered", ""),
                                 "registered_on": meta.get("registered_on", ""),
                                 "config": user_config(u)})
@@ -3986,6 +4083,8 @@ def cmd_serve(args):
                     changed = do_user_update(
                         str(req.get("name") or ""), display=req.get("display"),
                         email=req.get("email"), role=role,
+                        emails=req.get("emails"), github=req.get("github"),
+                        github_org=req.get("github_org"),
                         actor=f"{actor} via dashboard")
                     self._json({"ok": True, "changed": changed})
                 elif parsed.path == "/api/project/member":
@@ -4234,13 +4333,16 @@ def main():
     up = sub.add_parser("user", help="user registry & session binding")
     up.add_argument("action",
                     choices=["add", "attach", "list", "switch", "current",
-                             "role", "config"])
+                             "role", "config", "update"])
     up.add_argument("name", nargs="?")
     up.add_argument("key", nargs="?", help="config: 설정 키 / role: 무시")
     up.add_argument("value", nargs="?", help="config: 설정 값 / role: 새 역할")
     up.add_argument("--role", default="member", choices=["admin", "member", "viewer"],
                     help="add 시 초기 역할")
     up.add_argument("--email")
+    up.add_argument("--emails", help="회사 이메일 목록 (쉼표 구분, update 시 전체 교체)")
+    up.add_argument("--github", help="개인 GitHub 계정")
+    up.add_argument("--github-org", dest="github_org", help="조직 GitHub 계정/팀")
     up.add_argument("--display")
     up.add_argument("--session", help="세션 id (기본: $S9_SESSION)")
     up.add_argument("--machine", help="머신 이름 (기본: $S9_MACHINE 또는 hostname)")
