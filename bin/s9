@@ -2916,7 +2916,7 @@ def cmd_instance(args):
     if args.action != "init":
         die("usage: s9 instance init <사설리포URL> [--dir 경로] [--create]")
     url = args.url or die("사설 리포 URL이 필요하다 — 예: s9 instance init "
-                          "git@github.com:me/itcen-work.git")
+                          "git@github.com:your-org/your-org-work.git")
     name = re.sub(r"\.git$", "", url.rstrip("/").rsplit("/", 1)[-1]) or "s9-instance"
     target = os.path.abspath(os.path.expanduser(args.dir or
                                                 os.path.join("~", name)))

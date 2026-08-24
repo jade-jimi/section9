@@ -27,7 +27,7 @@ class TestInstanceInit(unittest.TestCase):
         cls.base = tempfile.mkdtemp(prefix="s9inst-")
         cls.origin = os.path.join(cls.base, "work.git")   # 사설 리포(로컬 bare)
         sh("git", "init", "-q", "--bare", cls.origin)
-        cls.target = os.path.join(cls.base, "itcen-work")
+        cls.target = os.path.join(cls.base, "org-work")
         cls.env = {**os.environ}
         cls.env.pop("S9_ROOT", None)
         cls.env.pop("S9_SESSION", None)
