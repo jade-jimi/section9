@@ -29,7 +29,8 @@ def ensure_serve():
     except OSError:
         pass
     try:
-        root = os.environ.get("S9_ROOT") or os.path.expanduser("~/section9")
+        root = os.environ.get("S9_ROOT") or os.path.dirname(
+            os.path.dirname(os.path.realpath(__file__)))
         os.makedirs(os.path.join(root, "state"), exist_ok=True)
         lf = open(os.path.join(root, "state", "serve.log"), "a")
         subprocess.Popen([S9, "serve", "--port", str(port)],
@@ -57,7 +58,8 @@ def main():
                        capture_output=True, text=True, env=env, timeout=10)
         # 세션 시작/종료 시 스트림 미러링 — 파일명=원본 basename(전체SID.jsonl)
         try:
-            root = os.environ.get("S9_ROOT") or os.path.expanduser("~/section9")
+            root = os.environ.get("S9_ROOT") or os.path.dirname(
+            os.path.dirname(os.path.realpath(__file__)))
             os.makedirs(os.path.join(root, "streams"), exist_ok=True)
             shutil.copyfile(tp, os.path.join(root, "streams", os.path.basename(tp)))
         except Exception:
@@ -93,7 +95,8 @@ def main():
         # 대시보드 채팅 수신함 (REQ-20260824-032): 세션별 inbox 파일을 만들어 두고
         # Monitor(tail -f) arming을 지시 — 대시보드가 append하면 세션이 즉시 깨어난다.
         try:
-            root = os.environ.get("S9_ROOT") or os.path.expanduser("~/section9")
+            root = os.environ.get("S9_ROOT") or os.path.dirname(
+            os.path.dirname(os.path.realpath(__file__)))
             inbox = os.path.join(root, "state", "chat", f"inbox-{session}.jsonl")
             os.makedirs(os.path.dirname(inbox), exist_ok=True)
             open(inbox, "a").close()

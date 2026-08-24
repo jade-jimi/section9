@@ -306,7 +306,8 @@ def start_dashboard():
         pass
     try:
         s9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
-        root = os.environ.get("S9_ROOT") or os.path.expanduser("~/section9")
+        root = os.environ.get("S9_ROOT") or os.path.dirname(
+            os.path.dirname(os.path.realpath(__file__)))
         os.makedirs(os.path.join(root, "state"), exist_ok=True)
         lf = open(os.path.join(root, "state", "serve.log"), "a")
         subprocess.Popen([s9, "serve", "--port", str(port)],

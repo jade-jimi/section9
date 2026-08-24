@@ -18,7 +18,10 @@ import socket
 import sys
 import time
 
-ROOT = os.environ.get("S9_ROOT") or os.path.expanduser("~/section9")
+# ROOT 기본값 = 이 스크립트가 속한 리포 (REQ-20260824-052: 클론 위치가
+# ~/section9 가 아니어도 자기 리포를 다룬다). S9_ROOT 로 재지정 가능.
+ROOT = os.environ.get("S9_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.realpath(__file__)))
 VAULT = os.path.join(ROOT, "vault")
 INDEX = os.path.join(ROOT, "index")
 CATALOG = os.path.join(INDEX, "catalog.jsonl")
@@ -2908,6 +2911,38 @@ def cmd_code(args):
         print(f"대시보드 기동: http://127.0.0.1:{port}/")
     if getattr(args, "no_claude", False):
         return  # 테스트/대시보드만
+    # ---- preflight (REQ-20260824-052): 환경이 미완인데 claude 부터 띄우면
+    # 사용자는 하네스 없이 "그냥 그대로" 써버린다 — 실행 전에 자가 점검·치유.
+    home = os.path.expanduser("~")
+    sp = os.path.join(home, ".claude", "settings.json")
+    hooked = False
+    try:
+        with open(sp, encoding="utf-8") as f:
+            hooked = "s9-audit-prompt" in f.read() and ROOT in open(sp).read()
+    except OSError:
+        pass
+    if not hooked:
+        print("◌ section9 훅 미설치 감지 — s9-install 을 먼저 실행한다…")
+        bindir = os.path.dirname(os.path.realpath(__file__))
+        r = subprocess.run([os.path.join(bindir, "s9-install")],
+                           stdin=subprocess.DEVNULL)
+        if r.returncode != 0:
+            die("s9-install 실패 — 수동 실행 후 다시 시도하라: bin/s9-install")
+        print("◌ 설치 완료 — 지금 시작하는 세션부터 자동 audit이 적용된다.")
+    try:
+        u, src_kind = resolve_user(None, with_source=True)
+        if src_kind == "os-account" and not user_role(u):
+            if sys.stdin.isatty():
+                name = input(f"◌ 미등록 사용자다. 등록할 이름(Enter={u}): ").strip() or u
+                subprocess.run([os.path.realpath(__file__), "user", "add",
+                                name], stdin=subprocess.DEVNULL)
+            else:
+                print(f"◌ 미등록 사용자({u}) — 등록하려면: s9 user add {u}")
+    except Exception:
+        pass
+    if not os.path.exists(os.path.join(home, ".claude", ".credentials.json")):
+        print("◌ Claude 미로그인 — 이어서 뜨는 Claude Code 화면에서 안내대로 "
+              "로그인하면 그대로 세션이 시작된다 (별도 선행 절차 없음).")
     try:
         os.chdir(ROOT)  # 규약·스킬이 이 디렉토리 기준으로 로드된다
         # 계정 기본 인자(user config s9code_args) 뒤에 명령행 인자 — 뒤가 우선

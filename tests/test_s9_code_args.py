@@ -31,7 +31,17 @@ class TestCodeArgs(unittest.TestCase):
         cls.port = cls.lsock.getsockname()[1]
         t = threading.Thread(target=cls._accept_loop, daemon=True)
         t.start()
+        # HOME 격리 + 훅 설치済 가장 — preflight(REQ-052)가 실 HOME을 만지거나
+        # s9-install을 트리거하지 않게 한다
+        cls.home = tempfile.mkdtemp(prefix="s9codehome-")
+        os.makedirs(os.path.join(cls.home, ".claude"), exist_ok=True)
+        with open(os.path.join(cls.home, ".claude", "settings.json"), "w") as f:
+            f.write(json.dumps({"note": f"s9-audit-prompt {cls.tmp}"}))
+        with open(os.path.join(cls.home, ".claude",
+                               ".credentials.json"), "w") as f:
+            f.write("{}")
         cls.env = {**os.environ, "S9_ROOT": cls.tmp, "S9_PORT": str(cls.port),
+                   "HOME": cls.home,
                    "S9_CODE_DRYRUN": "1", "S9_USER": "tester"}
         cls.env.pop("S9_SESSION", None)
         subprocess.run([S9, "init"], capture_output=True, env=cls.env, timeout=15)
@@ -104,6 +114,36 @@ class TestCodeArgs(unittest.TestCase):
         finally:
             subprocess.run([S9, "user", "config", "tester", "s9code_args", ""],
                            capture_output=True, env=self.env, timeout=15)
+
+    # P1. preflight: 훅 미설치 흔적(settings.json에 마커 없음) → s9-install 자동
+    #     실행 안내가 출력되고 설치가 수행된다 (REQ-20260824-052)
+    def test_p1_preflight_installs(self):
+        home2 = tempfile.mkdtemp(prefix="s9codeh2-")
+        # 실리포 유사 ROOT(bin/ 존재) — s9-install이 자기 파일들을 찾을 수 있게
+        root2 = tempfile.mkdtemp(prefix="s9coderoot-")
+        os.symlink(os.path.join(HERE, "..", "bin"),
+                   os.path.join(root2, "bin"))
+        os.symlink(os.path.join(HERE, "..", "harness"),
+                   os.path.join(root2, "harness"))
+        env2 = {**self.env, "HOME": home2, "S9_ROOT": root2}
+        r = subprocess.run([S9, "code"], capture_output=True, text=True,
+                           env=env2, timeout=60, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("훅 미설치", r.stdout)
+        self.assertTrue(os.path.exists(
+            os.path.join(home2, ".claude", "settings.json")))
+        self.assertIn("미로그인", r.stdout)   # credentials 없음 → 로그인 예고
+        self.assertIn('["claude"', r.stdout)  # 그 후 실행은 계속된다
+
+    # P2. preflight: 미등록 사용자 + 비대화형 → 등록 안내만 출력(멈추지 않음)
+    def test_p2_preflight_unregistered_notty(self):
+        env2 = {**self.env}
+        env2.pop("S9_USER")               # OS 계정 fallback → 미등록
+        r = subprocess.run([S9, "code"], capture_output=True, text=True,
+                           env=env2, timeout=30, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("미등록 사용자", r.stdout)
+        self.assertIn('["claude"', r.stdout)
 
     # G4. 회귀: --no-claude 는 대시보드만 — dry-run 출력(JSON exec 라인) 없음
     def test_g4_no_claude(self):
