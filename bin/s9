@@ -3051,6 +3051,13 @@ def cmd_instance(args):
     git("remote", "rename", "origin", "upstream")
     git("remote", "set-url", "upstream", upstream_url)
     git("remote", "add", "origin", url)
+    # 리포 로컬 git 신원 — 업스트림 카피의 설정을 승계(없으면 이후 커밋에서
+    # git이 스스로 안내). merge/커밋이 신원 부재로 실패하지 않게 한다.
+    for k in ("user.name", "user.email"):
+        v = subprocess.run(["git", "config", k], cwd=ROOT,
+                           capture_output=True, text=True).stdout.strip()
+        if v:
+            git("config", k, v)
     print(f"② 리모트: upstream={upstream_url}  origin={url}")
 
     with open(os.path.join(target, ".gitignore"), "w", encoding="utf-8") as f:
