@@ -444,7 +444,7 @@ def _tdd_progress(body):
         # 'S1. ...' / 'V8 ...' 등 대문자 1글자+숫자 라벨 — REQ-... 같은 다글자 접두는
         # 라벨이 아니다. 라벨 병합으로 개정된 체크리스트 세대가 합산되지 않는다
         # (REQ-20260824-001: V-라벨 미인식으로 카드 TDD 수가 실제와 불일치하던 버그)
-        km = re.match(r"([A-Z]\d+)\b", rest)
+        km = re.match(r"([A-Z]\d+(?:\.\d+)?)\b", rest)
         key = km.group(1) if km else rest.strip()[:40]
         seen[key] = seen.get(key, False) or passed
     if not seen:
@@ -740,12 +740,15 @@ def do_transition(doc_id, new_status, note="", user=None, force=False, auto=Fals
     # review 진입 가드: TDD 미완료 request는 판정 대기에 올릴 수 없다 (REQ-20260824-010)
     # — 객관 검증을 마치고 체크하거나, 시나리오를 개정(새 tdd 노트)하거나, 사용자
     # 판정만 남은 예외적 경우 --force로 사유와 함께 전이하라.
-    if new_status == "review" and meta.get("type") == "request" and not force:
+    if new_status in ("review", "done") and meta.get("type") == "request" \
+            and not force:
         prog = _tdd_progress(body)
         if prog and prog["passed"] < prog["total"]:
             raise ValueError(
-                f"TDD 미완료 {prog['passed']}/{prog['total']} — review는 검증 완료 후. "
-                f"검증해 체크하거나 시나리오를 개정하라 (예외는 --force)")
+                f"TDD 미완료 {prog['passed']}/{prog['total']} — {new_status}는 검증 "
+                f"완료 후. 검증해 체크하거나 시나리오를 개정하라 (예외는 --force)"
+                + (" (055가 0/1로 done된 재발 방지 가드, REQ-20260824-058)"
+                   if new_status == "done" else ""))
     # note 단일라인 정규화: History status 라인이 개행에 깨지면 reopened/reqstream 파싱 실패
     note = re.sub(r"\s+", " ", note).strip() if note else ""
     if note:
