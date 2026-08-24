@@ -4,7 +4,6 @@
 **로컬 md 문서**로 audit / 문서화 / 인덱싱하여, LLM의 컨텍스트 메모리 한계를
 **외부기억(external memory)** 으로 대체하는 시스템.
 
-지향점: JIRA(요청/상태머신) + Confluence·Notion(문서/지식) + Obsidian(로컬 md, 링크 그래프).
 
 ## 핵심 원칙
 
@@ -39,6 +38,35 @@
   (세션 시작 시 네이티브 subagent로 동기화, 무인 워커 봉투 자동 주입).
 - **계정·사용량**: 헤더에 로그인된 클로드 계정과 사용량(세션 5h·주간·모델별)을
   60초 주기로 표시 — 계정 전환 즉시 반영.
+
+## 프로젝트 (projects)
+
+요청·문서·화면을 **프로젝트 단위로 묶고 격리**하는 축. 프로젝트는 PRJ 문서(slug 키)로
+등록되고, 파일 공간 `projects/<slug>/` 를 가진다.
+
+```bash
+s9 project add pay --name "결제 시스템" --user alice    # 등록 (owner=alice) + 공간 스캐폴드
+s9 project member pay add bob --role maintainer         # 멤버 (owner/maintainer/contributor/viewer)
+s9 project ls / show pay / authz pay bob                # 목록·상세·권한 확인
+s9 new request --project pay ...                        # 요청을 프로젝트에 귀속
+s9 project agents sync                                  # 프로젝트 에이전트 → .claude/agents 미러
+```
+
+```
+projects/<slug>/
+├── CONTEXT.md   # 프로젝트 컨텍스트 — 이 프로젝트의 요청 접수 시 세션에 자동 주입된다
+├── assets/      # 프로젝트 자료(문서·이미지·데이터)
+└── agents/      # 프로젝트 전용 에이전트 정의(*.md)
+                 #   세션 시작 시 .claude/agents/<slug>--이름.md 로 동기화 → 네이티브 subagent
+                 #   agents/worker.md 는 무인 재작업 워커의 프롬프트 봉투로 자동 주입
+```
+
+- **역할·인가**: 멤버 변경은 maintainer+, owner 지정·마지막 owner 강등 차단은 owner 전용.
+  대시보드의 프로젝트 정보 박스에서 인라인으로 관리한다.
+- **가시성 격리**: 문서(`/api/doc`)·스트림(`/api/stream*`) 열람은 소유자·프로젝트 멤버·admin
+  으로 제한 — 비멤버에게는 존재 자체가 보이지 않는다(404).
+- **화면**: Board/Docs/Graph 모두 프로젝트 필터를 지원한다. 요청 카드·그래프 노드는
+  프로젝트로 좁혀 볼 수 있다.
 
 ## Quickstart
 
