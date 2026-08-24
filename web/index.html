@@ -318,6 +318,9 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .ccout .ln.sub .g{color:var(--cc-faint)}
 .ccout .ln.ccdim{color:var(--cc-dim)}
 .ccstatus .ccagrow{cursor:pointer}
+.ccstatus .ccagrow.sel{background:rgba(78,201,122,.08)}
+.ccstatus .ccagrow.sel b{color:var(--cc-green)}
+.ccstatus .ccmain.dim{opacity:.5}
 .ccstatus .ccagrow:hover{background:rgba(255,255,255,.04)}
 .ccstatus .ccmain{cursor:pointer}
 .ccstatus .ccrc{text-decoration:underline;cursor:help}
@@ -938,6 +941,19 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .cfg-h{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
   margin:26px 0 4px;font-weight:600;font-family:var(--mono);
   border-top:1px solid var(--border);padding-top:14px}
+/* 프로필 확장 (REQ-20260824-055 E7) — 미기재 신호는 앰버, 실패는 인라인 mono (팝업 금지) */
+.pbadge{font-family:var(--mono);font-size:11px;color:var(--c-inprogress);margin-left:5px}
+.reqhint{font-family:var(--mono);font-size:10px;color:var(--c-inprogress);
+  text-transform:uppercase;letter-spacing:.05em;margin-left:8px;white-space:nowrap}
+.ferr{font-family:var(--mono);font-size:11px;color:var(--c-blocked);align-self:center;
+  margin-left:4px}
+.emrow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.emrow .em-rm{border:1px solid var(--border);background:var(--panel);color:var(--muted);
+  font-family:var(--mono);font-size:11px;padding:4px 8px;cursor:pointer;line-height:1.2}
+.emrow .em-rm:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+.em-add{border:0;background:none;color:var(--faint);padding:2px 0;cursor:pointer;
+  font-size:11px;font-family:var(--mono);text-align:left}
+.em-add:hover{color:var(--text);text-decoration:underline}
 
 /* ------- hovercard ------- */
 .hovercard{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--text);
@@ -960,7 +976,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
       <button data-tab="audit">Audit</button>
       <button data-tab="stream">Stream</button>
       <button data-tab="terminal">Terminal</button>
-      <button data-tab="settings">Settings</button>
+      <button data-tab="settings">Settings<span id="settings-badge" class="pbadge" hidden>⚠</span></button>
     </div>
   </div>
   <div class="hrow2">
@@ -1119,6 +1135,27 @@ const viewMe = () => asUser || getMe();
 // 조회 GET 쿼리: admin 미리보기 중에만 as를 붙인다 (그 외 신원 파라미터 없음)
 const meQ = () => asUser ? "as=" + encodeURIComponent(asUser) : "";
 
+/* 프로필 미기재 판정 (REQ-20260824-055) — 서버의 세션 시작 촉구와 동일 기준:
+   legacy email 단수 필드도 이메일 기재로 인정. 반환 = 빈 필드 라벨 목록. */
+function profileMissing(u){
+  if (!u) return [];
+  const miss = [];
+  if (!((u.emails || []).length || u.email)) miss.push("회사 이메일");
+  if (!u.github) miss.push("개인 GitHub");
+  if (!u.github_org) miss.push("조직 GitHub");
+  return miss;
+}
+// 헤더 Settings 탭의 ⚠ 배지 — __users 갱신 시점(boot·renderSettings)에 호출
+function updateProfileBadge(){
+  const el = $("#settings-badge");
+  if (!el) return;
+  const me = getMe();
+  const miss = me ? profileMissing((window.__users || []).find(x => x.name === me)) : [];
+  el.hidden = !miss.length;
+  el.title = miss.length
+    ? `프로필 미기재: ${miss.join(" · ")} — Settings > 내 계정에서 입력하세요` : "";
+}
+
 function renderWhoami(){
   const el = $("#whoami"), w = window.__whoami || {};
   if (!el || !w.user) return;
@@ -1178,6 +1215,7 @@ async function boot(){
       cfg = ((u.users || []).find(x => x.name === getMe()) || {}).config || null;
     }catch(e){}
     applyUISettings(cfg);
+    updateProfileBadge();
   }catch(e){}
   applyRoute(location.hash, false);  // 초기 URL 해시(#docs/REQ-... 등) 반영
   if (!location.hash) history.replaceState(null, "", "#" + tab);  // 초기 진입점 고정(뒤로가기 기준)
@@ -1234,7 +1272,9 @@ async function refreshCatalog(rerender){
                  || JSON.stringify(projects) !== before;
     catalog = fresh;
     if (changed){ fillFilters(); graph = null; }
-    if (rerender && changed){ auditCache = null; render(); }
+    // Settings는 폼 입력 중일 수 있다 — 폴링발 재렌더로 DOM(입력값)을 파괴하지
+    // 않는다. 탭을 떠날 때 render()가 최신 catalog로 다시 그린다 (REQ-055 E7).
+    if (rerender && changed){ auditCache = null; if (tab !== "settings") render(); }
   }catch(e){ /* 서버 재시작 중 등 — 다음 주기에 재시도 */ }
 }
 
@@ -2518,13 +2558,18 @@ function termAgentsRender(T){
   // transcript 근사(T.agents)를 그린다 (REQ-20260824-044)
   const srv = (T.srvAgents || []).filter(a => a.active).slice(-5);
   if (srv.length){
-    box.innerHTML = srv.map(a =>
-      `<div class="ag sub ccagrow" data-agent="${esc(a.id)}" title="클릭 또는 ← 키로 이 에이전트의 작업 내용을 터미널에서 본다">` +
-      `<span class="g">○</span> <b>${esc(a.type)}</b> ` +
-      `<span style="color:var(--cc-faint)">${esc(a.label || a.desc)}</span>` +
-      `<span class="r">${fmtDur(a.elapsed)} · ↓ ${fmtTok(a.tokens)} tokens</span></div>`).join("");
+    const selId = T.agv ? T.agv.id : null;   // 열람 중 에이전트 = 활성 표시 (REQ-057)
+    box.innerHTML = srv.map(a => {
+      const sel = a.id === selId;
+      return `<div class="ag sub ccagrow${sel ? " sel" : ""}" data-agent="${esc(a.id)}" title="클릭 또는 ← 키로 이 에이전트의 작업 내용을 터미널에서 본다">` +
+        `<span class="g"${sel ? ' style="color:var(--cc-green)"' : ""}>${sel ? "●" : "○"}</span> <b>${esc(a.type)}</b> ` +
+        `<span style="color:var(--cc-faint)">${esc(a.label || a.desc)}</span>` +
+        `<span class="r">${sel ? "viewing · " : ""}${fmtDur(a.elapsed)} · ↓ ${fmtTok(a.tokens)} tokens</span></div>`;
+    }).join("");
+    termMainRow(T);
     return;
   }
+  termMainRow(T);
   box.innerHTML = T.agents.map(a =>
     `<div class="ag sub"><span class="g">○</span> ${esc(a.type)} <span style="color:var(--cc-faint)">${esc(a.desc)}</span><span class="r">running</span></div>`).join("");
 }
@@ -2573,6 +2618,20 @@ function termAgvLine(e){
   return ccLine("●", "", ccText(t.slice(0, 6000)));
 }
 
+function termMainRow(T){
+  // main 행 활성 표시: 에이전트 뷰 열람 중이면 ○/dim, 아니면 ● (REQ-057)
+  const m = document.querySelector("#cc-root .ccmain");
+  if (!m) return;
+  const g = m.querySelector(".g");
+  if (T.agv){
+    m.classList.add("dim");
+    if (g) g.textContent = "○";
+  } else {
+    m.classList.remove("dim");
+    if (g) g.textContent = "●";
+  }
+}
+
 function termAgentOpen(T, id){
   termAgentClose(T);
   const out = $("#ccout"), av = $("#cc-agview");
@@ -2601,6 +2660,7 @@ function termAgentOpen(T, id){
   load();
   T.agv.timer = setInterval(() => { if (!document.hidden) load(); }, 2000);
   T.timers.push(T.agv.timer);
+  termAgentsRender(T);   // 스트립 활성 표시 즉시 반영 (REQ-057)
 }
 
 function termAgentClose(T){
@@ -2608,6 +2668,7 @@ function termAgentClose(T){
   const out = $("#ccout"), av = $("#cc-agview");
   if (av) av.hidden = true;
   if (out) out.hidden = false;
+  termAgentsRender(T);   // 선택 해제 → main 활성 복귀 (REQ-057)
 }
 
 async function refreshTermChat(T){
@@ -3295,15 +3356,22 @@ let selectedUser = null;
 // 않는다 (actor 는 서버 whoami 파생, REQ-20260824-027)
 const withAs = body => asUser ? {...body, as: asUser} : body;
 
-async function postJSON(url, body){
+// 쓰기 공통 — 결과 객체 반환 (팝업 없음). 인라인 표시가 필요한 폼은 이걸 직접 쓴다.
+async function postJSONRaw(url, body){
   try{
     const r = await fetch(url, {method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(withAs(body))});
     const d = await r.json();
-    if (!d.ok){ alert("거부: " + d.error); return false; }
-    return true;
-  }catch(e){ alert("서버에 연결할 수 없습니다"); return false; }
+    if (!d.ok) return {ok: false, refused: true, error: d.error || `HTTP ${r.status}`};
+    return {ok: true};
+  }catch(e){ return {ok: false, error: "서버에 연결할 수 없습니다"}; }
+}
+
+async function postJSON(url, body){
+  const res = await postJSONRaw(url, body);
+  if (!res.ok) alert(res.refused ? "거부: " + res.error : res.error);
+  return res.ok;
 }
 
 let settingsSection = "display";  // display | account | users
@@ -3312,11 +3380,15 @@ async function renderSettings(){
   let data = {users: []};
   try{ data = await (await fetch("/api/users")).json(); }catch(e){}
   window.__users = data.users;
+  updateProfileBadge();
   const me = getMe();   // 서버 파생 whoami (미등록이면 "")
   const meAdmin = isAdmin();
+  const myMiss = me ? profileMissing((data.users || []).find(x => x.name === me)) : [];
   const SECTIONS = [
     ["display", "디스플레이", "스킨·톤·밀도 (내 계정에 저장)"],
-    ["account", "내 계정", me ? `@${me} 프로필·개인화` : "미등록 계정"],
+    ["account", "내 계정", me
+      ? `@${me} 프로필·개인화${myMiss.length ? ` ⚠ 미기재 ${myMiss.length}` : ""}`
+      : "미등록 계정"],
     ["users", "사용자 관리", meAdmin ? "등록·역할·시점 미리보기 (admin)" : "admin 전용"],
     ["about", "시스템", "저장소·통계·문서 안내"],
   ];
@@ -3364,7 +3436,8 @@ function renderSettingsSection(meAdmin){
     if (!meAdmin){ v.innerHTML = `<p class="empty">사용자 관리는 admin만 가능합니다. (whoami=${esc((window.__whoami||{}).user||"?")})</p>`; return; }
     const list = (window.__users||[]).map(u => `<div class="urow" data-uname="${esc(u.name)}">
         <span class="st">${esc(u.role)}</span> <b>${esc(u.display||u.name)}</b>
-        <span class="path">@${esc(u.name)} · ${esc((u.registered||"").slice(0,10))}</span></div>`).join("");
+        <span class="path">@${esc(u.name)} · ${esc((u.registered||"").slice(0,10))}</span>${
+          profileMissing(u).length ? `<span class="pbadge" title="프로필 미기재: ${esc(profileMissing(u).join(" · "))}">⚠</span>` : ""}</div>`).join("");
     v.innerHTML = `<h1 style="margin:0 0 10px">사용자 관리</h1>
       <div class="ulist">${list}</div>
       <div class="cfg-h">새 사용자 등록</div>
@@ -3432,17 +3505,28 @@ function showUserForm(u, host, isAdminEdit){
   const prefs = Object.entries(cfg).filter(([k]) => k.startsWith("pref_"));
   const extraCfg = Object.entries(cfg).filter(([k]) =>
     !["timezone","digest_budget","ui_skin","ui_tone","ui_density"].includes(k) && !k.startsWith("pref_"));
+  // 회사 이메일: emails[] 우선, 비어 있으면 legacy email 단수를 시드(저장 시 emails로 이관)
+  const seedEmails = (u.emails && u.emails.length) ? u.emails : (u.email ? [u.email] : []);
+  const emRowHTML = val => `<div class="emrow">
+      <input class="uf em-val" value="${esc(val)}" placeholder="name@company.com">
+      <button type="button" class="em-rm" title="이 이메일 행 삭제">− 삭제</button></div>`;
+  const reqhint = `<span class="reqhint">필수 권장 — 미기재</span>`;
   host.innerHTML = `
     <div class="path">users/${esc(u.name)}/profile.md · 등록 ${esc((u.registered||"?").slice(0,16))} @ ${esc(u.registered_on||"?")}</div>
     <h1 style="margin:6px 0 14px">@${esc(u.name)}</h1>
     <table class="metatbl">
       <tr><td>display</td><td><input class="uf" id="uf-display" value="${esc(u.display)}"></td></tr>
-      <tr><td>email</td><td><input class="uf" id="uf-email" value="${esc(u.email)}"></td></tr>
+      <tr><td>회사 이메일</td><td id="uf-emails">
+        ${seedEmails.map(em => emRowHTML(em)).join("")}
+        <button type="button" class="em-add" id="uf-em-add">＋ 이메일 추가</button>${seedEmails.length ? "" : reqhint}
+        <div class="path">회사 이메일 N개 — 빈 행은 저장 시 제외됩니다</div></td></tr>
+      <tr><td>github (개인)</td><td><input class="uf" id="uf-github" value="${esc(u.github||"")}" placeholder="개인 GitHub 계정명">${u.github ? "" : reqhint}</td></tr>
+      <tr><td>github (조직)</td><td><input class="uf" id="uf-github-org" value="${esc(u.github_org||"")}" placeholder="조직 GitHub 계정/org">${u.github_org ? "" : reqhint}</td></tr>
       <tr><td>role</td><td><select class="uf" id="uf-role">
         ${["admin","member","viewer"].map(r => `<option${r===u.role?" selected":""}>${r}</option>`).join("")}
       </select> <span class="path">변경은 admin만</span></td></tr>
     </table>
-    <div class="acts"><button id="uf-save">프로필 저장</button></div>
+    <div class="acts"><button id="uf-save">프로필 저장</button><span class="ferr" id="uf-err"></span></div>
     <div class="cfg-h">개인화 설정 — config/settings.json</div>
     <table class="metatbl">
       <tr><td>timezone</td><td><input class="uf" id="cf-timezone" placeholder="Asia/Seoul" value="${esc(cfg.timezone||"")}"></td></tr>
@@ -3464,12 +3548,29 @@ function showUserForm(u, host, isAdminEdit){
     ${prefs.length ? "" : `<div class="path" style="margin-top:6px">아직 없음 — 프롬프트에서 말해도 되고("앞으로 반말로 해줘") 여기서 직접 추가해도 된다.</div>`}
     ${extraCfg.length ? `<div class="path" style="margin-top:12px">기타: ${esc(JSON.stringify(Object.fromEntries(extraCfg)))}</div>` : ""}
     <div class="path" style="margin-top:16px">변경은 profile.md Notes에 audit + git 동기화. 본인 또는 admin만 수정.</div>`;
+  // 이메일 행 추가/삭제 — DOM만 조작(재렌더 없음 → 다른 입력값 보존)
+  host.querySelector("#uf-emails").addEventListener("click", e => {
+    if (e.target.classList.contains("em-rm")) e.target.closest(".emrow").remove();
+  });
+  host.querySelector("#uf-em-add").addEventListener("click", () => {
+    host.querySelector("#uf-em-add").insertAdjacentHTML("beforebegin", emRowHTML(""));
+    const rows = host.querySelectorAll("#uf-emails .em-val");
+    rows[rows.length - 1].focus();
+  });
   host.querySelector("#uf-save").addEventListener("click", async () => {
-    const body = {name: u.name, display: $("#uf-display").value.trim(),
-                  email: $("#uf-email").value.trim()};
-    const nr = $("#uf-role").value;
+    const errEl = host.querySelector("#uf-err");
+    errEl.textContent = "";
+    const emails = [...host.querySelectorAll("#uf-emails .em-val")]
+      .map(i => i.value.trim()).filter(Boolean);
+    const body = {name: u.name, display: host.querySelector("#uf-display").value.trim(),
+                  emails,  // legacy email 단수는 더 보내지 않음 — 서버는 미전달 필드 무변경
+                  github: host.querySelector("#uf-github").value.trim(),
+                  github_org: host.querySelector("#uf-github-org").value.trim()};
+    const nr = host.querySelector("#uf-role").value;
     if (nr !== u.role) body.role = nr;
-    if (await postJSON("/api/user/update", body)) renderSettings();
+    const res = await postJSONRaw("/api/user/update", body);
+    if (!res.ok){ errEl.textContent = "✕ " + res.error; return; }  // 인라인 — 팝업 금지
+    renderSettings();
   });
   host.querySelector("#cf-save").addEventListener("click", async () => {
     const sets = [["timezone", $("#cf-timezone").value.trim()],
