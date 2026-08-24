@@ -33,6 +33,11 @@ git clone <repo-url> ~/section9
 
 ## 동기화 운영
 
+> **이 시스템은 스스로 git commit/push 를 실행하지 않는다.** 설치되는 git hook은
+> pull 후 인덱스 재생성(post-merge/post-checkout)과 커밋 인가 검사(pre-commit)뿐이다.
+> 향후 자동 동기화(`s9 sync`)가 추가되더라도 **기본 off(명시적 옵트인)** 이다 —
+> 리포를 클론해 써보는 것만으로 원격에 무언가가 푸시되는 일은 없다.
+
 - 커밋/푸시 주기는 사용자가 결정 (예: 세션 종료 시, 또는 cron).
   전형적 흐름: `git pull --rebase && git add -A && git commit -m "sync" && git push`
 - vault 문서와 streams 파일은 append/생성 위주라 rebase 충돌이 드물다.
