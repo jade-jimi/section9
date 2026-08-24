@@ -19,6 +19,31 @@ S9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
 
 
 
+
+def _claude_pid():
+    """이 훅을 실행한 claude 프로세스 pid — getppid는 소멸성 중간 셸일 수 있어
+    (REQ-20260824-065: 신생 유휴 세션이 attach 죽음+활동 0으로 미검출)
+    조상 체인을 걸어 올라가 comm이 claude/node인 첫 프로세스를 잡는다."""
+    pid = os.getppid()
+    for _ in range(10):
+        if pid <= 1:
+            break
+        try:
+            with open(f"/proc/{pid}/comm") as f:
+                comm = f.read().strip()
+            if comm in ("claude", "node"):
+                return pid
+            with open(f"/proc/{pid}/status") as f:
+                for ln in f:
+                    if ln.startswith("PPid:"):
+                        pid = int(ln.split()[1])
+                        break
+                else:
+                    break
+        except OSError:
+            break
+    return os.getppid()
+
 def _detect_root(data):
     """세션 cwd가 s9 리포(인스턴스)면 그 루트를 S9_ROOT로 승격 — 한 머신에서
     업스트림 카피와 인스턴스를 병행할 때 기록이 세션 위치를 따라간다
@@ -139,7 +164,7 @@ def main():
             bd = subprocess.run([S9, "bind"], capture_output=True, text=True,
                                 env=env, timeout=10)
             prev = (json.loads(bd.stdout or "{}") or {}).get("attach_pid")
-            me_pid = os.getppid()  # 훅의 부모 = 이 claude 프로세스
+            me_pid = _claude_pid()  # 조상 체인의 claude 프로세스
             if prev and int(prev) != me_pid and os.path.exists(f"/proc/{prev}"):
                 dual_warn = (
                     f"⚠ 이 세션({session})은 다른 터미널(pid {prev})에서 이미 활성이다. "

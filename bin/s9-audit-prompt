@@ -45,6 +45,31 @@ FRAGMENT_MAX = 20  # 이하 길이 + 명령형/질문 표지 없음 → 파편(R
 
 
 
+
+def _claude_pid():
+    """이 훅을 실행한 claude 프로세스 pid — getppid는 소멸성 중간 셸일 수 있어
+    (REQ-20260824-065: 신생 유휴 세션이 attach 죽음+활동 0으로 미검출)
+    조상 체인을 걸어 올라가 comm이 claude/node인 첫 프로세스를 잡는다."""
+    pid = os.getppid()
+    for _ in range(10):
+        if pid <= 1:
+            break
+        try:
+            with open(f"/proc/{pid}/comm") as f:
+                comm = f.read().strip()
+            if comm in ("claude", "node"):
+                return pid
+            with open(f"/proc/{pid}/status") as f:
+                for ln in f:
+                    if ln.startswith("PPid:"):
+                        pid = int(ln.split()[1])
+                        break
+                else:
+                    break
+        except OSError:
+            break
+    return os.getppid()
+
 def _detect_root(data):
     """세션 cwd가 s9 리포(인스턴스)면 그 루트를 S9_ROOT로 승격 — 한 머신에서
     업스트림 카피와 인스턴스를 병행할 때 기록이 세션 위치를 따라간다
@@ -146,8 +171,11 @@ def main():
     # 낡으면(프로세스 교체 등) 유휴 5분 후 채팅 대상에서 빠져 Terminal 탭이
     # 'no live session'으로 오검출된다 — 매 프롬프트마다 재바인딩해 자가 치유.
     try:
-        run(env, "bind", "attach_pid", str(os.getppid()))
+        run(env, "bind", "attach_pid", str(_claude_pid()))
         run(env, "bind", "ended", "")
+        tp = data.get("transcript_path") or ""
+        if tp and os.path.exists(tp):
+            run(env, "bind", "transcript_path", tp)  # 신생 세션 자가 치유
     except Exception:
         pass
 

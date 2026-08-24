@@ -283,7 +283,11 @@ class TestDashboardChat(unittest.TestCase):
             capture_output=True, text=True, env=self.env, timeout=20)
         self.assertEqual(r.returncode, 0, r.stderr)
         b = json.loads(self.cli("bind", env_extra=env_r).stdout)
-        self.assertEqual(int(b["attach_pid"]), os.getpid())  # 훅 부모 = 이 프로세스
+        # _claude_pid()는 조상 체인에서 claude/node를 찾는다(REQ-065) — 테스트
+        # 환경에선 상위 하네스 pid일 수 있으므로 '살아있는 프로세스로 갱신됨'만 검증
+        pid = int(b["attach_pid"])
+        self.assertNotEqual(pid, 999999997)          # 낡은 값이 교체됨
+        self.assertTrue(os.path.exists(f"/proc/{pid}"))
         self.assertFalse(b.get("ended"))
 
     # C5. 훅 주입: SessionStart 컨텍스트에 수신함 경로 + Monitor arming 지시
