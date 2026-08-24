@@ -1026,8 +1026,8 @@ def chat_send(text, sid8=None, sender="", kind="chat"):
     b = chat_target(sid8)
     if not b:
         raise ValueError(
-            "라이브 클로드 세션이 없다 — 터미널에서 `cd ~/section9 && bin/s9 code`"
-            "로 세션을 시작한 뒤 다시 보내라")
+            f"라이브 클로드 세션이 없다 — 터미널에서 `cd {ROOT} && bin/s9 code`"
+            f"로 세션을 시작한 뒤 다시 보내라")
     line = {"ts": now_iso(), "from": sender or "dashboard", "kind": kind,
             "text": text}
     with open(chat_inbox_path(b["session"], make=True), "a",
@@ -4028,7 +4028,7 @@ def cmd_serve(args):
                 b = chat_target(qs.get("sid", [""])[0] or None)
                 if not b:
                     self._json({"sid": None, "hint":
-                                "터미널에서 `cd ~/section9 && bin/s9 code` 실행"})
+                                f"터미널에서 `cd {ROOT} && bin/s9 code` 실행"})
                 else:
                     self._json({"sid": b.get("session"),
                                 "user": b.get("user", ""),
