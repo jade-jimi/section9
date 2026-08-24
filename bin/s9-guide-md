@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""web/guide.html → docs/guide.md 변환기 (REQ-20260824-050).
+
+깃헙은 data URI 이미지를 렌더하지 않으므로 내장 base64 PNG를
+docs/guide-assets/NN.png 파일로 추출하고 상대 링크로 참조한다.
+가이드(html)가 갱신될 때마다 재실행하면 md가 따라간다 (파생물).
+
+usage: s9-guide-md [--src web/guide.html] [--out docs/guide.md]
+"""
+import argparse
+import base64
+import os
+import re
+import sys
+from html.parser import HTMLParser
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+BLOCK = {"p", "li", "h1", "h2", "h3", "h4", "pre", "tr", "section",
+         "div", "ul", "ol", "table", "blockquote", "figure", "figcaption",
+         "nav", "details", "summary"}
+SKIP = {"script", "style", "nav"}
+
+
+class MD(HTMLParser):
+    def __init__(self, asset_dir, asset_rel):
+        super().__init__(convert_charrefs=True)
+        self.out = []
+        self.stack = []
+        self.skip = 0
+        self.pre = 0
+        self.imgn = 0
+        self.li_depth = 0
+        self.asset_dir = asset_dir
+        self.asset_rel = asset_rel
+        self.href = None
+        self.in_no = 0
+
+    def emit(self, s):
+        self.out.append(s)
+
+    def nl(self, n=2):
+        joined = "".join(self.out)
+        while not joined.endswith("\n" * n) and joined.strip():
+            self.out.append("\n")
+            joined = "".join(self.out)
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag in SKIP:
+            self.skip += 1
+            return
+        if self.skip:
+            return
+        if tag == "h1":
+            self.nl(); self.emit("# ")
+        elif tag == "h2":
+            self.nl(); self.emit("## ")
+        elif tag == "h3":
+            self.nl(); self.emit("### ")
+        elif tag == "h4":
+            self.nl(); self.emit("#### ")
+        elif tag == "p":
+            self.nl()
+        elif tag in ("ul", "ol"):
+            self.li_depth += 1
+        elif tag == "li":
+            self.nl(1)
+            self.emit("  " * (self.li_depth - 1) + "- ")
+        elif tag == "pre":
+            self.nl(); self.emit("```\n"); self.pre += 1
+        elif tag == "code" and not self.pre:
+            self.emit("`")
+        elif tag in ("strong", "b"):
+            self.emit("**")
+        elif tag in ("em", "i"):
+            self.emit("*")
+        elif tag == "a":
+            self.href = a.get("href", "")
+            self.emit("[")
+        elif tag == "img":
+            src = a.get("src", "")
+            alt = a.get("alt", "screenshot")
+            m = re.match(r"data:image/(png|jpe?g|webp);base64,(.*)", src, re.S)
+            if m:
+                ext = "png" if m.group(1) == "png" else "jpg"
+                self.imgn += 1
+                fn = f"{self.imgn:02d}.{ext}"
+                os.makedirs(self.asset_dir, exist_ok=True)
+                with open(os.path.join(self.asset_dir, fn), "wb") as f:
+                    f.write(base64.b64decode(m.group(2)))
+                self.nl()
+                self.emit(f"![{alt}]({self.asset_rel}/{fn})")
+                self.nl()
+            elif src:
+                self.nl(); self.emit(f"![{alt}]({src})"); self.nl()
+        elif tag == "br":
+            self.emit("\n")
+        elif tag == "kbd":
+            self.emit("`")
+        elif tag == "span" and "no" in (a.get("class") or "").split():
+            self.in_no += 1   # 챕터 번호 스팬 — 뒤에 '. ' 구두점을 붙인다
+
+    def handle_endtag(self, tag):
+        if tag in SKIP:
+            self.skip = max(0, self.skip - 1)
+            return
+        if self.skip:
+            return
+        if tag == "pre":
+            self.pre = max(0, self.pre - 1)
+            self.nl(1); self.emit("```"); self.nl()
+        elif tag == "code" and not self.pre:
+            self.emit("`")
+        elif tag in ("strong", "b"):
+            self.emit("**")
+        elif tag in ("em", "i"):
+            self.emit("*")
+        elif tag == "kbd":
+            self.emit("`")
+        elif tag == "a":
+            href = self.href or ""
+            self.href = None
+            if href.startswith("#") or not href:
+                self.emit("]()" if False else "]")  # 내부 앵커 — 링크 제거
+                # 방금 넣은 '[' 를 상쇄: 텍스트만 남긴다
+                joined = "".join(self.out)
+                i = joined.rfind("[")
+                self.out = [joined[:i] + joined[i + 1:-1]]
+            else:
+                self.emit(f"]({href})")
+        elif tag in ("h1", "h2", "h3", "h4", "p", "table", "figure",
+                     "blockquote", "section"):
+            self.nl()
+        elif tag in ("ul", "ol"):
+            self.li_depth = max(0, self.li_depth - 1)
+            self.nl()
+        elif tag == "span" and self.in_no:
+            self.in_no -= 1
+            self.emit(". ")
+
+    def handle_data(self, data):
+        if self.skip:
+            return
+        if self.pre:
+            self.emit(data)
+        else:
+            t = re.sub(r"\s+", " ", data)
+            if t.strip() or (self.out and not self.out[-1].endswith("\n")):
+                self.emit(t)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--src", default=os.path.join(ROOT, "web", "guide.html"))
+    ap.add_argument("--out", default=os.path.join(ROOT, "docs", "guide.md"))
+    args = ap.parse_args()
+    with open(args.src, encoding="utf-8") as f:
+        html = f.read()
+    # body만 대상 (head의 style/script 제외는 파서 SKIP이 처리)
+    m = re.search(r"<body[^>]*>([\s\S]*)</body>", html)
+    body = m.group(1) if m else html
+    asset_dir = os.path.join(os.path.dirname(args.out), "guide-assets")
+    p = MD(asset_dir, "guide-assets")
+    p.feed(body)
+    md = "".join(p.out)
+    md = re.sub(r"\n{3,}", "\n\n", md).strip() + "\n"
+    # 첫 H1 이전의 사이트 헤더 잔여 텍스트 제거
+    i = md.find("# ")
+    if i > 0:
+        md = md[i:]
+    header = ("<!-- 자동 생성: bin/s9-guide-md 가 web/guide.html 에서 변환한다. "
+              "직접 수정하지 말 것 — 원본(html) 수정 후 재실행. -->\n\n")
+    with open(args.out, "w", encoding="utf-8") as f:
+        f.write(header + md)
+    print(f"{args.out}  ({len(md)//1000}KB, images={p.imgn})")
+
+
+if __name__ == "__main__":
+    main()
