@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""section9 subagent audit hook (Claude Code SubagentStop).
+
+리드가 Agent(서브에이전트)로 위임한 작업이 끝날 때, 그 서브에이전트의 최종 보고를
+이 세션의 진행 중 REQ(binding.last_req)의 ## Notes 에 label=subagent 로 append 한다.
+
+배경(B안): 리드의 최종 응답은 Stop 훅(s9-audit-response)이 잡지만, 위임한
+서브에이전트의 산출물은 어디에도 안 남고 "리드가 받은 요약"만 남는 audit 공백이
+있었다. 위임을 늘릴수록 실제 작업이 문서에서 빠지는 역설을 이 훅이 막는다.
+→ REQ 문서 = 요청 + 리드응답(response) + 위임산출물(subagent) 의 완결 기록.
+
+실제 SubagentStop 페이로드(검증됨):
+  session_id            = 부모 세션의 전체 SID (앞 8자가 바인딩 키)
+  last_assistant_message= 서브에이전트 최종 텍스트 (직접 제공 — 파싱 불필요)
+  agent_transcript_path = 서브에이전트 전용 transcript (폴백 파싱용)
+  agent_type, agent_id  = 어떤 에이전트였는지 (노트 헤더 맥락)
+  transcript_path       = 부모 transcript (리드 응답용 — 여기선 쓰지 않는다)
+session_id 가 부모라 binding.last_req 로 진행 중 REQ가 그대로 해석된다.
+last_req 가 없으면 조용히 넘어간다. Question/Nothing 턴의 pause는 응답 캡처만
+멈추고 last_req는 남기므로, 진행 중 위임 보고는 pause와 무관하게 캡처된다 (REQ-20260823-072).
+
+원칙: 실패 시 조용히 exit 0. 비활성화: S9_AUDIT=off
+"""
+import json
+import os
+import subprocess
+import sys
+
+S9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
+MAX_CHARS = 12000
+
+
+def run(env, *argv, inp=None):
+    return subprocess.run([S9, *argv], input=inp, capture_output=True,
+                          text=True, env=env, timeout=15)
+
+
+def last_assistant_text(transcript_path):
+    """transcript 마지막 assistant 텍스트 파트를 이어붙여 반환 (없으면 None).
+    last_assistant_message 필드가 없는 하위호환 폴백 경로."""
+    text = None
+    try:
+        with open(transcript_path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                except ValueError:
+                    continue
+                if obj.get("type") != "assistant":
+                    continue
+                msg = obj.get("message") or {}
+                parts = [c.get("text", "") for c in (msg.get("content") or [])
+                         if isinstance(c, dict) and c.get("type") == "text"]
+                t = "\n\n".join(p for p in parts if p).strip()
+                if t:
+                    text = t
+    except OSError:
+        return None
+    return text
+
+
+def main():
+    if os.environ.get("S9_AUDIT", "").lower() == "off":
+        return
+    data = json.load(sys.stdin)
+    if data.get("stop_hook_active"):
+        return
+
+    # 서브에이전트 최종 보고: 페이로드가 직접 주면 그걸, 아니면 전용 transcript 파싱.
+    # 절대 transcript_path(부모)로 폴백하지 않는다 — 리드 응답을 중복 캡처하게 된다.
+    text = (data.get("last_assistant_message") or "").strip()
+    if not text:
+        atp = data.get("agent_transcript_path")
+        if atp and os.path.exists(atp):
+            text = (last_assistant_text(atp) or "").strip()
+    if not text:
+        return  # 텍스트 보고 없음(툴만 사용 등) — 붙일 것 없음
+
+    session = (data.get("session_id") or "unknown")[:8]
+    env = dict(os.environ)
+    env["S9_SESSION"] = session
+
+    # 귀속 대상 결정 (REQ-20260824-023): last_req는 훅이 매 프롬프트 회전시키므로
+    # 병렬 위임 중엔 stale 오귀속이 난다(019 오염 실측). 보고 본문이 언급한 REQ 중
+    # 이 세션의 실행 등록(active_reqs∪last_req)과 일치하는 것을 최우선으로 귀속한다.
+    import re
+    try:
+        b = json.loads(run(env, "bind").stdout or "{}")
+    except ValueError:
+        b = {}
+    last = (b.get("last_req") or "").strip()
+    active = [x for x in (b.get("active_reqs") or []) if x]
+    mentioned = re.findall(r"\bREQ-\d{8}-\d{3}\b", text)
+    req = next((m for m in mentioned if m in active or m == last), None)
+    if not req and mentioned:
+        chk = run(env, "show", mentioned[0], "--meta")
+        if chk.returncode == 0:
+            req = mentioned[0]
+
+    atype = data.get("agent_type") or "subagent"
+    # 진행성 소음 필터: generic 타입 + REQ 무언급 보고는 문서에 붙이지 않는다(로그만) —
+    # 장시간 위임 중 수십 건의 중간 보고가 무관 REQ를 오염시키던 문제
+    if not req and atype == "subagent":
+        run(env, "log", f"subagent 중간보고 생략 ({len(text)} chars)")
+        return
+    if not req:
+        req = last
+    if not req:
+        return  # 귀속처 없음 — 붙이지 않음
+    if len(text) > MAX_CHARS:
+        text = text[:MAX_CHARS] + "\n\n…(truncated)"
+    # 위임 에이전트 귀속: 노트 헤더(agent: <type>)와 REQ 프론트매터 agents에 누적
+    out = run(env, "note", req, "--label", "subagent", "--agent", atype, inp=text)
+    if out.returncode == 0:
+        run(env, "log", f"subagent({atype}) → {req} ({len(text)} chars)")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        sys.exit(0)

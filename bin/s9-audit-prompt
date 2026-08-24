@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""section9 auto-audit hook (Claude Code UserPromptSubmit).
+
+프롬프트를 Request / Question / Fragment / Nothing 으로 1차 분류(휴리스틱)하고:
+  - Request  → REQ 문서 생성 + SES 로그 + 보강 규약 주입 (오분류 시 s9 rm 정정)
+  - Question → REQ 미생성, SES 로그만 + 정정 경로 주입 (실제 요청이면 s9 new request)
+  - Fragment → 짧은 파편("logout" 등) — REQ 미생성, SES 로그 + 정정 경로 주입
+  - Nothing  → SES 로그만 (컨텍스트 주입 없음)
+
+의미 판단의 최종 권한은 LLM에게 있다 — 휴리스틱은 기본값, 양방향 정정 경로 제공.
+원칙: 어떤 경우에도 사용자 프롬프트를 막지 않는다 — 실패 시 조용히 exit 0.
+비활성화: 환경변수 S9_AUDIT=off
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+
+S9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
+TITLE_MAX = 24  # 임시 제목 — LLM이 20자 이내 명사구 제목으로 반드시 교체
+
+ACK = re.compile(
+    r"^(?:(?:ㅇㅋ|ok|okay|yes|no|네|넵|예|응|웅|좋아|좋다|좋네|고마워|고맙다|감사|thanks|thx|"
+    r"알겠어|알겠다|알았어|확인|됐다|됐어|잘했어|굿|good)[.!~ㅋㅎ\s]*)+$", re.I)
+IMPERATIVE = re.compile(
+    r"(해\s?줘|해\s?주세요|해라|하라|해봐|해\s?볼래|시켜|만들어|추가해|수정해|고쳐|바꿔|"
+    r"삭제해|지워|없애|구현|진행해|진행하|부탁|생성해|등록해|적용해|반영해|정리해|"
+    r"작성해|개선해|리팩|배포해|테스트해|확인해\s?줘|보여\s?줘|알려\s?줘)")
+QUESTION_TAIL = re.compile(
+    r"(\?|까요?\s*$|니\s*$|냐\s*$|나요\s*$|가요\s*$|는가\s*$|은가\s*$|인가\s*$|"
+    r"건가\s*$|일까\s*$|어때\s*$|는지\s*$|그래\s*$|거야\s*$|거지\s*$|다고\s*$)")
+QUESTION_HEAD = re.compile(r"^(왜|뭐|무엇|어떻게|어떤|어디|누가|누구|언제|몇|얼마)")
+ACK_TAIL = re.compile(r"(구나|군요|네요|되네|거네|겠다|알겠다|이해했다|확인했다)[.!~ ]*$")
+# 메타 지시: 기존 작업/시스템에 대한 명령 (새 산출물 요청이 아님). REQ화하지 않는다.
+META_VERB = re.compile(
+    r"(진행(해|하|시켜)?|이어서|이어(해|가)|계속(해|\s*진행)?|착수|취소(해|하)?|삭제(해)?|지워|"
+    r"켜(줘|라|)?\s*$|켜(줘|라)|꺼(줘|라)?|활성화|비활성화|승인(해)?|반려(해)?|재개(해)?|"
+    r"되돌려|롤백|다시\s?해|재시도|정리해|치워|진행$)")
+# 기존 REQ/DOC id 참조 (특정 문서를 가리키는 지시)
+REF_ID = re.compile(r"\b(REQ|DOC|SES)-\d")
+
+
+FRAGMENT_MAX = 20  # 이하 길이 + 명령형/질문 표지 없음 → 파편(REQ 미생성)
+
+
+def classify(text):
+    """휴리스틱 1차 분류.
+    우선순위: nothing > meta지시 > request(명령형) > question > fragment > request"""
+    if len(text) <= 12 and ACK.match(text):
+        return "nothing"
+    # 메타 지시(기존 작업/시스템 명령)는 새 REQ가 아니다 → nothing(세션 로그만).
+    # 짧으면서(≤60자) 메타 동사를 쓰거나, 짧으면서 기존 REQ/DOC id를 참조하는 지시.
+    # (예: "032 켜줘", "백로그 진행해", "취소해줘", "REQ-044 이어서 해")
+    t1 = text.strip()
+    if len(t1) <= 60 and (META_VERB.search(t1) or
+                          (REF_ID.search(t1) and len(t1) <= 40)):
+        return "nothing"
+    if IMPERATIVE.search(text):
+        return "request"  # "왜 이래? 고쳐줘" — 명령형이 있으면 질문 표지보다 우선
+    last = text.splitlines()[-1].strip()
+    # 짧은 감탄/이해 표현 ("아 ~되는거구나") — 명령형 없을 때만
+    if len(text) <= 40 and ACK_TAIL.search(last):
+        return "nothing"
+    if QUESTION_TAIL.search(last) or QUESTION_HEAD.match(text):
+        return "question"
+    # 파편: 짧고(≤FRAGMENT_MAX) 명령형·질문 표지가 전혀 없는 단문("logout", "test", 오타 등).
+    # REQ를 만들지 않고 정정 경로만 주입 — 실제 요청이면 LLM이 s9 new request로 등록한다.
+    if len(t1) <= FRAGMENT_MAX:
+        return "fragment"
+    return "request"  # 애매하면 request — 잘못 만든 REQ는 s9 rm으로 제거 가능
+
+
+def run(env, *argv, inp=None):
+    return subprocess.run([S9, *argv], input=inp, capture_output=True,
+                          text=True, env=env, timeout=15)
+
+
+def prefs_context(env, who):
+    """현재 요청 주체의 개인 선호(user config의 pref_* 키) → 주입 컨텍스트.
+    말투·응답 형식·작업 방식 등 하네스 공통이 아닌 사용자별 설정 (REQ-20260824-006).
+    없거나 조회 실패면 빈 문자열 — 기존 컨텍스트 불변."""
+    name = (who or "").split()[0].strip()
+    if not name or name.startswith("("):
+        return ""
+    out = run(env, "user", "config", name)
+    if out.returncode != 0:
+        return ""
+    try:
+        cfg = json.loads(out.stdout)
+    except ValueError:
+        return ""
+    prefs = {k[5:]: str(v) for k, v in cfg.items()
+             if k.startswith("pref_") and v}
+    if not prefs:
+        # 부재도 명시 지시로 (REQ-20260824-016): 침묵이면 LLM이 직전 대화의 말투
+        # 관성을 따라가 '삭제가 안 먹는' 것처럼 보인다 — 기본 복귀를 지시한다.
+        return (" ◈ 개인 설정: 없음 — 기본 말투·방식으로 응답하라 "
+                "(직전 대화의 스타일 관성을 따르지 마라). ")
+    body = " · ".join(f"{k}: {v}" for k, v in sorted(prefs.items()))
+    return (f" ◈ 이 사용자의 개인 설정(응답 말투·작업 방식에 반영하라): {body}. ")
+
+
+def emit(context):
+    print(json.dumps({
+        "suppressOutput": True,
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context,
+        },
+    }, ensure_ascii=False))
+
+
+def main():
+    if os.environ.get("S9_AUDIT", "").lower() == "off":
+        return
+    data = json.load(sys.stdin)
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt or prompt.startswith(("/", "!")):
+        return
+    # 시스템 통지 턴(백그라운드 태스크 완료 등)은 사용자 요청이 아니다 — 카드 금지
+    # (REQ-20260823-084: task-notification이 REQ로 오생성되던 결함)
+    if prompt.startswith(("<task-notification>", "<system-reminder>",
+                          "[SYSTEM NOTIFICATION")):
+        return
+
+    session = (data.get("session_id") or "unknown")[:8]
+    env = dict(os.environ)
+    env["S9_SESSION"] = session
+    first_line = prompt.splitlines()[0].strip()
+
+    # attach 생존 신호 갱신 (REQ-20260824-041): SessionStart 시점의 attach_pid가
+    # 낡으면(프로세스 교체 등) 유휴 5분 후 채팅 대상에서 빠져 Terminal 탭이
+    # 'no live session'으로 오검출된다 — 매 프롬프트마다 재바인딩해 자가 치유.
+    try:
+        run(env, "bind", "attach_pid", str(os.getppid()))
+        run(env, "bind", "ended", "")
+    except Exception:
+        pass
+
+    # auto-resume 스폰 턴 — 대상 REQ가 이미 존재한다. 새 카드를 만들면 안 되지만,
+    # 세션 id와 클레임 지시는 반드시 주입해야 한다: 이게 없으면 스폰된 작업자가
+    # 자기 sid를 몰라 클레임을 못 하고, 워처가 쿨다운마다 중복 스폰한다
+    # (REQ-20260823-081 카드 방지 + REQ-20260824-004 클레임 결함).
+    if os.environ.get("S9_AUTO_RESUME"):
+        run(env, "log", f"auto-resume 재작업 턴: {first_line[:60]}")
+        m = re.search(r"\bREQ-\d{8}-\d{3}\b", prompt)
+        target = m.group(0) if m else "<대상 REQ-id>"
+        emit(
+            f"[section9 audit] 자동 재작업 세션이다 — 이 세션의 식별자는 {session} 이다. "
+            f"allowlist가 s9로 시작하는 명령만 허용하므로 환경변수 접두(S9_SESSION=...) 대신 "
+            f"`--session {session}` 플래그를 써라. "
+            f"**첫 행동으로 `s9 last {target} --add --session {session}` 을 실행해 "
+            f"클레임하라** — 그래야 워처의 중복 스폰이 멈추고 대시보드 live 표시가 정합된다. "
+            f"새 REQ 카드는 만들지 마라(대상 REQ가 이미 있다). 재작업 완료 시 "
+            f"`s9 status {target} review --note '확인 포인트...'` 로 전이하라. "
+            f"s9 = ~/section9/bin/s9")
+        return
+
+    cls = classify(prompt)
+
+    if cls == "nothing":
+        run(env, "log", f"note: {first_line[:40]}")
+        run(env, "last", "--pause")  # 응답 캡처만 중지 — last_req는 유지(위임 캡처/스트림 활성 보존)
+        return
+
+    if cls == "fragment":
+        run(env, "log", f"note: {first_line[:40]}")
+        run(env, "last", "--pause")
+        emit(
+            f"[section9 audit] 이 프롬프트는 짧은 파편(Fragment)으로 분류되어 요청 문서를 "
+            f"만들지 않았다 (세션 로그에만 기록). 실제 작업 요청이면 — "
+            f"`S9_SESSION={session} s9 new request --title '20자 이내 명사구' "
+            f"--summary '...' --size S|M|L --body '원문'` 으로 직접 등록하고 규약대로 "
+            f"상태를 관리하라. s9 = ~/section9/bin/s9")
+        return
+
+    if cls == "question":
+        run(env, "log", f"question: {first_line[:60]}")
+        run(env, "last", "--pause")
+        cur = run(env, "user", "current")
+        who = cur.stdout.strip() if cur.returncode == 0 else "?"
+        pref = prefs_context(env, who)
+        ro = run(env, "reopened", "--quiet")
+        rewarn = ("" if ro.returncode != 0 or not ro.stdout.strip() else
+                  f" ⚠ 대시보드에서 반려/재개된 요청 대기:\n{ro.stdout.strip()}\n답변 후 이어서 처리하라.")
+        rv = run(env, "review", "--quiet")
+        rvwarn = ("" if rv.returncode != 0 or not rv.stdout.strip() else
+                  f" ⏳ 확인 대기(review):\n{rv.stdout.strip()}\n"
+                  f"이 질문이 위 항목의 재작업 요청이면 먼저 `s9 status <id> in-progress` 전이 후 작업하라.")
+        emit(
+            f"[section9 audit] 이 프롬프트는 Question 으로 분류되어 요청 문서를 만들지 "
+            f"않았다 (세션 로그에만 기록). 현재 요청 주체: {who}.{pref}{rewarn}{rvwarn} "
+            f"오분류라면 — 실제 작업 요청이면 — `S9_SESSION={session} s9 new request "
+            f"--title '20자 이내 명사구' --summary '...' --size S|M|L --body '원문'` "
+            f"으로 직접 등록하고 규약대로 상태를 관리하라. s9 = ~/section9/bin/s9")
+        return
+
+    # request
+    title = first_line[:TITLE_MAX] + ("…" if len(first_line) > TITLE_MAX else "")
+    # 원문은 stdin으로 전달 (s9 new가 비-tty stdin을 body로 읽음 — /dev/stdin 불요, Windows 호환)
+    out = run(env, "new", "request", "--title", title,
+              "--tag", "auto-audit", inp=prompt)
+    if out.returncode != 0:
+        return  # audit 실패가 프롬프트를 막으면 안 됨
+    doc_id = out.stdout.split()[0]
+    run(env, "log", f"prompt {doc_id} 기록: {title}")
+    run(env, "last", doc_id)  # Stop hook의 응답 캡처 대상
+    cur = run(env, "user", "current")
+    who = cur.stdout.strip() if cur.returncode == 0 else "?"
+    pref = prefs_context(env, who)
+
+    # 대시보드에서 반려/재개된 요청 — 어떤 프롬프트가 오든 최우선 주입해 자동 재개
+    ro = run(env, "reopened", "--quiet")
+    reopened = ("" if ro.returncode != 0 or not ro.stdout.strip() else
+                f" ⚠ 대시보드에서 반려/재개된 요청이 대기 중이다:\n{ro.stdout.strip()}\n"
+                f"이번 턴에서 우선 이어서 작업하고 완료 시 전이하라 "
+                f"(즉시 처리 불가면 사유를 note로 남기고 blocked 전이). ")
+    # 미확인 승인 메모 — 질문·후속 지시가 담겼을 수 있다: 리드가 이번 턴에 소화 (1회 주입)
+    ap = run(env, "approvals", "--quiet")
+    approvals = ("" if ap.returncode != 0 or not ap.stdout.strip() else
+                 f" 🆗 방금 승인 처리된 요청의 메모:\n{ap.stdout.strip()}\n"
+                 f"메모가 질문이면 이번 응답에서 답하고, 후속 작업을 지시·함의하면 "
+                 f"`s9 new request --parent <그 REQ>` 로 등록해 즉시 착수하라 "
+                 f"(검토 승인 = 구현 착수 신호). ")
+    # blocked 대기 항목 — '패치 적용 대기'는 리드(권한 세션)가 즉시 처리해야 한다
+    bl = run(env, "blocked", "--quiet")
+    blocked = ("" if bl.returncode != 0 or not bl.stdout.strip() else
+               f" ⛔ 대기(blocked) 요청:\n{bl.stdout.strip()}\n"
+               f"사유가 '패치 적용 대기'면 이 세션(정상 권한)이 지금 문서의 patch 노트를 "
+               f"적용·검증하고 in-progress→review로 전이해 블락을 풀어라. ")
+    # review 대기 항목 — 이 프롬프트가 그에 대한 피드백/재작업일 수 있다
+    rv = run(env, "review", "--quiet")
+    review = ("" if rv.returncode != 0 or not rv.stdout.strip() else
+              f" ⏳ 확인 대기(review) 요청:\n{rv.stdout.strip()}\n"
+              f"이 프롬프트가 위 항목에 대한 피드백이면: 승인 의미면 `s9 status <id> done`, "
+              f"재작업 요청이면 **먼저 `s9 status <id> in-progress`로 전이한 뒤** 작업하라. "
+              f"review 상태로 방치하거나 새 REQ로 우회해 상태를 흐리지 마라 (재작업은 원 REQ에서). ")
+
+    warn = ""
+    if "os-account" in who:  # 바인딩/env 없이 OS 계정 fallback으로 잡힌 경우
+        name = who.split()[0]
+        registered = run(env, "user", "role", name).returncode == 0
+        if registered:
+            warn = (f" (주체는 OS 계정 fallback — 이 세션을 명시 바인딩하려면 "
+                    f"`s9 user switch {name}`.)")
+        else:
+            warn = (" 주의: 현재 주체가 미등록 OS 계정 fallback이다 — `s9 user add` 후 "
+                    "`s9 user switch` 로 등록 사용자를 지정하라.")
+    emit(
+        f"[section9 audit] 이 프롬프트는 {doc_id} 로 자동 기록되었다 (Request 분류). "
+        f"현재 요청 주체: {who}.{pref}{warn}{approvals}{reopened}{blocked}{review} "
+        f"이 세션에서 s9 를 호출할 때는 반드시 `S9_SESSION={session}` 을 앞에 붙여라. 규약: "
+        f"(1) 제목은 원문 복사가 아니라 20자 이내의 이해하기 쉬운 명사구로 교체하라 — "
+        f"`s9 set {doc_id} --title '...' --summary '...' --size S|M|L "
+        f"--goal '무엇이 충족되면 완료인지 판별 가능한 한 문장' [--project ...]`. "
+        f"**goal 없는 요청은 done 전이가 거부된다** (REQ-20260824-030). "
+        f"(2) 관계는 `s9 link {doc_id} --parent/--relates/--tag` 로 연결하라. "
+        f"프롬프트에 서로 다른 작업 요청이 여러 개 섞여 있으면 {doc_id} 를 주 요청으로 두고 "
+        f"나머지는 `s9 new request --parent {doc_id}` 로 각각 분리 등록해 개별 상태로 관리하라. "
+        f"분리 등록한 파생 REQ 중 이번에 실제로 처리할 것은 open으로 방치하지 말고 즉시 `s9 status <id> in-progress` 로 착수하라 — 필요한 파생 작업의 진행에 별도 지시를 기다리지 마라. "
+        f"(3) 착수 시 in-progress, 완료 시 done, 확인 대기면 review 로 `s9 status` 전이하고 --note 를 남겨라. "
+        f"done의 --note에는 **goal 대비 충족 근거**를 반드시 담아라. "
+        f"**검증된 것은 done, 방향만 review**: TDD·실브라우저 등 객관적 검증을 마친 구현은 review에 쌓지 말고 바로 done 하라(문제 시 사용자가 반려→자동재개). review는 사용자의 주관적 판정(취향·방향·불확실)이 필요한 것만. 사람을 승인 기계로 만들지 마라. "
+        f"review로 보낼 때는 --note에 **무엇을·왜 봐야 하는지 확인 포인트**를 반드시 담아라(예: `s9 status <id> review --note '헤더 정렬 방식 A/B 중 선택 필요'`) — 그래야 사용자가 무엇을 판정할지 안다. "
+        f"개발/구현 요청이면 코드 착수 전 TDD 시나리오(정상/경계/실패/회귀)를 `s9 note {doc_id} --label tdd` 로 문서에 먼저 작성하고, UI 변경이면 실브라우저로 검증하라(WSL은 `s9 shot <url>` 로 스크린샷 후 확인). "
+        f"(4) 실제로는 단순 질문/응답이면 `s9 rm {doc_id} --reason question` 으로 제거하라. "
+        f"(5) 주체 변경 요청 시 `s9 user switch <이름>` (미등록이면 s9 user add 먼저). "
+        f"(6) 재사용할 지식은 `s9 new knowledge` 로 남겨라. "
+        f"(7) 사용자가 말투·응답 형식·작업 방식 선호를 말하면 즉시 "
+        f"`s9 user config <이름> pref_<주제> '<내용>'` 으로 저장하라 — 다음 턴부터 "
+        f"모든 프롬프트에 개인 설정으로 자동 주입된다 (삭제 = 빈 값). s9 = ~/section9/bin/s9")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        sys.exit(0)  # never block the user's prompt

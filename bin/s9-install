@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+"""section9 installer / updater.
+
+section9 리포가 갱신되면(clone, pull) 이 스크립트 하나로 로컬 환경이 최신화된다:
+  1. 디렉토리 골격 (s9 init 과 동일)
+  2. git hooks 설치 — post-merge/post-checkout(index rebuild + self 재실행),
+     pre-commit(s9-guard: 역할 기반 harness 보호)
+  3. ~/.claude/settings.json 에 claude/hooks.json 의 hook 반영
+     (command 에 '/section9/bin/' 이 포함된 항목만 section9 소유로 간주하여
+      교체/추가 — 사용자의 다른 훅/설정은 건드리지 않는다)
+
+post-merge git hook이 자동 실행하므로 pull 후 별도 조치 불필요.
+usage: s9-install [--quiet] [--no-claude]
+"""
+import json
+import os
+import stat
+import sys
+
+ROOT = os.environ.get("S9_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))
+QUIET = "--quiet" in sys.argv
+MARK = "/section9/bin/"  # section9 소유 hook 식별자
+
+
+def say(msg):
+    if not QUIET:
+        print(msg)
+
+
+def install_dirs():
+    import subprocess
+    subprocess.run([os.path.join(ROOT, "bin", "s9"), "init"],
+                   capture_output=True, env={**os.environ, "S9_ROOT": ROOT})
+    say(f"dirs OK: {ROOT}")
+
+
+def install_git_hooks():
+    hooks_dir = os.path.join(ROOT, ".git", "hooks")
+    if not os.path.isdir(hooks_dir):
+        say("git repo 아님 — git hooks 생략")
+        return
+    # Git for Windows 포함 어디서든: python3 → python 순으로 탐색 (셔뱅 의존 제거)
+    py = ('if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi\n')
+    sync = ('#!/bin/sh\n' + py +
+            'TOP="$(git rev-parse --show-toplevel)"\n'
+            '"$PY" "$TOP/bin/s9" index rebuild >/dev/null 2>&1 || true\n'
+            '"$PY" "$TOP/bin/s9-install" --quiet || true\n')
+    guard = ('#!/bin/sh\n' + py +
+             'exec "$PY" "$(git rev-parse --show-toplevel)/bin/s9-guard"\n')
+    for name, body in [("post-merge", sync), ("post-checkout", sync),
+                       ("pre-commit", guard)]:
+        p = os.path.join(hooks_dir, name)
+        with open(p, "w") as f:
+            f.write(body)
+        os.chmod(p, os.stat(p).st_mode | stat.S_IEXEC | stat.S_IXGRP)
+    say("git hooks OK: post-merge, post-checkout, pre-commit(guard)")
+
+
+def install_claude_hooks():
+    src = os.path.join(ROOT, "harness", "claude", "hooks.json")
+    if not os.path.exists(src):
+        return
+    with open(src, encoding="utf-8") as f:
+        canonical = json.load(f)["hooks"]
+    # {ROOT} 치환
+    canonical = json.loads(json.dumps(canonical).replace("{ROOT}", ROOT))
+    if os.name == "nt":
+        # 순수 Windows: bash 문법(2>/dev/null || true) 제거 + python 명시 실행.
+        # 스크립트 자체가 fail-safe(항상 exit 0)라 리다이렉트 없이도 안전.
+        for entries in canonical.values():
+            for e in entries:
+                for h in e.get("hooks", []):
+                    cmd = h.get("command", "")
+                    cmd = cmd.replace(" 2>/dev/null || true", "").strip()
+                    parts = cmd.split(" ", 1)
+                    script = parts[0].replace("/", "\\")
+                    args = (" " + parts[1]) if len(parts) > 1 else ""
+                    h["command"] = f'python "{script}"{args}'
+
+    settings_path = os.path.expanduser("~/.claude/settings.json")
+    try:
+        with open(settings_path, encoding="utf-8") as f:
+            settings = json.load(f)
+    except (OSError, ValueError):
+        settings = {}
+    hooks = settings.setdefault("hooks", {})
+
+    changed = False
+    for event, entries in canonical.items():
+        cur = hooks.get(event, [])
+        # section9 소유 항목 제거 후 canonical 로 재삽입 (다른 훅은 보존)
+        kept = [e for e in cur
+                if not any(MARK in h.get("command", "")
+                           for h in e.get("hooks", []))]
+        new = kept + entries
+        if new != cur:
+            hooks[event] = new
+            changed = True
+
+    # remoteControlAtStartup: 세션 시작 시 remote-control(모바일 앱 제어) 자동 활성화.
+    # 조용히 켜지 않는다 — 최초로 켤 때 고지한다(사용자 settings.json 변경이므로).
+    if "--no-remote-control" not in sys.argv and not settings.get("remoteControlAtStartup"):
+        settings["remoteControlAtStartup"] = True
+        changed = True
+        say("⚑ remoteControlAtStartup=true 로 설정 (세션 시작 시 원격제어 자동 활성 — "
+            "모바일 앱/claude.ai에서 이 세션 제어 가능). 원치 않으면 s9-install --no-remote-control 또는 "
+            "settings.json에서 해당 키 삭제.")
+
+    if changed:
+        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        say(f"claude hooks 갱신됨: {settings_path} (세션 재시작 또는 /hooks 리로드 필요할 수 있음)")
+    else:
+        say("claude hooks 최신 상태")
+
+
+def current_user():
+    u = os.environ.get("S9_USER")
+    if u and os.path.isdir(os.path.join(ROOT, "users", u)):
+        return u
+    import getpass
+    g = getpass.getuser()
+    return g if os.path.isdir(os.path.join(ROOT, "users", g)) else ""
+
+
+def link_into(src_dir, dst_dir, label):
+    """src_dir 항목들을 dst_dir 에 symlink. section9 안을 가리키는 기존
+    링크만 갱신/제거 대상 — 사용자의 다른 스킬/에이전트는 건드리지 않는다."""
+    if not os.path.isdir(src_dir):
+        return
+    os.makedirs(dst_dir, exist_ok=True)
+    for name in sorted(os.listdir(src_dir)):
+        if name.startswith(".") or name == "README.md":
+            continue
+        src = os.path.join(src_dir, name)
+        dst = os.path.join(dst_dir, name)
+        marker = os.path.join(dst, ".section9-copy") if os.path.isdir(dst) else None
+        if os.path.islink(dst):
+            if os.path.realpath(dst).startswith(os.path.realpath(ROOT)):
+                os.remove(dst)  # section9 소유 링크 → 갱신
+            else:
+                say(f"  skip (남의 링크): {dst}")
+                continue
+        elif os.path.exists(dst) and marker and os.path.exists(marker):
+            import shutil
+            shutil.rmtree(dst)  # 우리가 복사한 항목 → 갱신
+        elif os.path.exists(dst):
+            say(f"  skip (기존 항목 존재): {dst}")
+            continue
+        try:
+            os.symlink(src, dst)
+            say(f"  {label}: {name} -> ~/.claude/{os.path.basename(dst_dir)}/")
+        except OSError:
+            # Windows 비관리자 등 symlink 불가 → 복사 fallback (마커로 소유 표시)
+            import shutil
+            if os.path.isdir(src):
+                shutil.copytree(src, dst)
+                open(os.path.join(dst, ".section9-copy"), "w").close()
+            else:
+                shutil.copy2(src, dst)
+            say(f"  {label}: {name} (copy fallback) -> {dst}")
+
+
+def validate_agents(agents_dir):
+    """에이전트 파일 frontmatter 유효성 검사 (Claude Code가 로드하는 조건).
+    name(소문자/숫자/하이픈)·description 필수. 반환: (정상 수, [결함 메시지])."""
+    ok, bad = 0, []
+    if not os.path.isdir(agents_dir):
+        return ok, bad
+    for fn in sorted(os.listdir(agents_dir)):
+        if not fn.endswith(".md") or fn == "README.md":
+            continue
+        path = os.path.join(agents_dir, fn)
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        except OSError:
+            continue
+        # section9 소유(우리가 링크한 것)만 검사
+        if not os.path.realpath(path).startswith(os.path.realpath(ROOT)):
+            continue
+        import re as _re
+        m = _re.search(r"^---\s*\n(.*?)\n---", text, _re.S)
+        if not m:
+            bad.append(f"{fn}: frontmatter(--- ---) 없음")
+            continue
+        fm = m.group(1)
+        name = _re.search(r"(?m)^name:\s*(.+)$", fm)
+        desc = _re.search(r"(?m)^description:\s*(.+)$", fm)
+        if not name:
+            bad.append(f"{fn}: name 필드 없음")
+        elif not _re.fullmatch(r"[a-z0-9-]+", name.group(1).strip()):
+            bad.append(f"{fn}: name '{name.group(1).strip()}' — 소문자/숫자/하이픈만 허용")
+        if not desc:
+            bad.append(f"{fn}: description 필드 없음")
+        if name and desc and _re.fullmatch(r"[a-z0-9-]+", name.group(1).strip()):
+            ok += 1
+    return ok, bad
+
+
+def install_skills_agents():
+    home = os.path.expanduser("~/.claude")
+    link_into(os.path.join(ROOT, "harness", "claude", "skills"),
+              os.path.join(home, "skills"), "skill(공용)")
+    link_into(os.path.join(ROOT, "harness", "claude", "agents"),
+              os.path.join(home, "agents"), "agent(공용)")
+    u = current_user()
+    if u:
+        link_into(os.path.join(ROOT, "users", u, "skills"),
+                  os.path.join(home, "skills"), f"skill({u})")
+        link_into(os.path.join(ROOT, "users", u, "agents"),
+                  os.path.join(home, "agents"), f"agent({u})")
+    # 설치 검증 — Claude Code가 로드할 수 있는 형식인지 확인
+    ok, bad = validate_agents(os.path.join(home, "agents"))
+    for b in bad:
+        say(f"  ⚠ 에이전트 결함: {b}")
+    # ⚑ 핵심: 에이전트/스킬은 '세션 시작 시점'에만 로드된다(Claude Code 동작).
+    #   세션 도중 설치했다면 이 세션에선 스폰 불가 → 재시작해야 활성화.
+    say(f"agents/skills 설치·검증 OK ({ok}개 에이전트 유효). "
+        f"⚑ 역할 에이전트는 Claude Code 세션 '시작 시'에만 로드된다 — "
+        f"방금 설치했다면 이 세션에선 스폰 불가, **Claude Code를 재시작**해야 "
+        f"designer 등 역할 에이전트가 활성화된다. (현재 로드 목록은 /context 로 확인)")
+
+
+BEGIN_MARK = "<!-- section9:begin -->"
+END_MARK = "<!-- section9:end -->"
+
+
+def managed_block(path, label):
+    """instructions 파일(GEMINI.md/AGENTS.md 등)에 PROTOCOL을 managed block으로
+    주입. 마커 밖 사용자 내용은 보존, 블록만 교체 (idempotent)."""
+    proto_path = os.path.join(ROOT, "harness", "common", "PROTOCOL.md")
+    if not os.path.exists(proto_path):
+        return
+    with open(proto_path, encoding="utf-8") as f:
+        proto = f.read().strip()
+    block = f"{BEGIN_MARK}\n{proto}\n{END_MARK}"
+    try:
+        with open(path, encoding="utf-8") as f:
+            cur = f.read()
+    except OSError:
+        cur = ""
+    if BEGIN_MARK in cur and END_MARK in cur:
+        pre = cur.split(BEGIN_MARK)[0]
+        post = cur.split(END_MARK, 1)[1]
+        new = pre + block + post
+    else:
+        new = (cur.rstrip("\n") + "\n\n" if cur.strip() else "") + block + "\n"
+    if new != cur:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(new)
+        say(f"{label}: protocol block 갱신 → {path}")
+    else:
+        say(f"{label}: 최신 상태 ({path})")
+
+
+def install_other_harnesses():
+    # 존재하는 하네스만 감지해 적용 (프로토콜 모드 — harness/README.md 매트릭스 참조)
+    targets = [
+        ("gemini", os.path.expanduser("~/.gemini"),
+         os.path.expanduser("~/.gemini/GEMINI.md")),
+        ("codex", os.path.expanduser("~/.codex"),
+         os.path.expanduser("~/.codex/AGENTS.md")),
+    ]
+    for name, probe, dst in targets:
+        if os.path.isdir(probe):
+            managed_block(dst, name)
+        else:
+            say(f"{name}: 미설치 감지 ({probe} 없음) — 생략")
+
+
+def main():
+    # --agents-md <path>: 임의 instructions 파일에 protocol 주입 (copilot/프로젝트용)
+    if "--agents-md" in sys.argv:
+        i = sys.argv.index("--agents-md")
+        if i + 1 >= len(sys.argv):
+            print("usage: s9-install --agents-md <path>", file=sys.stderr)
+            sys.exit(1)
+        managed_block(os.path.abspath(sys.argv[i + 1]), "custom")
+        return
+    install_dirs()
+    install_git_hooks()
+    if "--no-claude" not in sys.argv:
+        install_claude_hooks()
+        install_skills_agents()
+    install_other_harnesses()
+    start_dashboard()
+    say("section9 install 완료")
+
+
+def start_dashboard():
+    """설치 직후 대시보드 자동 기동 (REQ-20260824-020) — 이미 떠 있으면 무시(멱등).
+    이후에는 Claude 세션 시작 훅(s9-audit-session)이 죽은 서버를 되살린다."""
+    import socket
+    import subprocess
+    port = int(os.environ.get("S9_PORT", "9909"))
+    try:
+        socket.create_connection(("127.0.0.1", port), 0.5).close()
+        say(f"대시보드 이미 실행 중: http://127.0.0.1:{port}/")
+        return
+    except OSError:
+        pass
+    try:
+        s9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
+        root = os.environ.get("S9_ROOT") or os.path.expanduser("~/section9")
+        os.makedirs(os.path.join(root, "state"), exist_ok=True)
+        lf = open(os.path.join(root, "state", "serve.log"), "a")
+        subprocess.Popen([s9, "serve", "--port", str(port)],
+                         stdin=subprocess.DEVNULL, stdout=lf, stderr=lf,
+                         start_new_session=True)
+        say(f"대시보드 기동: http://127.0.0.1:{port}/")
+    except Exception as e:
+        say(f"대시보드 자동 기동 실패({e}) — 수동: ~/section9/bin/s9 serve")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        print(f"s9-install: {e}", file=sys.stderr)
+        sys.exit(0 if QUIET else 1)

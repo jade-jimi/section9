@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""section9 harness guard (git pre-commit hook).
+
+보호 경로(harness)가 커밋에 포함되면 현재 사용자의 role을 확인해
+admin이 아니면 커밋을 거부한다.
+
+인가(authorization)만 있고 인증(authentication)은 없다 — S9_USER 위조로
+우회 가능하며, 이는 의도된 설계다(실수 방지 + 규율 + 감사가 목표).
+우회 불가능한 최종 게이트는 GitHub branch protection + CODEOWNERS (docs/09).
+"""
+import os
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "bin"))
+
+PROTECTED = ("bin/", "web/", "harness/", ".github/", ".gitignore")
+
+
+def current_user():
+    u = os.environ.get("S9_USER")
+    if u:
+        return u
+    import getpass
+    return getpass.getuser()
+
+
+def role_of(user):
+    profile = os.path.join(ROOT, "users", user, "profile.md")
+    try:
+        with open(profile, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("role:"):
+                    return line.split(":", 1)[1].strip()
+        return "member"  # 등록됐지만 role 미지정
+    except OSError:
+        return ""  # 미등록
+
+
+def main():
+    out = subprocess.run(["git", "diff", "--cached", "--name-only"],
+                         capture_output=True, text=True, cwd=ROOT)
+    staged = [l for l in out.stdout.splitlines() if l.strip()]
+    hits = [f for f in staged if f.startswith(PROTECTED)]
+    if not hits:
+        sys.exit(0)
+
+    user = current_user()
+    role = role_of(user)
+    if role == "admin":
+        sys.exit(0)
+
+    print("s9-guard: harness 보호 경로가 커밋에 포함되어 있습니다:", file=sys.stderr)
+    for f in hits[:10]:
+        print(f"  - {f}", file=sys.stderr)
+    who = f"{user} (role: {role or '미등록'})"
+    print(f"현재 사용자 {who} 는 admin이 아니므로 커밋이 거부됩니다.", file=sys.stderr)
+    print("admin이라면: S9_USER=<admin이름> git commit ... 또는 s9 user role 로 역할 부여.",
+          file=sys.stderr)
+    print("(harness 변경은 PR로 제안하고 admin 승인을 받는 것이 원칙 — docs/09)",
+          file=sys.stderr)
+    sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

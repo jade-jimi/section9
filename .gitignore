@@ -1,0 +1,22 @@
+# 일시적 lock — 절대 커밋 금지
+.s9.lock
+
+# index/ 는 파생물 — 커밋하면 모든 머신의 모든 쓰기가 catalog.jsonl 충돌을 만든다.
+# pull 후 git hook(post-merge/post-checkout)이 `s9 index rebuild` 로 재생성한다.
+index/
+
+# ---- 로컬 인스턴스 데이터 — 공개 리포에 절대 커밋 금지 (REQ-20260824-046) ----
+vault/
+users/
+state/
+streams/
+projects/
+scratchpad/
+.claude/
+*.log
+__pycache__/
+*.pyc
+nul
+
+# 실화면 스크린샷 내장(사용자·머신·실요청 노출) — 공개 포함 여부는 사용자 결정 대기
+web/guide.html

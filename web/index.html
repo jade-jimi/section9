@@ -1,0 +1,3646 @@
+<!doctype html>
+<html lang="ko" data-theme="system" data-skin="ledger" data-density="normal">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>section9</title>
+<style>
+:root{
+  --bg:#fafaf8; --panel:#ffffff; --border:#d8d8d3; --hairline:#e9e9e5;
+  --text:#141518; --muted:#5c6470; --faint:#9096a0;
+  --accent:#141518; --accent-soft:#f0f0ec; --accent-line:#141518;
+  --r:0;
+  --c-draft:#868c96; --c-open:#1d4ed8; --c-inprogress:#b45309; --c-blocked:#b91c1c;
+  --c-review:#6d28d9; --c-done:#047857; --c-cancelled:#868c96; --c-published:#0f766e;
+  --t-request:#1d4ed8; --t-knowledge:#0f766e; --t-session:#92400e;
+  --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+}
+/* 테마: system(OS 추종) / paper(라이트 고정=기본 토큰) / carbon(다크 고정) / phosphor(CRT) */
+@media (prefers-color-scheme: dark){
+  :root[data-theme="system"]{
+    --bg:#111214; --panel:#17181b; --border:#33353a; --hairline:#232529;
+    --text:#e8e8e4; --muted:#9aa0aa; --faint:#5f646d;
+    --accent:#e8e8e4; --accent-soft:#222327; --accent-line:#e8e8e4;
+    --c-open:#5b8def; --c-inprogress:#d99537; --c-blocked:#e05d5d;
+    --c-review:#a582e8; --c-done:#3fa583; --c-published:#3d9d96;
+    --t-request:#5b8def; --t-knowledge:#3d9d96; --t-session:#c08a4e;
+  }
+}
+:root[data-theme="carbon"]{
+  --bg:#111214; --panel:#17181b; --border:#33353a; --hairline:#232529;
+  --text:#e8e8e4; --muted:#9aa0aa; --faint:#5f646d;
+  --accent:#e8e8e4; --accent-soft:#222327; --accent-line:#e8e8e4;
+  --c-open:#5b8def; --c-inprogress:#d99537; --c-blocked:#e05d5d;
+  --c-review:#a582e8; --c-done:#3fa583; --c-published:#3d9d96;
+  --t-request:#5b8def; --t-knowledge:#3d9d96; --t-session:#c08a4e;
+}
+:root[data-theme="phosphor"]{
+  --bg:#0a0e0a; --panel:#0d120d; --border:#2b3a2b; --hairline:#1a231a;
+  --text:#b9e2b2; --muted:#79a674; --faint:#4b6f49;
+  --accent:#b9e2b2; --accent-soft:#131b13; --accent-line:#b9e2b2;
+  --c-draft:#5f7f5c; --c-open:#5b9bd5; --c-inprogress:#d9b13b; --c-blocked:#e06c5d;
+  --c-review:#b78ee0; --c-done:#55c07a; --c-cancelled:#5f7f5c; --c-published:#46b39a;
+  --t-request:#5b9bd5; --t-knowledge:#46b39a; --t-session:#c9a35a;
+}
+*{box-sizing:border-box}
+::selection{background:var(--text);color:var(--bg)}
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-thumb{background:var(--border)}
+*::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+*::-webkit-scrollbar-track{background:transparent}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{
+  outline:1px solid var(--text);outline-offset:1px}
+body{margin:0;font-family:"Noto Sans KR",system-ui,sans-serif;
+  background:var(--bg);color:var(--text);font-size:13.5px;-webkit-font-smoothing:antialiased}
+
+/* ------- header: 2행 구조 — 1행 브랜드/탭, 2행 툴바(필터 좌 · 환경설정 우) ------- */
+header{background:var(--bg);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:10}
+.hrow1{display:flex;align-items:baseline;gap:26px;padding:14px 22px 0}
+.brand{font-size:15px;font-weight:700;letter-spacing:.02em;padding-bottom:12px}
+.brand .dot{display:inline-block;width:8px;height:8px;background:var(--text);margin-right:8px}
+.tabs{display:flex;gap:2px}
+.tabs button{border:0;background:none;padding:4px 12px 13px;cursor:pointer;
+  font-size:13px;color:var(--muted);font-family:inherit;letter-spacing:.01em;
+  border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button:hover{color:var(--text)}
+.tabs button.active{color:var(--text);font-weight:600;border-bottom-color:var(--text)}
+.hrow2{display:flex;gap:14px;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;padding:8px 22px;border-top:1px solid var(--hairline)}
+.fgroup,.pgroup{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+/* whoami 라벨 — 서버 파생 신원 표시 전용 (선택 UI 아님, REQ-20260824-027) */
+.who{font-family:var(--mono);font-size:10px;letter-spacing:.4px;color:var(--muted);white-space:nowrap}
+.who b{color:var(--text);font-weight:600}
+.who.warn{color:var(--c-blocked);white-space:normal}
+.who.warn code{font-family:var(--mono);border:1px solid var(--hairline);padding:0 3px}
+.who .as{color:var(--c-review)}
+.pdiv{width:1px;height:18px;background:var(--border);margin:0 4px}
+.gear{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  font-size:14px;line-height:1;padding:4px 9px;cursor:pointer}
+.gear:hover{background:var(--text);color:var(--bg)}
+.settings{position:fixed;inset:0;z-index:50}
+.settings-panel{position:absolute;top:92px;right:22px;width:290px;
+  background:var(--panel);border:1px solid var(--text);padding:14px 16px;
+  box-shadow:0 8px 28px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:12px}
+.settings-h{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;font-family:var(--mono);
+  display:flex;justify-content:space-between;align-items:baseline}
+.settings-h span{font-size:11px;color:var(--text);text-transform:none;letter-spacing:0}
+.settings-panel label{display:flex;flex-direction:column;gap:4px;font-size:11px;
+  color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em}
+.settings-panel select{border:1px solid var(--border);padding:6px 9px;font-size:12.5px;
+  background:var(--panel);color:var(--text);font-family:inherit;text-transform:none;letter-spacing:0}
+.settings-note{font-size:11px;color:var(--faint);margin:2px 0 0;line-height:1.5}
+/* 프로젝트 정보 패널 — 계기판/장부 스타일(둥근모서리·pill 금지) */
+.proj-info{border:1px solid var(--text);background:var(--panel);margin:0 0 14px;
+  padding:12px 14px;display:grid;gap:10px}
+.proj-info[hidden]{display:none}  /* display:grid가 UA [hidden] 규칙을 덮어써 빈 박스가 남던 버그 수정 */
+.proj-info .pi-head{display:flex;justify-content:space-between;align-items:baseline;
+  border-bottom:1px solid var(--hairline);padding-bottom:8px;gap:12px;flex-wrap:wrap}
+.proj-info .pi-title{font-size:14px;font-weight:600}
+.proj-info .pi-slug{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.proj-info .pi-status{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted)}
+.proj-info .pi-grid{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;
+  font-size:12px;align-items:baseline}
+.proj-info .pi-k{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--faint)}
+.proj-info .pi-v{color:var(--text)}
+.proj-info table{border-collapse:collapse;width:100%;font-size:12px}
+.proj-info th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--faint);font-weight:600;
+  border-bottom:1px solid var(--hairline);padding:3px 10px 5px 0}
+.proj-info td{padding:4px 10px 4px 0;border-bottom:1px solid var(--hairline)}
+.proj-info .m-role{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.proj-info .m-exp{color:var(--c-blocked);font-family:var(--mono);font-size:10.5px}
+.proj-info .m-act{color:var(--c-done);font-family:var(--mono);font-size:10.5px}
+.hrow2 input[type="text"],.hrow2 select{border:1px solid var(--border);
+  padding:5px 9px;font-size:12.5px;background:var(--panel);color:var(--text);font-family:inherit}
+.hrow2 input[type="text"]{width:190px;font-family:var(--mono)}
+.chk{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);
+  cursor:pointer;user-select:none}
+.chk input{accent-color:var(--text)}
+.chk:has(input:disabled){opacity:.45;cursor:not-allowed}
+
+/* MY PROJECTS 레저 스트립 — '내 것만' 토글 ON일 때 #proj-info 자리 위에 표시
+   (DOC-20260823-006 권고안 B). 배지·pill·라운드·그림자 금지 — 선과 타이포만. */
+/* 헤더 계정·사용량 칩 (REQ-20260824-043) — 60s 폴, 색은 임계 신호만 */
+.usagechip{font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  white-space:nowrap;letter-spacing:.02em}
+/* 클로드 계정(사용량)과 하네스 신원을 두 줄로 분리 — 가독 (2026-08-24 채팅 요청) */
+.pgroup.idcol{flex-direction:column;align-items:flex-end;gap:2px}
+.usagechip .warn{color:var(--c-inprogress);font-weight:600}
+.usagechip .crit{color:var(--c-blocked);font-weight:600}
+.mystrip{border:1px solid var(--border);background:var(--panel);margin:0 0 14px}
+.mystrip[hidden]{display:none}
+.mystrip .ms-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:9px 14px;border-bottom:1px solid var(--hairline);font-family:var(--mono);
+  font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.mystrip .ms-row{display:flex;width:100%;align-items:baseline;gap:10px;flex-wrap:wrap;
+  border:0;border-bottom:1px solid var(--hairline);background:none;text-align:left;
+  cursor:pointer;font-family:inherit;color:var(--text);padding:9px 14px}
+.mystrip .ms-row:hover{background:var(--accent-soft)}
+.mystrip .ms-row.sel{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--text)}
+.mystrip .ms-row:focus-visible{outline:1px solid var(--text);outline-offset:-1px}
+.mystrip .ms-t{font-size:13px;font-weight:600}
+.mystrip .ms-slug{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.mystrip .ms-role{font-family:var(--mono);font-size:11px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.04em;margin-left:auto}
+.mystrip .ms-until{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.mystrip .ms-until.soon{color:var(--c-inprogress)}  /* until ≤14일 임박 — 색은 보조 신호 */
+.mystrip .ms-note{padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+.mystrip .more{padding-left:14px}
+.proj-info .m-me{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.proj-info .m-me-name{font-weight:600}
+/* 멤버 관리(manage 권한 me) — 인라인 편집 컨트롤: 플랫, 모노, 헤어라인 */
+.proj-info select,.proj-info input{border:1px solid var(--hairline);background:var(--panel);
+  color:var(--text);font-family:var(--mono);font-size:11px;padding:2px 4px;border-radius:0}
+.proj-info select:focus,.proj-info input:focus{outline:none;border-color:var(--text)}
+.proj-info input[type="date"]{width:118px}
+.proj-info .pi-x{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  font-family:var(--mono);font-size:10.5px;padding:2px 8px;cursor:pointer;letter-spacing:.03em}
+.proj-info .pi-x:hover:not(:disabled){background:var(--text);color:var(--bg);border-color:var(--text)}
+.proj-info .pi-x:disabled{color:var(--faint);cursor:not-allowed}
+.proj-info .pi-addrow td{border-bottom:0;border-top:1px solid var(--border);padding-top:6px}
+.proj-info .pi-err{font-family:var(--mono);font-size:10.5px;color:var(--c-blocked);margin-top:6px}
+
+main{padding:18px 22px}
+.count{color:var(--faint);font-size:11px;margin:0 0 14px;font-family:var(--mono);
+  text-transform:uppercase;letter-spacing:.06em}
+.more{display:block;width:100%;border:0;background:none;color:var(--faint);
+  padding:7px 0;cursor:pointer;font-size:11.5px;font-family:var(--mono);text-align:left}
+.more:hover{color:var(--text);text-decoration:underline}
+.more::before{content:"+ "}
+
+/* ------- stats: 텍스트 계기줄 ------- */
+.stats{display:flex;gap:0;flex-wrap:wrap;margin:0 0 18px;border:1px solid var(--border);
+  background:var(--panel)}
+.stat{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;font-size:11px;
+  color:var(--muted);cursor:pointer;font-family:var(--mono);text-transform:uppercase;
+  letter-spacing:.05em;border-right:1px solid var(--hairline)}
+.stat b{color:var(--text);font-size:15px;font-weight:600}
+.stat .cdot{width:7px;height:7px;background:var(--sc)}
+.stat:hover{background:var(--accent-soft)}
+.stat.on{box-shadow:inset 0 -2px 0 var(--text);color:var(--text)}
+
+/* ------- board: hairline 레저 ------- */
+.board{display:flex;gap:0;align-items:flex-start;overflow-x:auto;padding-bottom:10px;
+  border:1px solid var(--border);background:var(--panel)}
+.col{min-width:252px;width:252px;flex:none;border-right:1px solid var(--hairline);
+  padding:0 0 10px}
+.col:last-child{border-right:0}
+.col h2{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;margin:0;
+  padding:11px 14px;display:flex;align-items:center;gap:8px;font-weight:600;
+  color:var(--muted);border-bottom:1px solid var(--hairline);font-family:var(--mono)}
+.col h2 .cdot{width:7px;height:7px;background:var(--sc)}
+.col h2 .n{margin-left:auto;font-weight:400;color:var(--faint)}
+.cards{display:flex;flex-direction:column;min-height:20px}
+.card{padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--hairline);position:relative}
+.card:hover{background:var(--accent-soft)}
+.card .id{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.02em}
+.card .t{margin:3px 0 6px;font-weight:600;line-height:1.45;font-size:13.5px;letter-spacing:-.01em;
+  padding-right:56px}
+.card .m{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);
+  font-family:var(--mono);align-items:baseline}
+.elapsed{position:absolute;right:12px;top:10px;font-family:var(--mono);font-size:10px;
+  color:var(--sc,var(--muted));white-space:nowrap}
+.elapsed::before{content:"⏱ "}
+.urow{padding:7px 0;border-bottom:1px solid var(--hairline);cursor:pointer;font-size:13px}
+.urow:hover{background:var(--accent-soft)}
+.urow .st{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase}
+.badge{color:var(--text);font-family:var(--mono);font-size:11px}
+.badge::before{content:"@"}
+.size{color:var(--faint)}
+.tag{color:var(--faint)}
+.col .more{padding-left:14px}
+
+/* ------- docs ------- */
+.docs{display:flex;gap:0;align-items:flex-start;border:1px solid var(--border);background:var(--panel)}
+.doclist{width:330px;flex:none;border-right:1px solid var(--border);
+  max-height:calc(100vh - 150px);overflow-y:auto}
+.doclist .grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  padding:13px 14px 6px;font-weight:600;position:sticky;top:0;background:var(--panel);
+  font-family:var(--mono);border-bottom:1px solid var(--hairline)}
+.doclist .row{padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--hairline)}
+.doclist .row:hover{background:var(--accent-soft)}
+.doclist .row.sel{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--text)}
+.doclist .row .id{font-family:var(--mono);font-size:10px;color:var(--faint)}
+.doclist .row .st{float:right;font-size:10px;color:var(--sc,var(--muted));
+  font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em}
+.doclist .row>div:nth-child(3){font-size:13px;margin-top:1px}
+.viewer{flex:1;padding:24px 34px;min-height:300px;max-height:calc(100vh - 150px);overflow-y:auto}
+.viewer .empty{color:var(--faint);font-family:var(--mono);font-size:12px}
+.viewer h1{letter-spacing:-.015em;font-size:21px}
+.metatbl{width:100%;border-collapse:collapse;margin:16px 0 24px;font-size:12.5px;
+  border-top:1px solid var(--border)}
+.metatbl td{border-bottom:1px solid var(--hairline);padding:7px 10px 7px 0;vertical-align:top}
+.metatbl td:first-child{color:var(--faint);width:150px;white-space:nowrap;
+  font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);
+  padding-top:9px}
+.md h2{border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:30px;
+  font-size:15px;text-transform:uppercase;letter-spacing:.05em}
+.md h3{font-size:13px;color:var(--muted);margin-top:20px;font-family:var(--mono)}
+.md pre{background:var(--accent-soft);border-left:2px solid var(--border);
+  padding:11px 14px;overflow-x:auto;font-size:12px}
+.md code{background:var(--accent-soft);padding:1px 5px;font-family:var(--mono);font-size:12px}
+.md pre code{background:none;padding:0}
+.md a{color:var(--text)}
+.md li{margin:3px 0}
+a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
+  text-decoration-style:dotted;text-underline-offset:3px;font-family:var(--mono);font-size:.92em}
+.path{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.snip{font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  padding:2px 0 2px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.snip b{color:var(--text);font-weight:700;background:var(--accent-soft)}
+.reqstream summary{cursor:pointer;font-weight:600;font-size:11px;color:var(--muted);
+  border-top:1px solid var(--border);padding:14px 0 8px;margin-top:28px;list-style:none;
+  text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono)}
+.reqstream summary::before{content:"▸ ";color:var(--faint)}
+.reqstream[open] summary::before{content:"▾ "}
+.reqstream .term{max-height:440px;margin-top:8px}
+
+/* ------- audit: 레저 테이블 ------- */
+.audit{border:1px solid var(--border);background:var(--panel)}
+.audit .cap{padding:10px 16px;border-bottom:1px solid var(--border);font-size:11.5px;
+  color:var(--muted)}
+.audit .tblwrap{overflow-x:auto}
+.audit table{width:100%;border-collapse:collapse;font-size:12.5px}
+.audit th{text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);padding:9px 14px;border-bottom:1px solid var(--border);
+  white-space:nowrap;font-family:var(--mono);font-weight:600}
+.audit td{padding:7px 14px;border-bottom:1px solid var(--hairline);vertical-align:top}
+.audit tr:hover td{background:var(--accent-soft)}
+.audit td.ts{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap}
+.kind{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:600;
+  white-space:nowrap;color:var(--kc);font-family:var(--mono);text-transform:uppercase;
+  letter-spacing:.06em}
+.kind::before{content:"";width:6px;height:6px;background:var(--kc);display:inline-block}
+.audit .more{padding:10px 14px}
+
+/* ------- backlinks ------- */
+.backlinks{border-top:1px solid var(--border);margin-top:28px;padding-top:14px}
+.backlinks h4{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 8px;font-weight:600;font-family:var(--mono)}
+.backlinks .bl{padding:6px 0;cursor:pointer;font-size:13px;border-bottom:1px solid var(--hairline)}
+.backlinks .bl:hover{background:var(--accent-soft)}
+.backlinks .bl .id{font-family:var(--mono);font-size:10px;color:var(--faint);margin-right:10px}
+
+/* ------- stream 터미널 ------- */
+.streamwrap{display:flex;gap:0;align-items:flex-start;border:1px solid var(--border);
+  background:var(--panel)}
+.streamwrap .doclist{border-right:1px solid var(--border)}
+.term{flex:1;background:#101418;color:#cfd8e3;padding:16px 20px;
+  max-height:calc(100vh - 150px);overflow-y:auto;
+  font-family:var(--mono);font-size:12px;line-height:1.55}
+.term .ev{margin:11px 0;white-space:pre-wrap;word-break:break-word}
+.term .ev.agent{opacity:.7;padding-left:12px;border-left:1px solid #3a4655}
+.term .hd{font-weight:600}
+.term details summary{cursor:pointer;list-style:none}
+.term details summary::before{content:"▸ "}
+.term details[open] summary::before{content:"▾ "}
+.term .meta{color:#5c6878;font-size:11px}
+.term mark.reqhl{background:#d97706;color:#101418;padding:0 2px;border-radius:0}
+
+/* ------- terminal 탭 (REQ-20260824-037) — Claude Code CLI 재현.
+   .term처럼 테마 무관 상시 다크 + CC 팔레트. 라운드/그림자 0 (터미널이므로 당연). ------- */
+.ccterm{--cc-bg:#1b1c1e;--cc-text:#e8e8e4;--cc-dim:#8a8f98;--cc-faint:#5c626c;
+  --cc-green:#4ec97a;--cc-cyan:#56c8d8;--cc-yellow:#e5c07b;--cc-red:#e06c75;
+  --cc-border:#3a3d44;
+  background:var(--cc-bg);color:var(--cc-text);border:1px solid var(--border);
+  display:flex;flex-direction:column;height:calc(100vh - 168px);
+  font-family:var(--mono);font-size:12.5px;line-height:1.7;
+  font-variant-ligatures:none;letter-spacing:0}
+.ccout{flex:1;overflow-y:auto;padding:16px 20px}
+.ccout .ln{display:flex;gap:9px;margin:0 0 13px}
+.ccout .ln .g{flex:none;width:14px;text-align:left;user-select:none}
+.ccout .ln .b{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word}
+.ccout .ln.sub{margin:-9px 0 13px;color:var(--cc-dim)}   /* ⎿ 연속줄 — 앞 줄에 붙는다 */
+.ccout .ln.sub .g{color:var(--cc-faint)}
+.ccout .ln.ccdim{color:var(--cc-dim)}
+.ccstatus .ccagrow{cursor:pointer}
+.ccstatus .ccagrow:hover{background:rgba(255,255,255,.04)}
+.ccstatus .ccmain{cursor:pointer}
+.ccstatus .ccrc{text-decoration:underline;cursor:help}
+.ccout .ln.pending{opacity:.55}
+.ccterm .ccprompt{color:var(--cc-text)}
+.ccterm .cccode{background:rgba(255,255,255,.09);padding:0 4px}
+.ccterm details summary{cursor:pointer;list-style:none;display:inline}
+.ccterm details summary::-webkit-details-marker{display:none}
+.ccterm details summary::after{content:" [+]";color:var(--cc-faint)}
+.ccterm details[open] summary::after{content:" [\2212]"}
+.ccterm details .full{white-space:pre-wrap;word-break:break-word;margin-top:6px}
+.ccerr{border-top:1px solid var(--cc-border);color:var(--cc-red);
+  padding:7px 20px;font-size:12px}
+.ccinputrow{display:flex;gap:9px;align-items:flex-start;
+  border-top:1px solid var(--cc-border);padding:11px 20px}
+.ccinputrow .ccp{flex:none;color:var(--cc-text)}
+.ccinputrow textarea{flex:1;border:0;background:none;color:var(--cc-text);
+  font:inherit;line-height:1.7;padding:0;margin:0;resize:none;outline:none;
+  overflow:hidden;display:block}
+.ccinputrow textarea::placeholder{color:var(--cc-faint)}
+.ccinputrow textarea:disabled{opacity:.5}
+.ccstatus{padding:4px 20px 12px;font-size:12px;line-height:1.85}
+.ccstatus .ccs1{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px}
+.ccstatus .ccmode{font-weight:600;color:var(--cc-yellow)}
+.ccstatus .ccok{color:var(--cc-green)}
+.ccstatus .ccwarn{color:var(--cc-red)}
+.ccstatus .cccyan{color:var(--cc-cyan)}
+.ccstatus .ccs1 .r{color:var(--cc-dim);text-decoration:underline;text-underline-offset:3px}
+.ccstatus .ag{display:flex;gap:9px}
+.ccstatus .ag .g{flex:none;width:14px}
+.ccstatus .ag .r{margin-left:auto;color:var(--cc-dim)}
+.ccstatus .ag.sub{color:var(--cc-dim)}
+[data-density="compact"] .ccterm{font-size:11.5px;line-height:1.55}
+/* REQ-040: 팔레트·첨부 칩·웨이팅 스피너·에이전트 dim — 라운드/그림자 0 유지 */
+.ccpal{border-top:1px solid var(--cc-border);max-height:230px;overflow-y:auto;padding:5px 0}
+.ccpal .pi{display:flex;gap:14px;padding:2px 20px;cursor:pointer;align-items:baseline}
+.ccpal .pi .pn{flex:none;min-width:180px;color:var(--cc-text)}
+.ccpal .pi .pd{color:var(--cc-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.ccpal .pi.sel{background:rgba(255,255,255,.1)}
+.ccpal .pi.cli .pn{color:var(--cc-faint)}
+.ccpal .pcli{color:var(--cc-faint)}
+.ccatt{display:flex;gap:8px;flex-wrap:wrap;padding:7px 20px 0;border-top:1px solid var(--cc-border)}
+.ccatt .chip{border:1px solid var(--cc-border);padding:1px 8px;color:var(--cc-dim);font-size:11.5px}
+.ccatt .chip .up{color:var(--cc-yellow)}
+.ccatt .chip button{background:none;border:0;color:var(--cc-red);cursor:pointer;font:inherit;padding:0 0 0 6px}
+.ccclip{flex:none;background:none;border:0;color:var(--cc-dim);cursor:pointer;font:inherit;line-height:1.7;padding:0 2px}
+.ccclip:hover{color:var(--cc-text)}
+.ccterm.dragover{outline:1px dashed var(--cc-cyan);outline-offset:-5px}
+.ccwaitline{padding:0 0 13px;color:var(--cc-dim)}
+.ccspin::before{content:"✻";color:var(--cc-yellow);animation:ccglyph 1s steps(1,end) infinite}
+@keyframes ccglyph{0%{content:"✻"}33%{content:"✳"}66%{content:"✶"}100%{content:"✻"}}
+@media (prefers-reduced-motion: reduce){.ccspin::before{animation:none}}
+.ccout .ln.ccagent{color:var(--cc-dim);opacity:.75;margin-left:14px}
+.ccout .ln.ccagent .g{color:var(--cc-faint)}
+.ccout .b .full .ln{margin:0 0 6px}
+
+/* ------- graph ------- */
+.graphwrap{border:1px solid var(--border);background:var(--panel);position:relative}
+.graphwrap canvas{display:block;width:100%;cursor:grab}
+.graphwrap canvas.grabbing{cursor:grabbing}
+.ghint{position:absolute;right:12px;bottom:10px;font-size:10.5px;color:var(--faint);
+  font-family:var(--mono);background:var(--panel);border:1px solid var(--hairline);padding:3px 9px}
+.legend{display:flex;gap:18px;padding:10px 16px;border-bottom:1px solid var(--border);
+  font-size:11px;color:var(--muted);align-items:center;flex-wrap:wrap;
+  font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em}
+.dot{display:inline-block;width:7px;height:7px;margin-right:6px}
+.gmode{border:1px solid var(--border);background:none;color:var(--muted);
+  font-family:var(--mono);font-size:10px;padding:2px 9px;cursor:pointer;
+  text-transform:uppercase;letter-spacing:.05em}
+.gmode.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.gtype{cursor:pointer;user-select:none}
+.gtype.off{opacity:.35;text-decoration:line-through}
+
+/* ------- 상태 전이 액션 (판정 버튼 / 드래그) ------- */
+.tdd{font-family:var(--mono);font-size:10px;color:var(--c-inprogress);border:1px solid currentColor;
+  padding:0 4px;border-radius:2px}
+.tdd.full{color:var(--c-done)}
+.livedot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.livedot.on{background:#16a34a;box-shadow:0 0 0 0 rgba(22,163,74,.6);animation:livepulse 1.6s infinite}
+.livedot.off{background:var(--faint)}
+/* 간접 신호: 세션은 활동 중이나 이 REQ의 직접 증거 없음 — 비점멸 hollow (REQ-20260823-080) */
+.livedot.sess{background:transparent;border:1.5px solid #16a34a}
+/* 무인 작업자 기동 중(스폰 후 클레임 전) — 앰버 점멸 (REQ-20260824-008) */
+.livedot.spawn{background:#d97706;box-shadow:0 0 0 0 rgba(217,119,6,.6);animation:livepulse 1.6s infinite}
+@keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.5)}70%{box-shadow:0 0 0 5px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
+.rvpt{margin-top:7px;font-size:11px;color:var(--c-review);line-height:1.4;
+  border-left:2px solid var(--c-review);padding-left:7px}
+.acts{display:flex;gap:6px;margin-top:8px}
+.acts button{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  font-family:var(--mono);font-size:10.5px;padding:3px 10px;cursor:pointer;letter-spacing:.03em}
+.acts button:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+.card[draggable="true"]{cursor:grab}
+.col.dropok{outline:2px dashed var(--text);outline-offset:-2px;background:var(--accent-soft)}
+
+/* ============ skin: soft — 사이드바 앱 셸 + 라운드 카드 (구조부터 다른 언어) ============ */
+[data-skin="soft"] header{position:fixed;left:0;top:0;bottom:0;width:232px;
+  display:flex;flex-direction:column;border-right:1px solid var(--border);
+  border-bottom:0;background:var(--panel);overflow-y:auto}
+[data-skin="soft"] main{margin-left:232px}
+[data-skin="soft"] .hrow1{flex-direction:column;align-items:stretch;gap:16px;
+  padding:18px 14px 10px}
+[data-skin="soft"] .brand{padding-bottom:0;font-size:16px}
+[data-skin="soft"] .tabs{flex-direction:column;gap:3px}
+[data-skin="soft"] .tabs button{text-align:left;border-bottom:0;border-radius:8px;
+  padding:8px 12px;margin:0;font-size:13.5px}
+[data-skin="soft"] .tabs button:hover{background:var(--accent-soft)}
+[data-skin="soft"] .tabs button.active{background:var(--accent-soft);color:var(--text)}
+[data-skin="soft"] .hrow2{flex-direction:column;align-items:stretch;gap:10px;
+  padding:12px 14px;border-top:1px solid var(--hairline)}
+[data-skin="soft"] .fgroup,[data-skin="soft"] .pgroup{flex-direction:column;
+  align-items:stretch;gap:7px}
+[data-skin="soft"] .pgroup{border-top:1px solid var(--hairline);padding-top:12px}
+[data-skin="soft"] .pdiv{display:none}
+[data-skin="soft"] .pgroup{flex-direction:row;justify-content:space-between}
+[data-skin="soft"] .settings-panel{top:auto;bottom:14px;left:14px;right:auto;width:204px}
+[data-skin="soft"] .hrow2 input[type="text"],[data-skin="soft"] .hrow2 select{
+  width:100%;border-radius:8px}
+[data-skin="soft"] .viewer{max-height:none}
+[data-skin="soft"] .stats{border:0;background:none;gap:8px}
+[data-skin="soft"] .stat{border:1px solid var(--border);border-radius:9px;background:var(--panel)}
+[data-skin="soft"] .stat.on{box-shadow:none;border-color:var(--text)}
+[data-skin="soft"] .board{border:0;background:none;gap:14px}
+[data-skin="soft"] .col{background:var(--accent-soft);border-right:0;border-radius:12px;padding:6px}
+[data-skin="soft"] .col h2{border-bottom:0}
+[data-skin="soft"] .cards{gap:8px;padding:2px}
+[data-skin="soft"] .card{background:var(--panel);border-radius:10px;border-bottom:0;
+  box-shadow:0 1px 3px rgba(16,24,40,.09);border-left:3px solid var(--sc,var(--border));
+  transition:transform .1s,box-shadow .1s}
+[data-skin="soft"] .card:hover{background:var(--panel);transform:translateY(-1px);
+  box-shadow:0 4px 10px rgba(16,24,40,.13)}
+[data-skin="soft"] .badge{background:var(--accent-soft);border-radius:5px;padding:1px 7px}
+[data-skin="soft"] .badge::before{content:""}
+[data-skin="soft"] .docs,[data-skin="soft"] .audit,[data-skin="soft"] .graphwrap,
+[data-skin="soft"] .streamwrap{border-radius:12px;overflow:hidden}
+[data-skin="soft"] .term{border-radius:10px}
+[data-skin="soft"] .hovercard{border-radius:10px;border-color:var(--border);
+  box-shadow:0 4px 14px rgba(0,0,0,.16)}
+[data-skin="soft"] .kind{background:color-mix(in srgb,var(--kc) 12%,transparent);
+  border-radius:5px;padding:1px 8px}
+[data-skin="soft"] .kind::before{content:none}
+[data-skin="soft"] .more{border:1px dashed var(--border);border-radius:8px;text-align:center}
+[data-skin="soft"] .more::before{content:""}
+[data-skin="soft"] .doclist .row.sel{box-shadow:inset 3px 0 0 var(--text)}
+
+/* ============ skin: terminal — 브루탈리스트 모노 디자인 언어 ============ */
+[data-skin="terminal"] body,[data-skin="terminal"] .card .t,
+[data-skin="terminal"] .viewer h1,[data-skin="terminal"] .tabs button,
+[data-skin="terminal"] .doclist .row>div:nth-child(3),
+[data-skin="terminal"] .hovercard .ht,[data-skin="terminal"] .backlinks .bl{
+  font-family:var(--mono);letter-spacing:0}
+[data-skin="terminal"] body{font-size:12.5px}
+[data-skin="terminal"] header{border-bottom:2px solid var(--text)}
+[data-skin="terminal"] .tabs button{text-transform:uppercase;letter-spacing:.08em;font-size:12px}
+[data-skin="terminal"] .tabs button.active{background:var(--text);color:var(--bg);
+  border-bottom-color:transparent}
+[data-skin="terminal"] .viewer h1{font-size:17px}
+[data-skin="terminal"] .viewer h1::before{content:"> "}
+[data-skin="terminal"] .card:hover,[data-skin="terminal"] .doclist .row:hover{
+  background:var(--text)}
+[data-skin="terminal"] .card:hover *,[data-skin="terminal"] .doclist .row:hover *{
+  color:var(--bg) !important}
+[data-skin="terminal"] .doclist .row.sel{background:var(--text);box-shadow:none}
+[data-skin="terminal"] .doclist .row.sel *{color:var(--bg) !important}
+[data-skin="terminal"] .stat.on{background:var(--text);color:var(--bg);box-shadow:none}
+[data-skin="terminal"] .stat.on b{color:var(--bg)}
+[data-skin="terminal"] .brand .dot{width:9px;height:14px;animation:s9blink 1.1s steps(1) infinite}
+@keyframes s9blink{50%{opacity:0}}
+
+/* ============ skin: glass — frosted 레이어 + 앰비언트 컬러 필드 (2026-08-23 사용자 번복으로 부활)
+   ledger의 정반대 언어: 반투명 패널 + backdrop blur, 은은한 그라데이션 배경, 라운드/부드러운 그림자.
+   색은 tone 토큰(color-mix)에서만 파생 — 4개 tone 어디서든 성립. ============ */
+[data-skin="glass"]{
+  --gl-panel:color-mix(in srgb, var(--panel) 62%, transparent);
+  --gl-card:color-mix(in srgb, var(--panel) 52%, transparent);
+  --gl-solid:color-mix(in srgb, var(--panel) 90%, transparent);
+  --gl-line:color-mix(in srgb, var(--text) 16%, transparent);
+  --gl-hairline:color-mix(in srgb, var(--text) 9%, transparent);
+  --gl-tint:color-mix(in srgb, var(--text) 9%, transparent);
+  --gl-shadow:0 14px 38px -16px color-mix(in srgb, var(--text) 35%, transparent);
+}
+[data-skin="glass"] body{
+  background:
+    radial-gradient(58% 44% at 12% 0%,  color-mix(in srgb, var(--c-open) 26%, transparent), transparent 70%),
+    radial-gradient(50% 42% at 90% 10%, color-mix(in srgb, var(--c-review) 22%, transparent), transparent 70%),
+    radial-gradient(46% 38% at 78% 88%, color-mix(in srgb, var(--c-inprogress) 15%, transparent), transparent 72%),
+    radial-gradient(60% 50% at 22% 100%, color-mix(in srgb, var(--c-done) 20%, transparent), transparent 72%),
+    var(--bg);
+  background-attachment:fixed;
+}
+[data-skin="glass"] header{
+  background:color-mix(in srgb, var(--bg) 52%, transparent);
+  -webkit-backdrop-filter:blur(16px) saturate(1.3);
+  backdrop-filter:blur(16px) saturate(1.3);
+  border-bottom:1px solid var(--gl-line)}
+[data-skin="glass"] .tabs{gap:6px}
+[data-skin="glass"] .tabs button{border-bottom:0;border-radius:999px;
+  padding:6px 14px;margin:0 0 8px}
+[data-skin="glass"] .tabs button:hover{background:color-mix(in srgb, var(--text) 6%, transparent)}
+[data-skin="glass"] .tabs button.active{background:var(--gl-tint);color:var(--text)}
+[data-skin="glass"] .hrow2{border-top-color:var(--gl-hairline)}
+/* 패널 = 떠 있는 유리판: 반투명 + blur + 라운드 + 부드러운 그림자 */
+[data-skin="glass"] .stats,[data-skin="glass"] .board,[data-skin="glass"] .docs,
+[data-skin="glass"] .audit,[data-skin="glass"] .graphwrap,[data-skin="glass"] .streamwrap,
+[data-skin="glass"] .proj-info,[data-skin="glass"] .mystrip{
+  background:var(--gl-panel);
+  -webkit-backdrop-filter:blur(18px) saturate(1.25);
+  backdrop-filter:blur(18px) saturate(1.25);
+  border:1px solid var(--gl-line);border-radius:14px;box-shadow:var(--gl-shadow)}
+[data-skin="glass"] .docs,[data-skin="glass"] .audit,[data-skin="glass"] .graphwrap,
+[data-skin="glass"] .streamwrap{overflow:hidden}
+[data-skin="glass"] .stats{overflow:hidden}
+[data-skin="glass"] .stat{border-right-color:var(--gl-hairline)}
+[data-skin="glass"] .stat:hover{background:var(--gl-tint)}
+[data-skin="glass"] .stat.on{background:var(--gl-tint);box-shadow:none}
+/* Board: 레저 행 대신 유리 칩 카드 */
+[data-skin="glass"] .col{border-right-color:var(--gl-hairline)}
+[data-skin="glass"] .col h2{border-bottom-color:var(--gl-hairline)}
+[data-skin="glass"] .cards{gap:8px;padding:8px}
+[data-skin="glass"] .card{background:var(--gl-card);border:1px solid var(--gl-hairline);
+  border-radius:11px;box-shadow:0 4px 16px -10px color-mix(in srgb, var(--text) 30%, transparent)}
+[data-skin="glass"] .card:hover{background:var(--gl-solid)}
+[data-skin="glass"] .col .more{padding-left:22px}
+[data-skin="glass"] .doclist{border-right-color:var(--gl-hairline)}
+[data-skin="glass"] .doclist .grp{background:var(--gl-solid);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border-bottom-color:var(--gl-hairline)}
+[data-skin="glass"] .doclist .row{border-bottom-color:var(--gl-hairline)}
+[data-skin="glass"] .doclist .row:hover,[data-skin="glass"] .doclist .row.sel,
+[data-skin="glass"] .card:hover,[data-skin="glass"] .urow:hover,
+[data-skin="glass"] .mystrip .ms-row:hover,[data-skin="glass"] .mystrip .ms-row.sel,
+[data-skin="glass"] .backlinks .bl:hover{background:var(--gl-tint)}
+[data-skin="glass"] .audit tr:hover td{background:var(--gl-tint)}
+[data-skin="glass"] .audit td,[data-skin="glass"] .metatbl td{border-bottom-color:var(--gl-hairline)}
+/* 컨트롤: 라운드 + 반투명 */
+[data-skin="glass"] .hrow2 input[type="text"],[data-skin="glass"] .hrow2 select,
+[data-skin="glass"] .settings-panel select,[data-skin="glass"] .uf,
+[data-skin="glass"] .uform input,[data-skin="glass"] .uform select,
+[data-skin="glass"] .uform button,[data-skin="glass"] .gear,
+[data-skin="glass"] .acts button,[data-skin="glass"] .gmode,
+[data-skin="glass"] .pi-x{border-radius:9px;
+  background:var(--gl-card);border-color:var(--gl-line)}
+[data-skin="glass"] .gmode.on,[data-skin="glass"] .gear:hover,
+[data-skin="glass"] .acts button:hover,[data-skin="glass"] .uform button:hover{
+  background:var(--text);color:var(--bg);border-color:transparent}
+[data-skin="glass"] .settings-panel{background:var(--gl-panel);
+  -webkit-backdrop-filter:blur(20px) saturate(1.25);
+  backdrop-filter:blur(20px) saturate(1.25);
+  border-radius:14px;border-color:var(--gl-line);box-shadow:var(--gl-shadow)}
+[data-skin="glass"] .hovercard{background:var(--gl-solid);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  border-radius:12px;border-color:var(--gl-line);box-shadow:var(--gl-shadow)}
+[data-skin="glass"] .proj-info{border-color:var(--gl-line)}
+[data-skin="glass"] .term{background:rgba(13,17,22,.92)}
+[data-skin="glass"] .ghint{background:var(--gl-solid);border-color:var(--gl-hairline);
+  border-radius:8px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+[data-skin="glass"] .legend{border-bottom-color:var(--gl-hairline)}
+[data-skin="glass"] .md pre{border-radius:8px;border-left-color:var(--gl-line)}
+[data-skin="glass"] .kind{background:color-mix(in srgb, var(--kc) 13%, transparent);
+  border-radius:6px;padding:1px 8px}
+[data-skin="glass"] .kind::before{content:none}
+[data-skin="glass"] .more{border-radius:8px}
+[data-skin="glass"] .more:hover{background:var(--gl-tint);text-decoration:none;
+  color:var(--text)}
+
+/* ============ skin: field — 강한 컬러 필드 + 플랫 패널 ============
+   glass의 안개를 훨씬 밀어붙인 선명한 앰비언트 그라운드 — 그 위에 불투명·플랫한
+   패널이 또렷이 앉는다. 블러·그림자·반투명 없음: 채색 지면 vs 백색 판의 대비가 언어.
+   축: 배경 분위기(강) + 깊이(플랫으로 반전) + 셸(여백·컬럼 분리).
+   필드는 tone의 상태색·--bg에서만 파생(color-mix) — 4 tone 성립. 토큰 재정의 없음. */
+[data-skin="field"]{
+  --fd-line:color-mix(in srgb, var(--text) 24%, transparent);
+  --fd-hair:color-mix(in srgb, var(--text) 10%, transparent);
+  --fd-field:
+    radial-gradient(58% 66% at 6% 0%,  color-mix(in srgb, var(--c-open) 68%, transparent), transparent 76%),
+    radial-gradient(52% 60% at 98% 2%, color-mix(in srgb, var(--c-review) 62%, transparent), transparent 74%),
+    radial-gradient(48% 56% at 92% 100%, color-mix(in srgb, var(--c-inprogress) 55%, transparent), transparent 76%),
+    radial-gradient(58% 62% at 2% 100%, color-mix(in srgb, var(--c-done) 60%, transparent), transparent 76%),
+    linear-gradient(155deg, color-mix(in srgb, var(--c-open) 34%, var(--bg)) 0%,
+      color-mix(in srgb, var(--c-review) 30%, var(--bg)) 48%,
+      color-mix(in srgb, var(--c-done) 26%, var(--bg)) 100%);
+}
+[data-skin="field"] body{background:var(--fd-field);background-attachment:fixed}
+/* 헤더도 같은 fixed 필드 — 지면과 이음새 없이 이어진다 (블러 없이 sticky 성립) */
+[data-skin="field"] header{background:var(--fd-field);background-attachment:fixed;
+  border-bottom:1px solid var(--fd-line)}
+[data-skin="field"] main{padding:26px clamp(22px, 4vw, 64px)}
+[data-skin="field"] .count{color:var(--text)}
+[data-skin="field"] .tabs button{color:color-mix(in srgb, var(--text) 76%, transparent)}
+[data-skin="field"] .tabs button:hover{color:var(--text)}
+/* 활성 탭 = 지면 위 백색 판이 헤더까지 올라온 칩 */
+[data-skin="field"] .tabs button.active{background:var(--panel);color:var(--text);
+  border-bottom-color:transparent}
+[data-skin="field"] .hrow2{border-top-color:var(--fd-hair)}
+[data-skin="field"] .hrow2 input[type="text"],[data-skin="field"] .hrow2 select{
+  border-color:var(--fd-line)}
+[data-skin="field"] .chk{color:var(--text)}
+[data-skin="field"] .pdiv{background:var(--fd-line)}
+[data-skin="field"] .stats,[data-skin="field"] .docs,[data-skin="field"] .audit,
+[data-skin="field"] .graphwrap,[data-skin="field"] .streamwrap,
+[data-skin="field"] .proj-info,[data-skin="field"] .mystrip{border-color:var(--fd-line)}
+/* Board: 패널 상자를 버리고 컬럼 자체가 지면 위 백색 판 — 판 사이로 필드가 흐른다 */
+[data-skin="field"] .board{background:transparent;border:0;gap:16px;padding-bottom:4px}
+[data-skin="field"] .col,[data-skin="field"] .col:last-child{
+  background:var(--panel);border:1px solid var(--fd-line)}
+[data-skin="field"] .ghint{border-color:var(--fd-hair)}
+
+/* ============ skin: cobalt — 컬러 헤더 밴드 셸 ============
+   상단을 짙은 코발트 밴드(브랜드·탭 백색 잉크)로 바꾼 클래식 프로 SaaS 셸.
+   축: 셸 구조(밴드 2단) + 배경(밴드 색) + 모양(라운드 10px 카드 그리드).
+   밴드색은 --c-open을 black으로 눌러 파생 — 어느 tone에서도 백색 잉크 대비 성립. */
+[data-skin="cobalt"]{
+  --cb-band:color-mix(in srgb, var(--c-open) 66%, black);
+  --cb-band2:color-mix(in srgb, var(--c-open) 52%, black);
+  --cb-ink:#ffffff;
+  --cb-ink-dim:rgba(255,255,255,.72);
+  --cb-edge:rgba(255,255,255,.16);
+}
+[data-skin="cobalt"] header{background:var(--cb-band);border-bottom:0}
+[data-skin="cobalt"] .hrow1{padding:16px 24px 0}
+[data-skin="cobalt"] .brand{color:var(--cb-ink);font-size:16px}
+[data-skin="cobalt"] .brand .dot{background:var(--cb-ink)}
+[data-skin="cobalt"] .tabs button{color:var(--cb-ink-dim);border-bottom-width:3px;
+  padding:6px 13px 13px}
+[data-skin="cobalt"] .tabs button:hover{color:var(--cb-ink)}
+[data-skin="cobalt"] .tabs button.active{color:var(--cb-ink);border-bottom-color:var(--cb-ink)}
+[data-skin="cobalt"] header button:focus-visible{outline-color:var(--cb-ink)}
+[data-skin="cobalt"] .hrow2{background:var(--cb-band2);border-top:1px solid var(--cb-edge)}
+[data-skin="cobalt"] .hrow2 input[type="text"],[data-skin="cobalt"] .hrow2 select{
+  border-color:transparent;border-radius:7px}
+[data-skin="cobalt"] .hrow2 .chk{color:var(--cb-ink-dim)}
+[data-skin="cobalt"] .hrow2 .chk input{accent-color:var(--cb-ink)}
+[data-skin="cobalt"] .pdiv{background:var(--cb-edge)}
+[data-skin="cobalt"] .gear{background:transparent;border-color:var(--cb-edge);
+  color:var(--cb-ink);border-radius:7px}
+[data-skin="cobalt"] .gear:hover{background:var(--cb-ink);color:var(--cb-band)}
+[data-skin="cobalt"] .settings-panel{top:118px;border-radius:12px}
+/* 콘텐츠: 라운드 카드 그리드 — 밴드 아래는 밝고 정돈된 작업면 */
+[data-skin="cobalt"] .stats,[data-skin="cobalt"] .docs,[data-skin="cobalt"] .audit,
+[data-skin="cobalt"] .graphwrap,[data-skin="cobalt"] .streamwrap,
+[data-skin="cobalt"] .proj-info,[data-skin="cobalt"] .mystrip{border-radius:12px}
+[data-skin="cobalt"] .docs,[data-skin="cobalt"] .audit,[data-skin="cobalt"] .graphwrap,
+[data-skin="cobalt"] .streamwrap,[data-skin="cobalt"] .stats{overflow:hidden}
+[data-skin="cobalt"] .board{background:transparent;border:0;gap:12px}
+[data-skin="cobalt"] .col,[data-skin="cobalt"] .col:last-child{background:var(--panel);
+  border:1px solid var(--border);border-radius:12px}
+/* 액센트 = 밴드색 계열(--c-open): 선택·활성 신호를 일관 코딩 */
+[data-skin="cobalt"] .stat.on{box-shadow:inset 0 -2px 0 var(--c-open);color:var(--text)}
+[data-skin="cobalt"] .doclist .row.sel,[data-skin="cobalt"] .mystrip .ms-row.sel{
+  box-shadow:inset 2px 0 0 var(--c-open)}
+[data-skin="cobalt"] .more:hover{color:var(--c-open)}
+[data-skin="cobalt"] .acts button,[data-skin="cobalt"] .gmode,[data-skin="cobalt"] .pi-x,
+[data-skin="cobalt"] .uform button{border-radius:7px}
+[data-skin="cobalt"] .hovercard{border-radius:10px}
+
+/* ============ skin: grid — 풀블리드 고밀도 데이터 그리드 ============
+   프레임·여백을 걷어낸 엣지-투-엣지 그리드: 잉크 인버스 헤더 바 + 지브라 행 +
+   전폭 컬럼. 축: 셸(풀블리드) + 밀도(고) + 모양(라운드 0·면 채움 헤더).
+   서체는 베이스 그대로(sans) — terminal(전면 mono·인버스 hover)과 다른 문법. */
+[data-skin="grid"] main{padding:0}
+[data-skin="grid"] .count{margin:0;padding:7px 14px;border-bottom:1px solid var(--hairline)}
+[data-skin="grid"] .hrow1{padding:10px 14px 0}
+[data-skin="grid"] .brand{padding-bottom:9px}
+[data-skin="grid"] .tabs button{padding:3px 11px 9px}
+[data-skin="grid"] .hrow2{padding:6px 14px}
+[data-skin="grid"] .stats,[data-skin="grid"] .board,[data-skin="grid"] .docs,
+[data-skin="grid"] .audit,[data-skin="grid"] .graphwrap,[data-skin="grid"] .streamwrap{
+  border-left:0;border-right:0;border-top:0}
+[data-skin="grid"] .stats{margin:0}
+[data-skin="grid"] .stat{flex:1 1 auto}
+[data-skin="grid"] .proj-info,[data-skin="grid"] .mystrip{margin:10px 14px}
+/* 컬럼: 고정폭을 버리고 화면을 나눠 가진다 — 잉크 헤더 바가 구획의 앵커 */
+[data-skin="grid"] .board{padding-bottom:0}
+[data-skin="grid"] .col{flex:1 1 0;width:auto;min-width:212px;padding-bottom:0}
+[data-skin="grid"] .col h2{background:var(--text);color:var(--bg);border-bottom:0;
+  letter-spacing:.12em;padding:8px 12px}
+[data-skin="grid"] .col h2 .n{color:color-mix(in srgb, var(--bg) 72%, transparent)}
+[data-skin="grid"] .doclist .grp{background:var(--text);color:var(--bg);border-bottom:0}
+[data-skin="grid"] .audit th{background:var(--text);color:var(--bg);border-bottom:0}
+[data-skin="grid"] .audit .cap{border-bottom-color:var(--hairline)}
+/* 지브라 + 조밀 행 */
+[data-skin="grid"] .card{padding:7px 12px}
+[data-skin="grid"] .card .t{font-size:12.5px;margin:2px 0 4px;padding-right:52px}
+[data-skin="grid"] .card:nth-child(even),
+[data-skin="grid"] .audit tbody tr:nth-child(even) td,
+[data-skin="grid"] .doclist .row:nth-child(even){
+  background:color-mix(in srgb, var(--text) 3%, var(--panel))}
+[data-skin="grid"] .card:hover,[data-skin="grid"] .doclist .row:hover{
+  background:color-mix(in srgb, var(--text) 8%, var(--panel))}
+[data-skin="grid"] .audit tr:hover td{
+  background:color-mix(in srgb, var(--text) 8%, var(--panel))}
+[data-skin="grid"] .doclist .row{padding:6px 12px}
+[data-skin="grid"] .doclist{width:300px}
+[data-skin="grid"] .viewer{padding:18px 26px}
+[data-skin="grid"] .settings-panel{top:84px}
+
+/* ============ skin: cockpit — 다크 전용 관제실 ============
+   tone 무관 상시 다크(.term·neon 전례의 자체 토큰 전면 재정의) — 심야 관제 콘솔.
+   엘리베이션 레이어(깊은 그림자·상단 미광)와 상태색 코딩 강화(컬럼 캡·스탯 언더라인)가 언어.
+   축: 배경(상시 다크 필드) + 깊이(레이어드 엘리베이션) + 색(기능 코딩 강화).
+   코스튬 아님 — 같은 계기판을 어두운 관제실 조도에서 본 것. */
+:root[data-skin="cockpit"]{
+  --bg:#0a0e15; --panel:#10151f; --border:#273246; --hairline:#1b2434;
+  --text:#d9e2f2; --muted:#8fa0b8; --faint:#5a6880;
+  --accent:#d9e2f2; --accent-soft:#182032; --accent-line:#d9e2f2;
+  --c-draft:#6b7689; --c-open:#5c9dff; --c-inprogress:#ffab40; --c-blocked:#ff5d5d;
+  --c-review:#b48cff; --c-done:#37d09e; --c-cancelled:#6b7689; --c-published:#2fc3b4;
+  --t-request:#5c9dff; --t-knowledge:#2fc3b4; --t-session:#d19a4f;
+  --ck-up:#141b2a;           /* 한 단 위 레이어 */
+  --ck-lift:0 1px 0 rgba(255,255,255,.045) inset, 0 16px 34px -18px rgba(0,0,0,.85);
+}
+[data-skin="cockpit"] body{
+  background:radial-gradient(120% 90% at 50% -10%, #121a2a, var(--bg) 58%) fixed}
+[data-skin="cockpit"] header{background:rgba(10,14,21,.92);border-bottom-color:var(--border)}
+[data-skin="cockpit"] .brand .dot{border-radius:50%;background:var(--c-done);
+  box-shadow:0 0 8px rgba(55,208,158,.7)}   /* 시스템 활성 램프 — 유일한 발광 */
+[data-skin="cockpit"] .tabs button.active{border-bottom-color:var(--c-open)}
+[data-skin="cockpit"] .stats,[data-skin="cockpit"] .board,[data-skin="cockpit"] .docs,
+[data-skin="cockpit"] .audit,[data-skin="cockpit"] .graphwrap,
+[data-skin="cockpit"] .streamwrap,[data-skin="cockpit"] .proj-info,
+[data-skin="cockpit"] .mystrip{border-radius:10px;box-shadow:var(--ck-lift)}
+[data-skin="cockpit"] .docs,[data-skin="cockpit"] .audit,[data-skin="cockpit"] .graphwrap,
+[data-skin="cockpit"] .streamwrap,[data-skin="cockpit"] .stats{overflow:hidden}
+/* 컬럼 캡 = 상태색 코딩: 상단 2px 인셋 바 + 저농도 틴트 */
+[data-skin="cockpit"] .col h2{color:var(--text);
+  background:color-mix(in srgb, var(--sc, var(--muted)) 13%, var(--panel));
+  box-shadow:inset 0 2px 0 var(--sc, var(--border))}
+[data-skin="cockpit"] .cards{gap:8px;padding:8px}
+[data-skin="cockpit"] .card{background:var(--ck-up);border:1px solid var(--hairline);
+  border-radius:8px;box-shadow:0 6px 14px -10px rgba(0,0,0,.7)}
+[data-skin="cockpit"] .card:hover{background:#182236}
+[data-skin="cockpit"] .col .more{padding-left:8px}
+[data-skin="cockpit"] .stat.on{box-shadow:inset 0 -2px 0 var(--sc, var(--text));
+  background:var(--accent-soft);color:var(--text)}
+[data-skin="cockpit"] .doclist .grp{background:#0d121c}
+[data-skin="cockpit"] .doclist .row.sel{background:var(--accent-soft);
+  box-shadow:inset 2px 0 0 var(--sc, var(--text))}
+[data-skin="cockpit"] .hrow2 input[type="text"],[data-skin="cockpit"] .hrow2 select,
+[data-skin="cockpit"] .settings-panel select,[data-skin="cockpit"] .uform input,
+[data-skin="cockpit"] .uform select,[data-skin="cockpit"] .uf{
+  background:#0c111b;border-radius:6px}
+[data-skin="cockpit"] .gear,[data-skin="cockpit"] .gmode,[data-skin="cockpit"] .acts button,
+[data-skin="cockpit"] .uform button,[data-skin="cockpit"] .pi-x{
+  background:var(--ck-up);border-radius:6px}
+[data-skin="cockpit"] .gear:hover,[data-skin="cockpit"] .acts button:hover,
+[data-skin="cockpit"] .uform button:hover,[data-skin="cockpit"] .gmode.on{
+  background:var(--text);color:var(--bg)}
+[data-skin="cockpit"] .pi-x:hover:not(:disabled){background:var(--text);color:var(--bg)}
+[data-skin="cockpit"] .settings-panel{background:var(--panel);border-color:var(--border);
+  border-radius:10px;box-shadow:0 22px 48px -18px rgba(0,0,0,.9)}
+[data-skin="cockpit"] .hovercard{background:var(--ck-up);border-color:var(--border);
+  border-radius:8px;box-shadow:0 14px 30px -14px rgba(0,0,0,.85)}
+[data-skin="cockpit"] .md pre{background:#0c111b}
+[data-skin="cockpit"] .ghint{background:var(--ck-up);border-color:var(--hairline);
+  border-radius:6px}
+
+/* ============ skin: slate — 라이트 SaaS 셸·블루 액센트 ============
+   메인스트림 협업 도구의 디자인 언어(상표 요소 없이): 회청(blue-gray) 캔버스 위
+   화이트 패널 + 미세 그림자 + 6~8px 라운드, 명확한 블루 프라이머리(활성 탭·선택·버튼),
+   컴팩트하고 단정한 밀도의 화이트 제품 네비. 축: 배경(회청 캔버스) + 깊이(카드 그림자) +
+   모양(라운드) + 색(블루 액센트). cobalt(짙은 밴드 셸)와 달리 헤더가 밝다.
+   전 색상 tone 토큰 color-mix 파생 — 4 tone 성립. 그림자는 남색 저알파 고정(다크에선 침잠). */
+[data-skin="slate"]{
+  --sl-canvas:color-mix(in srgb, var(--c-open) 9%, color-mix(in srgb, var(--text) 4%, var(--bg)));
+  --sl-line:color-mix(in srgb, var(--c-open) 16%, var(--border));
+  --sl-blue:var(--c-open);
+  --sl-tint:color-mix(in srgb, var(--c-open) 10%, var(--panel));
+  --sl-tint2:color-mix(in srgb, var(--c-open) 16%, var(--panel));
+  --sl-shadow:0 1px 2px rgba(9,30,66,.14), 0 0 1px rgba(9,30,66,.16);
+  --sl-pop:0 8px 20px -6px rgba(9,30,66,.22), 0 0 1px rgba(9,30,66,.2);
+}
+[data-skin="slate"] body{background:var(--sl-canvas);font-size:13px}
+/* 화이트 제품 네비: 패널색 2단 바 + 블루 활성 언더라인 */
+[data-skin="slate"] header{background:var(--panel);border-bottom:1px solid var(--sl-line);
+  box-shadow:var(--sl-shadow)}
+[data-skin="slate"] .hrow1{padding:12px 22px 0}
+[data-skin="slate"] .tabs button{padding:4px 12px 12px;border-bottom-width:3px}
+[data-skin="slate"] .tabs button:hover{color:var(--sl-blue)}
+[data-skin="slate"] .tabs button.active{color:var(--sl-blue);border-bottom-color:var(--sl-blue)}
+[data-skin="slate"] .brand .dot{background:var(--sl-blue);border-radius:2px}
+[data-skin="slate"] .hrow2{background:var(--panel)}
+[data-skin="slate"] .hrow2 input[type="text"],[data-skin="slate"] .hrow2 select,
+[data-skin="slate"] .settings-panel select,[data-skin="slate"] .uform input,
+[data-skin="slate"] .uform select,[data-skin="slate"] .uf{
+  border-radius:4px;border-color:var(--sl-line)}
+[data-skin="slate"] .hrow2 input[type="text"]:focus,[data-skin="slate"] .hrow2 select:focus{
+  outline:2px solid var(--sl-blue);outline-offset:-1px}
+[data-skin="slate"] .chk input{accent-color:var(--sl-blue)}
+/* 버튼 = 블루 프라이머리 문법 (베이스 잉크 인버스를 블루로 교체) */
+[data-skin="slate"] .gear,[data-skin="slate"] .acts button,[data-skin="slate"] .gmode,
+[data-skin="slate"] .uform button,[data-skin="slate"] .pi-x{border-radius:4px}
+[data-skin="slate"] .gear:hover,[data-skin="slate"] .acts button:hover,
+[data-skin="slate"] .uform button:hover{
+  background:var(--sl-blue);color:#fff;border-color:var(--sl-blue)}
+[data-skin="slate"] .gmode.on{background:var(--sl-blue);color:#fff;border-color:var(--sl-blue)}
+[data-skin="slate"] .pi-x:hover:not(:disabled){background:var(--sl-blue);color:#fff;
+  border-color:var(--sl-blue)}
+/* 패널 = 화이트 카드: 라운드 8px + 미세 그림자 */
+[data-skin="slate"] .stats,[data-skin="slate"] .docs,[data-skin="slate"] .audit,
+[data-skin="slate"] .graphwrap,[data-skin="slate"] .streamwrap,
+[data-skin="slate"] .proj-info,[data-skin="slate"] .mystrip{
+  border-radius:8px;border-color:var(--sl-line);box-shadow:var(--sl-shadow)}
+[data-skin="slate"] .docs,[data-skin="slate"] .audit,[data-skin="slate"] .graphwrap,
+[data-skin="slate"] .streamwrap,[data-skin="slate"] .stats{overflow:hidden}
+/* Board: 컬럼이 각각 화이트 카드로 분리 — 캔버스가 사이로 보인다 */
+[data-skin="slate"] .board{background:transparent;border:0;gap:10px}
+[data-skin="slate"] .col,[data-skin="slate"] .col:last-child{background:var(--panel);
+  border:1px solid var(--sl-line);border-radius:8px;box-shadow:var(--sl-shadow)}
+[data-skin="slate"] .card{padding:9px 13px}
+[data-skin="slate"] .card .t{font-size:13px}
+[data-skin="slate"] .card:hover{background:var(--sl-tint)}
+/* 선택·활성 = 블루 코딩 */
+[data-skin="slate"] .stat.on{box-shadow:inset 0 -2px 0 var(--sl-blue);color:var(--text)}
+[data-skin="slate"] .stat:hover{background:var(--sl-tint)}
+[data-skin="slate"] .doclist .row:hover,[data-skin="slate"] .urow:hover,
+[data-skin="slate"] .backlinks .bl:hover,[data-skin="slate"] .mystrip .ms-row:hover{
+  background:var(--sl-tint)}
+[data-skin="slate"] .audit tr:hover td{background:var(--sl-tint)}
+[data-skin="slate"] .doclist .row.sel,[data-skin="slate"] .mystrip .ms-row.sel{
+  background:var(--sl-tint);box-shadow:inset 2px 0 0 var(--sl-blue)}
+[data-skin="slate"] a.doclink{color:var(--sl-blue)}
+[data-skin="slate"] .md a{color:var(--sl-blue)}
+[data-skin="slate"] .more:hover{color:var(--sl-blue)}
+[data-skin="slate"] .settings-panel,[data-skin="slate"] .hovercard{
+  border-radius:8px;border-color:var(--sl-line);box-shadow:var(--sl-pop)}
+[data-skin="slate"] .col.dropok{outline-color:var(--sl-blue);border-radius:8px}
+[data-skin="slate"] .ghint{border-radius:4px}
+[data-skin="slate"] header button:focus-visible,[data-skin="slate"] a:focus-visible,
+[data-skin="slate"] input:focus-visible,[data-skin="slate"] select:focus-visible{
+  outline-color:var(--sl-blue)}
+
+/* ============ skin: cork — 컬러 캔버스 보드 웰 ============
+   대중적 칸반 보드의 디자인 언어(상표 요소 없이): 은은한 단색 컬러 캔버스가 지면,
+   컬럼 = 라운드 회색 웰(보드가 주인공), 카드 = 화이트 라운드 + 얕은 그림자 + hover
+   리프트. 가볍고 친근한 밀도. 축: 배경(컬러 캔버스) + 셸(웰 보드 문법) + 깊이(리프트).
+   field(고채도 멀티컬러+플랫 판)와 달리 저채도 단일 계열 + 웰/리프트가 언어.
+   캔버스는 --c-open→--c-done 저농도 사선 그라데이션 — 4 tone 성립. */
+[data-skin="cork"]{
+  --ck-canvas:linear-gradient(160deg,
+    color-mix(in srgb, var(--c-open) 46%, var(--bg)) 0%,
+    color-mix(in srgb, var(--c-open) 30%, var(--bg)) 55%,
+    color-mix(in srgb, var(--c-done) 26%, var(--bg)) 100%);
+  --ck-well:color-mix(in srgb, var(--text) 7%, var(--panel));
+  --ck-line:color-mix(in srgb, var(--text) 14%, transparent);
+  --ck-shadow:0 1px 1px rgba(20,25,35,.16);
+  --ck-lift:0 6px 14px -6px rgba(20,25,35,.3);
+}
+[data-skin="cork"] body{background:var(--ck-canvas);background-attachment:fixed}
+/* 헤더 = 캔버스 위 반투명 판 (블러 없음 — glass와 다른 문법) */
+[data-skin="cork"] header{background:color-mix(in srgb, var(--panel) 62%, transparent);
+  border-bottom:1px solid var(--ck-line)}
+[data-skin="cork"] .tabs button{border-bottom:0;border-radius:6px;padding:5px 12px;
+  margin:0 0 9px}
+[data-skin="cork"] .tabs button:hover{
+  background:color-mix(in srgb, var(--panel) 55%, transparent);color:var(--text)}
+[data-skin="cork"] .tabs button.active{background:var(--panel);color:var(--text);
+  box-shadow:var(--ck-shadow)}
+[data-skin="cork"] .hrow2{border-top-color:var(--ck-line)}
+[data-skin="cork"] .hrow2 input[type="text"],[data-skin="cork"] .hrow2 select{
+  border-radius:6px;border-color:var(--ck-line)}
+[data-skin="cork"] .gear,[data-skin="cork"] .gmode,[data-skin="cork"] .acts button,
+[data-skin="cork"] .uform button,[data-skin="cork"] .pi-x{border-radius:6px}
+[data-skin="cork"] .pdiv{background:var(--ck-line)}
+/* Board = 주인공: 프레임 상자를 버리고 웰 컬럼이 캔버스 위에 뜬다 */
+[data-skin="cork"] .board{background:transparent;border:0;gap:12px;padding-bottom:6px}
+[data-skin="cork"] .col,[data-skin="cork"] .col:last-child{
+  background:var(--ck-well);border:0;border-radius:12px;padding:4px 6px 8px}
+[data-skin="cork"] .col h2{border-bottom:0;padding:9px 10px 5px}
+[data-skin="cork"] .cards{gap:7px;padding:2px 4px}
+[data-skin="cork"] .card{background:var(--panel);border-bottom:0;border-radius:8px;
+  box-shadow:var(--ck-shadow);padding:9px 12px;
+  transition:transform .12s ease, box-shadow .12s ease}
+[data-skin="cork"] .card:hover{background:var(--panel);transform:translateY(-2px);
+  box-shadow:var(--ck-lift)}
+[data-skin="cork"] .col .more{padding-left:10px}
+[data-skin="cork"] .col.dropok{outline-color:var(--text);border-radius:12px;
+  background:color-mix(in srgb, var(--text) 12%, var(--ck-well))}
+/* 다른 탭들도 같은 문법: 캔버스 위 라운드 화이트 판 */
+[data-skin="cork"] .stats,[data-skin="cork"] .docs,[data-skin="cork"] .audit,
+[data-skin="cork"] .graphwrap,[data-skin="cork"] .streamwrap,
+[data-skin="cork"] .proj-info,[data-skin="cork"] .mystrip{
+  border:0;border-radius:12px;box-shadow:var(--ck-shadow)}
+[data-skin="cork"] .docs,[data-skin="cork"] .audit,[data-skin="cork"] .graphwrap,
+[data-skin="cork"] .streamwrap,[data-skin="cork"] .stats{overflow:hidden}
+[data-skin="cork"] .settings-panel,[data-skin="cork"] .hovercard{border-radius:10px;
+  border-color:var(--ck-line);box-shadow:var(--ck-lift)}
+[data-skin="cork"] .ghint{border-radius:6px}
+[data-skin="cork"] .md pre{border-radius:8px;border-left:0}
+[data-skin="cork"] .md code{border-radius:4px}
+[data-skin="cork"] .term{border-radius:10px;margin:8px}
+
+/* ============ density: compact — 초고밀도 (skin과 독립인 밀도 축) ============ */
+[data-density="compact"] body{font-size:12px}
+[data-density="compact"] main{padding:10px 12px}
+[data-density="compact"] .stats .stat{padding:4px 10px}
+[data-density="compact"] .stats .stat b{font-size:12.5px}
+[data-density="compact"] .col{min-width:198px;width:198px}
+[data-density="compact"] .col h2{padding:7px 10px}
+[data-density="compact"] .card{padding:5px 10px}
+[data-density="compact"] .card .id{font-size:9px}
+[data-density="compact"] .card .t{font-size:12px;font-weight:500;margin:1px 0 2px;line-height:1.3}
+[data-density="compact"] .card .m{font-size:9.5px;gap:6px}
+[data-density="compact"] .doclist .row{padding:4px 10px}
+[data-density="compact"] .doclist .row>div:nth-child(3){font-size:12px}
+[data-density="compact"] .viewer{padding:14px 20px}
+[data-density="compact"] .metatbl td{padding:3px 8px 3px 0;font-size:11.5px}
+[data-density="compact"] .audit td{padding:4px 10px;font-size:11.5px}
+[data-density="compact"] .term{font-size:11px;line-height:1.45}
+[data-density="compact"] .acts button{padding:1px 7px;font-size:9.5px}
+
+/* ------- users 탭 ------- */
+.uform{display:flex;flex-direction:column;gap:6px;padding:10px 14px 14px}
+.uform input,.uform select,.uf{border:1px solid var(--border);padding:5px 9px;
+  font-size:12.5px;background:var(--panel);color:var(--text);font-family:inherit}
+.uf{width:min(300px,100%)}
+.uform button{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  font-family:var(--mono);font-size:11px;padding:6px;cursor:pointer;letter-spacing:.03em}
+.uform button:hover{background:var(--text);color:var(--bg)}
+.cfg-h{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  margin:26px 0 4px;font-weight:600;font-family:var(--mono);
+  border-top:1px solid var(--border);padding-top:14px}
+
+/* ------- hovercard ------- */
+.hovercard{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--text);
+  padding:11px 14px;max-width:340px;font-size:12.5px;pointer-events:none;opacity:0;
+  transition:opacity .1s;line-height:1.5}
+.hovercard.show{opacity:1}
+.hovercard .hid{font-family:var(--mono);font-size:10px;color:var(--faint)}
+.hovercard .ht{font-weight:600;margin:3px 0}
+.hovercard .hs{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow1">
+    <div class="brand"><span class="dot"></span>section9</div>
+    <div class="tabs">
+      <button data-tab="board" class="active">Board</button>
+      <button data-tab="docs">Docs</button>
+      <button data-tab="graph">Graph</button>
+      <button data-tab="audit">Audit</button>
+      <button data-tab="stream">Stream</button>
+      <button data-tab="terminal">Terminal</button>
+      <button data-tab="settings">Settings</button>
+    </div>
+  </div>
+  <div class="hrow2">
+    <div class="fgroup">
+      <input id="q" type="text" placeholder="search…">
+      <label class="chk" title="문서 본문(History 포함)까지 검색 — Docs 탭에서 매치 라인 표시">
+        <input type="checkbox" id="q-body"> 본문</label>
+      <select id="f-user"><option value="">user: all</option></select>
+      <label class="chk" id="mine-wrap">
+        <input type="checkbox" id="f-mine"> 내 것만</label>
+      <select id="f-project"><option value="">project: all</option></select>
+      <select id="f-tag"><option value="">tag: all</option></select>
+      <select id="f-type"><option value="">type: all</option>
+        <option>request</option><option>knowledge</option><option>session</option><option>project</option></select>
+    </div>
+    <div class="pgroup idcol">
+      <span id="usage-chip" class="usagechip" title="로그인된 클로드 계정과 사용량(세션 5h·주간·모델) — 60초 갱신, 계정 전환 즉시 반영"></span>
+      <span id="whoami" class="who" title="서버가 파생한 신원 — 대시보드는 127.0.0.1 전용이라 브라우저 사용자 = 서버 기동 OS 계정. 다른 계정명으로 연결하려면 터미널에서 s9 user attach"></span>
+    </div>
+  </div>
+</header>
+<main>
+  <p class="count" id="count"></p>
+  <div id="my-strip" class="mystrip" hidden></div>
+  <div id="proj-info" class="proj-info" hidden></div>
+  <div id="view"></div>
+</main>
+
+<script>
+"use strict";
+const STATUSES = ["draft","open","in-progress","blocked","review","done","cancelled"];
+const TERMINAL = new Set(["done","cancelled"]);
+const SCOLOR = {draft:"var(--c-draft)",open:"var(--c-open)","in-progress":"var(--c-inprogress)",
+  blocked:"var(--c-blocked)",review:"var(--c-review)",done:"var(--c-done)",
+  cancelled:"var(--c-cancelled)",published:"var(--c-published)"};
+const TCOLOR = {request:"var(--t-request)",knowledge:"var(--t-knowledge)",session:"var(--t-session)"};
+const TCOLOR_RAW = {request:"#1d4ed8",knowledge:"#0f766e",session:"#92400e"};
+
+const COL_LIMIT = 7, COL_LIMIT_TERMINAL = 3, GRP_LIMIT = 20, AUDIT_PAGE = 50;
+
+let catalog = [], graph = null, auditCache = null, TRANS = {}, projects = [];
+let tab = "board", selectedDoc = null, selectedStream = null;
+let streamTimer = null, reqStreamTimer = null;  // live follow 폴링 (화면 이탈 시 정리)
+// 그래프 타입 표시 집합 — 기본은 request/knowledge (세션 로그 노드 숨김, REQ-20260824-026)
+let gtypes = new Set(["request", "knowledge"]);
+try{ const s = JSON.parse(localStorage.getItem("s9gtypes") || "null");
+     if (Array.isArray(s) && s.length) gtypes = new Set(s); }catch(e){}
+let expanded = new Set();      // board 컬럼 / docs 그룹 펼침 상태
+let auditLimit = AUDIT_PAGE;
+
+// 최근 갱신 우선 정렬 — Board 컬럼/Docs 목록/검색 결과 공통
+const sortRecent = rows => [...rows].sort((a, b) =>
+  (b.updated || b.created || "").localeCompare(a.updated || a.created || ""));
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const linkifyIds = escaped => escaped.replace(
+  /(^|[^"\w-])((?:REQ|DOC|SES)-\d{8}-\d{3})/g,
+  '$1<a class="doclink" data-doc="$2">$2</a>');
+
+// 경과시간 포맷: <60s=Ns, <60m=Mm Ss, <24h=Hh Mm, 그 이상=Dd Hh
+function fmtElapsed(sinceIso){
+  if (!sinceIso) return "";
+  const t = Date.parse(sinceIso);
+  if (isNaN(t)) return "";
+  let s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  if (h < 24) return `${h}h ${m % 60}m`;
+  return `${d}d ${h % 24}h`;
+}
+let elapsedTimer = null;  // 카드 경과시간 1초 갱신 (화면 이탈 시 정리)
+function tickElapsed(){
+  if (document.hidden) return;
+  document.querySelectorAll(".elapsed[data-since]").forEach(el => {
+    el.textContent = fmtElapsed(el.dataset.since);
+  });
+}
+
+function isDarkTheme(){
+  // skin이 자체 필드 색을 가질 수 있으므로 tone 추론이 아니라 실제 --bg 휘도로 판정 (스킨 무관 구조 개선 — 유지)
+  const v = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+  const m = v.match(/^#([0-9a-f]{6})$/i);
+  if (m){
+    const n = parseInt(m[1], 16);
+    return 0.2126*(n>>16&255) + 0.7152*(n>>8&255) + 0.0722*(n&255) < 128;
+  }
+  const t = document.documentElement.dataset.theme || "system";
+  if (t === "carbon" || t === "phosphor") return true;
+  if (t === "paper") return false;
+  return matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+// 디스플레이 설정 3축: skin(언어) × tone(색) × density(밀도).
+// 저장 우선순위: me(등록 사용자)의 user config > localStorage > 기본값.
+// → 로그인한 사용자는 어느 머신에서든 자기 설정이 따라온다.
+const UI_DIMS = [
+  {key:"s9skin", attr:"skin", cfg:"ui_skin", def:"ledger", label:"skin — 디자인 언어",
+   opts:[["ledger","ledger — 계기판/장부 (기본)"],["soft","soft — 사이드바 앱 셸"],["terminal","terminal — 모노 브루탈"],["glass","glass — 반투명 레이어"],["field","field — 컬러 필드"],["cobalt","cobalt — 헤더 밴드"],["grid","grid — 고밀도 그리드"],["cockpit","cockpit — 다크 관제실"],["slate","slate — 라이트 SaaS 블루"],["cork","cork — 컬러 보드 웰"]]},
+  {key:"s9theme", attr:"theme", cfg:"ui_tone", def:"system", label:"tone — 색",
+   opts:[["system","system — OS 추종"],["paper","paper — 라이트 고정"],["carbon","carbon — 다크 고정"],["phosphor","phosphor — CRT 그린"]]},
+  {key:"s9density", attr:"density", cfg:"ui_density", def:"normal", label:"density — 밀도",
+   opts:[["normal","normal"],["compact","compact"]]},
+];
+
+// 개명된 skin의 저장값 구제 (localStorage·user config 공통). 제거된 skin은 아래 opts 검증에서 기본으로 폴백.
+const UI_RENAMED = {skin:{atlas:"slate", tray:"cork"}};
+
+// 현재 각 축의 적용값 (me config > localStorage > 기본). documentElement에 반영.
+function currentUIValue(d, userCfg){
+  let v = d.def;
+  try{ if (localStorage.getItem(d.key)) v = localStorage.getItem(d.key); }catch(e){}
+  if (userCfg && userCfg[d.cfg]) v = userCfg[d.cfg];
+  const ren = UI_RENAMED[d.attr];
+  if (ren && ren[v]) v = ren[v];
+  if (!d.opts.some(([val]) => val === v)) v = d.def;
+  return v;
+}
+function applyUISettings(userCfg){
+  for (const d of UI_DIMS){
+    let v = currentUIValue(d, userCfg);
+    // ?skin=·?theme=·?density= — 검증(s9 shot)·공유용 일회성 오버라이드. 저장 경로에는 불관여.
+    try{
+      const ov = new URLSearchParams(location.search).get(d.attr);
+      if (ov && d.opts.some(([val]) => val === ov)) v = ov;
+    }catch(e){}
+    document.documentElement.dataset[d.attr] = v;
+  }
+}
+
+// 한 축 변경 저장: dataset 즉시 반영(CSS 자동) + localStorage + (등록 계정이면) 계정 config.
+// 주의: render()를 호출하지 않는다 — Settings 화면의 select가 파괴되어 변경 불능이 됐던 버그.
+async function setUIDim(d, v){
+  document.documentElement.dataset[d.attr] = v;
+  try{ localStorage.setItem(d.key, v); }catch(e){}
+  const me = getMe();  // 개인화는 실제 whoami 계정에 저장 (미리보기와 무관)
+  if (me) await postJSON("/api/user/config", {name: me, key: d.cfg, value: v});
+}
+
+(function initTheme(){ applyUISettings(null); })();  // 초기 적용 (whoami 로드 전)
+
+/* 신원 = 서버 파생 whoami (REQ-20260824-027) — me 셀렉터·localStorage s9me 폐기.
+   대시보드는 127.0.0.1 전용: 브라우저 사용자 = 서버 기동 OS 계정이므로 클라이언트는
+   신원을 보내지 않는다 (쓰기 actor·열람 격리 모두 서버가 파생). 유일한 예외는
+   admin의 시점 미리보기/대리(asUser) — Settings 사용자 관리에서만 부여, 비저장. */
+let asUser = "";
+function getMe(){
+  const w = window.__whoami || {};
+  return w.registered ? w.user : "";
+}
+const isAdmin = () => (window.__whoami || {}).role === "admin";
+// 화면 시점(열람 격리·mine 판정) — admin 미리보기 중엔 그 사용자
+const viewMe = () => asUser || getMe();
+// 조회 GET 쿼리: admin 미리보기 중에만 as를 붙인다 (그 외 신원 파라미터 없음)
+const meQ = () => asUser ? "as=" + encodeURIComponent(asUser) : "";
+
+function renderWhoami(){
+  const el = $("#whoami"), w = window.__whoami || {};
+  if (!el || !w.user) return;
+  if (!w.registered){
+    el.className = "who warn";
+    el.innerHTML = `⚠ 미등록 계정 <b>${esc(w.user)}</b> @ ${esc(w.machine || "")} — 터미널에서 <code>s9 user add ${esc(w.user)}</code> 로 등록하세요`;
+    return;
+  }
+  el.className = "who";
+  el.innerHTML = `<b>${esc(w.user)}</b> @ ${esc(w.machine || "")} [${esc(w.role || "member")}]`
+    + (asUser ? ` <span class="as">→ @${esc(asUser)} 시점</span>` : "");
+}
+
+// admin 미리보기(as) 전환 — 서버 가시성 범위가 바뀐다: 캐시 무효화 후 전면 재조회
+function onViewerChanged(){
+  renderWhoami();
+  graph = null; auditCache = null;
+  refreshProjects().then(refreshCatalog).then(() => {
+    fillProjects();   // mine 집합 재스코핑 (범위 밖 선택은 리셋)
+    render();
+  });
+}
+
+/* '내 것만' 스코프 (DOC-20260823-006) — '나' = 화면 시점(viewMe), 저장 = s9mine.
+   mine 판정 = /api/projects members에 user===viewMe && active. 만료·미등록 slug 제외. */
+function getMineOnly(){
+  try{ return localStorage.getItem("s9mine") === "1"; }catch(e){ return false; }
+}
+// 미등록 whoami면 저장값(s9mine)은 보존한 채 무시 — '나 없음'엔 mine이 정의 안 됨
+const mineActive = () => !!viewMe() && getMineOnly();
+const mineProjects = () => {
+  const me = viewMe();
+  return me ? projects.filter(p => (p.members || []).some(m => m.user === me && m.active)) : [];
+};
+// 토글 체크박스는 상태(localStorage)의 파생 뷰 — render()마다 동기화
+function syncMineToggle(){
+  const el = $("#f-mine"), me = viewMe();
+  el.disabled = !me;
+  el.checked = mineActive();
+  $("#mine-wrap").title = me
+    ? `@${me}가 active 멤버인 프로젝트의 문서만 표시 (Board·Docs·Graph 공통)`
+    : "미등록 계정 — s9 user add 로 등록하면 내 프로젝트만 볼 수 있습니다";
+}
+
+async function boot(){
+  try{ TRANS = await (await fetch("/api/transitions")).json(); }catch(e){}
+  try{
+    // 신원은 서버가 파생 — 표시 라벨 1회 + 등록 계정의 저장 설정 적용
+    window.__whoami = await (await fetch("/api/whoami")).json();
+    refreshUsage();
+    setInterval(() => { if (!document.hidden) refreshUsage(); }, 60000);
+    renderWhoami();
+    let cfg = null;
+    try{
+      const u = await (await fetch("/api/users")).json();
+      window.__users = u.users;
+      cfg = ((u.users || []).find(x => x.name === getMe()) || {}).config || null;
+    }catch(e){}
+    applyUISettings(cfg);
+  }catch(e){}
+  applyRoute(location.hash, false);  // 초기 URL 해시(#docs/REQ-... 등) 반영
+  if (!location.hash) history.replaceState(null, "", "#" + tab);  // 초기 진입점 고정(뒤로가기 기준)
+  await refreshProjects();
+  await refreshCatalog();
+  // ?project=slug — 공유 가능한 프로젝트 단위 뷰(보드/그래프가 그 프로젝트로 필터)
+  const qp = new URLSearchParams(location.search).get("project");
+  if (qp && [...$("#f-project").options].some(o => o.value === qp)) $("#f-project").value = qp;
+  render();
+  window.addEventListener("focus", () => refreshCatalog(true));
+  setInterval(() => refreshCatalog(true), 15000);
+  window.addEventListener("popstate", () => applyRoute(location.hash, true));
+}
+
+const TABS = ["board","docs","graph","audit","stream","terminal","settings"];
+
+// URL 해시 ↔ 상태. 형태: #<tab> 또는 #docs/REQ-.. 또는 #settings/account
+function applyRoute(hash, doRender){
+  const parts = (hash || "").replace(/^#/, "").split("/");
+  if (parts[0] === "chat") parts[0] = "terminal";  // 구 해시 alias (REQ-037 개명)
+  const t = TABS.includes(parts[0]) ? parts[0] : "board";
+  tab = t;
+  if (t === "docs" && parts[1]) selectedDoc = parts[1];
+  if (t === "stream" && parts[1]) selectedStream = parts[1];
+  if (t === "settings" && parts[1]) settingsSection = parts[1];
+  document.querySelectorAll("[data-tab]").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === t));
+  if (doRender) render();
+}
+
+// 상태 → 해시 push (뒤로가기가 동작하도록 history에 쌓는다)
+function pushRoute(){
+  let h = "#" + tab;
+  if (tab === "docs" && selectedDoc) h += "/" + selectedDoc;
+  else if (tab === "stream" && selectedStream) h += "/" + selectedStream;
+  else if (tab === "settings") h += "/" + settingsSection;
+  if (location.hash !== h){ history.pushState(null, "", h); }
+}
+
+async function refreshProjects(){
+  try{
+    const d = await (await fetch("/api/projects?" + meQ())).json();
+    projects = d.projects || [];
+    window.__projects = projects;
+  }catch(e){ /* 구버전 서버 등 — 프로젝트 API 없으면 무시 */ }
+}
+
+async function refreshCatalog(rerender){
+  try{
+    const fresh = await (await fetch("/api/catalog?" + meQ())).json();
+    const before = JSON.stringify(projects);
+    await refreshProjects();  // 프로젝트는 자주 안 바뀌므로 catalog와 함께 갱신
+    const changed = JSON.stringify(fresh) !== JSON.stringify(catalog)
+                 || JSON.stringify(projects) !== before;
+    catalog = fresh;
+    if (changed){ fillFilters(); graph = null; }
+    if (rerender && changed){ auditCache = null; render(); }
+  }catch(e){ /* 서버 재시작 중 등 — 다음 주기에 재시도 */ }
+}
+
+function fillFilters(){
+  const fill = (sel, vals) => {
+    const el = $(sel), cur = el.value;
+    while (el.options.length > 1) el.remove(1);
+    [...new Set(vals.filter(Boolean))].sort().forEach(v => {
+      const o = document.createElement("option"); o.value = o.textContent = v; el.appendChild(o);
+    });
+    el.value = [...el.options].some(o => o.value === cur) ? cur : "";
+  };
+  fill("#f-user", catalog.map(r => r.user));
+  fill("#f-tag", catalog.flatMap(r => r.tags || []));
+  fillProjects();
+}
+
+// 프로젝트 드롭다운: 등록된 모든 프로젝트(요청 없어도) + 문서 없는 레거시 slug.
+// value=slug, label="title (slug)" — 요청의 project 필드는 slug를 저장하므로 필터가 일치.
+// '내 것만' ON이면 옵션을 mine으로 스코핑(첫 옵션 'project: mine(N)', 미등록 slug 숨김),
+// 현재 선택이 범위 밖이면 all로 명시 리셋 — 조용한 빈 결과 금지 (DOC-20260823-006).
+function fillProjects(){
+  const el = $("#f-project"), cur = el.value;
+  while (el.options.length > 1) el.remove(1);
+  const scoped = mineActive() ? mineProjects() : projects;
+  el.options[0].textContent = mineActive() ? `project: mine(${scoped.length})` : "project: all";
+  const known = new Set();
+  scoped.forEach(p => {
+    known.add(p.slug);
+    const o = document.createElement("option");
+    o.value = p.slug;
+    o.textContent = p.title && p.title !== p.slug ? `${p.title} (${p.slug})` : p.slug;
+    el.appendChild(o);
+  });
+  // 프로젝트 문서는 없지만 요청에 적힌 레거시 project 값도 필터 가능하게 포함
+  // (mine 스코프에서는 멤버 판정 불가 → 숨김)
+  if (!mineActive())
+    [...new Set(catalog.map(r => r.project).filter(Boolean))].sort().forEach(slug => {
+      if (known.has(slug)) return;
+      const o = document.createElement("option");
+      o.value = slug; o.textContent = `${slug} ·미등록`;
+      el.appendChild(o);
+    });
+  el.value = [...el.options].some(o => o.value === cur) ? cur : "";
+}
+
+// 선택된 프로젝트의 정보 패널(고객/담당자/멤버) — 특정 프로젝트 선택 시 표시.
+// '내 것만' ON + mine 1개면 선택 없이도 범위가 단일 확정이므로 병행 표시 (필터는 안 건드림).
+function renderProjectInfo(){
+  const box = $("#proj-info"), slug = $("#f-project").value, meName = viewMe();
+  let p = slug && projects.find(x => x.slug === slug);
+  if (!p && mineActive()){
+    const mp = mineProjects();
+    if (mp.length === 1) p = mp[0];
+  }
+  if (!p){ box.hidden = true; box.innerHTML = ""; return; }
+  const contact = [p.contact_name, p.contact_org, p.contact_email, p.contact_phone]
+    .filter(Boolean).map(esc).join(" · ");
+  // manage 권한 판정(표시용) — 실제 인가는 서버 do_member_set/rm(project_can) 단일 경로
+  const LVL = {viewer:1, contributor:2, maintainer:3, owner:4};
+  const isAdmin = ((window.__users || []).find(u => u.name === meName) || {}).role === "admin";
+  const myMem = meName && (p.members || []).find(m => m.user === meName && m.active);
+  const myLvl = isAdmin ? 4 : (myMem ? (LVL[myMem.role] || 0) : 0);
+  const canManage = myLvl >= 3, canOwn = myLvl >= 4;
+  const roleSel = (cur, cls) => {
+    const roles = (canOwn || cur === "owner")
+      ? ["owner","maintainer","contributor","viewer"] : ["maintainer","contributor","viewer"];
+    return `<select class="${cls}"${cur === "owner" && !canOwn ? " disabled title='owner 변경은 owner만 가능'" : ""}>${
+      roles.map(r => `<option value="${r}"${r === cur ? " selected" : ""}>${r}</option>`).join("")}</select>`;
+  };
+  const nameCell = m => m.user === meName
+    ? `<span class="m-me-name">${esc(m.user)}</span> <span class="m-me">· ME</span>`
+    : esc(m.user);
+  const rows = (p.members || []).map(m => canManage ? `<tr data-member="${esc(m.user)}">
+      <td>${nameCell(m)}</td>
+      <td>${roleSel(m.role, "pi-role")}</td>
+      <td><input class="pi-pos" value="${esc(m.position || "")}" placeholder="—" size="10"></td>
+      <td>${esc(m.since || "")}</td>
+      <td><input class="pi-until" type="date" value="${esc(m.until || "")}" title="비우면 무기한"></td>
+      <td class="${m.active ? "m-act" : "m-exp"}">${m.active ? "활성" : "만료"}</td>
+      <td><button class="pi-x" data-rm="${esc(m.user)}"${m.role === "owner" && !canOwn
+        ? " disabled title='owner 제거는 owner만 가능'" : ""}>− 제거</button></td>
+    </tr>` : `<tr>
+      <td>${nameCell(m)}</td>
+      <td class="m-role">${esc(m.role)}</td>
+      <td>${m.position ? esc(m.position) : "<span class='pi-k'>—</span>"}</td>
+      <td>${esc(m.since || "")}</td>
+      <td>${m.until ? esc(m.until) : "<span class='pi-k'>무기한</span>"}</td>
+      <td class="${m.active ? "m-act" : "m-exp"}">${m.active ? "활성" : "만료"}</td>
+    </tr>`).join("");
+  // 추가 행: 아직 멤버가 아닌 등록 사용자만 후보로
+  const memberSet = new Set((p.members || []).map(m => m.user));
+  const candidates = (window.__users || []).map(u => u.name).filter(n => !memberSet.has(n));
+  const addRow = canManage ? `<tr class="pi-addrow">
+      <td>${candidates.length
+        ? `<select class="pi-newuser">${candidates.map(n => `<option>${esc(n)}</option>`).join("")}</select>`
+        : "<span class='pi-k'>추가할 등록 사용자 없음</span>"}</td>
+      <td>${candidates.length ? roleSel("contributor", "pi-newrole") : ""}</td>
+      <td>${candidates.length ? `<input class="pi-newpos" placeholder="직무(선택)" size="10">` : ""}</td>
+      <td></td>
+      <td>${candidates.length ? `<input class="pi-newuntil" type="date" title="비우면 무기한">` : ""}</td>
+      <td></td>
+      <td>${candidates.length ? `<button class="pi-x" data-add="1">+ 추가</button>` : ""}</td>
+    </tr>` : "";
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="pi-head">
+      <div><span class="pi-title">${esc(p.title || p.slug)}</span>
+        <span class="pi-slug">${esc(p.id)} · ${esc(p.slug)}</span></div>
+      <span class="pi-status">${esc(p.status)} · 멤버 ${p.member_active}/${p.member_total}</span>
+    </div>
+    <div class="pi-grid">
+      <span class="pi-k">고객</span><span class="pi-v">${esc(p.customer) || "<span class='pi-k'>—</span>"}</span>
+      <span class="pi-k">현업 담당자</span><span class="pi-v">${contact || "<span class='pi-k'>—</span>"}</span>
+      ${p.summary ? `<span class="pi-k">개요</span><span class="pi-v">${esc(p.summary)}</span>` : ""}
+    </div>
+    ${rows || addRow ? `<table><thead><tr><th>사용자</th><th>권한</th><th>직무</th><th>참여일</th><th>만료</th><th>상태</th>${
+      canManage ? "<th></th>" : ""}</tr></thead>
+      <tbody>${rows}${addRow}</tbody></table>` : "<p class='pi-k'>멤버 없음</p>"}
+    <div class="pi-err" hidden></div>`;
+  if (canManage) wireMemberControls(box, p.slug, meName);
+}
+
+// 멤버 관리 컨트롤 배선 — 변경 즉시 POST(서버 단일 인가 경로), 성공 시 전체 갱신
+function wireMemberControls(box, slug, meName){
+  // render()는 패널을 통째로 다시 그리므로, 오류는 재렌더 후의 .pi-err에 써야 남는다
+  const fail = msg => {
+    const e2 = document.querySelector("#proj-info .pi-err");
+    if (e2){ e2.textContent = "거부: " + msg; e2.hidden = false; }
+  };
+  const post = async (path, payload) => {
+    try{
+      const r = await fetch(path, {method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({user: meName, slug, ...payload})});
+      const d = await r.json();
+      if (!d.ok){ render(); fail(d.error); return; }  // 컨트롤 원복 후 거부 사유 표시
+      await refreshProjects();
+      render();  // mine 스코프·스트립·패널 즉시 갱신
+    }catch(e){ render(); fail("서버에 연결할 수 없습니다"); }
+  };
+  box.querySelectorAll("tr[data-member]").forEach(tr => {
+    const member = tr.dataset.member;
+    tr.querySelector(".pi-role").addEventListener("change",
+      e => post("/api/project/member", {member, role: e.target.value}));
+    tr.querySelector(".pi-until").addEventListener("change",
+      e => post("/api/project/member", {member, until: e.target.value}));
+    const pos = tr.querySelector(".pi-pos");
+    pos.addEventListener("change",
+      e => post("/api/project/member", {member, position: e.target.value}));
+    const rm = tr.querySelector("[data-rm]");
+    rm && !rm.disabled && rm.addEventListener("click", () => {
+      if (confirm(`${slug}에서 ${member} 멤버를 제거할까요?`))
+        post("/api/project/member/rm", {member});
+    });
+  });
+  const add = box.querySelector("[data-add]");
+  add && add.addEventListener("click", () => {
+    const v = c => { const el = box.querySelector(c); return el ? el.value : ""; };
+    post("/api/project/member", {member: v(".pi-newuser"), role: v(".pi-newrole"),
+      position: v(".pi-newpos"), until: v(".pi-newuntil")});
+  });
+}
+
+/* MY PROJECTS 레저 스트립 — '내 것만' ON일 때 board/docs/graph에서 표시 (DOC-20260823-006).
+   행=전폭 button(키보드 순회), 행 클릭=단일 프로젝트 선택, 선택 행 재클릭=합집합 복귀. */
+const MY_STRIP_LIMIT = 8;
+function renderMyStrip(){
+  const box = $("#my-strip");
+  if (!mineActive()){ box.hidden = true; box.innerHTML = ""; return; }
+  const me = viewMe(), mp = mineProjects(), sel = $("#f-project").value;
+  // 만료 멤버십(active=false만 남은 프로젝트)은 mine에서 제외하되 존재만 고지
+  const expiredN = projects.filter(p =>
+    (p.members || []).some(m => m.user === me && !m.active) &&
+    !(p.members || []).some(m => m.user === me && m.active)).length;
+  let body;
+  if (!mp.length){
+    body = `<div class="ms-note">@${esc(me)}가 멤버인 활성 프로젝트가 없습니다 —
+      <code>s9 project member add &lt;slug&gt; ${esc(me)}</code> 또는 토글 해제${
+      expiredN ? ` · 만료된 멤버십 ${expiredN}건` : ""}</div>`;
+  } else {
+    const open = expanded.has("mystrip");
+    const shown = open ? mp : mp.slice(0, MY_STRIP_LIMIT);
+    body = shown.map(p => {
+      const m = (p.members || []).find(x => x.user === me && x.active) || {};
+      const soon = m.until && (Date.parse(m.until) - Date.now()) <= 14 * 86400e3;
+      return `<button class="ms-row${p.slug === sel ? " sel" : ""}" data-mine-slug="${esc(p.slug)}"
+        title="${p.slug === sel ? "클릭 = 내 프로젝트 전체(합집합)로 복귀" : "클릭 = 이 프로젝트만 보기"}">
+        <span class="ms-t">${esc(p.title || p.slug)}</span><span class="ms-slug">(${esc(p.slug)})</span>
+        <span class="ms-role">${esc(m.role || "")}${m.position ? " · " + esc(m.position) : ""}</span>
+        <span class="ms-until${soon ? " soon" : ""}"${soon ? ' title="만료 14일 이내"' : ""}>${
+          m.until ? "~" + esc(m.until) : "무기한"}</span></button>`;
+    }).join("");
+    if (mp.length > shown.length)
+      body += `<button class="more" data-expand="mystrip">${mp.length - shown.length}개 더 보기</button>`;
+    else if (open && mp.length > MY_STRIP_LIMIT)
+      body += `<button class="more" data-expand="mystrip">접기</button>`;
+    if (expiredN)
+      body += `<div class="ms-note">+ 만료된 멤버십 ${expiredN}건 — 토글 해제 후 전체 뷰에서 확인</div>`;
+  }
+  box.hidden = false;
+  box.innerHTML = `<div class="ms-head"><span>MY PROJECTS · @${esc(me)}</span>
+    <span>${mp.length} ACTIVE</span></div>${body}`;
+}
+
+function filtered(skipQ){
+  const q = skipQ ? "" : $("#q").value.trim().toLowerCase();
+  const [u,p,t,ty] = ["#f-user","#f-project","#f-tag","#f-type"].map(s => $(s).value);
+  // mine 가드(앞단): '내 것만' ON이면 내 active 프로젝트 문서만 — Board/Docs/Graph 공통
+  const mine = mineActive() ? new Set(mineProjects().map(x => x.slug)) : null;
+  return sortRecent(catalog).filter(r => {
+    if (mine && !mine.has(r.project)) return false;
+    if (u && r.user !== u) return false;
+    if (p && r.project !== p) return false;
+    if (t && !(r.tags||[]).includes(t)) return false;
+    if (ty && r.type !== ty) return false;
+    if (q){
+      const hay = [r.id,r.title,r.summary,(r.tags||[]).join(" "),r.project,r.slug||""].join(" ").toLowerCase();
+      if (!q.split(/\s+/).every(term => hay.includes(term))) return false;
+    }
+    return true;
+  });
+}
+
+function render(){
+  // L0 (REQ-040): 살아있는 terminal 셸은 절대 재빌드하지 않는다 — 15s catalog
+  // 갱신(refreshCatalog→render)이 입력줄 DOM을 파괴해 타이핑을 날리던 치명
+  // 결함의 차단점. 터미널 갱신은 자체 SSE/폴이 append로만 수행한다.
+  if (tab === "terminal" && TERM && document.getElementById("cc-root")) return;
+  stopGraph();  // graph 탭을 떠나면 애니메이션 정지
+  if (streamTimer){ clearInterval(streamTimer); streamTimer = null; }
+  if (reqStreamTimer){ clearInterval(reqStreamTimer); reqStreamTimer = null; }
+  if (elapsedTimer){ clearInterval(elapsedTimer); elapsedTimer = null; }
+  stopChat();  // terminal 탭 폴링(target/log/tail)도 탭 이탈 시 전량 정리
+  $("#proj-info").hidden = true;  // 기본 숨김 — board/docs/graph에서만 조건부 표시
+  $("#my-strip").hidden = true;   // MY PROJECTS 스트립도 동일 조건
+  syncMineToggle();               // 토글은 상태(whoami/s9mine)의 파생 뷰
+  if (tab === "audit"){ renderAudit(); return; }
+  if (tab === "stream"){ renderStream(); return; }
+  if (tab === "terminal"){ renderTerminal(); return; }
+  if (tab === "settings"){ renderSettings(); return; }
+  const bodyMode = tab === "docs" && $("#q-body").checked && $("#q").value.trim();
+  const rows = filtered(!!bodyMode);
+  $("#count").textContent = `${rows.length} / ${catalog.length} documents` +
+    (mineActive() ? ` · my ${mineProjects().length} projects` : "");
+  renderMyStrip();      // '내 것만' ON 시 내 프로젝트 레저 스트립
+  renderProjectInfo();  // 특정 프로젝트 선택(또는 mine 단일 확정) 시 정보 패널
+  if (tab === "board") renderBoard(rows);
+  else if (tab === "docs") renderDocs(rows);
+  else renderGraph(rows);
+}
+
+/* ---------------- board ---------------- */
+function cardHTML(r){
+  const isReq = r.type === "request";
+  const acts = isReq && r.status === "review"
+    ? `${r.review_point ? `<div class="rvpt" title="확인 포인트">👁 ${esc(r.review_point)}</div>` : ""}<div class="acts"><button data-approve="${esc(r.id)}" title="done으로 전이">✓ 승인</button><button data-reject="${esc(r.id)}" title="in-progress로 반려">↺ 반려</button></div>`
+    : isReq && r.status === "blocked" && r.block_reason
+    ? `<div class="rvpt" title="대기 사유 (마지막 blocked 전이 note)">⛔ ${esc(r.block_reason)}</div>`
+    : "";
+  const liveDot = r.status === "in-progress"
+    ? (r.live ? `<span class="livedot on" title="이 요청을 실행 중인 세션이 활동 중 (${r.live_age}s 전 갱신 — last_req/active_reqs 등록)"></span>`
+       : r.live_kind === "session"
+         ? `<span class="livedot sess" title="담당 세션은 활동 중이나 이 요청의 직접 신호는 없음 (${r.live_age}s 전 세션 갱신)"></span>`
+       : r.live_kind === "spawned"
+         ? `<span class="livedot spawn" title="무인 재작업 작업자가 기동됨(${r.live_age}s 전 스폰) — 클레임 등록 대기 중"></span>`
+         : `<span class="livedot off" title="in-progress지만 스트림 조용함 — 실제 동작 아닐 수 있음"></span>`)
+    : "";
+  return `<div class="card" ${isReq ? 'draggable="true"' : ""} style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
+    <div class="id">${liveDot}${esc(r.id)}</div>
+    <div class="t">${esc(r.title)}</div>
+    <div class="m">
+      <span class="badge">${esc(r.user)}</span>
+      ${r.size ? `<span class="size">${esc(r.size)}</span>` : ""}
+      ${r.tdd ? `<span class="tdd${r.tdd.passed===r.tdd.total?" full":""}" title="TDD 시나리오 ${r.tdd.passed}/${r.tdd.total} 통과">TDD ${r.tdd.passed}/${r.tdd.total}</span>` : ""}
+      ${(r.tags||[]).slice(0,2).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}
+    </div>${acts}
+    ${r.status_since ? `<span class="elapsed" data-since="${esc(r.status_since)}" title="현재 상태(${esc(r.status)}) 시작 이후 경과">${fmtElapsed(r.status_since)}</span>` : ""}</div>`;
+}
+
+// 반려: 사유 필수 (빈 값이면 재요구, 취소면 중단). Board·문서 뷰어 공용.
+function rejectWithReason(id){
+  let why = prompt(`${id} 반려 → in-progress\n반려 사유 (필수, History에 기록):`, "");
+  while (why !== null && !why.trim()){
+    why = prompt(`사유를 입력해야 반려됩니다. (취소하려면 Cancel)\n${id} 반려 사유:`, "");
+  }
+  if (why === null) return;  // 취소
+  postStatus(id, "in-progress", "반려: " + why.trim());
+}
+
+async function postStatus(id, to, note){
+  try{
+    const r = await fetch("/api/status", {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(withAs({id, to, note}))});  // actor는 서버 whoami 파생
+    const d = await r.json();
+    if (!d.ok){ alert("전이 거부: " + d.error); return; }
+    refreshCatalog(true);
+  }catch(e){ alert("서버에 연결할 수 없습니다"); }
+}
+
+function colHTML(key, label, color, grp){
+  const limit = TERMINAL.has(key) ? COL_LIMIT_TERMINAL : COL_LIMIT;
+  const open = expanded.has("col:"+key);
+  const shown = open ? grp : grp.slice(0, limit);
+  const hidden = grp.length - shown.length;
+  return `<div class="col" style="--sc:${color}"${key !== "etc" ? ` data-colstatus="${key}"` : ""}><h2><span class="cdot"></span>${label}<span class="n">${grp.length}</span></h2>
+    <div class="cards">${shown.map(cardHTML).join("")}
+    ${hidden>0 ? `<button class="more" data-expand="col:${key}">${hidden}개 더 보기</button>`
+      : (open && grp.length>limit ? `<button class="more" data-expand="col:${key}">접기</button>` : "")}
+    </div></div>`;
+}
+
+function renderBoard(rows){
+  const reqs = rows.filter(r => r.type === "request");
+  const others = rows.filter(r => r.type !== "request");
+  const cur = window.__statusFilter || "";
+  const shown = cur ? reqs.filter(r => r.status === cur) : reqs;
+  const counts = {};
+  reqs.forEach(r => counts[r.status] = (counts[r.status]||0)+1);
+  let html = `<div class="stats">
+    <span class="stat${cur===""?" on":""}" data-statf=""><b>${reqs.length}</b> 전체 요청</span>` +
+    STATUSES.filter(s => counts[s]).map(s =>
+      `<span class="stat${cur===s?" on":""}" data-statf="${s}" style="--sc:${SCOLOR[s]}">
+        <span class="cdot"></span>${s} <b>${counts[s]}</b></span>`).join("") + `</div>`;
+  html += `<div class="board">`;
+  for (const st of STATUSES){
+    const grp = shown.filter(r => r.status === st);
+    if (!grp.length && (cur || !["open","in-progress","done"].includes(st))) continue;
+    html += colHTML(st, st, SCOLOR[st], grp);
+  }
+  if (others.length && !cur) html += colHTML("etc", "knowledge / session", "var(--c-published)", others);
+  html += `</div>`;
+  $("#view").innerHTML = html;
+  elapsedTimer = setInterval(tickElapsed, 1000);  // 카드 경과시간 실시간 갱신
+}
+
+/* ---------------- docs ---------------- */
+function hl(text, q){
+  let out = esc(text);
+  for (const t of q.split(/\s+/).filter(Boolean)){
+    const re = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    out = out.replace(re, m => `<b>${m}</b>`);
+  }
+  return out;
+}
+
+async function renderDocs(rows){
+  const q = $("#q").value.trim();
+  let matchMap = null;
+  if ($("#q-body").checked && q){
+    const data = await (await fetch("/api/search?q=" + encodeURIComponent(q) + "&" + meQ())).json();
+    matchMap = Object.fromEntries(data.results.map(r => [r.id, r.matches]));
+    rows = rows.filter(r => matchMap[r.id]);
+    $("#count").textContent = `${rows.length} matches (body search)`;
+  }
+  const groups = {request:[],knowledge:[],session:[]};
+  rows.forEach(r => (groups[r.type] || (groups[r.type]=[])).push(r));
+  let list = "";
+  for (const [g, grp] of Object.entries(groups)){
+    if (!grp.length) continue;
+    const open = expanded.has("grp:"+g) || !!matchMap;
+    const shown = open ? grp : grp.slice(0, GRP_LIMIT);
+    list += `<div class="grp">${g} (${grp.length})</div>` + shown.map(r => {
+      const snips = matchMap?.[r.id] ? matchMap[r.id].slice(0, 3).map(m =>
+        `<div class="snip">${m.n}: ${hl(m.text, q)}</div>`).join("") : "";
+      return `<div class="row${r.id===selectedDoc?" sel":""}" data-doc="${esc(r.id)}" style="--sc:${SCOLOR[r.status]}">
+        <span class="st">${esc(r.status)}</span>
+        <div class="id">${esc(r.id)}</div><div>${esc(r.title)}</div>${snips}</div>`;
+    }).join("");
+    if (grp.length > shown.length)
+      list += `<button class="more" data-expand="grp:${g}">${grp.length - shown.length}개 더 보기</button>`;
+  }
+  // 백그라운드 catalog 갱신(15s 폴링)이 뷰어를 파괴하지 않도록 doclist만 교체 —
+  // 열려 있는 reqstream 터미널·스크롤·live 폴링이 그대로 산다 (REQ-20260823-071)
+  const wrap = $("#view .docs .doclist");
+  if (wrap && $("#viewer")) wrap.innerHTML = list;
+  else $("#view").innerHTML = `<div class="docs"><div class="doclist">${list}</div>
+    <div class="viewer" id="viewer"><p class="empty">← 문서를 선택하세요</p></div></div>`;
+  if (selectedDoc) loadDoc(selectedDoc, true);
+}
+
+// bg=true — renderDocs 경유(탭 진입·필터·15s 폴링) 재로드: updated 무변화면 스킵하고,
+// 같은 문서면 뷰어 스크롤·열린 스트림 터미널 상태를 보존한다. 사용자가 직접 문서를
+// 클릭하는 경로는 bg 없이 호출되어 기존처럼 상단부터·접힘 기본 (REQ-20260823-071).
+async function loadDoc(id, bg){
+  selectedDoc = id;
+  document.querySelectorAll(".doclist .row").forEach(el =>
+    el.classList.toggle("sel", el.dataset.doc === id));
+  const viewer = $("#viewer");
+  if (!viewer) return;
+  const row = catalog.find(r => r.id === id);
+  // 주의: 뷰어의 '표시 중 문서' 상태는 data-showing에 둔다 — data-doc을 쓰면
+  // 전역 클릭 위임([data-doc]=문서 링크)과 충돌해 뷰어 내부 클릭마다 리로드된다 (REQ-20260823-076)
+  const sameDoc = viewer.dataset.showing === id;
+  if (bg && sameDoc && row && viewer.dataset.updated === (row.updated || "")) return;
+  let keep = null;  // 같은 문서의 백그라운드 재로드 — 읽던 위치를 잃지 않는다
+  if (bg && sameDoc){
+    keep = {viewerTop: viewer.scrollTop};
+    const det0 = viewer.querySelector(".reqstream");
+    if (det0 && det0.open){
+      const t0 = det0.querySelector(".term");
+      keep.stream = {top: t0.scrollTop,
+        atBottom: t0.scrollHeight - t0.scrollTop - t0.clientHeight < 140};
+    }
+  }
+  // fetch 예외(서버 순단 등)가 조용히 삼켜져 뷰어가 빈 채 남던 문제 (REQ-20260824-021):
+  // 1회 자동 재시도 후에도 실패면 오류 안내 + 다시 시도 버튼을 표면화한다.
+  let res;
+  try{
+    res = await fetch("/api/doc?id=" + encodeURIComponent(id) + "&" + meQ());
+  }catch(e){
+    await new Promise(r => setTimeout(r, 800));
+    try{
+      res = await fetch("/api/doc?id=" + encodeURIComponent(id) + "&" + meQ());
+    }catch(e2){
+      viewer.innerHTML = `<p class="empty">서버에 연결할 수 없어 문서를 열지 못했습니다 (${esc(id)}).
+        서버가 재시작 중일 수 있습니다. <button class="more" data-retrydoc="${esc(id)}">다시 시도</button></p>`;
+      return;
+    }
+  }
+  if (!res.ok){
+    viewer.innerHTML = `<p class="empty">문서를 찾을 수 없습니다: ${esc(id)} — 삭제되었거나 목록이 오래되었습니다. 목록을 새로고침합니다.</p>`;
+    viewer.dataset.showing = ""; viewer.dataset.updated = "";
+    selectedDoc = null;
+    refreshCatalog(true);
+    return;
+  }
+  const d = await res.json(), m = d.meta;
+  const li = v => Array.isArray(v) && v.length
+    ? v.map(x => /^(REQ|DOC|SES)-\d{8}-\d{3}$/.test(x)
+        ? `<a class="doclink" data-doc="${esc(x)}">${esc(x)}</a>` : esc(x)).join(", ") : null;
+  const rel = v => v ? `<a class="doclink" data-doc="${esc(v)}">${esc(v)}</a>` : null;
+  const fields = [
+    ["status", m.status ? `<span style="color:${SCOLOR[m.status]}">●</span> ${esc(m.status)}` : null],
+    ["summary", esc(m.summary) || null], ["goal", esc(m.goal) || null],
+    ["user / machine / session", esc([m.user, m.machine, m.session].filter(Boolean).join(" / "))],
+    ["project", esc(m.project) || null], ["size", esc(m.size) || null],
+    ["parent", rel(m.parent)], ["children", li(m.children)],
+    ["derived_from", rel(m.derived_from)], ["relates", li(m.relates)],
+    ["refs_docs", li(m.refs_docs)],
+    ["refs_links", (m.refs_links||[]).map(u => `<a href="${esc(u)}" target="_blank">${esc(u)}</a>`).join("<br>") || null],
+    ["refs_files", li(m.refs_files)],
+    ["tags", (m.tags||[]).map(t => `<span class="badge">#${esc(t)}</span>`).join(" ") || null],
+    ["created / updated", esc(m.created) + (m.updated && m.updated !== m.created ? " → " + esc(m.updated) : "")],
+  ];
+  const streamSec = (m.type === "request" && m.session) ? `
+    <details class="reqstream" data-req="${esc(m.id)}">
+      <summary>이 요청의 스트림 — 활성 턴의 세션 로그 <span class="path">(한 턴이 여러 요청을 다루면 다른 요청 내용도 섞임 · <b>${esc(m.id)}</b> 언급은 하이라이트)</span></summary>
+      <div class="term"><span class="meta">여는 순간 로드됩니다…</span></div>
+    </details>` : "";
+  // 모든 request 문서: 현재 상태에서 허용되는 전이를 버튼으로 노출
+  const targets = m.type === "request" ? (TRANS[m.status] || []) : [];
+  const reviewActs = targets.length
+    ? `<div class="acts" style="margin:10px 0 0">` + targets.map(to =>
+        `<button data-goto="${esc(m.id)}|${to}|${esc(m.status)}" title="${esc(m.status)} → ${to}">→ ${to}</button>`).join("") + `</div>`
+    : "";
+  viewer.innerHTML = `
+    <div class="path">${esc(d.path)}</div>
+    <h1 style="margin:6px 0 2px">${esc(m.title)} <span class="path" style="font-size:13px">${esc(m.id)}</span></h1>${reviewActs}
+    <table class="metatbl">${fields.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td></tr>`).join("")}</table>
+    <div class="md">${md2html(d.body)}</div>${streamSec}
+    <div class="backlinks" id="backlinks"></div>`;
+  viewer.dataset.showing = id;
+  viewer.dataset.updated = m.updated || "";
+  viewer.scrollTop = keep ? keep.viewerTop : 0;
+  renderBacklinks(id);
+  const det = viewer.querySelector(".reqstream");
+  if (det) det.addEventListener("toggle", async () => {
+    if (reqStreamTimer){ clearInterval(reqStreamTimer); reqStreamTimer = null; }
+    if (!det.open) return;
+    const t = det.querySelector(".term");
+    let lastCount = -1, firstLoad = true;
+    const load = async () => {
+      const r = await (await fetch("/api/reqstream?id=" + encodeURIComponent(det.dataset.req) + "&" + meQ())).json();
+      if (r.count !== lastCount){  // 변화 있을 때만 재렌더 (flicker/부하 방지)
+        lastCount = r.count;
+        const nearBottom = t.scrollHeight - t.scrollTop - t.clientHeight < 140;
+        t.innerHTML = r.events?.length
+          ? `<div class="meta">${r.count} events · session ${esc(r.session)}${r.live ? ' · <span style="color:#34d399">● live</span>' : ""}</div>` + renderEvents(r.events, "")
+          : `<span class="meta">이 요청 구간의 스트림이 없습니다 (스트림 미러 이전 문서이거나 다른 머신 세션).</span>`;
+        // 자기 요청 언급 하이라이트 (REQ-20260824-029): 다중 REQ 턴에서 내 구간 식별
+        const rid = det.dataset.req;
+        if (r.events?.length && t.innerHTML.includes(rid)){
+          t.innerHTML = t.innerHTML.split(rid).join(`<mark class="reqhl">${rid}</mark>`);
+          const nHl = t.querySelectorAll("mark.reqhl").length;
+          t.insertAdjacentHTML("afterbegin",
+            `<div class="meta">▼ 이 요청(${rid}) 언급 ${nHl}곳 — ` +
+            `<a class="hljump" style="cursor:pointer;text-decoration:underline">첫 언급으로 이동</a></div>`);
+          t.querySelector(".hljump").addEventListener("click", () => {
+            const mk = t.querySelector("mark.reqhl");
+            if (mk) mk.scrollIntoView({block: "center"});
+          });
+        }
+        // 펼친 직후엔 최신(하단)으로 — 단, 백그라운드 재렌더 복원이면 읽던 위치 유지.
+        // 이후 폴링에선 사용자가 하단 근처일 때만 따라감 (REQ-20260823-071)
+        if (firstLoad){
+          const rs = det.__restore; det.__restore = null;
+          requestAnimationFrame(() => {
+            t.scrollTop = rs && !rs.atBottom ? rs.top : t.scrollHeight;
+          });
+        } else if (r.live && nearBottom){
+          requestAnimationFrame(() => { t.scrollTop = t.scrollHeight; });
+        }
+      }
+      firstLoad = false;
+      return r;
+    };
+    let r;
+    try{ r = await load(); }catch(e){ t.textContent = "스트림 로드 실패"; return; }
+    if (r && r.live){  // 진행 중인 턴의 요청 — 4초 폴링 follow
+      reqStreamTimer = setInterval(async () => {
+        if (document.hidden || !det.open) return;
+        if (!document.contains(det)){ clearInterval(reqStreamTimer); reqStreamTimer = null; return; }
+        try{
+          const nr = await load();
+          if (!nr.live){ clearInterval(reqStreamTimer); reqStreamTimer = null; }
+        }catch(e){}
+      }, 4000);
+    }
+  });
+  // 백그라운드 재로드 복원: 이전에 열려 있던 터미널을 다시 열고(toggle 핸들러가
+  // 로드·폴링 재개) 저장한 스크롤 위치는 __restore로 전달 (REQ-20260823-071)
+  if (det && keep && keep.stream){ det.__restore = keep.stream; det.open = true; }
+}
+
+async function renderBacklinks(id){
+  const el = $("#backlinks");
+  if (!el) return;
+  try{
+    if (!graph) graph = await (await fetch("/api/graph?" + meQ())).json();
+  }catch(e){ return; }
+  const back = [...new Set(graph.edges.filter(e => e.to === id).map(e => e.from))];
+  if (!back.length){ el.remove(); return; }
+  const byId = Object.fromEntries(catalog.map(r => [r.id, r]));
+  el.innerHTML = `<h4>Linked mentions — 이 문서를 참조하는 문서 (${back.length})</h4>` +
+    back.map(b => {
+      const r = byId[b] || {title: b, status: ""};
+      return `<div class="bl" data-doc="${esc(b)}"><span class="id">${esc(b)}</span>
+        ${esc(r.title)} <span class="st" style="color:${SCOLOR[r.status]||"var(--muted)"};font-size:11px"> ${esc(r.status)}</span></div>`;
+    }).join("");
+}
+
+/* Obsidian식 링크 hover 미리보기 카드 */
+const hovercard = document.createElement("div");
+hovercard.className = "hovercard";
+document.body.appendChild(hovercard);
+document.addEventListener("mouseover", e => {
+  const a = e.target.closest("a.doclink");
+  if (!a){ hovercard.classList.remove("show"); return; }
+  const r = catalog.find(x => x.id === a.dataset.doc);
+  if (!r){ hovercard.classList.remove("show"); return; }
+  hovercard.innerHTML = `<div class="hid">${esc(r.id)} · ${esc(r.user)} · ${esc((r.updated||"").slice(0,10))}</div>
+    <div class="ht">${esc(r.title)}</div>
+    ${r.summary ? `<div class="hs">${esc(r.summary)}</div>` : ""}
+    <div class="hs" style="margin-top:4px"><span style="color:${SCOLOR[r.status]||"inherit"}">●</span> ${esc(r.status)}${r.project ? " · " + esc(r.project) : ""}</div>`;
+  const rect = a.getBoundingClientRect();
+  const top = rect.bottom + 8 + 260 > innerHeight ? rect.top - 8 - 150 : rect.bottom + 8;
+  hovercard.style.left = Math.min(rect.left, innerWidth - 360) + "px";
+  hovercard.style.top = Math.max(8, top) + "px";
+  hovercard.classList.add("show");
+});
+document.addEventListener("mouseout", e => {
+  if (e.target.closest && e.target.closest("a.doclink")) hovercard.classList.remove("show");
+});
+
+/* minimal markdown renderer */
+function md2html(src){
+  const lines = esc(src).split("\n");
+  let out = [], inCode = false, inList = false, para = [];
+  const flushPara = () => { if (para.length){ out.push("<p>" + inline(para.join(" ")) + "</p>"); para = []; } };
+  const flushList = () => { if (inList){ out.push("</ul>"); inList = false; } };
+  const inline = s => linkifyIds(s
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[\[((?:REQ|DOC|SES)-\d{8}-\d{3})\]\]/g, '<a class="doclink" data-doc="$1">$1</a>')
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>'));
+  for (const raw of lines){
+    if (raw.startsWith("```")){ flushPara(); flushList();
+      out.push(inCode ? "</code></pre>" : "<pre><code>"); inCode = !inCode; continue; }
+    if (inCode){ out.push(raw); continue; }
+    const h = raw.match(/^(#{1,6})\s+(.*)/);
+    if (h){ flushPara(); flushList(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
+    if (/^\s*[-*]\s+/.test(raw)){ flushPara();
+      if (!inList){ out.push("<ul>"); inList = true; }
+      out.push("<li>" + inline(raw.replace(/^\s*[-*]\s+/, "")) + "</li>"); continue; }
+    if (!raw.trim()){ flushPara(); flushList(); continue; }
+    para.push(raw);
+  }
+  flushPara(); flushList();
+  if (inCode) out.push("</code></pre>");
+  return out.join("\n");
+}
+
+/* ---------------- audit ---------------- */
+async function renderAudit(){
+  if (!auditCache)
+    auditCache = (await (await fetch("/api/audit?" + meQ())).json()).events;
+  const q = $("#q").value.trim().toLowerCase();
+  const u = $("#f-user").value;
+  const kindOf = t =>
+    t.startsWith("prompt ") ? "prompt" : t.startsWith("question:") ? "question" :
+    t.startsWith("note:") ? "note" : t.startsWith("session ") ? "session" :
+    t.startsWith("response") ? "response" : t.includes("removed") ? "removed" : "event";
+  const KC = {prompt:"#1d4ed8", question:"#6d28d9", note:"#868c96", response:"#047857",
+              session:"#0f766e", removed:"#b91c1c", event:"#5c6470"};
+  const evs = auditCache.filter(e =>
+    (!u || e.by === u) &&
+    (!q || q.split(/\s+/).every(t =>
+      (e.text + " " + e.session + " " + e.by + " " + e.ts).toLowerCase().includes(t))));
+  $("#count").textContent = `${evs.length} / ${auditCache.length} audit events`;
+  const page = evs.slice(0, auditLimit);
+  const body = page.map(e => {
+    const k = kindOf(e.text);
+    return `<tr>
+      <td class="ts">${esc(e.ts.slice(0, 16).replace("T", " "))}</td>
+      <td><span class="kind" style="--kc:${KC[k]}">${k}</span></td>
+      <td>${linkifyIds(esc(e.text))}</td>
+      <td>${esc(e.by)}</td>
+      <td><a class="doclink" data-doc="${esc(e.doc)}">${esc(e.session)}@${esc(e.machine)}</a></td>
+    </tr>`;
+  }).join("");
+  $("#view").innerHTML = `<div class="audit">
+    <div class="cap">audit 이벤트는 세션 문서(SES-*)의 History에서 실시간 생성됩니다 —
+      session 클릭 = 원본 SES 문서, 이벤트 속 ID 클릭 = 해당 문서.
+      작업 상세(구현·응답 전문)는 각 REQ 문서의 Notes에 있습니다.</div>
+    <div class="tblwrap"><table>
+    <thead><tr><th>time</th><th>type</th><th>event</th><th>by</th><th>session</th></tr></thead>
+    <tbody>${body || '<tr><td colspan="5" style="color:var(--faint);padding:18px">no events</td></tr>'}</tbody>
+    </table></div>
+    ${evs.length > page.length ? `<button class="more" data-audit-more>이전 이벤트 ${evs.length - page.length}건 더 보기</button>` : ""}
+  </div>`;
+}
+
+/* ---------------- stream ---------------- */
+function renderEvents(events, q){
+  const RC = {user:"#fbbf24", assistant:"#e2e8f0", tool:"#a5b4fc",
+              result:"#94a3b8", thinking:"#64748b"};
+  const evs = q ? events.filter(e =>
+    (e.text + " " + (e.name || "")).toLowerCase().includes(q)) : events;
+  return evs.map(e => {
+    const cls = "ev" + (e.agent ? " agent" : "");
+    const hd = `<span class="hd" style="color:${RC[e.role] || "#ccc"}">[${esc(e.ts.slice(5,16))}]${e.agent ? " ⚙agent" : ""} ${e.role}${e.name ? " ⚒ " + esc(e.name) : ""}${e.error ? " ⚠ error" : ""}</span>`;
+    if ((e.role === "result" || e.role === "thinking") && e.text.length > 200){
+      return `<div class="${cls}"><details><summary>${hd} <span style="color:#94a3b8">${esc(e.text.slice(0,110))}…</span></summary>${esc(e.text)}</details></div>`;
+    }
+    return `<div class="${cls}">${hd}\n${esc(e.text)}</div>`;
+  }).join("");
+}
+
+async function renderStream(){
+  // 서버(HTTP/1.0)의 간헐 연결 reset이 unhandled rejection으로 새지 않게 —
+  // 실패 시 1회 재시도 후 안내 (REQ-037 T7 검증 중 발견)
+  let data = await ccFetch("/api/streams");
+  if (!data){
+    await new Promise(r => setTimeout(r, 400));
+    data = await ccFetch("/api/streams");
+  }
+  if (!data){
+    $("#view").innerHTML = `<div class="streamwrap"><div class="term"><span class="meta">stream 목록을 불러오지 못했습니다 — 잠시 후 다시 시도하세요</span></div></div>`;
+    return;
+  }
+  const sesDocs = Object.fromEntries(
+    catalog.filter(r => r.type === "session").map(r => [r.session, r]));
+  $("#count").textContent = `${data.streams.length} stream logs (streams/*.jsonl — transcript 미러, 시간은 서버 설정 시간대)`;
+  const list = data.streams.map(s => {
+    const d = sesDocs[s.session];
+    return `<div class="row${s.session===selectedStream?" sel":""}" data-stream="${esc(s.session)}">
+      <span class="st">${(s.size/1024).toFixed(0)}KB</span>
+      <div class="id">${esc(s.session)}</div>
+      <div>${esc(d ? d.title : "(SES 문서 없음)")}</div>
+      <div class="snip">${esc(s.mtime.slice(0,16).replace("T"," "))}</div></div>`;
+  }).join("");
+  $("#view").innerHTML = `<div class="streamwrap">
+    <div class="doclist">${list || '<div class="grp">no streams — 훅이 턴 종료마다 미러링합니다</div>'}</div>
+    <div class="term" id="term"><span class="meta">← 세션을 선택하세요. 터미널 transcript와 동일한 이벤트 흐름이 표시됩니다 (⚙agent = 서브에이전트 실행분). 검색창 = 이벤트 필터. 특정 요청의 구간만 보려면 Docs 탭에서 문서를 열고 "이 요청의 스트림"을 사용하세요.</span></div></div>`;
+  if (selectedStream) loadStream(selectedStream);
+}
+
+async function loadStream(s){
+  selectedStream = s;
+  if (streamTimer){ clearInterval(streamTimer); streamTimer = null; }
+  document.querySelectorAll("[data-stream]").forEach(el =>
+    el.classList.toggle("sel", el.dataset.stream === s));
+  const term = $("#term");
+  if (!term) return;
+  const d = await ccFetch("/api/stream?session=" + encodeURIComponent(s));
+  if (!d){ term.textContent = "stream not found: " + s; return; }
+  const q = $("#q").value.trim().toLowerCase();
+  let offset = d.offset, total = d.count;
+  const liveTag = d.live
+    ? ' · <span style="color:#34d399">● live</span> <label style="cursor:pointer;color:#94a3b8"><input type="checkbox" id="follow" checked> follow</label>'
+    : ' · mirror(턴 종료 시점)';
+  term.innerHTML =
+    `<div class="meta">session ${esc(s)} · <span id="evcount">${total}</span> events${q ? " · filtered" : ""}${liveTag}</div>` +
+    renderEvents(d.events, q);
+  term.scrollTop = d.live ? term.scrollHeight : 0;
+  if (!d.live) return;
+  // 증분 tail: 서버는 offset 이후의 새 라인만 파싱해 반환 — 폴링 부하 최소화.
+  // 폴링 조건: follow 체크 + 브라우저 탭 가시 + 요소가 화면에 존재.
+  streamTimer = setInterval(async () => {
+    if (document.hidden) return;
+    if (!document.contains(term)){ clearInterval(streamTimer); streamTimer = null; return; }
+    const fl = $("#follow");
+    if (!fl || !fl.checked) return;
+    try{
+      const r = await fetch(`/api/stream?session=${encodeURIComponent(s)}&after=${offset}`);
+      if (!r.ok) return;
+      const nd = await r.json();
+      offset = nd.offset;
+      if (nd.events.length){
+        const nearBottom = term.scrollHeight - term.scrollTop - term.clientHeight < 140;
+        term.insertAdjacentHTML("beforeend",
+          renderEvents(nd.events, $("#q").value.trim().toLowerCase()));
+        total += nd.events.length;
+        const ec = $("#evcount"); if (ec) ec.textContent = total;
+        if (nearBottom) term.scrollTop = term.scrollHeight;  // 위로 스크롤해 읽는 중이면 방해 안 함
+      }
+    }catch(e){ /* 서버 재시작 등 — 다음 tick */ }
+  }, 2500);
+}
+
+/* ------- terminal (REQ-20260824-040): Claude Code CLI 재현 — 비재빌드 아키텍처.
+   L0: 셸 DOM(타임라인·입력줄·상태 스트립)은 탭 진입 시 1회만 생성하고, 이후의
+   모든 갱신은 타임라인 append(스피너 줄 앞)와 텍스트 노드 patch로만 한다 —
+   어떤 코드 경로도 입력 요소를 재생성/치환하지 않는다(render() 조기 반환 가드
+   포함). 대상 sid 교체(대격변)도 타임라인만 교체한다.
+   L1: 수신 = /api/stream/sse(EventSource, 서버측 250ms 감시) → rAF 배칭 append.
+   연속 실패 시 2.5s 폴링 폴백(30s마다 SSE 복귀 시도). 키 입력·로컬 에코는
+   네트워크 왕복과 결합하지 않는다. ------- */
+let TERM = null;          // 터미널 탭 생존 상태 — stopChat()이 전량 정리
+let termCmdCache = null;  // /api/chat/commands 캐시 (탭 재진입 시 재사용)
+const CC_BUILTINS = [     // CC CLI 빌트인 — 대시보드에선 실행 불가, 구분 표시(L4)
+  ["clear","대화 히스토리 클리어"],["compact","컨텍스트 압축"],["help","도움말"],
+  ["model","모델 선택"],["resume","이전 세션 재개"],["config","설정"],
+  ["cost","토큰 사용량"],["status","세션 상태"],["memory","메모리 편집"],
+  ["init","CLAUDE.md 생성"],["doctor","설치 진단"],
+].map(([n,d]) => ({name:n, desc:d, source:"cli"}));
+
+/* 계정·사용량 (REQ-043): 서버가 60s 캐시+계정전환 즉시 무효화 — 클라이언트는
+   응답을 캐시하지 않고 매 폴마다 다시 그린다(계정이 바뀔 수 있다는 전제). */
+async function refreshUsage(){
+  const el = $("#usage-chip");
+  if (!el) return;
+  try{
+    const d = await (await fetch("/api/claude/usage")).json();
+    if (!d || (!d.ok && !d.stale)){ el.textContent = ""; return; }
+    const L = {};
+    (d.limits || []).forEach(x => { L[x.kind] = x; });
+    const pct = x => x == null ? "—"
+      : `<span class="${x.percent >= 90 ? "crit" : x.percent >= 70 ? "warn" : ""}">${x.percent}%</span>`;
+    el.innerHTML = `${esc(d.email || "?")}${d.stale ? " ⏳" : ""}` +
+      ` · 5h ${pct(L.session)} · wk ${pct(L.weekly_all)}` +
+      (L.weekly_scoped
+        ? ` · ${esc((L.weekly_scoped.scope_name || "model").toLowerCase())} ${pct(L.weekly_scoped)}` : "");
+  }catch(e){ /* 다음 폴 */ }
+}
+
+function stopChat(){
+  if (!TERM) return;
+  TERM.timers.forEach(clearInterval);
+  if (TERM.es){ try{ TERM.es.close(); }catch(e){} }
+  if (TERM.esRetryT) clearTimeout(TERM.esRetryT);
+  if (TERM.raf) cancelAnimationFrame(TERM.raf);
+  TERM = null;   // 진행 중 async는 TERM !== T 비교로 자멸
+}
+
+/* ANSI SGR → HTML (의존성 0, XSS 방지: 텍스트 조각은 esc() 후 span만 입힘).
+   기본 16색은 CC 근사 팔레트, 256색은 xterm 큐브/그레이스케일 산식. */
+const CC16 = ["#3f4451","#e06c75","#4ec97a","#e5c07b","#61afef","#c678dd",
+              "#56c8d8","#d7dae0","#5c6370","#ff7a85","#5fe08d","#f0cd8a",
+              "#74bdf7","#d894ec","#6fdbe8","#ffffff"];
+function ansi256(n){
+  n = +n;
+  if (n < 16) return CC16[n];
+  if (n < 232){
+    n -= 16;
+    const L = [0,95,135,175,215,255];
+    return "#" + [L[(n/36|0)], L[((n/6|0))%6], L[n%6]]
+      .map(v => v.toString(16).padStart(2,"0")).join("");
+  }
+  const v = 8 + (n - 232) * 10;
+  return `rgb(${v},${v},${v})`;
+}
+function ccStrip(raw){                           // 접힘 미리보기용 — ANSI 전부 제거
+  return String(raw ?? "").replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?/g, "")
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\x1b[=>]/g, "");
+}
+function ccText(raw){
+  raw = String(raw ?? "")
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?/g, "")     // OSC 제거
+    .replace(/\x1b\[[0-9;?]*[A-HJKSTfhilnsu]/g, "")          // 비-SGR CSI 제거
+    .replace(/\x1b[=>]/g, "");
+  const parts = raw.split(/\x1b\[([0-9;]*)m/);
+  const md = s => esc(s)                                     // 마크다운 근사 (CC식)
+    .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`\n]+)`/g, '<span class="cccode">$1</span>');
+  let st = {fg:null, bg:null, b:false, d:false, i:false, u:false};
+  const wrap = h => {
+    const css = [];
+    if (st.fg) css.push("color:" + st.fg);
+    if (st.bg) css.push("background:" + st.bg);
+    if (st.b) css.push("font-weight:700");
+    if (st.d) css.push("opacity:.6");
+    if (st.i) css.push("font-style:italic");
+    if (st.u) css.push("text-decoration:underline");
+    return css.length ? `<span style="${css.join(";")}">${h}</span>` : h;
+  };
+  let html = "";
+  for (let i = 0; i < parts.length; i++){
+    if (i % 2 === 0){ if (parts[i]) html += wrap(md(parts[i])); continue; }
+    const codes = parts[i] === "" ? [0] : parts[i].split(";").map(Number);
+    for (let j = 0; j < codes.length; j++){
+      const c = codes[j];
+      if (c === 0) st = {fg:null, bg:null, b:false, d:false, i:false, u:false};
+      else if (c === 1) st.b = true;
+      else if (c === 2) st.d = true;
+      else if (c === 3) st.i = true;
+      else if (c === 4) st.u = true;
+      else if (c === 22) st.b = st.d = false;
+      else if (c === 23) st.i = false;
+      else if (c === 24) st.u = false;
+      else if (c >= 30 && c <= 37) st.fg = CC16[c - 30];
+      else if (c === 39) st.fg = null;
+      else if (c >= 90 && c <= 97) st.fg = CC16[c - 82];
+      else if (c >= 40 && c <= 47) st.bg = CC16[c - 40];
+      else if (c === 49) st.bg = null;
+      else if (c >= 100 && c <= 107) st.bg = CC16[c - 92];
+      else if (c === 38 || c === 48){
+        let col = null;
+        if (codes[j+1] === 5){ col = ansi256(codes[j+2]); j += 2; }
+        else if (codes[j+1] === 2){
+          col = `rgb(${codes[j+2]|0},${codes[j+3]|0},${codes[j+4]|0})`; j += 4;
+        }
+        if (col){ if (c === 38) st.fg = col; else st.bg = col; }
+      }
+    }
+  }
+  return html;
+}
+
+/* CC 글리프 줄 빌더 */
+function ccLine(glyph, gcolor, bodyHtml, cls){
+  return `<div class="ln${cls ? " " + cls : ""}">` +
+    `<span class="g"${gcolor ? ` style="color:${gcolor}"` : ""}>${glyph}</span>` +
+    `<span class="b">${bodyHtml}</span></div>`;
+}
+function ccFold(preview, full){                 // 긴 본문은 CC처럼 접는다
+  return `<details><summary>${preview}</summary><div class="full">${full}</div></details>`;
+}
+function ccChatLine(l){                          // /api/chat/log 한 줄
+  if (l.kind === "chat")
+    return ccLine("❯", "var(--cc-dim)", ccText(l.text || ""));
+  return ccLine("●", "var(--cc-faint)",          // 전이 통지 등 kind=event
+    ccText(l.text || "") +
+    ` <span style="color:var(--cc-faint)">· ${esc((l.ts || "").slice(11,16))}</span>`,
+    "ccdim");
+}
+/* ---- transcript 이벤트 → CC 표시 규칙 (L10): 같은 시점의 CC 터미널과 같은
+   내용만 보인다. 숨김: 훅 주입 컨텍스트(system-reminder 등 구조화 주입),
+   사이드체인 thinking·원문(요약선만). thinking은 CC처럼 기본 접힘 한 줄.
+   반환 {html,k,role} — k는 "Ran N shell commands" 접힘 분류, null = 숨김. */
+function ccUserText(t){
+  return String(t || "")
+    .replace(/<system-reminder>[\s\S]*?(<\/system-reminder>|$)/g, "").trim();
+}
+function ccEvent(T, e){
+  const t = e.text || "";
+  if (e.agent){                                  // 사이드체인 — CC는 요약선만 (L8)
+    if (e.role === "thinking") return null;
+    if (e.role === "result")
+      return {k:"x", html: ccLine("⎿", null,
+        ccStrip(t).length > 60
+          ? ccFold('<span style="color:var(--cc-dim)">agent result</span>', ccText(t))
+          : `<span style="color:var(--cc-dim)">${ccText(t)}</span>`, "sub ccagent")};
+    const nm = e.role === "tool" ? `<b>${esc(e.name || "tool")}</b> ` : "";
+    return {k:"x", html: ccLine("⚙", "var(--cc-faint)",
+      `<span style="color:var(--cc-dim)">agent · ${nm}${esc(ccStrip(t).replace(/\s+/g," ").slice(0,110))}</span>`,
+      "ccagent")};
+  }
+  if (e.role === "user"){
+    const u = ccUserText(t);
+    if (!u) return null;                         // 훅 주입 컨텍스트만 있던 턴
+    if (/^<task-notification>/.test(u)){         // 백그라운드 에이전트 완료 통지
+      if (T) termAgentDone(T);
+      const id = (u.match(/<task-id>([^<]+)<\/task-id>/) || [])[1] || "";
+      return {k:"x", role:"notif", html: ccLine("●", "var(--cc-faint)",
+        ccFold(`<span style="color:var(--cc-dim)">background task ${esc(id)} 완료 통지</span>`, ccText(u)),
+        "ccdim")};
+    }
+    if (/^<[a-z-]+>/.test(u)) return null;       // 기타 구조화 주입(command 등)
+    return {k:"x", role:"user", html: ccLine("❯", "var(--cc-dim)", ccText(u))};
+  }
+  if (e.role === "assistant")
+    return {k:"x", role:"assistant", html: ccLine("●", "var(--cc-text)", ccText(t))};
+  if (e.role === "thinking"){
+    const prev = esc(ccStrip(t).replace(/\s+/g, " ").slice(0, 80));
+    return {k:"x", role:"thinking", html: ccLine("✻", "var(--cc-dim)",
+      ccFold(`<span style="font-style:italic">${prev}…</span>`, ccText(t)), "ccdim")};
+  }
+  if (e.role === "tool"){
+    if (e.name === "Agent" || e.name === "Task"){ // L8 — 스폰 줄 + Backgrounded 라벨
+      let o = {}; try{ o = JSON.parse(t) || {}; }catch(x){}
+      const at = o.subagent_type || "agent", ad = o.description || "";
+      if (T) termAgentSpawn(T, at, ad);
+      return {k:"x", role:"tool", name:e.name, html:
+        ccLine("●", "var(--cc-green)",
+          `<b>${esc(at)}</b><span style="color:var(--cc-dim)">(${esc(ad)})</span>`) +
+        ccLine("⎿", null, '<span style="color:var(--cc-dim)">Backgrounded agent</span>', "sub")};
+    }
+    const nm = `<b>${esc(e.name || "tool")}</b>`;
+    const sum = esc(ccToolSummary(e.name, t));
+    const body = ccStrip(t).length > 130
+      ? ccFold(`${nm}<span style="color:var(--cc-dim)">(${sum}…)</span>`, ccText(t))
+      : `${nm}<span style="color:var(--cc-dim)">(${sum})</span>`;
+    return {k: e.name === "Bash" ? "bash" : "x", role:"tool", name:e.name,
+            html: ccLine("●", "var(--cc-text)", body)};
+  }
+  // result — ⎿ 연속줄, 길면 접힘, 에러는 분홍 ✗
+  const body = t.length > 200
+    ? ccFold(esc(ccStrip(t).slice(0,140)) + "…", ccText(t))
+    : ccText(t);
+  return {k: T && T.lastToolName === "Bash" ? "bashres" : "x", role:"result",
+    html: ccLine("⎿", null,
+      e.error ? `<span style="color:var(--cc-red)">✗ ${body}</span>` : body, "sub")};
+}
+function ccToolSummary(name, raw){                // 도구명 옆 핵심 인자 한 줄 (L10)
+  let o = null; try{ o = JSON.parse(raw); }catch(e){}
+  if (!o || typeof o !== "object")
+    return ccStrip(raw).replace(/\s+/g, " ").slice(0, 100);
+  const v = o.command ?? o.file_path ?? o.path ?? o.pattern ?? o.skill ?? o.url ??
+            o.query ?? o.description ?? o.prompt ?? JSON.stringify(o);
+  return String(v).replace(/\s+/g, " ").slice(0, 100);
+}
+/* 배치 렌더: (수신함 라인 | transcript 이벤트) 목록 → html. 연속 Bash 실행(≥2)은
+   CC처럼 "Ran N shell commands" 접힘으로 묶는다. 스피너/에이전트 상태도 갱신. */
+function ccRenderBatch(T, evs){
+  const items = [];
+  for (const x of evs){
+    if (x && x.__chat){                          // 초기 병합용 수신함 라인
+      items.push({k:"x", html: ccChatLine(x)});
+      if (x.kind === "chat" && T){ T.lastRole = "user"; T.waitBase = Date.now(); }
+      continue;
+    }
+    const r = ccEvent(T, x);
+    if (!r) continue;
+    items.push(r);
+    if (T && r.role && r.role !== "notif"){
+      T.lastRole = r.role;
+      if (r.role === "tool") T.lastToolName = r.name || "";
+      const p = Date.parse(String(x.ts || "").replace(" ", "T"));
+      T.waitBase = isNaN(p) ? Date.now() : p;
+    }
+  }
+  let html = "", i = 0;
+  while (i < items.length){
+    if (items[i].k !== "bash"){ html += items[i].html; i++; continue; }
+    let j = i, n = 0, seg = "";
+    while (j < items.length && (items[j].k === "bash" || items[j].k === "bashres")){
+      if (items[j].k === "bash") n++;
+      seg += items[j].html; j++;
+    }
+    html += n >= 2
+      ? `<div class="ln ccdim"><span class="g"></span><span class="b"><details><summary><span style="color:var(--cc-dim)">Ran ${n} shell commands</span></summary><div class="full">${seg}</div></details></span></div>`
+      : seg;
+    i = j;
+  }
+  return html;
+}
+function ccTsKey(x){ return (x.ts || "").replace("T", " ").slice(0, 19); }
+/* 타임아웃 있는 JSON fetch — 서버 backlog 포화로 연결이 hang/reset 되어도
+   (실서버 /api/catalog reset 전례) 터미널 렌더가 멈추지 않게 null로 강등.
+   실패분은 어차피 폴러(offset 0부터)가 채운다. */
+function ccFetch(url, ms){
+  return new Promise(res => {
+    const ac = new AbortController();
+    const to = setTimeout(() => { ac.abort(); res(null); }, ms || 8000);
+    fetch(url, {signal: ac.signal})
+      .then(r => r.ok ? r.json() : null)
+      .then(v => { clearTimeout(to); res(v); })
+      .catch(() => { clearTimeout(to); res(null); });
+  });
+}
+function renderTerminal(){
+  // 셸 1회 생성(L0). 살아있는 셸은 render()의 조기 반환 가드가 지키므로
+  // 여기 도달 = 탭 새 진입. 이후 이 DOM은 탭을 떠날 때까지 재생성되지 않는다.
+  stopChat();
+  $("#count").textContent = "라이브 클로드 세션 터미널 (전송 = 수신함 append → Monitor가 깨움 · 수신 = SSE 푸시 tail)";
+  const T = TERM = {
+    sid: null, live: false, offset: 0, evCount: 0, chatCount: 0,
+    es: null, esFails: 0, esRetryT: null, poll: false, pollT: null,
+    timers: [], raf: 0, buf: [],
+    atts: [], hist: [], histIdx: null, agents: [],
+    lastRole: null, lastToolName: "", waitOn: false, waitT: null,
+    waitBase: Date.now(),
+    pal: {open: false, idx: 0, items: []},
+  };
+  $("#view").innerHTML = `<div class="ccterm" id="cc-root">
+    <div class="ccout" id="ccout"><div class="ccwaitline" id="cc-wait" hidden></div></div>
+    <div class="ccout" id="cc-agview" hidden></div>
+    <div class="ccerr" id="chat-err" hidden></div>
+    <div class="ccpal" id="cc-pal" hidden></div>
+    <div class="ccatt" id="cc-att" hidden></div>
+    <div class="ccinputrow"><span class="ccp">❯</span><textarea id="chat-in" rows="1" disabled placeholder="connecting…"></textarea><button class="ccclip" id="cc-clip" title="이미지 첨부 (붙여넣기·드래그도 가능)">📎</button><input type="file" id="cc-file" accept="image/*" multiple hidden></div>
+    <div class="ccstatus">
+      <div class="ccs1"><span class="ccmode">▶▶ <span id="cc-live" class="ccwarn">connecting</span><span id="cc-tgt"></span></span><span class="r ccrc" title="Remote Control — 터미널에서 /rc 로 연결하면 폰·다른 기기에서도 이 세션과 대화할 수 있다">/rc</span></div>
+      <div class="ag ccmain" title="메인 타임라인으로 복귀"><span class="g">●</span> <b>main</b></div>
+      <div id="cc-agents"></div>
+      <div class="ag sub"><span class="g">○</span> <span id="cc-src">transcript</span><span class="r" id="cc-meta"></span></div>
+    </div></div>`;
+  termBindInput(T);
+  termStripBind(T);
+  termTargetLoop(T);
+}
+
+/* 대상 감시: 최초 즉시 + 5s 주기 — live/stale은 텍스트 노드만 patch,
+   sid가 바뀌면(대격변) 타임라인만 교체. 입력줄은 어떤 경우에도 불변(L0). */
+async function termTargetLoop(T){
+  const tick = async () => {
+    const nt = await ccFetch("/api/chat/target", 4000);
+    if (TERM !== T) return;
+    if (!nt){ termStatus(T, null); return; }
+    if (nt.sid && nt.sid !== T.sid){ termAttach(T, nt); return; }
+    termStatus(T, nt.sid ? nt : null);
+  };
+  await tick();
+  if (TERM !== T) return;
+  if (!T.sid) termWaitingGuide(T);
+  T.timers.push(setInterval(() => {
+    if (document.hidden || tab !== "terminal") return;
+    tick();
+  }, 5000));
+  // 수신함 로그(보낸 메시지 echo·전이 이벤트) 3s 폴 — append 전용
+  T.timers.push(setInterval(() => {
+    if (document.hidden || tab !== "terminal" || !T.sid) return;
+    refreshTermChat(T);
+  }, 3000));
+  // 에이전트 스트립(이름·실시간 라벨·경과·토큰) 10s 폴 (REQ-044)
+  const agTick = async () => {
+    if (document.hidden || tab !== "terminal" || !T.sid) return;
+    const d = await ccFetch("/api/agents?session=" +
+                            encodeURIComponent(T.sid), 5000);
+    if (TERM !== T || !d) return;
+    T.srvAgents = d.agents || [];
+    termAgentsRender(T);
+  };
+  agTick();
+  T.timers.push(setInterval(agTick, 10000));
+}
+
+function termStatus(T, nt){
+  const lv = $("#cc-live"), tg = $("#cc-tgt");
+  if (!lv) return;
+  if (!nt || !nt.sid){
+    T.live = false;
+    lv.textContent = T.sid ? "stale" : "no session";
+    lv.className = "ccwarn";
+    if (!T.sid && tg) tg.textContent = " · waiting";
+    return;
+  }
+  T.live = !!nt.live;
+  lv.textContent = T.live ? "live" : "stale";
+  lv.className = T.live ? "ccok" : "ccwarn";
+  if (tg) tg.innerHTML = ` · target <span class="cccyan">${esc(nt.sid)}</span> <span class="cccyan">@${esc(nt.user || "?")}</span>`;
+}
+
+function termWaitingGuide(T){
+  const w = $("#cc-wait");
+  if (!w) return;
+  w.insertAdjacentHTML("beforebegin",
+    ccLine("✻", "var(--cc-dim)",
+      '<span style="color:var(--cc-dim)">Waiting for a live Claude session…</span>') +
+    ccLine("⎿", null, `라이브 클로드 세션이 없습니다 — 세션이 뜨면 이 화면이 자동 전환됩니다.
+  1. 터미널을 연다
+  2. <span class="cccode">cd ~/section9 &amp;&amp; bin/s9 code</span> 실행
+  3. 세션이 뜨면 이 탭에서 전송`, "sub"));
+  const ta = $("#chat-in");
+  ta.disabled = true;
+  ta.placeholder = "no live session";
+  termStatus(T, null);
+}
+
+/* 대상 세션 부착/교체 — 타임라인·상태 스트립만 만진다. 입력줄 DOM 불변(L0). */
+async function termAttach(T, nt){
+  const sid = nt.sid;
+  T.sid = sid; T.offset = 0; T.evCount = 0; T.chatCount = 0;
+  T.buf = []; T.agents = []; T.lastRole = null; T.lastToolName = "";
+  termCloseSSE(T);
+  termClearOut(T);
+  termStatus(T, nt);
+  termAgentsRender(T);
+  const src = $("#cc-src"); if (src) src.textContent = `${sid} transcript`;
+  const ta = $("#chat-in");
+  ta.disabled = false;
+  ta.placeholder = "메시지 — Enter 전송 · Shift+Enter 줄바꿈 · / 명령 · 이미지 붙여넣기/드래그";
+  if (tab === "terminal" && !document.hidden) ta.focus();
+  termMeta(T);
+  // 초기 로드: 수신함 로그 + transcript 병합(동초는 chat 먼저 — 안정 정렬)
+  const retry = async url => {   // 간헐 연결 reset — 1회 재시도
+    const v = await ccFetch(url);
+    if (v) return v;
+    await new Promise(r => setTimeout(r, 400));
+    return ccFetch(url);
+  };
+  const [logR, evR] = await Promise.all([
+    retry("/api/chat/log?sid=" + encodeURIComponent(sid)),
+    retry("/api/stream?session=" + encodeURIComponent(sid)),
+  ]);
+  if (TERM !== T || T.sid !== sid) return;
+  const log = logR || {lines: []}, ev = evR || {events: [], offset: 0};
+  T.chatCount = (log.lines || []).length;
+  T.offset = ev.offset || 0;
+  T.evCount = (ev.events || []).length;
+  const merged = [
+    ...(log.lines || []).map(l => ({...l, __chat: true})),
+    ...(ev.events || []),
+  ].sort((a, b) => {
+    const ka = ccTsKey(a), kb = ccTsKey(b);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+  const html = ccRenderBatch(T, merged);
+  const w = $("#cc-wait");
+  if (w) w.insertAdjacentHTML("beforebegin", html ||
+    ccLine("✻", "var(--cc-dim)",
+      '<span style="color:var(--cc-dim)">empty transcript — 첫 메시지를 보내보세요</span>'));
+  const out = $("#ccout");
+  if (out) out.scrollTop = out.scrollHeight;
+  termMeta(T); termSpinnerEval(T); termAgentsRender(T);
+  termConnectSSE(T);
+}
+
+function termClearOut(T){
+  const out = $("#ccout"), w = $("#cc-wait");
+  if (!out) return;
+  [...out.children].forEach(n => { if (n !== w) n.remove(); });
+  T.waitOn = false;
+  if (w) w.hidden = true;
+}
+
+/* ---- SSE 수신 (L1): 증분 push → rAF 배칭 append. 서버는 5분마다 정상 종료 —
+   onerror에서 마지막 offset으로 재접속. 연속 실패 시 폴링 폴백. ---- */
+function termCloseSSE(T){
+  if (T.es){ try{ T.es.close(); }catch(e){} T.es = null; }
+  if (T.esRetryT){ clearTimeout(T.esRetryT); T.esRetryT = null; }
+}
+function termConnectSSE(T){
+  termCloseSSE(T);
+  if (!T.sid) return;
+  if (!window.EventSource){ termPollFallback(T); return; }
+  const es = new EventSource(`/api/stream/sse?session=${encodeURIComponent(T.sid)}&after=${T.offset}`);
+  T.es = es; T.poll = false;
+  termMeta(T);
+  es.onopen = () => { if (TERM === T && T.es === es) T.esFails = 0; };
+  es.onmessage = m => {
+    if (TERM !== T || T.es !== es){ try{ es.close(); }catch(e){} return; }
+    T.esFails = 0;
+    let d = null; try{ d = JSON.parse(m.data); }catch(e){}
+    if (!d) return;
+    if (typeof d.offset === "number") T.offset = d.offset;
+    if (d.events && d.events.length){
+      T.buf.push(...d.events);
+      termScheduleFlush(T);
+    }
+  };
+  es.onerror = () => {
+    try{ es.close(); }catch(e){}
+    if (TERM !== T || T.es !== es) return;
+    T.es = null; T.esFails++;
+    if (T.esFails >= 4){ termPollFallback(T); return; }
+    T.esRetryT = setTimeout(() => {
+      if (TERM === T && !document.hidden) termConnectSSE(T);
+    }, Math.min(500 * Math.pow(2, T.esFails - 1), 5000));
+  };
+}
+function termPollFallback(T){
+  T.poll = true;
+  termMeta(T);
+  if (T.pollT) return;   // 폴백 인터벌은 1개만 — SSE 복귀 후 재폴백에도 재사용
+  let n = 0;
+  T.pollT = setInterval(async () => {
+    if (document.hidden || tab !== "terminal" || !T.sid || T.es) return;
+    if (++n % 12 === 0 && window.EventSource){ termConnectSSE(T); return; }
+    const nd = await ccFetch(`/api/stream?session=${encodeURIComponent(T.sid)}&after=${T.offset}`, 6000);
+    if (TERM !== T || !nd || T.es) return;
+    T.offset = nd.offset;
+    if (nd.events && nd.events.length){
+      T.buf.push(...nd.events);
+      termScheduleFlush(T);
+    }
+  }, 2500);
+  T.timers.push(T.pollT);
+}
+function termScheduleFlush(T){
+  if (T.raf) return;
+  T.raf = requestAnimationFrame(() => {
+    T.raf = 0;
+    if (TERM !== T) return;
+    const evs = T.buf; T.buf = [];
+    if (evs.length) termAppendBatch(T, evs);
+  });
+}
+function termAppendBatch(T, evs){
+  const out = $("#ccout"), w = $("#cc-wait");
+  if (!out || !w) return;
+  T.evCount += evs.length;
+  const hadWait = T.waitOn, waitStart = T.waitBase;
+  const html = ccRenderBatch(T, evs);   // lastRole/waitBase/agents 갱신 포함
+  termMeta(T);
+  if (!html){ termSpinnerEval(T); return; }   // 전부 숨김 이벤트(L10)
+  const nearBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 140;
+  if (hadWait) termSpinnerFinalize(T, waitStart);   // 스피너 자리 → 완료줄 확정
+  w.insertAdjacentHTML("beforebegin", html);
+  termSpinnerEval(T);
+  termAgentsRender(T);
+  if (nearBottom) out.scrollTop = out.scrollHeight;  // 위로 읽는 중이면 방해 안 함
+}
+function termMeta(T){
+  const m = $("#cc-meta");
+  if (m) m.textContent =
+    `${T.es ? "sse" : T.poll ? "poll 2.5s" : "…"} · ↓ ${T.evCount} events`;
+}
+
+/* ---- 웨이팅 상태줄 (L6): 마지막 이벤트가 user/tool_use이고 후속이 없으면
+   점멸 글리프(CSS 애니메이션, reduced-motion 존중) + 동사 + 경과초. ---- */
+function termSpinnerEval(T){
+  const w = $("#cc-wait");
+  if (!w) return;
+  const on = !!T.sid && (T.lastRole === "user" || T.lastRole === "tool");
+  if (!on){
+    T.waitOn = false; w.hidden = true;
+    return;
+  }
+  const verb = T.lastRole === "user" ? "Thinking…"
+             : T.lastToolName === "Bash" ? "Running…" : "Doing…";
+  if (!T.waitOn){
+    T.waitOn = true; w.hidden = false;
+    w.innerHTML = `<span class="ccspin"></span><span class="ccwv"> ${verb} </span><span class="ccwe"></span>`;
+    if (!T.waitT){
+      T.waitT = setInterval(() => {
+        if (TERM !== T) return;
+        const el = w.querySelector(".ccwe");
+        if (el && T.waitOn && !w.hidden)
+          el.textContent = `(${Math.max(0, Math.round((Date.now() - T.waitBase) / 1000))}s)`;
+      }, 1000);
+      T.timers.push(T.waitT);
+    }
+  } else {
+    const wv = w.querySelector(".ccwv");
+    if (wv) wv.textContent = ` ${verb} `;
+  }
+  const el = w.querySelector(".ccwe");
+  if (el) el.textContent = `(${Math.max(0, Math.round((Date.now() - T.waitBase) / 1000))}s)`;
+}
+function termSpinnerFinalize(T, base){
+  const w = $("#cc-wait");
+  const secs = Math.max(0, Math.round((Date.now() - (base != null ? base : T.waitBase)) / 1000));
+  if (w && T.waitOn)
+    w.insertAdjacentHTML("beforebegin",
+      `<div class="ln ccdim"><span class="g" style="color:var(--cc-dim)">✻</span><span class="b" style="color:var(--cc-faint)">~ (총 ${secs}s)</span></div>`);
+  T.waitOn = false;
+  if (w) w.hidden = true;
+}
+
+/* ---- 활성 에이전트 스트립 (L8): Agent 스폰 = 추가, task-notification = 종결.
+   상태 스트립의 작은 컨테이너만 재렌더 — 입력줄과 무관. ---- */
+function termAgentSpawn(T, type, desc){
+  T.agents.push({type, desc});
+  if (T.agents.length > 5) T.agents.shift();
+}
+function termAgentDone(T){
+  T.agents.shift();   // 통지엔 타입 정보가 없다 — 가장 오래된 활성분 종결로 근사
+}
+const fmtDur = s => s >= 3600 ? `${s/3600|0}h ${(s%3600/60)|0}m`
+  : s >= 60 ? `${(s/60)|0}m ${s%60|0}s` : `${s|0}s`;
+const fmtTok = n => n >= 1000 ? (n/1000).toFixed(1) + "k" : String(n | 0);
+
+function termAgentsRender(T){
+  const box = $("#cc-agents");
+  if (!box) return;
+  // 서버 파싱(/api/agents — 실시간 라벨·토큰)이 있으면 그것을, 없으면
+  // transcript 근사(T.agents)를 그린다 (REQ-20260824-044)
+  const srv = (T.srvAgents || []).filter(a => a.active).slice(-5);
+  if (srv.length){
+    box.innerHTML = srv.map(a =>
+      `<div class="ag sub ccagrow" data-agent="${esc(a.id)}" title="클릭 또는 ← 키로 이 에이전트의 작업 내용을 터미널에서 본다">` +
+      `<span class="g">○</span> <b>${esc(a.type)}</b> ` +
+      `<span style="color:var(--cc-faint)">${esc(a.label || a.desc)}</span>` +
+      `<span class="r">${fmtDur(a.elapsed)} · ↓ ${fmtTok(a.tokens)} tokens</span></div>`).join("");
+    return;
+  }
+  box.innerHTML = T.agents.map(a =>
+    `<div class="ag sub"><span class="g">○</span> ${esc(a.type)} <span style="color:var(--cc-faint)">${esc(a.desc)}</span><span class="r">running</span></div>`).join("");
+}
+
+/* ---- 에이전트 뷰어 (REQ-044): 스트립 행 클릭/← 키 → 해당 에이전트 transcript
+   를 타임라인 자리에서 열람. 세션 스트림 기계와 완전 분리(ccout 숨김 토글만) —
+   입력줄 불변(L0). esc/←/main 클릭으로 복귀. ---- */
+function termStripBind(T){
+  const st = document.querySelector("#cc-root .ccstatus");
+  if (st) st.addEventListener("click", ev => {
+    if (TERM !== T) return;
+    const row = ev.target.closest(".ccagrow");
+    if (row){ termAgentOpen(T, row.dataset.agent); return; }
+    if (ev.target.closest(".ccmain")) termAgentClose(T);
+  });
+  const inp = $("#chat-in");
+  if (inp) inp.addEventListener("keydown", ev => {
+    if (TERM !== T || inp.value) return;
+    if (ev.key === "ArrowLeft" && !T.agv && (T.srvAgents || []).some(a => a.active)){
+      ev.preventDefault();
+      const act = T.srvAgents.filter(a => a.active);
+      termAgentOpen(T, act[act.length - 1].id);
+    } else if ((ev.key === "ArrowLeft" || ev.key === "Escape") && T.agv){
+      ev.preventDefault();
+      termAgentClose(T);
+    }
+  });
+}
+
+function termAgvLine(e){
+  const t = e.text || "";
+  if (e.role === "thinking")
+    return ccLine("✻", "var(--cc-dim)", ccFold(
+      `<span style="color:var(--cc-faint)">${esc(t.slice(0, 90))}…</span>`,
+      ccText(t)), "ccdim");
+  if (e.role === "tool")
+    return ccLine("●", "var(--cc-faint)",
+      `<b>${esc(e.name || "")}</b>(` + (t.length > 110
+        ? ccFold(esc(t.slice(0, 100)) + "…", ccText(t)) : esc(t)) + ")");
+  if (e.role === "result")
+    return ccLine("⎿", "var(--cc-faint)", t.length > 180
+      ? ccFold(esc(t.slice(0, 140)) + "…", ccText(t)) : ccText(t),
+      e.error ? "" : "ccdim");
+  if (e.role === "user")
+    return ccLine("❯", "var(--cc-dim)", ccText(t.slice(0, 3000)));
+  return ccLine("●", "", ccText(t.slice(0, 6000)));
+}
+
+function termAgentOpen(T, id){
+  termAgentClose(T);
+  const out = $("#ccout"), av = $("#cc-agview");
+  if (!out || !av || !T.sid) return;
+  const meta = (T.srvAgents || []).find(a => a.id === id) || {};
+  T.agv = {id, off: 0, timer: null};
+  out.hidden = true;
+  av.hidden = false;
+  av.innerHTML = ccLine("⚙", "var(--cc-green)",
+    `<b>${esc(meta.type || "agent")}</b> <span style="color:var(--cc-faint)">${esc(meta.desc || "")}` +
+    ` — ← 또는 esc 로 main 복귀</span>`);
+  const load = async () => {
+    if (TERM !== T || !T.agv || T.agv.id !== id) return;
+    const d = await ccFetch(
+      `/api/agentstream?session=${encodeURIComponent(T.sid)}` +
+      `&agent=${encodeURIComponent(id)}&after=${T.agv.off}`, 6000);
+    if (TERM !== T || !T.agv || T.agv.id !== id || !d) return;
+    T.agv.off = d.offset || T.agv.off;
+    if ((d.events || []).length){
+      const nearBottom = av.scrollHeight - av.scrollTop - av.clientHeight < 140;
+      av.insertAdjacentHTML("beforeend",
+        d.events.map(termAgvLine).filter(Boolean).join(""));
+      if (nearBottom) av.scrollTop = av.scrollHeight;
+    }
+  };
+  load();
+  T.agv.timer = setInterval(() => { if (!document.hidden) load(); }, 2000);
+  T.timers.push(T.agv.timer);
+}
+
+function termAgentClose(T){
+  if (T.agv){ clearInterval(T.agv.timer); T.agv = null; }
+  const out = $("#ccout"), av = $("#cc-agview");
+  if (av) av.hidden = true;
+  if (out) out.hidden = false;
+}
+
+async function refreshTermChat(T){
+  const d = await ccFetch("/api/chat/log?sid=" + encodeURIComponent(T.sid), 6000);
+  if (TERM !== T || !d || !T.sid) return;
+  const lines = d.lines || [];
+  if (lines.length <= T.chatCount){ T.chatCount = lines.length; return; }
+  const add = lines.slice(T.chatCount);
+  T.chatCount = lines.length;
+  const out = $("#ccout"), w = $("#cc-wait");
+  if (!out || !w) return;
+  out.querySelectorAll(".ln.pending").forEach(n => n.remove());  // 낙관 줄 → echo 대체
+  const nearBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 140;
+  w.insertAdjacentHTML("beforebegin", add.map(ccChatLine).join(""));
+  if (add.some(l => l.kind === "chat")){ T.lastRole = "user"; T.waitBase = Date.now(); }
+  termSpinnerEval(T);
+  if (nearBottom) out.scrollTop = out.scrollHeight;
+}
+
+/* ---- 입력줄 (L0/L4/L5/L7): 리스너는 셸 생성 시 1회 바인딩.
+   키 처리·팔레트 필터·로컬 에코는 전부 로컬 — 네트워크와 결합 금지(L1). ---- */
+function termBindInput(T){
+  const ta = $("#chat-in"), root = $("#cc-root"),
+        pal = $("#cc-pal"), att = $("#cc-att");
+  ta.addEventListener("keydown", e => termKeydown(T, e));
+  ta.addEventListener("input", () => {
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+    T.histIdx = null;          // 편집 시작 = 히스토리 탐색 종료
+    termPalUpdate(T);
+  });
+  ta.addEventListener("paste", e => {            // L5 — 클립보드 이미지
+    const items = [...(((e.clipboardData || {}).items) || [])]
+      .filter(i => i.kind === "file" && /^image\//.test(i.type));
+    if (!items.length) return;
+    e.preventDefault();
+    items.forEach(i => { const f = i.getAsFile(); if (f) termUpload(T, f); });
+  });
+  $("#cc-clip").addEventListener("click", () => $("#cc-file").click());
+  $("#cc-file").addEventListener("change", e => {
+    [...e.target.files].forEach(f => termUpload(T, f));
+    e.target.value = "";
+  });
+  root.addEventListener("dragover", e => {       // L5 — 드래그&드롭
+    const ty = e.dataTransfer ? [...e.dataTransfer.types] : [];
+    if (!ty.includes("Files")) return;
+    e.preventDefault(); e.stopPropagation();
+    root.classList.add("dragover");
+  });
+  root.addEventListener("dragleave", () => root.classList.remove("dragover"));
+  root.addEventListener("drop", e => {
+    root.classList.remove("dragover");
+    const fs = e.dataTransfer ? [...e.dataTransfer.files] : [];
+    if (!fs.length) return;
+    e.preventDefault(); e.stopPropagation();
+    fs.forEach(f => termUpload(T, f));
+  });
+  pal.addEventListener("mousedown", e => {       // mousedown — blur 전에 선택
+    const pi = e.target.closest("[data-pi]");
+    if (!pi) return;
+    e.preventDefault();
+    T.pal.idx = +pi.dataset.pi;
+    termPalPick(T);
+  });
+  att.addEventListener("click", e => {
+    const rm = e.target.closest("[data-attrm]");
+    if (!rm) return;
+    T.atts.splice(+rm.dataset.attrm, 1);
+    termAttRender(T);
+  });
+}
+
+function termKeydown(T, e){
+  const ta = e.target;
+  if (T.pal.open){                               // L4 — 팔레트 내비게이션
+    if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+      e.preventDefault();
+      const n = T.pal.items.length;
+      if (n) T.pal.idx = (T.pal.idx + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
+      termPalRender(T);
+      return;
+    }
+    if (e.key === "Enter" || e.key === "Tab"){ e.preventDefault(); termPalPick(T); return; }
+    if (e.key === "Escape"){ e.preventDefault(); termPalClose(T); return; }
+  }
+  if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendChat(); return; }
+  if (e.key === "Escape"){                       // L7 — 첨부 → 입력 순 클리어
+    e.preventDefault();
+    if (T.atts.length){ T.atts = []; termAttRender(T); }
+    else { ta.value = ""; ta.style.height = "auto"; T.histIdx = null; }
+    return;
+  }
+  // L7 — ↑/↓ 히스토리: 입력이 비어있거나 탐색 중일 때만. 편집 중엔 커서 이동.
+  if (e.key === "ArrowUp" && T.hist.length && (ta.value === "" || T.histIdx !== null)){
+    e.preventDefault();
+    T.histIdx = T.histIdx === null ? T.hist.length - 1 : Math.max(0, T.histIdx - 1);
+    ta.value = T.hist[T.histIdx];
+    ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    termPalClose(T);
+    return;
+  }
+  if (e.key === "ArrowDown" && T.histIdx !== null){
+    e.preventDefault();
+    T.histIdx++;
+    if (T.histIdx >= T.hist.length){ T.histIdx = null; ta.value = ""; }
+    else ta.value = T.hist[T.histIdx];
+    ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+    return;
+  }
+}
+
+function termClearLocal(T){                      // L7 — Ctrl+L (로컬 클리어)
+  termClearOut(T);
+  T.lastRole = null;
+  termSpinnerEval(T);
+}
+
+// 전역 단축키/포커스 리다이렉트 (L7) — 1회 등록, 터미널 탭에서만 동작
+document.addEventListener("keydown", e => {
+  if (tab !== "terminal" || !TERM) return;
+  const ta = $("#chat-in");
+  if (!ta) return;
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === "l" || e.key === "L")){
+    e.preventDefault(); termClearLocal(TERM); return;
+  }
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === "o" || e.key === "O")){
+    e.preventDefault();
+    const ds = document.querySelectorAll("#ccout details");
+    if (ds.length){ const d = ds[ds.length - 1]; d.open = !d.open; }
+    return;
+  }
+  if (e.target === ta) return;
+  if (e.target.closest && e.target.closest("input,textarea,select,[contenteditable]")) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key.length !== 1) return;
+  if (window.getSelection && String(getSelection())) return;  // 선택/복사 중 방해 금지
+  ta.focus();   // preventDefault 없음 — 문자는 그대로 입력줄에 꽂힌다
+});
+// 백그라운드 탭은 SSE 연결 반납, 복귀 시 마지막 offset으로 재접속 (live follow 규약)
+document.addEventListener("visibilitychange", () => {
+  const T = TERM;
+  if (!T || tab !== "terminal" || !T.sid) return;
+  if (document.hidden) termCloseSSE(T);
+  else if (!T.es && !T.poll){ T.esFails = 0; termConnectSSE(T); }
+});
+
+/* ---- / 팔레트 (L4): /api/chat/commands(스킬·커맨드) + CC 빌트인(CLI 전용 dim).
+   스킬/커맨드 선택 = "/이름 " 완성 — 전송하면 세션이 스킬로 처리한다. ---- */
+function termPalLoad(){
+  if (termCmdCache) return Promise.resolve(termCmdCache);
+  return ccFetch("/api/chat/commands", 5000).then(d => {
+    const got = d && d.commands;
+    const list = [...(got || []), ...CC_BUILTINS];
+    if (got) termCmdCache = list;   // 실패는 캐시하지 않는다 — 다음 열림에 재시도
+    return list;
+  });
+}
+function termPalUpdate(T){
+  const ta = $("#chat-in");
+  const v = ta.value;
+  if (!/^\/[A-Za-z0-9_:-]*$/.test(v)){ termPalClose(T); return; }
+  termPalLoad().then(items => {
+    if (TERM !== T) return;
+    if ($("#chat-in").value !== v) return;       // 그 사이 입력이 변함
+    const q = v.slice(1).toLowerCase();
+    const list = items
+      .filter(c => c.name.toLowerCase().includes(q))
+      .sort((a, b) =>
+        (b.name.toLowerCase().startsWith(q) ? 1 : 0) -
+        (a.name.toLowerCase().startsWith(q) ? 1 : 0) ||
+        a.name.localeCompare(b.name))
+      .slice(0, 12);
+    T.pal.items = list;
+    T.pal.idx = Math.max(0, Math.min(T.pal.idx, list.length - 1));
+    T.pal.open = list.length > 0;
+    termPalRender(T);
+  });
+}
+function termPalRender(T){
+  const pal = $("#cc-pal");
+  if (!pal) return;
+  pal.hidden = !T.pal.open;
+  if (!T.pal.open){ pal.innerHTML = ""; return; }
+  pal.innerHTML = T.pal.items.map((c, i) =>
+    `<div class="pi${i === T.pal.idx ? " sel" : ""}${c.source === "cli" ? " cli" : ""}" data-pi="${i}"><span class="pn">/${esc(c.name)}</span><span class="pd">${esc(c.desc || "")}${c.source === "cli" ? ' <span class="pcli">(CLI 전용)</span>' : ""}</span></div>`).join("");
+  const sel = pal.querySelector(".pi.sel");
+  if (sel) sel.scrollIntoView({block: "nearest"});
+}
+function termPalPick(T){
+  const c = T.pal.items[T.pal.idx];
+  if (!c) return;
+  const ta = $("#chat-in");
+  ta.value = "/" + c.name + " ";
+  termPalClose(T);
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+function termPalClose(T){
+  T.pal.open = false; T.pal.items = []; T.pal.idx = 0;
+  const pal = $("#cc-pal");
+  if (pal){ pal.hidden = true; pal.innerHTML = ""; }
+}
+
+/* ---- 이미지 첨부 (L5): 붙여넣기/드래그/📎 → /api/chat/upload(base64) →
+   칩 표시 → 전송 시 "[Image: <절대경로>]" 줄 추가 (CC 관례 — 세션이 Read). ---- */
+function termAttRender(T){
+  const box = $("#cc-att");
+  if (!box) return;
+  box.hidden = !T.atts.length;
+  box.innerHTML = T.atts.map((a, i) =>
+    `<span class="chip">[Image #${i + 1}] ${esc(a.name)}${a.up ? ' <span class="up">uploading…</span>' : ""}<button data-attrm="${i}" title="제거">×</button></span>`).join("");
+}
+async function termUpload(T, file){
+  if (file.size > 10 * 1024 * 1024){ termErr("✗ 첨부가 너무 크다 (10MB 한도)"); return; }
+  const a = {name: file.name || "pasted.png", up: true, path: null};
+  T.atts.push(a);
+  termAttRender(T);
+  try{
+    const data = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = () => rej(new Error("파일 읽기 실패"));
+      fr.readAsDataURL(file);
+    });
+    const r = await fetch("/api/chat/upload", {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({name: a.name, data})});
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "업로드 실패");
+    a.path = d.path; a.up = false;
+    if (TERM === T){ termErrClear(); termAttRender(T); }
+  }catch(ex){
+    if (TERM === T){
+      T.atts = T.atts.filter(x => x !== a);
+      termAttRender(T);
+      termErr("✗ 첨부 실패: " + (ex && ex.message ? ex.message : ex));
+    }
+  }
+}
+function termErr(msg){
+  const err = $("#chat-err");
+  if (err){ err.textContent = msg; err.hidden = false; }
+}
+function termErrClear(){
+  const err = $("#chat-err");
+  if (err) err.hidden = true;
+}
+
+async function sendChat(){
+  const T = TERM, ta = $("#chat-in");
+  if (!T || !T.sid || !ta || ta.disabled) return;
+  const raw = ta.value.trim();
+  if (T.atts.some(a => a.up)){ termErr("✗ 첨부 업로드 중 — 잠시 후 전송"); return; }
+  const atts = T.atts.filter(a => a.path);
+  if (!raw && !atts.length) return;
+  let text = raw;
+  atts.forEach(a => { text += `\n[Image: ${a.path}]`; });
+  // 로컬 에코 + 입력 클리어는 즉시(동기) — 네트워크 왕복과 결합하지 않는다 (L1).
+  // 성공 시 수신함 echo 도착이 .pending을 제거·대체한다. 전송 중 입력 비활성화 금지.
+  const out = $("#ccout"), w = $("#cc-wait");
+  let pend = null;
+  if (out && w){
+    const clip = atts.length
+      ? ` <span style="color:var(--cc-dim)">📎${atts.length}</span>` : "";
+    w.insertAdjacentHTML("beforebegin",
+      `<div class="ln pending"><span class="g" style="color:var(--cc-dim)">❯</span><span class="b">${ccText(raw || "(첨부)")}${clip}</span></div>`);
+    pend = w.previousElementSibling;
+    out.scrollTop = out.scrollHeight;
+  }
+  if (raw && T.hist[T.hist.length - 1] !== raw) T.hist.push(raw);
+  T.histIdx = null;
+  ta.value = ""; ta.style.height = "auto";
+  T.atts = []; termAttRender(T);
+  termPalClose(T);
+  T.lastRole = "user"; T.waitBase = Date.now();
+  termSpinnerEval(T);
+  try{
+    const r = await fetch("/api/chat", {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text, sid: T.sid})});
+    const d = await r.json();
+    if (TERM !== T) return;
+    if (!d.ok) throw new Error(d.error || "전송 실패");
+    termErrClear();
+    refreshTermChat(T);
+  }catch(ex){
+    if (TERM !== T) return;
+    if (pend && pend.isConnected) pend.remove();
+    termErr("✗ " + (ex && ex.message ? ex.message
+      : "서버에 연결할 수 없습니다 — 잠시 후 다시 시도"));
+    if (!ta.value) ta.value = raw;   // 실패 시 입력 복원 — 바로 재전송 가능
+    T.lastRole = null;
+    termSpinnerEval(T);
+  }
+  ta.focus();
+}
+
+/* ------- graph (Obsidian-style: live physics, drag, pan/zoom, hover focus) ------- */
+let ganim = null;
+let graphPos = {}, graphTf = null;  // auto refresh 시 배치/줌 보존
+let graphLayout = (() => {         // force(자유 물리) | dag(계층 — 병목 파악용)
+  try{ return localStorage.getItem("s9glayout") || "force"; }catch(e){ return "force"; }
+})();
+
+function stopGraph(){
+  if (ganim){
+    cancelAnimationFrame(ganim.raf);
+    if (ganim.save) ganim.save();
+    ganim = null;
+  }
+}
+
+async function renderGraph(rows){
+  if (!graph) graph = await (await fetch("/api/graph?" + meQ())).json();
+  // 타입 표시 토글 (REQ-20260824-026): 세션 노드는 로그성 소음이라 기본 숨김 —
+  // 범례 클릭으로 타입별 on/off (localStorage 유지)
+  const visible = new Set(rows.filter(r => gtypes.has(r.type)).map(r => r.id));
+  const nodes = graph.nodes.filter(n => visible.has(n.id)).map(n => ({...n}));
+  const edges = graph.edges.filter(e => visible.has(e.from) && visible.has(e.to));
+  const deg = {};
+  edges.forEach(e => { deg[e.from]=(deg[e.from]||0)+1; deg[e.to]=(deg[e.to]||0)+1; });
+  const adj = {};
+  edges.forEach(e => {
+    (adj[e.from] = adj[e.from] || new Set()).add(e.to);
+    (adj[e.to] = adj[e.to] || new Set()).add(e.from);
+  });
+  // 병목 가중치: 미완료 노드의 "미완료 파생(자손) 수" — 이 노드가 막고 있는 작업량
+  const childrenOf = {};
+  edges.filter(e => e.rel === "parent").forEach(e => {
+    (childrenOf[e.to] = childrenOf[e.to] || []).push(e.from);  // to=부모, from=자식
+  });
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const pendingMemo = {};
+  const isPending = id => {
+    const n = byId[id];
+    return n && n.status !== "done" && n.status !== "cancelled" && n.type === "request";
+  };
+  const pendingDesc = id => {
+    if (id in pendingMemo) return pendingMemo[id];
+    pendingMemo[id] = 0;  // 순환 가드
+    let c = 0;
+    for (const ch of (childrenOf[id] || []))
+      c += (isPending(ch) ? 1 : 0) + pendingDesc(ch);
+    return pendingMemo[id] = c;
+  };
+  nodes.forEach(n => n.waiting = isPending(n.id) ? pendingDesc(n.id) : 0);
+
+  $("#view").innerHTML = `<div class="graphwrap">
+    <div class="legend">
+      <button class="gmode${graphLayout==="force"?" on":""}" data-glayout="force">force</button>
+      <button class="gmode${graphLayout==="dag"?" on":""}" data-glayout="dag">dag</button>
+      ${["request","knowledge","session"].map(t => `<span class="gtype${gtypes.has(t) ? "" : " off"}" data-gtype="${t}"
+        title="클릭 = ${t} 노드 표시 토글"><span class="dot" style="background:${TCOLOR[t]}"></span>${t}</span>`).join("")}
+      <span style="margin-left:auto">앰버 호+숫자 = 미완료 파생 병목(1건=¼둘레, 4건+=만원) · 점멸 = in-progress · 실선 링 = blocked · 점선 링 = review</span>
+    </div>
+    <canvas id="gcanvas"></canvas>
+    <div class="ghint">${graphLayout==="dag" ? "dag: 위→아래 = parent→파생 · " : ""}드래그 = 이동/노드 끌기 · 휠 = 줌 · 클릭 = 문서 열기</div>
+  </div>`;
+
+  const canvas = $("#gcanvas");
+  const dark = isDarkTheme();
+  const bgColor = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || (dark ? "#111214" : "#fafaf8");
+  const wrap = canvas.parentElement;
+  const W = wrap.clientWidth || 1200, H = Math.max(420, innerHeight - 210);
+  const dpr = devicePixelRatio || 1;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.height = H + "px";
+  const ctx = canvas.getContext("2d");
+  // ---- 우주 별무리 공간감 (2026-08-23 반려 반영: 노드 개체 광택 대신 장면 레벨 깊이) ----
+  // 스타필드: 멀리 있는 희미한 입자를 깊이 레이어별 오프스크린 타일에 1회만 렌더 →
+  // 매 프레임은 pattern fill뿐(프레임당 arc 0개). 팬/줌 시 레이어마다 다르게 움직여
+  // (시차 parallax) 깊이가 생긴다. 배경 전용 — 노드 좌표·히트테스트·물리에 무관.
+  const parseCol = v => { ctx.fillStyle = "#888"; ctx.fillStyle = v; const s = ctx.fillStyle;
+    if (s[0] === "#") return [1,3,5].map(i => parseInt(s.slice(i, i+2), 16));
+    const m = s.match(/[\d.]+/g); return m ? m.slice(0,3).map(Number) : [136,136,136]; };
+  const rootCS = getComputedStyle(document.documentElement);
+  const bgRGB = parseCol(bgColor);
+  // 타입색은 토큰 해석값 사용 — skin/tone이 타입 토큰을 재정의하면 그래프도 따라간다 (스킨 무관 구조 개선 — 유지)
+  const TC = {};
+  for (const k of ["request","knowledge","session"])
+    TC[k] = rootCS.getPropertyValue("--t-" + k).trim() || TCOLOR_RAW[k];
+  const TCrgb = {};
+  for (const k in TC) TCrgb[k] = parseCol(TC[k]);
+  // 대기 원근(aerial perspective): 원경 노드 색을 배경 쪽으로 — 알파 단독보다 깊이가 뚜렷
+  const mixToBg = (rgb, m) => rgb.map((c, i) => Math.round(c + (bgRGB[i] - c) * m));
+  // 비네트: 가장자리를 bg 파생 셰이드로 살짝 가라앉혀 중앙 클러스터에 깊이 — 1회 생성
+  const vignette = ctx.createRadialGradient(W/2, H/2, Math.min(W, H) * 0.38,
+                                            W/2, H/2, Math.hypot(W, H) * 0.62);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, `rgba(${bgRGB.map(c => Math.round(c * 0.45)).join(",")},${dark ? 0.5 : 0.18})`);
+
+  let restored = 0;
+  if (graphLayout === "dag"){
+    // 계층 배치: parent 체인 기준 depth(위=루트, 아래=파생). 병목이 위계로 보인다.
+    const parentOf = {};
+    edges.filter(e => e.rel === "parent").forEach(e => parentOf[e.from] = e.to);
+    const depth = {};
+    const depthOf = (id, seen) => {
+      if (id in depth) return depth[id];
+      if (seen.has(id)) return 0;
+      seen.add(id);
+      const p = parentOf[id];
+      return depth[id] = (p && byId[p]) ? depthOf(p, seen) + 1 : 0;
+    };
+    nodes.forEach(n => depthOf(n.id, new Set()));
+    const layers = {};
+    nodes.forEach(n => (layers[depth[n.id]] = layers[depth[n.id]] || []).push(n));
+    Object.entries(layers).forEach(([d, layer]) => {
+      // 부모 x 기준 정렬로 교차 최소화 (단순 barycenter)
+      layer.sort((a, b) => {
+        const px = id => { const p = parentOf[id]; return p && byId[p] ? byId[p].x || 0 : 0; };
+        return px(a.id) - px(b.id);
+      });
+      const gap = Math.min(170, (W - 120) / Math.max(layer.length, 1));
+      layer.forEach((n, i) => {
+        n.x = W/2 + (i - (layer.length - 1) / 2) * gap;
+        n.y = 70 + d * 105;
+      });
+    });
+    nodes.forEach(n => { n.vx = 0; n.vy = 0;
+      n.r = 5 + Math.min(9, 2.2 * Math.sqrt(deg[n.id] || 0)); });
+  } else {
+    nodes.forEach((n, i) => {
+      const saved = graphPos[n.id];
+      if (saved){ n.x = saved.x; n.y = saved.y; restored++; }
+      else {
+        const a = 2 * Math.PI * i / Math.max(nodes.length, 1);
+        const rr = 120 + 90 * ((i * 7919) % 13) / 13;   // 결정적 초기 산포
+        n.x = W/2 + Math.cos(a) * rr; n.y = H/2 + Math.sin(a) * rr;
+      }
+      n.vx = 0; n.vy = 0;
+      n.r = 5 + Math.min(9, 2.2 * Math.sqrt(deg[n.id] || 0));
+    });
+  }
+  // 병목 노드는 물리적으로도 크게 — 시선이 먼저 간다
+  nodes.forEach(n => { if (n.waiting) n.r += Math.min(7, 1.8 * Math.sqrt(n.waiting)); });
+  const idx = Object.fromEntries(nodes.map((n,i) => [n.id, i]));
+  // ---- 노드 z축 (2026-08-24 반려 반영: 배경 말고 노드 구름 자체에 깊이) ----
+  // zf 0=전경 1=원경. 반지름과 독립된 축: 해시(안정 산포) + 허브 근접 + 상태 의미
+  // (진행/블록/리뷰=전경으로 끌리고, 종결=원경으로 물러남 — 깊이가 의미를 갖는다).
+  const hash01 = id => { let h = 2166136261;
+    for (let i = 0; i < id.length; i++){ h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return ((h >>> 8) & 0xffff) / 65535; };
+  let degMax = 1;
+  nodes.forEach(n => { degMax = Math.max(degMax, deg[n.id] || 0); });
+  nodes.forEach(n => {
+    const hub = Math.sqrt((deg[n.id] || 0) / degMax);
+    const act = n.status === "in-progress" || n.status === "blocked" || n.status === "review";
+    const fin = n.status === "done" || n.status === "cancelled";
+    n.zf = Math.min(0.97, Math.max(0.03,
+      0.50 * hash01(n.id) + 0.42 * (1 - hub) + (act ? -0.30 : 0) + (fin ? 0.22 : 0)));
+    n.near = 1 - n.zf;
+  });
+  const drawOrder = [...nodes].sort((a, b) => b.zf - a.zf);   // 원경부터 → 전경이 덮는다
+  const depthOf01 = n => n.near;                              // 에지 페이드 호환 (0=원경 1=전경)
+
+  const st = { tf: graphTf ? {...graphTf} : {x:0,y:0,k:1},
+               // dag=고정 배치(물리 off), force=기존 배치 살아있으면 살짝만 재정착
+               alpha: graphLayout === "dag" ? 0.005
+                      : restored > nodes.length * 0.6 ? 0.12 : 1,
+               hover:null, drag:null, pan:null, moved:0,
+               dx:0, dy:0, lastTouch: performance.now() };
+  const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // 깊이 투영: 팬 오프셋을 깊이에 가중(전경이 더 크게 흐름) — 팬/줌 시 노드 사이
+  // 상대 이동(운동 시차)이 생겨 구름이 부피로 읽힌다. 줌 k는 전 깊이 공통(역변환 단순).
+  const pfOf = n => 0.72 + 0.52 * n.near;                    // 원경 0.72 ~ 전경 1.24
+  const sxOf = n => n.x * st.tf.k + (st.tf.x + st.dx) * pfOf(n);
+  const syOf = n => n.y * st.tf.k + (st.tf.y + st.dy) * pfOf(n);
+  const scOf = n => st.tf.k * (0.62 + 0.55 * n.near);        // 깊이 반지름 배율(원근 축소)
+  // 시험 이음새: CDP 검증이 스크린 좌표·zf·카메라 드리프트를 수치로 확인 (REQ-078)
+  window.__gdbg = { snap: () => nodes.map(n => ({ id: n.id, sx: sxOf(n), sy: syOf(n),
+    zf: n.zf, rr: n.r * scOf(n) })),
+    cam: () => ({ dx: st.dx, dy: st.dy }) };
+
+  function step(){
+    const a = st.alpha;
+    for (let i = 0; i < nodes.length; i++) for (let j = i+1; j < nodes.length; j++){
+      const p = nodes[i], q = nodes[j];
+      let dx = p.x-q.x, dy = p.y-q.y, d2 = dx*dx+dy*dy || 1;
+      if (d2 > 90000) continue;
+      const d = Math.sqrt(d2), f = 2600 / d2 * a;
+      p.vx += f*dx/d; p.vy += f*dy/d; q.vx -= f*dx/d; q.vy -= f*dy/d;
+    }
+    for (const e of edges){
+      const p = nodes[idx[e.from]], q = nodes[idx[e.to]];
+      let dx = q.x-p.x, dy = q.y-p.y, d = Math.sqrt(dx*dx+dy*dy) || 1;
+      const f = (d - 130) * 0.05 * a;
+      p.vx += f*dx/d; p.vy += f*dy/d; q.vx -= f*dx/d; q.vy -= f*dy/d;
+    }
+    for (const n of nodes){
+      if (st.drag === n) { n.vx = n.vy = 0; continue; }
+      n.vx += (W/2 - n.x) * 0.004 * a; n.vy += (H/2 - n.y) * 0.004 * a;
+      n.x += n.vx; n.y += n.vy; n.vx *= 0.85; n.vy *= 0.85;
+    }
+    st.alpha = Math.max(0.005, st.alpha * 0.985);
+  }
+
+  function draw(){
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, W, H);
+    // 유휴 카메라 드리프트: 정지 화면에서도 깊이별 상대 운동이 보이게 (5차 반려 반영).
+    // 인터랙션 5초 후 3초 페이드인, ±8px 리사주(비정수 주기비 — 반복 패턴 없음)
+    const tnow = performance.now();
+    const idleAmp = (!RM && tnow - st.lastTouch > 5000)
+      ? Math.min(1, (tnow - st.lastTouch - 5000) / 3000) : 0;
+    st.dx = idleAmp * 8 * Math.sin(tnow / 2900);
+    st.dy = idleAmp * 6 * Math.sin(tnow / 4100 + 1.7);
+    // (6차 반려로 배경 스타필드 제거 — 깊이는 노드 z축·유휴 드리프트가 담당)
+    ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
+    const hov = st.hover, nb = hov ? (adj[hov.id] || new Set()) : null;
+    const dim = id => hov && id !== hov.id && !nb.has(id);
+    for (const e of edges){
+      const p = nodes[idx[e.from]], q = nodes[idx[e.to]];
+      const hot = hov && (e.from === hov.id || e.to === hov.id);
+      ctx.beginPath(); ctx.moveTo(sxOf(p), syOf(p)); ctx.lineTo(sxOf(q), syOf(q));
+      ctx.setLineDash(e.rel === "parent" ? [] : [4, 4]);
+      if (hot){
+        ctx.lineWidth = 1.8;
+        ctx.strokeStyle = dark ? "#8b9cf5" : "#6474e0";
+      } else {
+        // 에지 원근: 깊은 쪽 끝점을 따라 얇고 흐리게 — 에지가 깊이 방향으로 가라앉는다
+        const dz = 0.6 * Math.min(depthOf01(p), depthOf01(q))
+                 + 0.4 * (depthOf01(p) + depthOf01(q)) / 2;
+        const ea = (hov ? (dark ? .15 : .2) : (dark ? .5 : .6)) * (0.30 + 0.70 * dz);
+        ctx.lineWidth = 0.6 + 0.9 * dz;
+        ctx.strokeStyle = dark ? `rgba(90,105,130,${ea})` : `rgba(150,165,190,${ea})`;
+      }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    const now = performance.now();
+    // 활성 상태 링 색 (canvas는 CSS 변수 rgba 조립을 위해 raw RGB)
+    const RING = dark
+      ? {"in-progress":"217,149,55", blocked:"224,93,93", review:"165,130,232"}
+      : {"in-progress":"180,83,9",  blocked:"185,28,28", review:"109,40,217"};
+    function drawNode(n){
+      const terminal = n.status === "done" || n.status === "cancelled";
+      const faded = dim(n.id);
+      const hovered = hov && n.id === hov.id;
+      const px = sxOf(n), py = syOf(n);
+      const rr = n.r * scOf(n) * (hovered ? 1.12 : 1);
+      // 깊이 3중주: 투명도(반려 요구) + 대기 원근(색이 배경으로 물러남) + 크기 감쇠.
+      // 7차 반려로 대비 강화: 하한 0.12 + 지수 커브 — 원근 차이가 정지 화면에서도 즉시 보인다.
+      // hover는 일시 전경화(알파 1·원색) — 깊은 노드도 짚으면 앞으로 나온다.
+      const bodyA = faded ? 0.12 : hovered ? 1
+                  : (terminal ? 0.55 : 1) * (0.12 + 0.88 * Math.pow(n.near, 1.35));
+      const sigA  = faded ? 0.12 : terminal ? 0.45 : Math.max(0.6, n.near + 0.35);
+      ctx.globalAlpha = bodyA;
+      if (hovered){ ctx.shadowColor = TC[n.type] || "#999"; ctx.shadowBlur = 14; }
+      ctx.beginPath(); ctx.arc(px, py, rr, 0, 7);
+      const rgb = TCrgb[n.type] || [153,153,153];
+      ctx.fillStyle = `rgb(${(hovered ? rgb : mixToBg(rgb, 0.55 * n.zf)).join(",")})`;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = sigA;
+      if (!faded && RING[n.status]){
+        const rc = RING[n.status];
+        if (n.status === "in-progress"){
+          const t = (now % 1800) / 1800;
+          ctx.beginPath(); ctx.arc(px, py, rr + (3 + t * 11) * st.tf.k, 0, 7);
+          ctx.strokeStyle = `rgba(${rc},${(1 - t) * 0.7})`;
+          ctx.lineWidth = 1.6; ctx.stroke();
+        }
+        ctx.beginPath(); ctx.arc(px, py, rr + 3 * st.tf.k, 0, 7);
+        ctx.setLineDash(n.status === "review" ? [3, 3] : []);
+        ctx.strokeStyle = `rgba(${rc},0.95)`;
+        ctx.lineWidth = n.status === "blocked" ? 2 : 1.1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (!faded && n.waiting > 0){
+        // 병목 게이지: 둘레를 채우는 앰버 호 (1건=90°, 4건+=만원) — 점선 후광 대체
+        // (5차 반려: 3중 인코딩 과잉 → 호 게이지 + 캡슐 배지로 정리)
+        const frac = Math.min(1, n.waiting / 4);
+        ctx.beginPath();
+        ctx.arc(px, py, rr + 5 * st.tf.k, -Math.PI/2, -Math.PI/2 + frac * 2 * Math.PI);
+        ctx.strokeStyle = dark ? "rgba(217,149,55,.85)" : "rgba(180,83,9,.8)";
+        ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.stroke(); ctx.lineCap = "butt";
+        // 파생 수는 노드 안에 — 별도 배지 제거 (7차 반려). 작은 노드는 숫자 생략,
+        // 양은 호 게이지가 전달한다.
+        if (rr >= 7){
+          ctx.font = `700 ${Math.max(8, Math.min(11, rr))}px ui-monospace,monospace`;
+          ctx.fillStyle = dark ? "#0b0c0e" : "#ffffff";
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(String(n.waiting), px, py + 0.5);
+          ctx.textBaseline = "alphabetic";
+        }
+      }
+      const showLabel = !faded && ((st.tf.k > 0.75 && n.near > 0.45) ||
+        (hov && (n.id === hov.id || nb.has(n.id))) || graphLayout === "dag");
+      if (showLabel){
+        ctx.font = `11px "Noto Sans KR",sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillStyle = dark ? `rgba(226,232,240,${.35 + .5 * n.near})`
+                             : `rgba(24,32,43,${.3 + .5 * n.near})`;
+        const t = n.title.length > 16 ? n.title.slice(0,16) + "…" : n.title;
+        ctx.fillText(t, px, py + rr + 13);
+      }
+      ctx.globalAlpha = 1;
+    }
+    // 원경→전경 순서로: 가까운 노드가 먼 노드를 덮는다. hover는 최전면.
+    for (const n of drawOrder) if (!hov || n.id !== hov.id) drawNode(n);
+    if (hov) drawNode(hov);
+  }
+
+  function loop(){
+    if (st.alpha > 0.006) step();
+    draw();
+    ganim.raf = requestAnimationFrame(loop);
+  }
+
+  // 히트테스트: 깊이 투영과 동일한 스크린 좌표로 판정 — 전경(위에 그려진 것)부터.
+  const hit = (mx, my) => {
+    for (let i = drawOrder.length - 1; i >= 0; i--){
+      const n = drawOrder[i], dx = mx - sxOf(n), dy = my - syOf(n);
+      const rr = n.r * scOf(n) + 4;
+      if (dx*dx + dy*dy < rr*rr) return n;
+    }
+    return null;
+  };
+  const pos = e => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+
+  canvas.addEventListener("pointerdown", e => {
+    const [mx, my] = pos(e); st.moved = 0; st.lastTouch = performance.now();
+    const n = hit(mx, my);
+    if (n){ st.drag = n; if (graphLayout === "force") st.alpha = Math.max(st.alpha, 0.3); }
+    else st.pan = { mx, my, x: st.tf.x, y: st.tf.y };
+    canvas.classList.add("grabbing");
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", e => {
+    const [mx, my] = pos(e);
+    if (st.drag){
+      st.lastTouch = performance.now();
+      const pf = pfOf(st.drag);  // 드래그 역변환도 같은 투영(드리프트 포함) — 커서에 정확히
+      st.drag.x = (mx - (st.tf.x + st.dx) * pf) / st.tf.k;
+      st.drag.y = (my - (st.tf.y + st.dy) * pf) / st.tf.k; st.moved += 2;
+      if (graphLayout === "force") st.alpha = Math.max(st.alpha, 0.25);
+    } else if (st.pan){
+      st.lastTouch = performance.now();
+      st.tf.x = st.pan.x + (mx - st.pan.mx); st.tf.y = st.pan.y + (my - st.pan.my);
+      st.moved += 2;
+    } else {
+      const n = hit(mx, my);
+      if (n !== st.hover){ st.hover = n; canvas.style.cursor = n ? "pointer" : "grab"; }
+    }
+  });
+  canvas.addEventListener("pointerup", e => {
+    if (st.drag && st.moved < 4){
+      const id = st.drag.id;
+      selectedDoc = id; tab = "docs";
+      document.querySelectorAll("[data-tab]").forEach(b =>
+        b.classList.toggle("active", b.dataset.tab === "docs"));
+      stopGraph(); render(); return;
+    }
+    st.drag = null; st.pan = null;
+    canvas.classList.remove("grabbing");
+  });
+  canvas.addEventListener("wheel", e => {
+    e.preventDefault();
+    st.lastTouch = performance.now();
+    const [mx, my] = pos(e);
+    const k2 = Math.min(4, Math.max(0.25, st.tf.k * (e.deltaY < 0 ? 1.12 : 0.89)));
+    st.tf.x = mx - (mx - st.tf.x) * k2 / st.tf.k;
+    st.tf.y = my - (my - st.tf.y) * k2 / st.tf.k;
+    st.tf.k = k2;
+  }, { passive: false });
+  canvas.addEventListener("pointerleave", () => { st.hover = null; });
+
+  stopGraph();
+  ganim = { raf: 0, save(){
+    if (graphLayout !== "force") return;  // dag 배치를 force 저장본에 덮지 않음
+    nodes.forEach(n => graphPos[n.id] = {x: n.x, y: n.y});
+    graphTf = {...st.tf};
+  }};
+  loop();
+}
+
+/* ---------------- users 탭 (계정/프로필/개인화) ---------------- */
+let selectedUser = null;
+
+// admin 대리 모드(asUser)면 쓰기 본문에 as 를 첨부 — 그 외 신원 파라미터는 보내지
+// 않는다 (actor 는 서버 whoami 파생, REQ-20260824-027)
+const withAs = body => asUser ? {...body, as: asUser} : body;
+
+async function postJSON(url, body){
+  try{
+    const r = await fetch(url, {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(withAs(body))});
+    const d = await r.json();
+    if (!d.ok){ alert("거부: " + d.error); return false; }
+    return true;
+  }catch(e){ alert("서버에 연결할 수 없습니다"); return false; }
+}
+
+let settingsSection = "display";  // display | account | users
+
+async function renderSettings(){
+  let data = {users: []};
+  try{ data = await (await fetch("/api/users")).json(); }catch(e){}
+  window.__users = data.users;
+  const me = getMe();   // 서버 파생 whoami (미등록이면 "")
+  const meAdmin = isAdmin();
+  const SECTIONS = [
+    ["display", "디스플레이", "스킨·톤·밀도 (내 계정에 저장)"],
+    ["account", "내 계정", me ? `@${me} 프로필·개인화` : "미등록 계정"],
+    ["users", "사용자 관리", meAdmin ? "등록·역할·시점 미리보기 (admin)" : "admin 전용"],
+    ["about", "시스템", "저장소·통계·문서 안내"],
+  ];
+  $("#count").textContent = `Settings — ${me ? "@"+me : "미등록 계정"}`;
+  const nav = SECTIONS.map(([k, label, sub]) =>
+    `<div class="row${k===settingsSection?" sel":""}" data-sset="${k}">
+      <div>${esc(label)}</div><div class="path">${esc(sub)}</div></div>`).join("");
+  $("#view").innerHTML = `<div class="docs">
+    <div class="doclist"><div class="grp">설정</div>${nav}
+      <a class="row" href="/guide.html" target="_blank" style="display:block;text-decoration:none"><div>가이드 열기</div><div class="path">/guide.html — 사용자 안내서</div></a></div>
+    <div class="viewer" id="sview"></div></div>`;
+  renderSettingsSection(meAdmin);
+}
+
+function renderSettingsSection(meAdmin){
+  const v = $("#sview");
+  if (!v) return;
+  document.querySelectorAll("[data-sset]").forEach(el =>
+    el.classList.toggle("sel", el.dataset.sset === settingsSection));
+  const me = getMe();
+  if (settingsSection === "display"){
+    const cur = {};
+    UI_DIMS.forEach(d => cur[d.attr] = document.documentElement.dataset[d.attr] || d.def);
+    const rows = UI_DIMS.map(d => `<tr><td>${esc(d.label)}</td><td>
+      <select class="uf" data-dim="${d.attr}">
+        ${d.opts.map(([val,txt]) => `<option value="${esc(val)}"${val===cur[d.attr]?" selected":""}>${esc(txt)}</option>`).join("")}
+      </select></td></tr>`).join("");
+    v.innerHTML = `<h1 style="margin:0 0 4px">디스플레이</h1>
+      <div class="path">${me ? `@${me} 계정에 저장 — 다른 기기에서도 적용됩니다.` : "미등록 계정 — s9 user add 로 등록하면 계정에 저장되어 기기 간 동기화됩니다. 지금은 이 브라우저에만 저장."}</div>
+      <table class="metatbl">${rows}</table>
+      <div class="path">skin=레이아웃/컴포넌트 문법 · tone=색 팔레트 · density=여백 밀도. 조합은 자유. 변경 즉시 적용됩니다.</div>`;
+    // 각 select에 change 바인딩 — render() 없이 값만 적용(재렌더로 select 파괴되던 버그 수정).
+    // skin/density는 다른 탭 레이아웃에 영향 → Settings에 머무는 동안엔 즉시 CSS 반영으로 충분.
+    v.querySelectorAll("select[data-dim]").forEach(sel => {
+      sel.addEventListener("change", async () => {
+        const d = UI_DIMS.find(x => x.attr === sel.dataset.dim);
+        await setUIDim(d, sel.value);
+      });
+    });
+  } else if (settingsSection === "account"){
+    if (!me){ v.innerHTML = `<p class="empty">이 OS 계정(${esc((window.__whoami||{}).user||"?")})은 미등록입니다 — 터미널에서 <code>s9 user add ${esc((window.__whoami||{}).user||"&lt;이름&gt;")}</code> 으로 등록하세요. 다른 이름의 기존 계정에 연결하려면 <code>s9 user attach &lt;이름&gt;</code>.</p>`; return; }
+    const u = (window.__users||[]).find(x => x.name === me);
+    if (u) showUserForm(u, v, false);
+  } else if (settingsSection === "users"){
+    if (!meAdmin){ v.innerHTML = `<p class="empty">사용자 관리는 admin만 가능합니다. (whoami=${esc((window.__whoami||{}).user||"?")})</p>`; return; }
+    const list = (window.__users||[]).map(u => `<div class="urow" data-uname="${esc(u.name)}">
+        <span class="st">${esc(u.role)}</span> <b>${esc(u.display||u.name)}</b>
+        <span class="path">@${esc(u.name)} · ${esc((u.registered||"").slice(0,10))}</span></div>`).join("");
+    v.innerHTML = `<h1 style="margin:0 0 10px">사용자 관리</h1>
+      <div class="ulist">${list}</div>
+      <div class="cfg-h">새 사용자 등록</div>
+      <div class="uform" style="max-width:340px">
+        <input id="nu-name" type="text" placeholder="계정명 (영문/숫자/._-)">
+        <input id="nu-display" type="text" placeholder="표시 이름 (선택)">
+        <input id="nu-email" type="text" placeholder="email (선택)">
+        <select id="nu-role"><option value="member">role: member</option>
+          <option value="viewer">role: viewer</option><option value="admin">role: admin</option></select>
+        <button id="nu-add">＋ 등록</button>
+      </div>
+      <div class="cfg-h">시점 미리보기 / 대리 (admin)</div>
+      <div class="path">다른 사용자의 화면(열람 격리)을 그대로 보고, 그 사용자로 조작합니다. 저장되지 않으며 이 화면에서만 유효합니다.</div>
+      <select id="as-user" class="uf">
+        <option value="">(내 시점 — 미리보기 해제)</option>
+        ${(window.__users||[]).filter(x => x.name !== me).map(x =>
+          `<option value="${esc(x.name)}"${x.name===asUser?" selected":""}>@${esc(x.name)} [${esc(x.role)}] 시점으로 보기</option>`).join("")}
+      </select>
+      <div id="uedit" style="margin-top:20px"></div>`;
+    $("#as-user").addEventListener("change", e => {
+      asUser = e.target.value;
+      onViewerChanged();
+    });
+    $("#nu-add").addEventListener("click", async () => {
+      const name = $("#nu-name").value.trim();
+      if (!name){ alert("계정명을 입력하세요"); return; }
+      if (await postJSON("/api/user/add", {name, display: $("#nu-display").value.trim(),
+          email: $("#nu-email").value.trim(), role: $("#nu-role").value}))
+        renderSettings();
+    });
+    v.querySelectorAll("[data-uname]").forEach(el => el.addEventListener("click", () => {
+      const u = (window.__users||[]).find(x => x.name === el.dataset.uname);
+      if (u) showUserForm(u, $("#uedit"), true);
+    }));
+  } else if (settingsSection === "about"){
+    const c = catalog;
+    const byType = {}, byStatus = {};
+    c.forEach(r => { byType[r.type]=(byType[r.type]||0)+1;
+      if(r.type==="request") byStatus[r.status]=(byStatus[r.status]||0)+1; });
+    v.innerHTML = `<h1 style="margin:0 0 10px">시스템</h1>
+      <table class="metatbl">
+        <tr><td>저장소</td><td class="path">~/section9 (로컬 md + git 동기화)</td></tr>
+        <tr><td>문서 수</td><td>${c.length} — request ${byType.request||0}, knowledge ${byType.knowledge||0}, session ${byType.session||0}</td></tr>
+        <tr><td>요청 상태</td><td>${Object.entries(byStatus).map(([k,n])=>`${k} ${n}`).join(" · ")||"(없음)"}</td></tr>
+        <tr><td>등록 사용자</td><td>${(window.__users||[]).map(u=>`@${esc(u.name)}[${esc(u.role)}]`).join(" ")||"(없음)"}</td></tr>
+      </table>
+      <div class="cfg-h">설계 문서</div>
+      <div class="path" style="line-height:1.9">
+        docs/00~11 (개요·포맷·인덱스·상태머신·검색·대시보드·audit·사용자·git·설치/인가·부트스트랩·Windows)<br>
+        harness/README.md (멀티 하네스) · harness/claude/agents/README.md (에이전트 26종)<br>
+        CLI: <code>s9 digest / ls / search --body / show / status / note / serve / shot</code>
+      </div>
+      <div class="cfg-h">이 대시보드</div>
+      <div class="path" style="line-height:1.9">
+        읽기 = 자유, 쓰기 = 상태 전이만(CLI와 동일 함수 경유, History에 [via dashboard]).<br>
+        탭/문서/설정 이동은 URL 해시로 기록되어 브라우저 뒤로가기·딥링크 지원.
+      </div>`;
+  }
+}
+
+// 프로필+config 편집 폼 (account 섹션: 본인 / users 섹션: admin이 타인 편집)
+function showUserForm(u, host, isAdminEdit){
+  if (!host) return;
+  const cfg = u.config || {};
+  const prefs = Object.entries(cfg).filter(([k]) => k.startsWith("pref_"));
+  const extraCfg = Object.entries(cfg).filter(([k]) =>
+    !["timezone","digest_budget","ui_skin","ui_tone","ui_density"].includes(k) && !k.startsWith("pref_"));
+  host.innerHTML = `
+    <div class="path">users/${esc(u.name)}/profile.md · 등록 ${esc((u.registered||"?").slice(0,16))} @ ${esc(u.registered_on||"?")}</div>
+    <h1 style="margin:6px 0 14px">@${esc(u.name)}</h1>
+    <table class="metatbl">
+      <tr><td>display</td><td><input class="uf" id="uf-display" value="${esc(u.display)}"></td></tr>
+      <tr><td>email</td><td><input class="uf" id="uf-email" value="${esc(u.email)}"></td></tr>
+      <tr><td>role</td><td><select class="uf" id="uf-role">
+        ${["admin","member","viewer"].map(r => `<option${r===u.role?" selected":""}>${r}</option>`).join("")}
+      </select> <span class="path">변경은 admin만</span></td></tr>
+    </table>
+    <div class="acts"><button id="uf-save">프로필 저장</button></div>
+    <div class="cfg-h">개인화 설정 — config/settings.json</div>
+    <table class="metatbl">
+      <tr><td>timezone</td><td><input class="uf" id="cf-timezone" placeholder="Asia/Seoul" value="${esc(cfg.timezone||"")}"></td></tr>
+      <tr><td>digest_budget</td><td><input class="uf" id="cf-digest_budget" placeholder="2500" value="${esc(cfg.digest_budget||"")}"></td></tr>
+      <tr><td><input class="uf" id="cf-key" placeholder="임의 키" style="width:130px"></td>
+          <td><input class="uf" id="cf-val" placeholder="값 (빈 값=삭제)"></td></tr>
+    </table>
+    <div class="acts"><button id="cf-save">설정 저장</button></div>
+    <div class="cfg-h">개인 선호 — 리드 에이전트의 말투·작업 방식 (매 턴 자동 반영, REQ-20260824-006)</div>
+    <table class="metatbl" id="pf-table">
+      ${prefs.map(([k, v]) => `<tr data-pref="${esc(k)}">
+        <td>${esc(k.slice(5))}</td>
+        <td><input class="uf pf-val" value="${esc(String(v))}" placeholder="비우고 저장 = 삭제"></td>
+      </tr>`).join("")}
+      <tr><td><input class="uf" id="pf-key" placeholder="주제 (예: 말투)" style="width:130px"></td>
+          <td><input class="uf" id="pf-new" placeholder="내용 (예: 반말로 간결하게)"></td></tr>
+    </table>
+    <div class="acts"><button id="pf-save">선호 저장</button></div>
+    ${prefs.length ? "" : `<div class="path" style="margin-top:6px">아직 없음 — 프롬프트에서 말해도 되고("앞으로 반말로 해줘") 여기서 직접 추가해도 된다.</div>`}
+    ${extraCfg.length ? `<div class="path" style="margin-top:12px">기타: ${esc(JSON.stringify(Object.fromEntries(extraCfg)))}</div>` : ""}
+    <div class="path" style="margin-top:16px">변경은 profile.md Notes에 audit + git 동기화. 본인 또는 admin만 수정.</div>`;
+  host.querySelector("#uf-save").addEventListener("click", async () => {
+    const body = {name: u.name, display: $("#uf-display").value.trim(),
+                  email: $("#uf-email").value.trim()};
+    const nr = $("#uf-role").value;
+    if (nr !== u.role) body.role = nr;
+    if (await postJSON("/api/user/update", body)) renderSettings();
+  });
+  host.querySelector("#cf-save").addEventListener("click", async () => {
+    const sets = [["timezone", $("#cf-timezone").value.trim()],
+                  ["digest_budget", $("#cf-digest_budget").value.trim()]];
+    const ck = $("#cf-key").value.trim();
+    if (ck) sets.push([ck, $("#cf-val").value.trim()]);
+    let ok = true;
+    for (const [k, val] of sets){
+      if (val === String(cfg[k] ?? "")) continue;
+      ok = (await postJSON("/api/user/config", {name: u.name, key: k, value: val})) && ok;
+    }
+    if (ok) renderSettings();
+  });
+  host.querySelector("#pf-save").addEventListener("click", async () => {
+    const sets = [];
+    host.querySelectorAll("#pf-table tr[data-pref]").forEach(tr => {
+      const k = tr.dataset.pref, val = tr.querySelector(".pf-val").value.trim();
+      if (val !== String(cfg[k] ?? "")) sets.push([k, val]);  // 빈 값 = 서버가 삭제
+    });
+    const nk = host.querySelector("#pf-key").value.trim();
+    if (nk) sets.push(["pref_" + nk.replace(/^pref_/, ""),
+                       host.querySelector("#pf-new").value.trim()]);
+    let ok = true;
+    for (const [k, val] of sets)
+      ok = (await postJSON("/api/user/config", {name: u.name, key: k, value: val})) && ok;
+    if (ok && sets.length) renderSettings();
+  });
+}
+
+/* ---------------- drag & drop 상태 전이 ---------------- */
+document.addEventListener("dragstart", e => {
+  const c = e.target.closest('.card[draggable="true"]');
+  if (!c) return;
+  e.dataTransfer.setData("text/plain",
+    JSON.stringify({id: c.dataset.doc, from: c.dataset.status}));
+  e.dataTransfer.effectAllowed = "move";
+  window.__dragFrom = c.dataset.status;
+});
+document.addEventListener("dragend", () => {
+  window.__dragFrom = null;
+  document.querySelectorAll(".col.dropok").forEach(el => el.classList.remove("dropok"));
+});
+document.addEventListener("dragover", e => {
+  const col = e.target.closest(".col[data-colstatus]");
+  document.querySelectorAll(".col.dropok").forEach(el => el.classList.remove("dropok"));
+  if (!col || !window.__dragFrom) return;
+  if ((TRANS[window.__dragFrom] || []).includes(col.dataset.colstatus)){
+    e.preventDefault();  // 허용 전이 컬럼만 drop 가능
+    col.classList.add("dropok");
+  }
+});
+document.addEventListener("drop", e => {
+  const col = e.target.closest(".col[data-colstatus]");
+  if (!col) return;
+  e.preventDefault();
+  try{
+    const d = JSON.parse(e.dataTransfer.getData("text/plain"));
+    const to = col.dataset.colstatus;
+    if (d.id && d.from !== to && (TRANS[d.from] || []).includes(to))
+      postStatus(d.id, to, "drag 이동");
+  }catch(err){}
+});
+
+/* ---------------- events ---------------- */
+document.addEventListener("click", e => {
+  const tabBtn = e.target.closest("[data-tab]");
+  if (tabBtn){
+    tab = tabBtn.dataset.tab;
+    if (tab === "audit") auditCache = null;
+    document.querySelectorAll("[data-tab]").forEach(b =>
+      b.classList.toggle("active", b === tabBtn));
+    pushRoute();
+    render();
+    refreshCatalog(true);
+    return;
+  }
+  const gt2 = e.target.closest("[data-gtype]");
+  if (gt2){
+    const t = gt2.dataset.gtype;
+    gtypes.has(t) ? gtypes.delete(t) : gtypes.add(t);
+    if (!gtypes.size) gtypes.add("request");  // 전부 끄면 무의미 — 최소 1종 유지
+    try{ localStorage.setItem("s9gtypes", JSON.stringify([...gtypes])); }catch(e){}
+    render(); return;
+  }
+  const gl = e.target.closest("[data-glayout]");
+  if (gl){
+    graphLayout = gl.dataset.glayout;
+    try{ localStorage.setItem("s9glayout", graphLayout); }catch(e2){}
+    graphTf = null;  // 레이아웃 전환 시 뷰 리셋
+    render();
+    return;
+  }
+  const gt = e.target.closest("[data-goto]");
+  if (gt){
+    const [id, to, from] = gt.dataset.goto.split("|");
+    // review에서 되돌리는(반려성) 전이는 사유 필수 — Board와 일관성
+    if (from === "review" && (to === "in-progress" || to === "blocked")){
+      rejectWithReason(id); return;
+    }
+    if (to === "cancelled" && !confirm(`${id} 를 cancelled 로 전이합니다. 계속할까요?`)) return;
+    const note = prompt(`${id} → ${to}\n메모 (선택, History에 기록):`, "");
+    if (note === null) return;
+    postStatus(id, to, note || "");
+    return;
+  }
+  const ap = e.target.closest("[data-approve]");
+  if (ap){
+    // 승인: 메모는 선택 (비우고 확인해도 done)
+    const memo = prompt(`${ap.dataset.approve} 승인 → done\n메모 (선택, 비워도 됨):`, "");
+    if (memo === null) return;  // 취소
+    postStatus(ap.dataset.approve, "done", memo ? "승인: " + memo : "대시보드 승인");
+    return;
+  }
+  const rj = e.target.closest("[data-reject]");
+  if (rj){ rejectWithReason(rj.dataset.reject); return; }
+  const sf = e.target.closest("[data-statf]");
+  if (sf){
+    window.__statusFilter = window.__statusFilter === sf.dataset.statf ? "" : sf.dataset.statf;
+    render(); return;
+  }
+  // MY PROJECTS 스트립 행: 클릭 = 단일 프로젝트 선택, 선택 행 재클릭 = 합집합(all) 복귀
+  const mr = e.target.closest("[data-mine-slug]");
+  if (mr){
+    const el = $("#f-project");
+    el.value = el.value === mr.dataset.mineSlug ? "" : mr.dataset.mineSlug;
+    auditLimit = AUDIT_PAGE;
+    render(); return;
+  }
+  const ex = e.target.closest("[data-expand]");
+  if (ex){
+    const k = ex.dataset.expand;
+    expanded.has(k) ? expanded.delete(k) : expanded.add(k);
+    render(); return;
+  }
+  if (e.target.closest("[data-audit-more]")){
+    auditLimit += AUDIT_PAGE; render(); return;
+  }
+  const st = e.target.closest("[data-stream]");
+  if (st){ selectedStream = st.dataset.stream; pushRoute(); loadStream(st.dataset.stream); return; }
+  const ss = e.target.closest("[data-sset]");
+  if (ss){ settingsSection = ss.dataset.sset;
+    const meAdmin = isAdmin();
+    document.querySelectorAll("[data-sset]").forEach(el => el.classList.toggle("sel", el === ss));
+    pushRoute(); renderSettingsSection(meAdmin); return; }
+  const rd = e.target.closest("[data-retrydoc]");
+  if (rd){ loadDoc(rd.dataset.retrydoc); return; }
+  const doc = e.target.closest("[data-doc]");
+  if (doc){
+    selectedDoc = doc.dataset.doc;
+    if (tab !== "docs"){
+      tab = "docs";
+      document.querySelectorAll("[data-tab]").forEach(b =>
+        b.classList.toggle("active", b.dataset.tab === "docs"));
+      pushRoute();
+      render();
+    } else { pushRoute(); loadDoc(selectedDoc); }
+  }
+});
+["#q","#q-body","#f-user","#f-project","#f-tag","#f-type"].forEach(s =>
+  $(s).addEventListener("input", () => { auditLimit = AUDIT_PAGE; render(); }));
+// '내 것만' 토글 — 필터 변경으로 취급: 저장(s9mine) + 드롭다운 재스코핑 + 목록 제한 리셋.
+// URL 해시에는 넣지 않는다(기기 로컬 정체성 — DOC-20260823-006 명시적 결정).
+$("#f-mine").addEventListener("change", e => {
+  try{ localStorage.setItem("s9mine", e.target.checked ? "1" : "0"); }catch(e2){}
+  expanded.delete("mystrip");
+  auditLimit = AUDIT_PAGE;
+  fillProjects();   // 옵션 스코핑 + 범위 밖 선택은 all로 리셋
+  render();
+});
+
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+# section9 파이썬 매니페스트 (REQ-20260824-003)
+#
+# 정책: **의존성 0 (표준 라이브러리 전용)** — 이 시스템은 오프라인/부트스트랩 환경에서
+# `python3` 하나로 동작해야 한다 (CLI bin/s9, 훅 bin/s9-audit-*, 테스트 tests/*).
+# 따라서 가상환경(venv)도 잠금파일도 두지 않는다: 설치할 서드파티가 없을 때
+# 재현성은 "requires-python + stdlib"가 전부이고, 이 파일이 그 선언이다.
+#
+# 서드파티가 정말 필요해지는 시점의 절차:
+#   1) dependencies에 추가하고 이 주석의 정책을 갱신한다 (REQ로 결정 기록)
+#   2) 그때 venv/uv 도입을 함께 결정한다
+# 그 전까지는 tests/test_stdlib_only.py 가드가 비표준 import를 CI 수준에서 차단한다.
+
+[project]
+name = "section9"
+version = "0.1.0"
+description = "프롬프트 audit/외부기억 시스템 — CLI, 훅, 대시보드 (stdlib-only)"
+requires-python = ">=3.10"  # sys.stdlib_module_names 필요 (가드 테스트)
+dependencies = []

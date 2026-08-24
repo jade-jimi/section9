@@ -1,0 +1,170 @@
+---
+name: s9-design
+description: section9 대시보드(web/index.html)의 디자인 시스템. 대시보드 UI를 만들거나 수정할 때 반드시 이 규칙을 따른다. UI 스타일, 색상, 컴포넌트, 밀도 관련 작업 전에 로드할 것.
+---
+
+# section9 Design System — "instrument panel"
+
+대시보드는 단일 파일(web/index.html), 외부 CDN 금지(오프라인), 의존성 0.
+
+## 디자인 언어 (2026-08-23 사용자 지시로 확정)
+
+**전형적인 AI-생성 대시보드 문법을 금지한다**: 둥근 카드, 좌측 컬러 바,
+파스텔 배경 pill 배지, 인디고/퍼플 액센트, 부유하는 그림자, 세그먼트 pill 탭 — 전부 금지.
+
+대신 계기판/장부(ledger) 스타일:
+- **라운드 0, 그림자 0.** 구획은 오직 1px 보더(굵은 `--border`, 얇은 `--hairline`)로.
+- **면이 아니라 선으로 나눈다**: Board 컬럼은 회색 웰 대신 hairline 세로 구분,
+  카드는 박스가 아니라 리스트 행(border-bottom), hover는 배경 틴트만(움직임 없음).
+- **타이포가 곧 UI**: 메타데이터(id/시각/카운트/라벨)는 전부 `var(--mono)` 10~11px
+  uppercase + letter-spacing. 제목은 본문체 600. 색보다 크기/굵기/케이스로 위계.
+- **색은 기능 신호만**: 상태/타입 색은 7px 사각 점(.cdot)과 글자색으로만 쓴다.
+  배경색 배지 금지. 장식적 액센트 색 없음 — 인터랙션 강조는 `--text`(잉크색)
+  언더라인/inset 바.
+- 탭 = 텍스트 + 활성 밑줄 2px. 사용자 표시 = `@이름` (mono, ::before로 @).
+- 헤더는 2행 고정 구조: 1행 브랜드+탭 / 2행 툴바(.hrow2 — .fgroup 필터 좌,
+  .pgroup 환경설정 우, .pdiv 구분선). 컨트롤을 1행에 우겨넣어 wrap시키지 말 것.
+- "더 보기" = `+ N개 더 보기` 텍스트 버튼(mono, 밑줄 hover).
+
+## 토큰
+
+- 라이트: bg #fafaf8(종이톤) / panel #fff / border #d8d8d3 / hairline #e9e9e5 /
+  text #141518 / muted #5c6470 / faint #9096a0. accent = text (잉크).
+- 다크(prefers-color-scheme): bg #111214 / panel #17181b / border #33353a /
+  text #e8e8e4. 상태색은 다크에서 밝기 보정본 재정의.
+- 상태색: open #1d4ed8 / in-progress #b45309 / blocked #b91c1c / review #6d28d9 /
+  done #047857 / cancelled·draft #868c96 / published #0f766e.
+  타입색: request #1d4ed8 / knowledge #0f766e / session #92400e. (JS 하드코딩
+  상수 TCOLOR_RAW·KC도 이 값과 동기화할 것)
+- 컴포넌트는 토큰만 참조 — 다크 대응은 토큰 블록에서만.
+
+## 터미널 뷰 (.term)
+
+테마 무관 항상 다크 #101418. 역할색: user 노랑 #fbbf24 / assistant #e2e8f0 /
+tool #a5b4fc / result #94a3b8 / thinking #64748b. agent 이벤트 = opacity .7 +
+좌측 1px 보더. REQ 문서 내 스트림 섹션도 동일 컴포넌트 재사용.
+
+## 디스플레이 설정 (헤더 ⚙ 패널)
+
+skin/tone/density 컨트롤은 헤더 툴바에 늘어놓지 않는다 — me + ⚙ 버튼만 두고,
+⚙ 클릭 시 Settings 패널(#settings)에서 조정한다(esc/바깥클릭 닫힘).
+저장 우선순위: **me(등록 사용자)의 user config(ui_skin/ui_tone/ui_density)
+> localStorage > 기본**. me가 있으면 변경 시 `/api/user/config`로 저장되어
+기기 간 동기화된다. me 변경 시 그 사용자 설정을 즉시 적용(onMeChanged).
+
+## 테마 = 2축: skin(디자인 언어) × tone(색)
+
+- **tone** (data-theme): system(OS 추종, 기본)/paper/carbon/phosphor — 토큰 세트 교체.
+  새 tone = 토큰 블록 하나. 컴포넌트 CSS는 절대 색을 직접 쓰지 않는다.
+  localStorage `s9theme`. 다크 판정은 isDarkTheme(). 그래프 캔버스 배경은
+  getComputedStyle의 --bg.
+- **skin** (data-skin): 형태·밀도·컴포넌트 문법 자체의 전환. localStorage `s9skin`.
+  - **최상위 원칙 (2026-08-23 2차 반려로 확정): skin = 시스템 정체성(계기판·장부·
+    프로페셔널 도구) 안의 재질/분위기/셸 변주. 장르 코스튬 금지.** 다른 물건
+    (신문·네온사인·도면 등)의 겉모습을 입히는 스킨은 "시스템과 어울리지 않는다"로
+    반려된다 — newspaper/neon/blueprint 3종이 이 사유로 제거됨(같은 날 추가분).
+    통과 기준은 glass처럼 "같은 도구를 다른 재질로 만든 것"인가이다. 동시에
+    "비슷한 변형 금지"도 유효 — 재질/분위기/셸 중 최소 한 축이 뚜렷이 달라야 한다.
+  - **썸네일 테스트 (2026-08-23 3차 반려로 추가 확정): 구분감은 썸네일 수준에서
+    즉시 보여야 한다.** 같은 데이터의 Board 스크린샷을 ~300px 폭으로 축소해 나란히
+    놓았을 때 서로(그리고 기존 스킨들과) 즉시 구분되지 않으면 탈락. 미묘한
+    헤어라인·질감·단차 변주는 실패 — instrument(머신드 계기판)/archive(장부
+    아카이브) 2종이 "죄다 똑같은 디자인" 사유로 제거됨(같은 날 추가분).
+    새 스킨은 [배경 분위기 / 모양 언어(라운드·보더) / 깊이(그림자·블러·부조) /
+    셸 구조 / 타이포 스케일] 중 **최소 2~3축을 과감하게** 바꿔야 한다.
+  - `ledger` (기본): 이 문서의 "디자인 언어" 섹션 규칙 그대로 (상단 탭 셸).
+  - `soft`: **좌측 고정 사이드바 앱 셸**(세로 탭, 스택 필터) + 라운드 카드/그림자/pill.
+    skin은 장식이 아니라 **셸 레이아웃부터 달라야 한다** — 사용자가 명시적으로
+    선택한 경우에만 활성화, 기본값 금지.
+  - `terminal`: 브루탈리스트 모노 — 전면 monospace, uppercase 탭,
+    활성/hover = inverse video, 커서 점멸 브랜드.
+  - `glass`: frosted 레이어 — 반투명 패널 + backdrop-filter blur(16~20px),
+    body에 앰비언트 그라데이션 필드(fixed radial 3~4개), 라운드 14px +
+    부드러운 그림자, pill 탭, 유리 칩 카드. 색은 하드코딩하지 않고 전부
+    tone 토큰에서 `color-mix`로 파생(--gl-* 토큰) — 4개 tone 어디서든 성립.
+    ledger의 계기판 언어와 정반대인 것이 의도다.
+    (이력: 2026-08-23 오전 "비슷비슷" 피드백으로 제거 → 같은 날 사용자가
+    "glass는 되려 좋았다"고 번복, 재도입 확정. 제거 이력보다 이 결정이 우선.)
+  - **선택 대기 후보 7종 (3차 재작업 5종 + 4차 재작업 2종 — 사용자 판정용
+    팔레트, 언어 규칙은 사용자 선택 후 확정)**: `field`(강한 컬러 필드 그라운드 + 플랫
+    불투명 패널 — 배경·깊이 반전), `cobalt`(짙은 코발트 헤더 밴드 셸 + 라운드
+    카드 그리드 — 셸·배경), `relief`(보더 소거·소프트 엠보스 부조, 잉크 저농도
+    회면 + polarity별 빛/그늘 토큰 — 깊이·모양), `grid`(풀블리드 고밀도 그리드,
+    잉크 인버스 헤더 바 + 지브라 — 셸·밀도·모양), `cockpit`(tone 무관 상시 다크
+    관제실, :root 토큰 전면 재정의 + 엘리베이션 + 상태색 컬럼 캡 — 배경·깊이·색).
+    **4차 반려("지라·트렐로 같이 대중적이고 UX 점수 높은 스킨", 2026-08-24)
+    추가 2종 — 메인스트림 SaaS 제품 언어. 특정 회사 로고/상표 모방 금지, 디자인
+    언어만**: `atlas`(Jira류: 회청 캔버스(--c-open 9% + --text 4% 파생) 위
+    화이트 패널·분리 컬럼 카드 + 남색 저알파 rgba(9,30,66) 미세 그림자 + 라운드
+    4~8px, 블루 프라이머리 = --c-open — 활성 탭 3px 언더라인·selected 틴트·버튼
+    hover 블루 필·doclink, 밝은 화이트 제품 네비 셸. cobalt(짙은 밴드 셸)와
+    달리 헤더가 밝다 — 배경·깊이·모양·색 축),
+    `tray`(Trello류: --c-open 46%→--c-done 26% 사선 단색 계열 fixed 캔버스가
+    지면, 컬럼 = 라운드 12px 회색 웰(--text 7% 파생, 보더 0) — 보드가 주인공,
+    카드 = 화이트 라운드 8px + 얕은 그림자 + hover translateY(-2px) 리프트,
+    헤더 = 캔버스 위 반투명 판(블러 없음 — glass와 구분), 활성 탭 = 화이트 필.
+    field(고채도 멀티컬러 + 플랫 판)와 달리 저채도 단일 계열 + 웰/리프트가 언어
+    — 배경·셸·깊이 축).
+    구현 주의(공통 함정): `[data-skin] .gmode`류 override가 베이스 인버스
+    (hover/.on)와 특이도 동급 후순위라 인버스를 죽인다 — 명시 복원 필요.
+  - 그래프 canvas와 skin: isDarkTheme()는 tone 추론이 아니라 **실제 --bg 휘도**로
+    판정하고, 노드/범례 타입색은 TCOLOR_RAW 하드코딩이 아니라 --t-* 토큰 해석값을
+    쓴다 — skin/tone이 자체 필드·타입색을 가져도 그래프가 따라온다 (반려 스킨과
+    무관한 구조 개선이므로 유지).
+  - 새 skin = `[data-skin="이름"]` override 블록 하나. 베이스(ledger) CSS를
+    수정하지 말고 override로만 얹는다. 토큰까지 재정의하는 skin은
+    `:root[data-skin=…]` 셀렉터로 tone 블록과 동급 특이도를 확보할 것. **skin은 뚜렷이 다른 디자인 언어일 때만
+    추가한다** — 비슷한 변형은 금지 (2026-08-23 editorial이 "비슷비슷"
+    피드백으로 제거됨). 밀도 변형은 skin이 아니라 density 축.
+- **density** (data-density): normal/compact — 폰트·패딩 밀도만 바꾸는 독립 축.
+  localStorage `s9density`.
+
+## 상태 전이 UI
+
+review 카드/문서에 ✓승인·↺반려 버튼(.acts — mono 소형, hover inverse),
+request 카드 드래그 → 허용 전이 컬럼만 .dropok(점선 아웃라인) 표시.
+전이는 반드시 POST /api/status (서버의 do_transition 단일 경로) — 클라이언트에서
+상태를 직접 바꾸는 로직 금지.
+
+## Graph 탭 (canvas)
+
+- canvas + requestAnimationFrame 실시간 물리(alpha decay, 드래그 reheat). SVG 정적 금지.
+- 인터랙션: 노드 드래그, 배경 팬, 커서 중심 휠 줌(0.25~4x), hover 시 이웃 강조 +
+  비이웃 fade(0.12), 클릭 = 문서 열기. 탭 이탈 시 cancelAnimationFrame 필수.
+- 노드 반지름 5 + 2.2√(연결수), 라벨은 줌 0.75+ 또는 hover 관련만. parent 실선, 나머지 점선.
+- 활성 상태 링: in-progress = 1.8초 레이더 핑(퍼지며 사라지는 링) + 상시 실선 링,
+  blocked = 굵은 실선 링, review = 점선 링, done/cancelled = 흐림. **상태 신호는**
+  글로우/펄스 채우기 금지 — 링 스트로크만 (계기판 언어).
+- 공간감 = 장면 레벨만, 노드 개체 광택 금지 (2026-08-23 반려로 확정 — "각각의
+  노드가 반짝이는 사과 같은 입체감은 촌스럽다. 우주 공간의 별들처럼 뭉친
+  공간감을 원했다"): **노드별 구체 셰이딩(radial 하이라이트)·접지 그림자·부양
+  그림자 금지.** 노드는 플랫 타입색 원(ledger 언어 정합). 허용되는 공간감:
+  ① 배경 스타필드 — `--faint` 파생 저알파 입자 2~3 깊이 레이어를 오프스크린
+  타일에 1회 렌더 후 createPattern/drawImage 재사용(매 프레임 arc 금지),
+  팬 = tf.x×pf, 줌 = k^pf 로 레이어별 시차(parallax). **배경 전용** — 노드
+  좌표·히트테스트·물리에 관여 금지. ② 노드 깊이 분화 — 연결수 기반 크기(기존) +
+  본체 알파 차등(허브=근경 또렷, 말단=원경 흐림). 상태 링·병목 후광·숫자 칩은
+  알파 감쇠 없이 또렷하게. ③ `--bg` 파생 비네트(절제). 라이트 tone에선 밤하늘이
+  아니라 "깊이 있는 입자 필드"로 읽혀야 한다. 색 하드코딩 금지 — 전부
+  getComputedStyle 토큰 파생. 깊이 레이어링(작은 노드부터 드로잉)·에지 원근
+  페이드·hover 반지름 1.07x는 유지.
+- 병목(미완료 파생 N): 앰버 후광 면적(∝√N, 점선 테두리) + 노드 반지름 가중 +
+  우상단 숫자 칩. 텍스트만으로 표기 금지(인지 안 됨 — 2026-08-23 피드백).
+- force/dag 레이아웃 토글(.gmode). dag = parent 체인 계층(위→아래), 물리 off, 라벨 상시.
+
+## 밀도 (무한 목록 금지)
+
+목록 기본 표시 제한 + 더 보기: Board 컬럼 7(터미널 상태 3), Docs 그룹 20, Audit 50.
+필터 변경 시 리셋. 빈 상태에는 다음 행동 안내.
+
+## Obsidian 패턴
+
+- doclink(a.doclink, 점선 밑줄 mono)에 hovercard 미리보기(잉크색 1px 보더, 그림자 없음).
+- 문서 뷰어 하단 Linked mentions(backlinks).
+
+## live follow
+
+폴링은 화면 가시(document.hidden 아님) + 요소 존재 + follow on일 때만.
+증분(offset) 전달, near-bottom일 때만 자동 스크롤. 탭 전환 시 타이머 전량 정리.
+
+- Graph 배경 입자(스타필드) 금지(2026-08-24 6차 반려). 공간감은 노드 z축·유휴 드리프트·비네트로.
