@@ -1105,6 +1105,7 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g,
 // uid 표시 축약 (REQ-20260825-031/-034): 지문 접미(-xxxx)는 같은
 // (타입-날짜-순번)이 실제로 겹칠 때만 보여준다 — git 짧은 해시 원리.
 // 참조(data-doc)는 항상 전문 uid, 축약은 렌더 시점에만.
+const SYS_TAGS = new Set(["auto-audit"]);   // 출처 표식 — 태그 UI에서 숨김
 let idBaseCount = new Map();
 function rebuildIdMap(){
   idBaseCount = new Map();
@@ -1389,7 +1390,9 @@ function fillFilters(){
     el.value = [...el.options].some(o => o.value === cur) ? cur : "";
   };
   fill("#f-user", catalog.map(r => r.user));
-  fill("#f-tag", catalog.flatMap(r => r.tags || []));
+  // 시스템 태그(생성 경로 표식)는 필터에서 숨긴다 (REQ-20260825-055 인접 지적:
+  // auto-audit은 주제가 아니라 출처 — 문서에는 남기되 태그 UI는 의미 태그만)
+  fill("#f-tag", catalog.flatMap(r => r.tags || []).filter(t => !SYS_TAGS.has(t)));
   fillProjects();
 }
 
@@ -1652,7 +1655,7 @@ function cardHTML(r){
       <span class="badge">${esc(r.user)}</span>
       ${r.size ? `<span class="size">${esc(r.size)}</span>` : ""}
       ${r.tdd ? `<span class="tdd${r.tdd.passed===r.tdd.total?" full":""}" title="TDD 시나리오 ${r.tdd.passed}/${r.tdd.total} 통과">TDD ${r.tdd.passed}/${r.tdd.total}</span>` : ""}
-      ${(r.tags||[]).slice(0,2).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}
+      ${(r.tags||[]).filter(t=>!SYS_TAGS.has(t)).slice(0,2).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}
     </div>${acts}
     ${r.status_since ? `<span class="elapsed" data-since="${esc(r.status_since)}" title="현재 상태(${esc(r.status)}) 시작 이후 경과">${fmtElapsed(r.status_since)}</span>` : ""}</div>`;
 }

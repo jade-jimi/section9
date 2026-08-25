@@ -324,5 +324,97 @@ class TestAttachExtraction(unittest.TestCase):
         self.assertEqual(self.mod.ATTACH_MAX_BYTES, 30 * 1024 * 1024)
 
 
+class TestFormatCoverage(unittest.TestCase):
+    """포맷 전면 지원 (REQ-20260825-055) — 오피스·ODF·iWork·데이터·json/xml."""
+    @classmethod
+    def setUpClass(cls):
+        import importlib.machinery
+        import importlib.util
+        cls.tmp = tempfile.mkdtemp(prefix="s9fmt-")
+        prev = {k: os.environ.get(k) for k in ("S9_ROOT", "S9_MACHINE")}
+        os.environ["S9_ROOT"] = cls.tmp
+        os.environ["S9_MACHINE"] = "testbox"
+        try:
+            spec = importlib.util.spec_from_loader(
+                "s9_mod_fmt",
+                importlib.machinery.SourceFileLoader("s9_mod_fmt", S9))
+            cls.mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(cls.mod)
+        finally:
+            for k, v in prev.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    def _zip(self, name, entries):
+        import zipfile
+        p = os.path.join(self.tmp, name)
+        with zipfile.ZipFile(p, "w") as z:
+            for n, data in entries.items():
+                z.writestr(n, data)
+        return p
+
+    def _bin(self, name, data):
+        p = os.path.join(self.tmp, name)
+        with open(p, "wb") as f:
+            f.write(data)
+        return p
+
+    # C1. ODF(odt/ods/odp) — content.xml
+    def test_c1_odf(self):
+        p = self._zip("a.odt", {"content.xml":
+                                "<office><text>동기화 리모트 커밋</text></office>"})
+        self.assertIn("리모트", self.mod.attach_text(p))
+        self.assertIn("document", self.mod.attach_tags([p]))
+
+    # C2. 키노트(.key) — 구형 XML은 파싱, 신형 IWA는 문자열 폴백
+    def test_c2_keynote(self):
+        old = self._zip("deck.key", {"index.apxl":
+                                     "<slides><t>dashboard board layout</t></slides>"})
+        self.assertIn("dashboard", self.mod.attach_text(old))
+        new = self._zip("new.key", {"Index/Slide.iwa": b"\x00\x01binary",
+                                    "preview.jpg": b"\xff\xd8"})
+        self.mod.attach_text(new)          # 폴백 경로가 죽지 않는다
+        self.assertIn("slides", self.mod.attach_tags([old]))
+
+    # C3. 레거시 MS(doc/xls/ppt) — UTF-16LE/ASCII 문자열 스캔
+    def test_c3_legacy_ms(self):
+        p = self._bin("legacy.doc",
+                      b"\xd0\xcf\x11\xe0" + "배포 파이프라인 검증 계획".encode("utf-16-le")
+                      + b"\x00" * 8 + b"deployment verify plan")
+        txt = self.mod.attach_text(p)
+        self.assertIn("verify", txt)
+        tags = self.mod.attach_tags([p])
+        self.assertIn("doc", tags)
+        self.assertIn("document", tags)
+
+    # C4. 컬럼 포맷(parquet/orc) — 스키마·평문 문자열
+    def test_c4_columnar(self):
+        p = self._bin("events.parquet",
+                      b"PAR1\x00\x00session_id\x00user_name\x00"
+                      b"dashboard_click\x00" + b"\x00" * 16 + b"PAR1")
+        txt = self.mod.attach_text(p)
+        self.assertIn("session_id", txt)
+        tags = self.mod.attach_tags([p])
+        self.assertIn("parquet", tags)
+        self.assertIn("data", tags)
+        o = self._bin("t.orc", b"ORC\x00col_name customer_id\x00")
+        self.assertIn("customer_id", self.mod.attach_text(o))
+
+    # C5. json/xml (텍스트류) — 내용 그대로
+    def test_c5_json_xml(self):
+        j = self._bin("cfg.json", b'{"sync": "remote", "commit": true}')
+        self.assertIn("remote", self.mod.attach_text(j))
+        x = self._bin("d.xml", "<root><item>테스트 검증</item></root>".encode())
+        self.assertIn("검증", self.mod.attach_text(x))
+        self.assertIn("json", self.mod.attach_tags([j]))
+
+    # C6. rtf — 제어어 제거
+    def test_c6_rtf(self):
+        p = self._bin("m.rtf", "{\\rtf1\\ansi 프로젝트 멤버십 계획\\par}".encode())
+        self.assertIn("멤버십", self.mod.attach_text(p))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

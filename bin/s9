@@ -2199,13 +2199,22 @@ ASSET_RE = re.compile(r"\[(Image|File): ([^\]\n]+)\]")
 TEXTISH = {".txt", ".md", ".log", ".json", ".csv", ".tsv", ".yaml", ".yml",
            ".py", ".js", ".ts", ".html", ".css", ".sh", ".sql", ".ini",
            ".conf", ".xml", ".diff", ".patch", ".rst", ".toml", ".env"}
-OOXML = {".docx", ".xlsx", ".pptx"}
+# zip 컨테이너 계열 — 내부 XML/텍스트에서 추출 (OOXML·ODF·epub·hwpx·iWork)
+ZIPPED = {".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp", ".epub",
+          ".hwpx", ".key", ".pages", ".numbers"}
+# 바이너리 컨테이너 — 최선 문자열 스캔(ASCII/UTF-16LE 런): 레거시 MS(OLE2),
+# 컬럼 포맷(parquet/orc/avro), 한글(hwp). 스키마·문자열 값이 평문으로 남는다.
+SCAN = {".doc", ".xls", ".ppt", ".hwp", ".parquet", ".orc", ".avro", ".db",
+        ".sqlite", ".sqlite3"}
 # 파일 타입군 — 확장자와 함께 태그가 된다 (검색: type:image 대신 image)
 TYPE_GROUPS = {
     "image": {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".heic"},
-    "document": {".pdf", ".docx", ".doc", ".md", ".txt", ".rtf", ".odt", ".hwp"},
-    "spreadsheet": {".xlsx", ".xls", ".csv", ".tsv", ".ods"},
-    "slides": {".pptx", ".ppt", ".odp"},
+    "document": {".pdf", ".docx", ".doc", ".md", ".txt", ".rtf", ".odt",
+                 ".hwp", ".hwpx", ".epub", ".pages"},
+    "spreadsheet": {".xlsx", ".xls", ".csv", ".tsv", ".ods", ".numbers"},
+    "slides": {".pptx", ".ppt", ".odp", ".key"},
+    "data": {".parquet", ".orc", ".avro", ".jsonl", ".ndjson", ".db",
+             ".sqlite", ".sqlite3"},
     "code": {".py", ".js", ".ts", ".sh", ".sql", ".html", ".css", ".json",
              ".yaml", ".yml", ".xml", ".diff", ".patch", ".toml"},
     "archive": {".zip", ".tar", ".gz", ".tgz", ".7z", ".rar"},
@@ -2243,18 +2252,30 @@ def _pdf_text(path, limit=8000):
     return " ".join(out)[:limit]
 
 
-def _ooxml_text(path, limit=8000):
-    """docx/xlsx/pptx 본문 추출 — zip 내부 XML에서 마크업을 걷어낸다(stdlib)."""
+def _zipped_text(path, limit=8000):
+    """zip 컨테이너(OOXML·ODF·epub·hwpx·iWork) 본문 — 내부 XML/텍스트에서
+    마크업을 걷어낸다(stdlib). 본문 성격의 엔트리를 우선하고, 없으면 모든
+    xml/xhtml/txt를 훑는다 — 포맷별 특수 경로에 의존하지 않는다."""
     import zipfile
-    want = ("word/document.xml", "xl/sharedStrings.xml")
+    prefer = ("word/document.xml", "xl/sharedStrings.xml", "content.xml",
+              "index.xml")
     txt, total = [], 0
     try:
         with zipfile.ZipFile(path) as z:
-            names = [n for n in z.namelist()
-                     if n in want or n.startswith("ppt/slides/slide")
-                     or n.startswith("xl/worksheets/sheet")]
-            for n in names:
-                data = z.read(n).decode("utf-8", "replace")
+            names = z.namelist()
+            picked = [n for n in names if n in prefer
+                      or n.startswith("ppt/slides/slide")
+                      or n.startswith("xl/worksheets/sheet")
+                      or n.startswith("Contents/") and n.endswith(".xml")]
+            if not picked:
+                picked = [n for n in names
+                          if n.lower().endswith((".xml", ".xhtml", ".html",
+                                                 ".txt", ".apxl"))]
+            for n in picked[:60]:
+                try:
+                    data = z.read(n).decode("utf-8", "replace")
+                except Exception:
+                    continue
                 piece = re.sub(r"<[^>]+>", " ", data)
                 piece = re.sub(r"\s+", " ", piece).strip()
                 if piece:
@@ -2267,6 +2288,49 @@ def _ooxml_text(path, limit=8000):
     return " ".join(txt)[:limit]
 
 
+def _strings_text(path, limit=8000):
+    """바이너리 컨테이너 최선 추출 — ASCII/UTF-16LE 인쇄가능 런을 모은다.
+    레거시 MS(OLE2)·parquet/orc(스키마·평문 문자열)·hwp 등에서 컬럼명·문구가
+    남아 키워드로 쓸 만하다. 정확한 파싱이 아니라 검색 보조용."""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read(4 * 1024 * 1024)
+    except OSError:
+        return ""
+    out, total = [], 0
+    for m in re.finditer(rb"[\x20-\x7e\r\n\t]{5,}", raw):
+        piece = m.group(0).decode("ascii", "replace").strip()
+        if piece:
+            out.append(piece)
+            total += len(piece)
+        if total > limit:
+            break
+    if total < limit:
+        # UTF-16LE(워드·한글 문서 등) — 버퍼를 통째로 디코드해 인쇄가능 런 수집.
+        # bytes 정규식으로는 한글 범위를 표현할 수 없어 str 단계에서 처리한다.
+        wide = raw.decode("utf-16-le", "replace")
+        for m in re.finditer(r"[가-힣A-Za-z0-9 ._\-]{5,}", wide):
+            piece = m.group(0).strip()
+            if piece:
+                out.append(piece)
+                total += len(piece)
+            if total > limit:
+                break
+    return " ".join(out)[:limit]
+
+
+def _rtf_text(path, limit=8000):
+    """RTF — 제어어를 걷어내고 평문만."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            raw = f.read(limit * 4)
+    except OSError:
+        return ""
+    txt = re.sub(r"\\[a-zA-Z]+-?\d* ?", " ", raw)
+    txt = re.sub(r"[{}]", " ", txt)
+    return re.sub(r"\s+", " ", txt).strip()[:limit]
+
+
 def attach_text(path, limit=8000):
     """첨부 파일에서 키워드 추출용 텍스트 — 형식별 디스패치, 실패는 빈 문자열."""
     ext = os.path.splitext(path)[1].lower()
@@ -2276,8 +2340,15 @@ def attach_text(path, limit=8000):
                 return f.read(limit)
         if ext == ".pdf":
             return _pdf_text(path, limit)
-        if ext in OOXML:
-            return _ooxml_text(path, limit)
+        if ext in ZIPPED:
+            t = _zipped_text(path, limit)
+            # iWork(.key/.pages/.numbers) 신형은 IWA(압축 protobuf)라 XML이
+            # 없다 — 그때는 문자열 스캔으로 폴백한다 (REQ-055)
+            return t or _strings_text(path, limit)
+        if ext == ".rtf":
+            return _rtf_text(path, limit)
+        if ext in SCAN:
+            return _strings_text(path, limit)
     except OSError:
         pass
     return ""
