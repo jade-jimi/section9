@@ -13,6 +13,9 @@
 실행: python3 tests/ port_exhaustion
 """
 import importlib.util
+import shutil
+import tempfile
+import time
 import os
 import unittest
 from importlib.machinery import SourceFileLoader
@@ -95,6 +98,53 @@ class Advice(unittest.TestCase):
                       degraded=False, windows_ports=win(11000, top_count=10800))
         text = "\n".join(doctor.advise(d))
         self.assertIn("포트", text)
+
+
+class Sweep(unittest.TestCase):
+    """주인 없는 캡처 잔여물 회수 — 나이로만 가른다.
+
+    캡처가 자기 것을 지우는 finally 는 세션이 중간에 죽으면 돌지 않는다.
+    그렇게 남은 프로필·브라우저가 2026-08-25 사고의 씨앗이었다. 그렇다고
+    무조건 지우면 **진행 중인 캡처**를 죽인다 — 그래서 나이가 유일한 기준이다.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="s9sweep-")
+        self._env = os.environ.get("TMPDIR")
+        os.environ["TMPDIR"] = self.tmp
+        # powershell 이 없는 환경으로 두어 윈도우 프로세스는 건드리지 않는다.
+        self._which = doctor.shutil.which
+        doctor.shutil.which = lambda name: None
+        self._wintemp = doctor.WIN_TEMP
+        doctor.WIN_TEMP = os.path.join(self.tmp, "no-such")
+
+    def tearDown(self):
+        doctor.shutil.which = self._which
+        doctor.WIN_TEMP = self._wintemp
+        if self._env is None:
+            os.environ.pop("TMPDIR", None)
+        else:
+            os.environ["TMPDIR"] = self._env
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def mkprof(self, name, age):
+        path = os.path.join(self.tmp, name)
+        os.makedirs(path, exist_ok=True)
+        old = 1_700_000_000.0 - age      # 고정 시각 기준 — 실행 시각에 안 흔들린다
+        os.utime(path, (old, old))
+        return path
+
+    def test_old_marked_profile_removed_fresh_kept(self):
+        stale = self.mkprof("s9shot-999", 0)          # 아주 오래된 것
+        fresh = self.mkprof("s9shot-1000", 0)
+        now = time.time()
+        os.utime(fresh, (now, now))
+        other = self.mkprof("my-work", 0)             # 표식 없는 남의 것
+        out = doctor.sweep_stale_shots(max_age=600)
+        self.assertFalse(os.path.exists(stale))
+        self.assertTrue(os.path.exists(fresh), "진행 중인 캡처는 건드리지 않는다")
+        self.assertTrue(os.path.exists(other), "표식 없는 것은 우리 것이 아니다")
+        self.assertEqual(out["profiles"], 1)
 
 
 if __name__ == "__main__":

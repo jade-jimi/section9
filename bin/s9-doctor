@@ -17,8 +17,16 @@ ERR_NO_BUFFER_SPACE 를 낸다. 기존에 떠 있던 포트는 멀쩡해서 증�
 회수는 `wsl --shutdown` 보다 훨씬 덜 파괴적이다 — COM 대리는 필요할 때 다시
 뜨고, 실행 중인 세션·에이전트는 살아남는다.
 
+세 번째 축이 **예방**이다(REQ-20260825-102). 캡처가 남긴 브라우저를 그때그때
+회수하는 것만으로는 부족했다 — 세션이 중간에 죽거나 캡처가 강제 종료되면
+finally 가 돌지 않아 고아 브라우저가 조용히 쌓이고, 그 하나하나가 호스트
+포트를 붙잡는다. 그래서 **표식(s9shot-/cdp-prof-)을 가진 오래된 브라우저와
+프로필 디렉토리를 주인 없이도 쓸어내는 sweep** 을 두고, 캡처 직전과 서버
+감시 주기에서 호출한다.
+
 사용:
   s9-doctor            진단만 (읽기 전용)
+  s9-doctor --sweep    고아 캡처 브라우저·프로필 디렉토리만 조용히 회수
   s9-doctor --fix      우리가 흘린 자원 회수(고아 테스트 서버·좀비 캡처·임시 파일)
   s9-doctor --recover  동적 포트를 독차지한 WSL 포트 중계 프로세스 회수(확인 후)
   s9-doctor --json     기계 판독용
@@ -220,6 +228,62 @@ def reclaim_relay(target, timeout=30):
             "out": (r.stdout or r.stderr).strip()}
 
 
+# 캡처가 남긴 표식 — 이 이름을 가진 브라우저·프로필은 우리 것이라 주인이
+# 사라져도 회수할 수 있다.
+SHOT_MARKERS = ("s9shot-", "cdp-prof-")
+SWEEP_AGE = 600           # 이보다 오래된 캡처 잔여물은 주인이 없다고 본다
+WIN_TEMP = "/mnt/c/Temp"
+
+
+def sweep_stale_shots(max_age=SWEEP_AGE):
+    """주인 없는 캡처 잔여물을 회수한다 — 고아 브라우저와 프로필 디렉토리.
+
+    캡처 프로세스가 스스로 회수하는 경로(cmd_shot 의 finally)는 세션이
+    중간에 죽으면 돌지 않는다. 2026-08-25 사고의 chrome.exe 165개가 그렇게
+    쌓였다. 여기서는 **표식을 가진, 충분히 오래된 것만** 지운다 — 진행 중인
+    캡처(방금 뜬 브라우저)는 건드리지 않는다."""
+    out = {"procs": 0, "profiles": 0}
+    ps = shutil.which("powershell.exe")
+    if ps:
+        cond = " -or ".join(f"$_.CommandLine -like '*{m}*'" for m in SHOT_MARKERS)
+        script = (
+            "$ErrorActionPreference='SilentlyContinue';"
+            "$cut=(Get-Date).AddSeconds(-%d);"
+            "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe' or "
+            "Name='msedge.exe'\" | Where-Object { (%s) -and "
+            "$_.CreationDate -lt $cut } | ForEach-Object "
+            "{ Stop-Process -Id $_.ProcessId -Force; $_.ProcessId }"
+            % (max_age, cond))
+        try:
+            r = subprocess.run([ps, "-NoProfile", "-NonInteractive",
+                                "-Command", script], capture_output=True,
+                               text=True, timeout=60)
+            out["procs"] = len([x for x in r.stdout.split() if x.strip()])
+        except Exception:
+            pass
+    now = time.time()
+    for base in (WIN_TEMP, os.environ.get("TMPDIR", "/tmp")):
+        try:
+            names = os.listdir(base)
+        except OSError:
+            continue
+        for name in names:
+            if not name.startswith(SHOT_MARKERS):
+                continue
+            path = os.path.join(base, name)
+            try:
+                if now - os.path.getmtime(path) < max_age:
+                    continue
+                if os.path.isdir(path):
+                    shutil.rmtree(path, ignore_errors=True)
+                else:
+                    os.remove(path)
+                out["profiles"] += 1
+            except OSError:
+                pass
+    return out
+
+
 def scratch_bytes():
     """캡처·임시 산출물이 쌓인 크기 — 정리 대상 규모 파악용."""
     total = 0
@@ -350,6 +414,8 @@ def advise(d):
 
 def main():
     ap = argparse.ArgumentParser(prog="s9-doctor", description=__doc__)
+    ap.add_argument("--sweep", action="store_true",
+                    help="고아 캡처 브라우저·프로필만 조용히 회수(진단 생략)")
     ap.add_argument("--fix", action="store_true",
                     help="고아 테스트 서버·좀비 헤드리스 브라우저 회수")
     ap.add_argument("--recover", action="store_true",
@@ -358,6 +424,17 @@ def main():
                     help="--recover 확인 프롬프트 생략(무인 실행용)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
+
+    if args.sweep:
+        # 캡처 직전·서버 감시 주기에서 부르는 경로 — 진단(프로브·powershell 조회)을
+        # 생략해 싸게 끝낸다. 조용히 실행하고 회수한 게 있을 때만 한 줄 남긴다.
+        sw = sweep_stale_shots()
+        if args.json:
+            print(json.dumps(sw, ensure_ascii=False))
+        elif sw["procs"] or sw["profiles"]:
+            print(f"회수: 고아 캡처 브라우저 {sw['procs']}개 · "
+                  f"프로필 {sw['profiles']}개")
+        return 0
 
     d, orphans, chromes = diagnose()
     if args.recover:
@@ -390,6 +467,7 @@ def main():
     if args.fix:
         d["fixed"] = [{"kind": k, "pid": p, "age": a}
                       for k, p, a in fix(orphans, chromes)]
+        d["swept"] = sweep_stale_shots()
         time.sleep(0.5)
         d["probe_after_fix"] = probe_new_port()
         d["degraded"] = not d["probe_after_fix"]["ok"]
@@ -427,6 +505,10 @@ def main():
                  else "✗ 여전히 degraded"))
     for f in d.get("fixed", []):
         print(f"  회수: {f['kind']} pid={f['pid']} ({f['age']}s)")
+    sw = d.get("swept")
+    if sw and (sw["procs"] or sw["profiles"]):
+        print(f"  회수: 고아 캡처 브라우저 {sw['procs']}개 · "
+              f"프로필 {sw['profiles']}개")
     if "probe_after_fix" in d:
         print("회수 후 프로브: "
               + ("✓ 정상" if d["probe_after_fix"]["ok"] else "✗ 여전히 degraded"))
