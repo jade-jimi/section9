@@ -317,13 +317,20 @@ def walk_docs():
 
 
 def load_catalog():
+    """카탈로그 로드. tombstone(.trash) 행은 조회 단계에서도 배제한다
+    (REQ-20260825-051): 재생성은 이미 .trash를 제외하지만, 낡은 코드·중단된
+    쓰기 등으로 섞여 들어오면 삭제한 문서가 보드에 되살아난다 — 이중 방어."""
     rows = []
     if os.path.exists(CATALOG):
         with open(CATALOG, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if line:
-                    rows.append(json.loads(line))
+                if not line:
+                    continue
+                r = json.loads(line)
+                if ".trash/" in (r.get("path") or "").replace("\\", "/"):
+                    continue          # 삭제(tombstone) 문서 — 조회에서 배제
+                rows.append(r)
     return rows
 
 
