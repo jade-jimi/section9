@@ -1339,7 +1339,9 @@ def restart_session(sid8, model="", effort="", account=""):
             return {"ok": False, "reason": "변경할 항목이 없다"}
         flags = (["--model", model] if model else []) \
             + (["--effort", effort] if effort else [])
-        manual = "claude --resume " + full \
+        # 수동 명령도 s9 code 래퍼 경유 — 이 1회 이후로는 재시작 루프가 생겨
+        # 대시보드 자동 재시작이 가능해진다 (claude 직접 실행이면 다음에도 수동)
+        manual = f"{os.path.join(ROOT, 'bin', 's9')} code --resume " + full \
             + ((" " + " ".join(flags)) if flags else "")
         if account:
             manual = (f"CLAUDE_CONFIG_DIR=~/.claude-profiles/"

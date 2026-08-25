@@ -360,6 +360,27 @@ class TestDashboardChat(unittest.TestCase):
         self.assertFalse(res["listening"])           # 테스트 환경엔 tail 없음
         self.assertEqual(res["user"], "tester")      # binding user="" → whoami
 
+    # C20. target 응답에 model 동봉 (REQ-20260825-037 재작업): 구버전 serve가
+    #      키 자체를 안 줘 상태줄 모델 라벨이 통째로 실종되던 결함 — 실 HTTP
+    #      왕복으로 키 존재와 트랜스크립트 파생 값을 고정한다.
+    def test_c20_target_model_key(self):
+        self.touch_stream()
+        code, res = self.api("/api/chat/target")
+        self.assertEqual(code, 200)
+        self.assertIn("model", res)              # 키는 항상 존재 (빈 값 허용)
+        # 트랜스크립트가 있으면 마지막 assistant의 model을 돌려준다
+        tp = os.path.join(self.tmp, "modelsess-transcript.jsonl")
+        with open(tp, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "assistant", "message": {
+                "model": "claude-fable-5", "stop_reason": "end_turn",
+                "content": []}}) + "\n")
+        env_s = {"S9_SESSION": "modelsess"}
+        self.cli("log", "session start", env_extra=env_s)
+        self.cli("bind", "transcript_path", tp, env_extra=env_s)
+        code, res = self.api("/api/chat/target?sid=modelsess")
+        self.assertEqual(code, 200)
+        self.assertEqual(res.get("model"), "claude-fable-5")
+
     # C16. 선행 대화 보존 (REQ-20260825-007): Question 분류로 문서화되지 않은
     #      직전 메시지가, 이어진 Request의 REQ body에 [선행 대화]로 담긴다
     def test_c16_chat_context_carryover(self):

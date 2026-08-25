@@ -328,6 +328,20 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   font-family:var(--mono),"Segoe UI Emoji","Noto Color Emoji";font-size:12.5px;
   line-height:1.7;font-variant-ligatures:none;letter-spacing:0}
 .ccterm .ccatt{color:var(--cc-cyan);background:rgba(86,200,216,.12);padding:0 5px}
+/* 모델/effort 선택 패널 (REQ-20260825-037 재작업 — 브라우저 prompt 대체) */
+.ccterm{position:relative}
+.ccmpanel{position:absolute;right:14px;bottom:60px;z-index:6;
+  background:var(--cc-bg);border:1px solid var(--cc-border);padding:10px 12px}
+.ccmpanel .mprow{display:flex;gap:6px;align-items:center;margin:4px 0}
+.ccmpanel .mplab{font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--cc-faint);width:46px;flex:none}
+.ccmpanel button{background:none;border:1px solid var(--cc-border);
+  color:var(--cc-dim);padding:2px 9px;font:inherit;font-size:12px;cursor:pointer}
+.ccmpanel button:hover{color:var(--cc-text);border-color:var(--cc-dim)}
+.ccmpanel button.sel{color:var(--cc-bg);background:var(--cc-text);
+  border-color:var(--cc-text)}
+.ccmpanel .mpgo{color:var(--cc-yellow);border-color:var(--cc-yellow)}
+.ccmpanel .mpnote{font-size:10px;color:var(--cc-faint);margin-top:6px}
 .ccout{flex:1;overflow-y:auto;padding:16px 20px}
 .ccout .ln{display:flex;gap:9px;margin:0 0 13px}
 .ccout .ln .g{flex:none;width:14px;text-align:left;user-select:none}
@@ -2476,6 +2490,9 @@ async function termTargetLoop(T){
   await tick();
   if (TERM !== T) return;
   if (!T.sid) termWaitingGuide(T);
+  // ?mpanel: 진단·헤드리스 캡처용 — 선택 패널 자동 오픈 (클릭 불가 환경 검증)
+  if (T.sid && /[?&]mpanel/.test(location.search) && !$("#cc-mpanel"))
+    termModelChange(T);
   T.timers.push(setInterval(() => {
     if (document.hidden || tab !== "terminal") return;
     tick();
@@ -3158,27 +3175,58 @@ function termErrClear(){
 /* 모델/effort 변경 (REQ-20260825-037): CC는 실행 중 변경을 안 열어주므로
    같은 대화를 --resume --model --effort 로 재개 재기동한다. s9 code 신버전
    래퍼 세션이면 자동, 아니면 실행할 명령을 안내한다. */
-async function termModelChange(T){
+function termModelChange(T){            // 라벨 클릭 → 인라인 선택 패널 (토글)
   if (!T.sid) return;
-  const model = prompt("모델 (빈칸=유지 · 예: opus, sonnet, haiku 또는 전체 모델 id):", "");
-  if (model === null) return;
-  const effort = prompt("effort (빈칸=유지 · low|medium|high|xhigh|max):", "");
-  if (effort === null) return;
-  if (!model.trim() && !effort.trim()) return;
+  const old = $("#cc-mpanel");
+  if (old){ old.remove(); return; }
+  const root = $("#cc-root");
+  if (!root) return;
+  const p = document.createElement("div");
+  p.id = "cc-mpanel";
+  p.className = "ccmpanel";
+  const row = (name, label, vals) => `<div class="mprow"><span class="mplab">${label}</span>`
+    + vals.map(v => `<button type="button" data-${name}="${v}" class="${v === "" ? "sel" : ""}">${v || "유지"}</button>`).join("") + `</div>`;
+  p.innerHTML = row("m", "model", ["", "opus", "sonnet", "haiku"])
+    + row("e", "effort", ["", "low", "medium", "high", "xhigh", "max"])
+    + `<div class="mprow"><button type="button" class="mpgo">적용 — 같은 대화로 재시작</button><button type="button" class="mpx">닫기</button></div>
+       <div class="mpnote">유휴 상태에서만 재시작된다 · effort 현재값은 CC가 기록하지 않아 미표시</div>`;
+  p.addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.classList.contains("mpx")){ p.remove(); return; }
+    if (b.dataset.m !== undefined || b.dataset.e !== undefined){
+      [...b.parentElement.querySelectorAll("button")].forEach(x => x.classList.toggle("sel", x === b));
+      return;
+    }
+    if (b.classList.contains("mpgo")){
+      const m = p.querySelector("[data-m].sel")?.dataset.m || "";
+      const ef = p.querySelector("[data-e].sel")?.dataset.e || "";
+      p.remove();
+      if (m || ef) termModelApply(T, m, ef);
+    }
+  });
+  root.appendChild(p);
+}
+
+async function termModelApply(T, model, effort){
   const out = $("#ccout"), w = $("#cc-wait");
   let d = null;
   try{
     const r = await fetch("/api/session/restart", {method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({sid: T.sid, model: model.trim(), effort: effort.trim()})});
-    d = await r.json();
+      body: JSON.stringify({sid: T.sid, model, effort})});
+    // 404 = serve가 이 API 이전 버전 — bin/s9 갱신 후 serve 프로세스가 남아
+    // 구 핸들러를 서빙하는 상태 (반려 재작업: "서버 연결 실패" 오진 방지)
+    d = r.status === 404
+      ? {ok: false, reason: "대시보드 서버가 구버전(재시작 API 없음) — 세션 터미널에서 serve 재시작 후 재시도"}
+      : await r.json();
   }catch(ex){ d = {ok: false, reason: "서버 연결 실패"}; }
   if (TERM !== T || !out || !w) return;
   const body = !d.ok
     ? `<span style="color:var(--cc-red)">✗ 재시작 거부 — ${esc(d.reason || "")}</span>`
     : d.mode === "wrapper"
     ? `<span style="color:var(--cc-yellow)">↻ 세션 재시작 중 — 같은 대화가 새 설정으로 재개된다 (몇 초 내 자동 복귀)</span>`
-    : `<span style="color:var(--cc-dim)">이 세션은 수동 재시작 필요 — 세션 터미널에서 종료 후 실행:</span> <span class="cccode">${esc(d.cmd || "")}</span>`;
+    : `<span style="color:var(--cc-dim)">이 세션은 1회 수동 재시작 필요 — 세션 터미널에서 종료(Ctrl+C 2회) 후 실행하면 이후부터는 대시보드에서 자동 재시작된다:</span> <span class="cccode">${esc(d.cmd || "")}</span>`;
   w.insertAdjacentHTML("beforebegin", ccLine("↻", "var(--cc-dim)", body));
   out.scrollTop = out.scrollHeight;
 }

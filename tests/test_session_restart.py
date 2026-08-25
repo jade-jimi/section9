@@ -118,7 +118,8 @@ class TestRestartGuards(unittest.TestCase):
             r = mod.restart_session("mansess", model="opus", effort="high")
         self.assertTrue(r["ok"], r)
         self.assertEqual(r["mode"], "manual")
-        self.assertIn("claude --resume mansess-full-session-id", r["cmd"])
+        # s9 code 래퍼 경유 — 1회 수동 후엔 재시작 루프가 생겨 자동화된다
+        self.assertIn("s9 code --resume mansess-full-session-id", r["cmd"])
         self.assertIn("--model opus", r["cmd"])
         self.assertIn("--effort high", r["cmd"])
 
@@ -139,6 +140,29 @@ class TestRestartGuards(unittest.TestCase):
                      transcript_path=os.path.join(TMP, "none.jsonl"))
         r = mod.restart_session("deadrst", model="opus")
         self.assertFalse(r["ok"])
+
+
+class TestRestartUiContract(unittest.TestCase):
+    """대시보드 마크업 계약 (반려 재작업): 모델 라벨은 미상이어도 항상 보이고,
+    구버전 serve(404)는 정확한 사유로 안내하며, 진단 플래그로 자가 검증 가능."""
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(HERE, "..", "web", "index.html"),
+                  encoding="utf-8") as f:
+            cls.html = f.read()
+
+    # R7. 모델 미상 폴백 라벨 — 라벨 실종이 "실행부터 실패"로 보이던 결함
+    def test_r7_model_label_always_visible(self):
+        self.assertIn("ccmodelbtn", self.html)
+        self.assertIn("model?", self.html)
+
+    # R8. 구버전 serve의 404를 "서버 연결 실패"로 오진하지 않는다
+    def test_r8_stale_serve_404_reason(self):
+        self.assertIn("재시작 API 없음", self.html)
+
+    # R9. ?nosse 진단 플래그 — 터미널 탭 헤드리스 캡처(자가 검증) 경로 유지
+    def test_r9_nosse_diag_flag(self):
+        self.assertIn("nosse", self.html)
 
 
 if __name__ == "__main__":
