@@ -356,6 +356,22 @@ class TestDashboardChat(unittest.TestCase):
         self.assertFalse(res["listening"])           # 테스트 환경엔 tail 없음
         self.assertEqual(res["user"], "tester")      # binding user="" → whoami
 
+    # C16. 선행 대화 보존 (REQ-20260825-007): Question 분류로 문서화되지 않은
+    #      직전 메시지가, 이어진 Request의 REQ body에 [선행 대화]로 담긴다
+    def test_c16_chat_context_carryover(self):
+        self.touch_stream()
+        code, res = self.api("/api/chat", {"text": "발번 구조가 왜 이렇게 되어 있지?"})
+        self.assertEqual(code, 200, res)
+        self.assertFalse(res.get("req"))             # 질문 — REQ 미생성
+        code, res = self.api("/api/chat", {"text": "그 발번 구조를 개선해줘"})
+        self.assertEqual(code, 200, res)
+        req_id = res.get("req") or ""
+        self.assertTrue(req_id.startswith("REQ-"), res)
+        r = self.cli("show", req_id)
+        self.assertIn("[선행 대화", r.stdout)
+        self.assertIn("발번 구조가 왜 이렇게", r.stdout)   # 원안 메시지 보존
+        self.assertIn("그 발번 구조를 개선해줘", r.stdout)
+
     # C14. SessionStart: 유휴 중 쌓인 미처리 줄 주입 + EOF 오프셋 arm + seen 갱신
     def test_c14_hook_pending_injection(self):
         sid = "pendsess"
