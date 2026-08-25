@@ -99,28 +99,71 @@ def probe_new_port(budget=12.0):
 
 
 def ps_rows():
-    """(pid, 경과초, 커맨드) — ps 한 번으로 끝낸다(의존성 0)."""
+    """(pid, ppid, 경과초, 커맨드) — ps 한 번으로 끝낸다(의존성 0)."""
     try:
-        out = subprocess.run(["ps", "-eo", "pid,etimes,args"],
+        out = subprocess.run(["ps", "-eo", "pid,ppid,etimes,args"],
                              capture_output=True, text=True, timeout=10).stdout
     except Exception:
         return []
     rows = []
     for line in out.splitlines()[1:]:
-        parts = line.strip().split(None, 2)
-        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
-            rows.append((int(parts[0]), int(parts[1]), parts[2]))
+        parts = line.strip().split(None, 3)
+        if (len(parts) == 4 and parts[0].isdigit() and parts[1].isdigit()
+                and parts[2].isdigit()):
+            rows.append((int(parts[0]), int(parts[1]), int(parts[2]), parts[3]))
     return rows
 
 
+# 부모가 이것들이면 진짜 부모(테스트 러너)는 이미 죽어 재양육된 것이다.
+INIT_NAMES = ("/init", "/sbin/init", "systemd", "launchd")
+# tests/portpool.py 의 고정 풀이 쓰는 대역. 풀 크기가 늘어도(64→128) 회수가
+# 따라오도록 대역을 넉넉히 잡는다 — 여기 밖이면 회수 대상이 아니므로,
+# 좁게 잡아 놓치는 쪽이 넓게 잡는 쪽보다 나쁘다(이 대역은 테스트 전용이다).
+POOL_LO, POOL_HI = 18800, 18999
+PORT_RE = re.compile(r"--port\s+(\d+)")
+
+
+def proc_cmd(pid):
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return f.read().decode("utf-8", "ignore").replace("\0", " ").strip()
+    except OSError:
+        pass
+    try:
+        return subprocess.run(["ps", "-p", str(pid), "-o", "args="],
+                              capture_output=True, text=True,
+                              timeout=5).stdout.strip()
+    except Exception:
+        return ""
+
+
+def reparented(ppid):
+    """부모를 잃고 init 에 재양육됐는가 — 즉 주인이 죽었는가."""
+    if ppid <= 1:
+        return True
+    cmd = proc_cmd(ppid)
+    if not cmd:
+        return False
+    head = cmd.split()[0]
+    return any(head == n or head.endswith(n) for n in INIT_NAMES)
+
+
 def scan(rows):
+    """살아 있는 s9 서버와 헤드리스 브라우저를 가른다.
+
+    고아 판정은 **나이가 아니라 주인 사망**이다(REQ-20260826-002 와 같은 규칙).
+    나이로 가르면 오래 걸리는 스위트의 멀쩡한 서버를 죽이거나, 방금 버려진
+    서버를 유예 시간 동안 방치한다 — 실제로 유예(180초) 탓에 갓 고아가 된
+    테스트 서버들이 풀(18800~18863)을 잠식해 다음 스위트가 '포트 풀 소진'으로
+    통째로 깨졌다. 테스트 러너가 죽으면 그 서버는 init 에 재양육되므로,
+    그 사실만으로 즉시 고아다."""
     serves, orphans, chromes = [], [], []
-    for pid, age, cmd in rows:
+    for pid, ppid, age, cmd in rows:
         if "s9 serve" in cmd or "bin/s9 serve" in cmd:
             serves.append((pid, age, cmd))
-            # 테스트가 띄우는 서버는 --host 127.0.0.1 + 임의 포트 형태다.
-            # 정상 종료되면 몇 초 안에 사라지므로, 오래 살아남았으면 누수다.
-            if "--host 127.0.0.1" in cmd and age > ORPHAN_AGE:
+            m = PORT_RE.search(cmd)
+            in_pool = bool(m) and POOL_LO <= int(m.group(1)) <= POOL_HI
+            if in_pool and reparented(ppid):
                 orphans.append((pid, age, cmd))
         elif "chrome" in cmd.lower() and "--headless" in cmd:
             chromes.append((pid, age, cmd))
@@ -251,7 +294,21 @@ def scan_shot_browsers():
     그것이다. 그래서 개체수는 반드시 윈도우 쪽에서 센다."""
     ps = shutil.which("powershell.exe")
     if not ps:
-        return []
+        # 윈도우가 아닌 곳(macOS·네이티브 리눅스)에서도 같은 규칙이 필요하다.
+        # 그쪽엔 포트를 대신 붙드는 중계가 없어 망이 끊기지는 않지만, 고아
+        # 브라우저가 FD·메모리·CPU를 먹는 누수 자체는 똑같이 일어난다.
+        out = []
+        for pid, _ppid, age, cmd in ps_rows():
+            if "--headless" not in cmd:
+                continue
+            if not any(m in cmd for m in SHOT_MARKERS):
+                continue
+            m = OWNER_RE.search(cmd)
+            mk = MARKER_RE.search(cmd)
+            out.append({"pid": pid, "cmd": cmd, "age": age,
+                        "marker": mk.group(1) if mk else "",
+                        "owner": int(m.group(1)) if m else None})
+        return out
     cond = " -or ".join(f"$_.CommandLine -like '*{m}*'" for m in SHOT_MARKERS)
     script = (
         "$ErrorActionPreference='SilentlyContinue';"
@@ -303,10 +360,36 @@ def owner_alive(pid):
         return False
 
 
+def reap_orphan_servers():
+    """주인을 잃은 테스트 서버를 회수한다 — 브라우저와 같은 규칙, 같은 이유.
+
+    스위트가 중간에 죽으면 그 서버는 init 에 재양육돼 영원히 남고, 고정 풀
+    (18800~18863)의 칸을 하나씩 잠식한다. 실제로 6개가 그렇게 남아 다음
+    스위트가 '포트 풀 소진'으로 5건 통째로 깨졌다."""
+    _serves, orphans, _chromes = scan(ps_rows())
+    n = 0
+    for pid, _age, _cmd in orphans:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            n += 1
+        except OSError:
+            pass
+    return n
+
+
 def kill_win(pids):
     ps = shutil.which("powershell.exe")
-    if not ps or not pids:
+    if not pids:
         return 0
+    if not ps:
+        n = 0
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                n += 1
+            except OSError:
+                pass
+        return n
     ids = ",".join(str(p) for p in pids)
     try:
         subprocess.run([ps, "-NoProfile", "-NonInteractive", "-Command",
@@ -523,11 +606,13 @@ def main():
         # 캡처 직전·서버 감시 주기에서 부르는 경로 — 진단(프로브·powershell 조회)을
         # 생략해 싸게 끝낸다. 조용히 실행하고 회수한 게 있을 때만 한 줄 남긴다.
         sw = sweep_stale_shots()
+        sw["servers"] = reap_orphan_servers()
         if args.json:
             print(json.dumps(sw, ensure_ascii=False))
-        elif sw["procs"] or sw["profiles"]:
+        elif sw["procs"] or sw["profiles"] or sw["servers"]:
             print(f"회수: 고아 캡처 브라우저 {sw['procs']}개 · "
-                  f"프로필 {sw['profiles']}개")
+                  f"프로필 {sw['profiles']}개 · "
+                  f"고아 테스트 서버 {sw['servers']}개")
         return 0
 
     d, orphans, chromes = diagnose()

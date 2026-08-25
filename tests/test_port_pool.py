@@ -53,10 +53,18 @@ class BoundedReuse(unittest.TestCase):
         self.assertTrue(seen <= set(portpool.pool_ports()))
 
     def test_repeated_runs_reuse_the_same_ports(self):
-        """스위트를 반복 실행해도 새 포트 번호가 늘지 않는다(중계 누수 상한 고정)."""
-        first = {portpool.free_port() for _ in range(portpool.POOL_SIZE)}
-        second = {portpool.free_port() for _ in range(portpool.POOL_SIZE)}
-        self.assertEqual(first, second)
+        """반복 할당은 같은 구간을 돌려쓴다 — 쓰는 포트 번호가 계속 늘지 않는다.
+
+        (정확히 같은 집합을 요구하지는 않는다 — 다른 테스트의 서버가 잠깐
+        한 칸을 쥐고 있으면 그 회차만 건너뛰기 때문이다. 고정하려는 성질은
+        '구간 밖으로 새지 않는다'와 '총량이 슬롯 크기 이하다' 두 가지다.)
+        """
+        slot = set(portpool.slot_ports())
+        first = {portpool.free_port() for _ in range(portpool.SLOT_SIZE * 2)}
+        second = {portpool.free_port() for _ in range(portpool.SLOT_SIZE * 2)}
+        self.assertTrue(first <= slot, first - slot)
+        self.assertTrue(second <= slot, second - slot)
+        self.assertLessEqual(len(first | second), portpool.SLOT_SIZE)
 
     def test_allocated_port_is_usable(self):
         port = portpool.free_port()
@@ -67,6 +75,24 @@ class BoundedReuse(unittest.TestCase):
             socket.create_connection(("127.0.0.1", port), 3).close()
         finally:
             srv.close()
+
+    def test_time_wait_port_is_still_allocatable(self):
+        """요청을 처리하고 내려간 서버의 포트는 60초쯤 TIME_WAIT 로 남는다.
+
+        그걸 '사용 중'으로 판정하면 방금 쓴 칸이 1분간 죽고 풀이 헛되이 마른다
+        (실제로 test_whoami 가 '풀 소진'으로 깨졌다). 실서버(HTTPServer)는
+        allow_reuse_address 로 그 포트를 다시 잡으므로 판정도 같아야 한다.
+        """
+        srv = portpool.pool_socket()
+        port = srv.getsockname()[1]
+        c = socket.create_connection(("127.0.0.1", port), 3)
+        a, _peer = srv.accept()
+        a.close()          # 서버가 먼저 닫는다 → 서버 쪽 포트가 TIME_WAIT
+        c.close()
+        srv.close()
+        s = portpool._try_bind(port)
+        self.assertIsNotNone(s, f"TIME_WAIT 인 {port} 를 다시 잡지 못한다")
+        s.close()
 
     def test_pool_socket_holds_the_port(self):
         a = portpool.pool_socket()

@@ -31,7 +31,7 @@
    파일마다 400회씩 두드려 고갈을 가속했다(스위트 14파일 = 최대 5,600
    커넥션). 고장이 부하를 키우는 되먹임을 끊는 것이 첫째다.
 2. **포트는 고정 풀에서 돌려쓴다** — 윈도우 동적 범위(49152~)와 커널 임시
-   범위(32768~) **아래**의 64개(18800~18863). 리스너를 동적 범위 안에 두면
+   범위(32768~) **아래**의 128개(18800~18927). 리스너를 동적 범위 안에 두면
    중계가 쓰려던 포트와 부딪히고, 임시 범위 안에 두면 남의 아웃바운드 연결과
    부딪힌다. 번호가 예측 가능해야 고아 서버 회수도 쉽다.
 
@@ -45,6 +45,8 @@ bind 적발 · 촘촘한 재시도 루프 적발).
 """
 import os
 import socket
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -54,10 +56,10 @@ try:
 except ImportError:      # 윈도우 — 슬롯 잠금 없이 pid 로만 나눈다
     fcntl = None
 
-# 18800~18863 — 윈도우 동적 범위(49152~65535)와 커널 임시 범위(32768~60999)
+# 18800~18927 — 윈도우 동적 범위(49152~65535)와 커널 임시 범위(32768~60999)
 # 양쪽 모두의 아래. 대시보드 기본 포트(9909)와 그 스캔 대역(9910~9950)도 피한다.
 POOL_BASE = int(os.environ.get("S9_TEST_PORT_BASE", "18800"))
-POOL_SIZE = int(os.environ.get("S9_TEST_PORT_SIZE", "64"))
+POOL_SIZE = int(os.environ.get("S9_TEST_PORT_SIZE", "128"))
 
 # 스위트가 동시에 여러 개 돌 수 있다(무인 감사 세션 병렬) — 풀을 슬롯으로 갈라
 # 프로세스마다 다른 구간을 쓰게 한다. 같은 포트를 동시에 노려 서로 밀어내는
@@ -127,9 +129,30 @@ def slot_ports():
     return [POOL_BASE + slot * SLOT_SIZE + i for i in range(SLOT_SIZE)]
 
 
+def _reclaim_orphans():
+    """주인 잃은 테스트 서버 회수 — 판단·실행은 bin/s9-doctor 한 곳에만 둔다."""
+    tool = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "bin", "s9-doctor")
+    if not os.path.exists(tool):
+        return
+    try:
+        subprocess.run([sys.executable, tool, "--sweep", "--json"],
+                       capture_output=True, timeout=90)
+        time.sleep(0.5)          # SIGTERM 이 실제로 포트를 놓을 틈
+    except Exception:
+        pass
+
+
 def _try_bind(port):
-    """실제로 잡을 수 있는 포트인지 확인 — 잡히면 bind+listen 된 소켓을 준다."""
+    """실제로 잡을 수 있는 포트인지 확인 — 잡히면 bind+listen 된 소켓을 준다.
+
+    SO_REUSEADDR 를 쓰는 이유: 테스트 서버가 요청을 처리하고 내려가면 그
+    리스닝 포트가 TIME_WAIT 로 60초쯤 남는다. 실제 서버(HTTPServer)는
+    allow_reuse_address 로 그 포트를 다시 잡으므로, 판정도 같은 기준이어야
+    한다. 아니면 방금 쓴 포트가 1분간 '사용 중'으로 보여 풀이 헛되이 마른다.
+    """
     s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         s.bind(("127.0.0.1", port))
         s.listen(8)
@@ -148,16 +171,32 @@ def pool_socket(base=None, size=None):
     global _cursor
     ports = slot_ports() if base is None and size is None else pool_ports(base, size)
     n = len(ports)
-    with _lock:
-        start = _cursor % n
-        for i in range(n):
-            s = _try_bind(ports[(start + i) % n])
-            if s is not None:
-                _cursor = (start + i + 1) % n
-                return s
+
+    def _grab():
+        global _cursor
+        with _lock:
+            start = _cursor % n
+            for i in range(n):
+                s = _try_bind(ports[(start + i) % n])
+                if s is not None:
+                    _cursor = (start + i + 1) % n
+                    return s
+        return None
+
+    s = _grab()
+    if s is not None:
+        return s
+    # 풀이 다 찼다면 십중팔구 주인 잃은 서버가 칸을 물고 있는 것이다 —
+    # 사람에게 회수를 안내하고 실패하는 대신 **먼저 회수하고 다시 시도한다**.
+    # 안내만 하면 그 스위트는 어차피 깨지고, 다음 실행도 같은 자리에서 깨진다.
+    _reclaim_orphans()
+    s = _grab()
+    if s is not None:
+        return s
     raise RuntimeError(
         f"테스트 포트 풀 소진: {ports[0]}~{ports[-1]} {n}개가 모두 사용 중이다. "
-        "고아 테스트 서버가 남아 있을 수 있다 — `s9 doctor --fix` 로 회수하라.")
+        "회수를 시도했는데도 비지 않았다 — 살아 있는 서버가 실제로 그만큼 "
+        "있다는 뜻이다. `s9 doctor` 로 확인하라.")
 
 
 def free_port(base=None, size=None):

@@ -31,9 +31,19 @@ def py_sources():
     return out
 
 
+def local_helpers():
+    """tests/ 안의 우리 헬퍼 모듈 — 설치가 필요 없으니 서드파티가 아니다.
+
+    (REQ-20260825-100: portpool 처럼 여러 테스트가 공유하는 규율 모듈.)
+    """
+    return {n[:-3] for n in os.listdir(HERE)
+            if n.endswith(".py") and not n.startswith("test_")
+            and n != "__main__.py"}
+
+
 class TestStdlibOnly(unittest.TestCase):
     def test_no_third_party_imports(self):
-        allowed = set(sys.stdlib_module_names)
+        allowed = set(sys.stdlib_module_names) | local_helpers()
         bad = []
         for path in py_sources():
             with open(path, encoding="utf-8") as f:
