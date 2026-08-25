@@ -20,7 +20,17 @@ import sys
 ROOT = os.environ.get("S9_ROOT") or os.path.dirname(
     os.path.dirname(os.path.abspath(__file__)))
 QUIET = "--quiet" in sys.argv
-MARK = "/section9/bin/"  # section9 소유 hook 식별자
+MARK = "/section9/bin/"  # section9 소유 hook 식별자(이 설치본)
+
+
+def owned_hook(cmd):
+    """이 명령이 section9 이 심은 훅인가 — **경로가 아니라 스크립트 이름으로** 본다.
+
+    경로로만 보면 다른 위치에서 설치된 훅을 못 지운다. 실제로 임시 워크트리
+    (/tmp/.../scratchpad/wt/bin/)에서 실행된 설치가 남긴 훅 5개가, 그 디렉토리가
+    지워진 뒤에도 settings.json 에 계속 남아 있었다 — 죽은 경로를 부르는
+    no-op 이라 조용했고, 재설치를 해도 경로가 안 맞아 정리되지 않았다."""
+    return MARK in cmd or "s9-audit" in cmd
 
 
 def say(msg):
@@ -91,7 +101,7 @@ def install_claude_hooks():
         cur = hooks.get(event, [])
         # section9 소유 항목 제거 후 canonical 로 재삽입 (다른 훅은 보존)
         kept = [e for e in cur
-                if not any(MARK in h.get("command", "")
+                if not any(owned_hook(h.get("command", ""))
                            for h in e.get("hooks", []))]
         new = kept + entries
         if new != cur:
