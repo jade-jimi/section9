@@ -3009,9 +3009,11 @@ async function termInterrupt(T){
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || "중단 요청 실패");
     if (TERM === T && out && w){
-      w.insertAdjacentHTML("beforebegin",
-        ccLine("⨯", "var(--cc-dim)",
-          `<span style="color:var(--cc-dim)">중단 요청 전송됨 — 세션은 다음 도구 경계에서 멈춘다 (즉시 강제 중단은 세션 터미널의 Esc)</span>`));
+      // signal=sent → SIGINT 즉시 중단 (REQ-20260825-008), skipped → 협조적 폴백
+      const body = d.signal === "sent"
+        ? `<span style="color:var(--cc-yellow)">⚡ 인터럽트 — 진행 중 턴을 즉시 중단</span>`
+        : `<span style="color:var(--cc-dim)">중단 요청 큐잉${d.reason ? ` · ${esc(d.reason)}` : ""} — 세션은 다음 도구 경계에서 멈춘다</span>`;
+      w.insertAdjacentHTML("beforebegin", ccLine("⨯", "var(--cc-dim)", body));
       out.scrollTop = out.scrollHeight;
     }
   }catch(ex){

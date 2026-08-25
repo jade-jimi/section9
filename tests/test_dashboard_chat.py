@@ -341,6 +341,10 @@ class TestDashboardChat(unittest.TestCase):
         code, res = self.api("/api/chat", {"kind": "interrupt"})
         self.assertEqual(code, 200, res)
         self.assertFalse(res.get("req"))
+        # attach_pid=1은 claude 프로세스가 아님 — 실신호 없이 skipped 보고
+        # (REQ-20260825-008 가드), 협조적 큐잉은 항상 수행
+        self.assertEqual(res.get("signal"), "skipped")
+        self.assertTrue(res.get("reason"))
         last = self.inbox(self.sid)[-1]
         self.assertEqual(last["kind"], "interrupt")
         self.assertTrue(last["text"])                # 기본 중단 문구
