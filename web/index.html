@@ -326,6 +326,10 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .ccstatus .ccrc{text-decoration:underline;cursor:help}
 .ccout .ln.pending{opacity:.55}
 .ccterm .ccprompt{color:var(--cc-text)}
+/* 선택 하이라이트 (REQ-20260825-003): 전역 ::selection은 tone 잉크색 배경이라
+   라이트 tone에서 항상-다크 터미널 배경과 구분 불가 — 터미널 인버스 비디오로 재정의 */
+.ccterm::selection,.ccterm ::selection{background:var(--cc-text);color:var(--cc-bg)}
+.term::selection,.term ::selection{background:#cfd8e3;color:#101418}
 .ccterm .cccode{background:rgba(255,255,255,.09);padding:0 4px}
 .ccterm details summary{cursor:pointer;list-style:none;display:inline}
 .ccterm details summary::-webkit-details-marker{display:none}
@@ -2176,6 +2180,11 @@ function ccEvent(T, e){
     const u = ccUserText(t);
     if (!u) return null;                         // 훅 주입 컨텍스트만 있던 턴
     if (/^<task-notification>/.test(u)){         // 백그라운드 에이전트 완료 통지
+      // 수신함 배달 통지(Monitor의 inbox tail 이벤트)는 전달 수단일 뿐이다 —
+      // 사용자 메시지는 이미 ❯ 채팅 줄로 보이므로 숨긴다. 이걸 보이면
+      // "background task 완료 통지"가 뜨고 스피너까지 종결시켜 응답 없이
+      // "~ (총 Ns)"만 찍힌다 (REQ-20260825-005)
+      if (/Monitor event/.test(u) && /inbox-/.test(u)) return null;
       if (T) termAgentDone(T);
       const id = (u.match(/<task-id>([^<]+)<\/task-id>/) || [])[1] || "";
       return {k:"x", role:"notif", html: ccLine("●", "var(--cc-faint)",
@@ -2233,7 +2242,13 @@ function ccRenderBatch(T, evs){
   for (const x of evs){
     if (x && x.__chat){                          // 초기 병합용 수신함 라인
       items.push({k:"x", html: ccChatLine(x)});
-      if (x.kind === "chat" && T){ T.lastRole = "user"; T.waitBase = Date.now(); }
+      if (x.kind === "chat" && T){
+        T.lastRole = "user";
+        // 경과시간은 줄의 실제 ts 기준 (REQ-20260825-004: Date.now()로 잡으면
+        // 탭 복귀 재렌더마다 대기 시계가 0초부터 다시 시작)
+        const p = Date.parse(String(x.ts || ""));
+        T.waitBase = isNaN(p) ? Date.now() : p;
+      }
       continue;
     }
     const r = ccEvent(T, x);
@@ -2594,7 +2609,7 @@ function termSpinnerFinalize(T, base){
   const secs = Math.max(0, Math.round((Date.now() - (base != null ? base : T.waitBase)) / 1000));
   if (w && T.waitOn)
     w.insertAdjacentHTML("beforebegin",
-      `<div class="ln ccdim"><span class="g" style="color:var(--cc-dim)">✻</span><span class="b" style="color:var(--cc-faint)">~ (총 ${secs}s)</span></div>`);
+      `<div class="ln ccdim"><span class="g" style="color:var(--cc-dim)">✻</span><span class="b" style="color:var(--cc-faint)">응답까지 ${secs}s</span></div>`);
   T.waitOn = false;
   if (w) w.hidden = true;
 }
