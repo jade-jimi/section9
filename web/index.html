@@ -2376,8 +2376,16 @@ function renderTerminal(){
    sid가 바뀌면(대격변) 타임라인만 교체. 입력줄은 어떤 경우에도 불변(L0). */
 async function termTargetLoop(T){
   const tick = async () => {
-    const nt = await ccFetch("/api/chat/target", 4000);
+    // 타깃 고착 (REQ-20260825-020): 현 대상이 있으면 sid를 명시해 유지 —
+    // listening 세션이 여럿일 때 최신 활동이 타깃을 가로채는 재발 차단.
+    // 현 대상이 죽었을 때만 자동 재선택으로 폴백한다.
+    let nt = await ccFetch("/api/chat/target"
+      + (T.sid ? "?sid=" + encodeURIComponent(T.sid) : ""), 4000);
     if (TERM !== T) return;
+    if (T.sid && nt && nt.sid && !nt.live){
+      nt = await ccFetch("/api/chat/target", 4000);
+      if (TERM !== T) return;
+    }
     if (nt && nt.hint) T.hint = nt.hint;   // 빈 상태 안내용 실행 명령(실경로)
     if (!nt){ termStatus(T, null); return; }
     if (nt.sid && nt.sid !== T.sid){ termAttach(T, nt); return; }
