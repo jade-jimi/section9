@@ -34,6 +34,7 @@ finally 가 돌지 않아 고아 브라우저가 조용히 쌓이고, 그 하나
 import argparse
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -235,32 +236,121 @@ SWEEP_AGE = 600           # 이보다 오래된 캡처 잔여물은 주인이 �
 WIN_TEMP = "/mnt/c/Temp"
 
 
-def sweep_stale_shots(max_age=SWEEP_AGE):
-    """주인 없는 캡처 잔여물을 회수한다 — 고아 브라우저와 프로필 디렉토리.
+OWNER_RE = re.compile(r"s9shot-(\d+)")
+# 캡처 하나가 브라우저 프로세스를 여럿 띄운다(렌더러·GPU·유틸리티 — 실측 11개).
+# 그래서 개체수는 프로세스가 아니라 **표식(= 캡처 한 건)** 단위로 센다.
+MARKER_RE = re.compile(r"(s9shot-\d+|cdp-prof-[A-Za-z0-9_.\-]+)")
 
-    캡처 프로세스가 스스로 회수하는 경로(cmd_shot 의 finally)는 세션이
-    중간에 죽으면 돌지 않는다. 2026-08-25 사고의 chrome.exe 165개가 그렇게
-    쌓였다. 여기서는 **표식을 가진, 충분히 오래된 것만** 지운다 — 진행 중인
-    캡처(방금 뜬 브라우저)는 건드리지 않는다."""
-    out = {"procs": 0, "profiles": 0}
+
+def scan_shot_browsers():
+    """표식을 가진 브라우저 목록 — [{pid, cmd, age, owner}].
+
+    리눅스 `ps` 로는 이걸 볼 수 없다. WSL에서 띄운 Windows 브라우저는 부모가
+    사라지면 리눅스 쪽 흔적이 없어지고 윈도우에만 남는다 — 2026-08-25 에
+    chrome.exe 165개가 상한(SHOT_MAX_HEADLESS) 계산에서 통째로 빠진 이유가
+    그것이다. 그래서 개체수는 반드시 윈도우 쪽에서 센다."""
     ps = shutil.which("powershell.exe")
-    if ps:
-        cond = " -or ".join(f"$_.CommandLine -like '*{m}*'" for m in SHOT_MARKERS)
-        script = (
-            "$ErrorActionPreference='SilentlyContinue';"
-            "$cut=(Get-Date).AddSeconds(-%d);"
-            "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe' or "
-            "Name='msedge.exe'\" | Where-Object { (%s) -and "
-            "$_.CreationDate -lt $cut } | ForEach-Object "
-            "{ Stop-Process -Id $_.ProcessId -Force; $_.ProcessId }"
-            % (max_age, cond))
-        try:
-            r = subprocess.run([ps, "-NoProfile", "-NonInteractive",
-                                "-Command", script], capture_output=True,
-                               text=True, timeout=60)
-            out["procs"] = len([x for x in r.stdout.split() if x.strip()])
-        except Exception:
-            pass
+    if not ps:
+        return []
+    cond = " -or ".join(f"$_.CommandLine -like '*{m}*'" for m in SHOT_MARKERS)
+    script = (
+        "$ErrorActionPreference='SilentlyContinue';"
+        "@(Get-CimInstance Win32_Process -Filter \"Name='chrome.exe' or "
+        "Name='msedge.exe'\" | Where-Object { %s } | ForEach-Object "
+        "{ [pscustomobject]@{pid=$_.ProcessId;cmd=$_.CommandLine;"
+        "age=[int]((Get-Date)-$_.CreationDate).TotalSeconds} }) "
+        "| ConvertTo-Json -Compress" % cond)
+    try:
+        r = subprocess.run([ps, "-NoProfile", "-NonInteractive", "-Command",
+                            script], capture_output=True, text=True, timeout=60)
+        rows = json.loads(r.stdout.strip() or "[]")
+    except Exception:
+        return []
+    if isinstance(rows, dict):        # 한 건이면 ConvertTo-Json 이 배열을 벗긴다
+        rows = [rows]
+    out = []
+    for row in rows:
+        cmd = row.get("cmd") or ""
+        m = OWNER_RE.search(cmd)
+        mk = MARKER_RE.search(cmd)
+        out.append({"pid": row.get("pid"), "cmd": cmd,
+                    "age": row.get("age") or 0,
+                    "marker": mk.group(1) if mk else "",
+                    "owner": int(m.group(1)) if m else None})
+    return out
+
+
+def owner_alive(pid):
+    """캡처를 띄운 s9 프로세스가 아직 살아 있는가.
+
+    나이가 아니라 **소유자 생존**이 고아의 정의다. 나이로 가르면 유예 시간
+    동안 계속 쌓이고, 유예를 줄이면 진행 중인 캡처를 죽인다. 소유자를 보면
+    둘 다 없다 — 죽는 순간 고아고, 살아 있는 동안은 절대 건드리지 않는다.
+
+    판정이 애매할 때는 **살아 있는 쪽으로 기운다**(권한 오류 등). pid 재사용을
+    구분하지 않는 것도 같은 이유다 — 최악이라야 고아 하나가 그 pid 의 수명만큼
+    더 사는 것이고, 반대 실수는 진행 중인 캡처를 죽이는 것이다."""
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
+def kill_win(pids):
+    ps = shutil.which("powershell.exe")
+    if not ps or not pids:
+        return 0
+    ids = ",".join(str(p) for p in pids)
+    try:
+        subprocess.run([ps, "-NoProfile", "-NonInteractive", "-Command",
+                        f"Stop-Process -Id {ids} -Force "
+                        f"-ErrorAction SilentlyContinue"],
+                       capture_output=True, timeout=60)
+        return len(pids)
+    except Exception:
+        return 0
+
+
+def sweep_stale_shots(max_age=SWEEP_AGE, browsers=None):
+    """고아 캡처 브라우저·프로필을 회수한다 (REQ-20260826-002).
+
+    회수 기준은 두 가지고, 순서가 중요하다:
+      1. **소유자 사망** — 표식이 `s9shot-<pid>` 라 띄운 프로세스를 특정할 수
+         있다. 그 프로세스가 없으면 이 브라우저는 아무도 거두지 않는다 =
+         즉시 고아. 유예 없음.
+      2. 소유자를 특정할 수 없는 표식(cdp-prof-)만 나이로 가른다 — 차선책이다.
+    이 정의 덕분에 "쌓이는 시간"이 없다. 캡처가 끝나거나 세션이 죽는 순간
+    고아가 되고, 다음 sweep(= 다음 캡처 직전 또는 5분 주기)에서 사라진다."""
+    out = {"procs": 0, "orphans": 0, "stale": 0, "profiles": 0, "alive": 0}
+    rows = scan_shot_browsers() if browsers is None else browsers
+    orphan_pids, stale_pids, live_markers = [], [], set()
+    for b in rows:
+        marker = b.get("marker") or f"pid:{b.get('pid')}"
+        if b["owner"] is not None:
+            if owner_alive(b["owner"]):
+                live_markers.add(marker)
+            else:
+                orphan_pids.append(b["pid"])
+        elif b["age"] > max_age:
+            stale_pids.append(b["pid"])
+        else:
+            live_markers.add(marker)
+    out["orphans"] = kill_win(orphan_pids)
+    out["stale"] = kill_win(stale_pids)
+    out["procs"] = out["orphans"] + out["stale"]
+    # 개체수는 프로세스가 아니라 캡처 건수다 — 캡처 하나가 렌더러·GPU 등
+    # 프로세스 11개를 띄우므로(실측), 프로세스로 세면 상한 8은 첫 캡처에서
+    # 이미 초과한다. 상한이 곧바로 무의미해지는 그 함정을 여기서 막는다.
+    out["alive"] = len(live_markers)
+    out["alive_procs"] = len(rows) - len(orphan_pids) - len(stale_pids)
+
     now = time.time()
     for base in (WIN_TEMP, os.environ.get("TMPDIR", "/tmp")):
         try:
@@ -271,8 +361,12 @@ def sweep_stale_shots(max_age=SWEEP_AGE):
             if not name.startswith(SHOT_MARKERS):
                 continue
             path = os.path.join(base, name)
+            m = OWNER_RE.search(name)
             try:
-                if now - os.path.getmtime(path) < max_age:
+                if m:
+                    if owner_alive(int(m.group(1))):
+                        continue          # 진행 중인 캡처의 프로필
+                elif now - os.path.getmtime(path) < max_age:
                     continue
                 if os.path.isdir(path):
                     shutil.rmtree(path, ignore_errors=True)

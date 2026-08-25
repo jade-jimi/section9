@@ -14,6 +14,7 @@
 """
 import importlib.util
 import shutil
+import subprocess
 import tempfile
 import time
 import os
@@ -100,13 +101,82 @@ class Advice(unittest.TestCase):
         self.assertIn("포트", text)
 
 
-class Sweep(unittest.TestCase):
-    """주인 없는 캡처 잔여물 회수 — 나이로만 가른다.
+def dead_pid():
+    """확실히 죽은 pid — 자식을 띄우고 곧바로 거둔다."""
+    p = subprocess.Popen(["true"])
+    p.wait()
+    return p.pid
 
-    캡처가 자기 것을 지우는 finally 는 세션이 중간에 죽으면 돌지 않는다.
-    그렇게 남은 프로필·브라우저가 2026-08-25 사고의 씨앗이었다. 그렇다고
-    무조건 지우면 **진행 중인 캡처**를 죽인다 — 그래서 나이가 유일한 기준이다.
+
+class Orphan(unittest.TestCase):
+    """고아의 정의는 나이가 아니라 **소유자 사망**이다 (REQ-20260826-002).
+
+    나이로 가르면 유예 시간만큼 반드시 쌓인다 — 90%에서 손쓰는 구조가 그래서
+    방어가 못 된다. 소유자를 보면 캡처를 띄운 프로세스가 죽는 순간 고아고,
+    살아 있는 동안은 절대 대상이 아니다. 즉 "쌓일 수 있는 창"이 없다.
     """
+
+    def setUp(self):
+        self.killed = []
+        self._kill = doctor.kill_win
+        doctor.kill_win = lambda pids: (self.killed.extend(pids), len(pids))[1]
+        self._which = doctor.shutil.which
+        doctor.shutil.which = lambda name: None      # 프로필 정리 경로 무력화
+        self._wintemp = doctor.WIN_TEMP
+        doctor.WIN_TEMP = "/nonexistent-s9"
+
+    def tearDown(self):
+        doctor.kill_win = self._kill
+        doctor.shutil.which = self._which
+        doctor.WIN_TEMP = self._wintemp
+
+    def browsers(self, rows):
+        return doctor.sweep_stale_shots(browsers=rows)
+
+    def test_dead_owner_is_reclaimed_immediately(self):
+        gone = dead_pid()
+        out = self.browsers([{"pid": 9001, "age": 2,
+                              "cmd": f"chrome.exe --user-data-dir=C:\\Temp\\s9shot-{gone}",
+                              "owner": gone}])
+        self.assertEqual(self.killed, [9001])
+        self.assertEqual(out["orphans"], 1)
+        self.assertEqual(out["alive"], 0)
+
+    def test_live_owner_is_never_touched(self):
+        """방금 뜬 캡처든 오래 걸리는 캡처든, 소유자가 살아 있으면 대상이 아니다."""
+        mine = os.getpid()
+        out = self.browsers([{"pid": 9002, "age": 4000, "marker": f"s9shot-{mine}",
+                              "cmd": f"chrome.exe --user-data-dir=C:\\Temp\\s9shot-{mine}",
+                              "owner": mine}])
+        self.assertEqual(self.killed, [])
+        self.assertEqual(out["alive"], 1)
+        self.assertEqual(out["procs"], 0)
+
+    def test_population_counts_captures_not_processes(self):
+        """캡처 하나가 프로세스 11개를 띄운다(실측) — 프로세스로 세면 상한 8이
+        첫 캡처에서 초과돼 상한 자체가 무의미해진다. 세는 단위는 캡처 건수다."""
+        mine = os.getpid()
+        rows = [{"pid": 9100 + i, "age": 3, "marker": f"s9shot-{mine}",
+                 "cmd": f"chrome.exe --user-data-dir=C:\\Temp\\s9shot-{mine} --type=renderer",
+                 "owner": mine} for i in range(11)]
+        out = self.browsers(rows)
+        self.assertEqual(out["alive"], 1, "캡처 1건으로 세야 한다")
+        self.assertEqual(out["alive_procs"], 11)
+        self.assertEqual(self.killed, [])
+
+    def test_ownerless_marker_falls_back_to_age(self):
+        rows = [{"pid": 9003, "age": 30, "cmd": "chrome.exe cdp-prof-x",
+                 "owner": None},
+                {"pid": 9004, "age": 5000, "cmd": "chrome.exe cdp-prof-y",
+                 "owner": None}]
+        out = self.browsers(rows)
+        self.assertEqual(self.killed, [9004])
+        self.assertEqual(out["stale"], 1)
+        self.assertEqual(out["alive"], 1)
+
+
+class Sweep(unittest.TestCase):
+    """프로필 디렉토리도 같은 기준으로 회수한다."""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="s9sweep-")
@@ -134,15 +204,16 @@ class Sweep(unittest.TestCase):
         os.utime(path, (old, old))
         return path
 
-    def test_old_marked_profile_removed_fresh_kept(self):
-        stale = self.mkprof("s9shot-999", 0)          # 아주 오래된 것
-        fresh = self.mkprof("s9shot-1000", 0)
+    def test_profile_follows_owner_not_age(self):
+        gone = self.mkprof(f"s9shot-{dead_pid()}", 0)     # 소유자 사망 → 즉시
+        mine = self.mkprof(f"s9shot-{os.getpid()}", 0)    # 소유자 생존 → 보존
         now = time.time()
-        os.utime(fresh, (now, now))
-        other = self.mkprof("my-work", 0)             # 표식 없는 남의 것
-        out = doctor.sweep_stale_shots(max_age=600)
-        self.assertFalse(os.path.exists(stale))
-        self.assertTrue(os.path.exists(fresh), "진행 중인 캡처는 건드리지 않는다")
+        os.utime(mine, (now - 9999, now - 9999))          # 나이는 기준이 아니다
+        other = self.mkprof("my-work", 0)                 # 표식 없는 남의 것
+        out = doctor.sweep_stale_shots(max_age=600, browsers=[])
+        self.assertFalse(os.path.exists(gone))
+        self.assertTrue(os.path.exists(mine),
+                        "소유자가 살아 있으면 아무리 오래돼도 진행 중이다")
         self.assertTrue(os.path.exists(other), "표식 없는 것은 우리 것이 아니다")
         self.assertEqual(out["profiles"], 1)
 

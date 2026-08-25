@@ -65,33 +65,50 @@ class PortGuard(unittest.TestCase):
         s9._doctor = fake_doctor(bound, total, self.calls)
         return s9.port_guard_tick()
 
-    def test_healthy_does_nothing(self):
-        v = self.tick(211)
-        self.assertIsNone(v["action"])
-        self.assertEqual(self.calls, [("--json",)])
-        self.assertFalse(self.logged)
+    def test_reclaims_every_tick_regardless_of_pressure(self):
+        """핵심: 회수는 소진도와 무관하게 매번 돈다.
 
-    def test_warn_reclaims_only_our_leftovers(self):
-        v = self.tick(11000)                      # 67%
-        self.assertEqual(v["action"], "sweep")
-        self.assertIn(("--sweep", "--json"), self.calls)
+        임계에서만 쓸면 그 임계까지는 반드시 쌓인다 — 그게 "90%에서 조치하는
+        건 방어가 아니다"라는 지적의 실체다. 평시 2%에서도 회수는 돈다."""
+        v = self.tick(211)                        # 1.3% — 평시
+        self.assertIsNone(v["action"])
+        self.assertEqual(self.calls[0], ("--sweep", "--json"))
         self.assertNotIn(("--recover", "--yes"), self.calls)
 
-    def test_critical_recovers_before_exhaustion(self):
-        v = self.tick(15000)                      # 92% — 아직 100%가 아니다
+    def test_elevated_is_recorded_not_acted_on(self):
+        v = self.tick(8000)                       # 49% — 평시보다 높다
+        self.assertEqual(v["action"], "watch")
+        self.assertTrue(any("평시" in m for m in self.logged))
+        self.assertNotIn(("--recover", "--yes"), self.calls)
+
+    def test_last_resort_recovers_and_flags_a_defect(self):
+        """90%는 방어선이 아니라 마지막 안전망이다 — 왔다는 것 자체가 결함."""
+        v = self.tick(15000)                      # 92%
         self.assertEqual(v["action"], "recover")
         self.assertIn(("--recover", "--yes"), self.calls)
         self.assertTrue(v["ok"])
-        self.assertTrue(any("자동 회수" in m for m in self.logged))
+        self.assertTrue(any("구멍" in m for m in self.logged))
 
     def test_no_windows_side_is_silent(self):
         s9._doctor = lambda *a, **k: FakeRun(json.dumps({"windows_ports": {}}))
-        self.assertEqual(s9.port_guard_tick(), {})
+        self.assertEqual(s9.port_guard_tick(), {"swept": {"windows_ports": {}}})
         self.assertFalse(self.logged)
 
     def test_doctor_missing_does_not_raise(self):
         s9._doctor = lambda *a, **k: None
-        self.assertEqual(s9.port_guard_tick(), {})
+        self.assertEqual(s9.port_guard_tick(), {"swept": {}})
+
+    def test_reclaimed_orphans_are_logged(self):
+        """조용히 사라지면 원인을 못 찾는다 — 회수는 반드시 흔적을 남긴다."""
+        def _doctor(*flags, timeout=90):
+            if flags == ("--sweep", "--json"):
+                return FakeRun(json.dumps({"procs": 3, "orphans": 3,
+                                           "profiles": 2, "alive": 1}))
+            return FakeRun(json.dumps({"windows_ports": {"bound": 211,
+                                                         "count": 16384}}))
+        s9._doctor = _doctor
+        s9.port_guard_tick()
+        self.assertTrue(any("고아 회수" in m for m in self.logged))
 
 
 if __name__ == "__main__":
