@@ -1,0 +1,440 @@
+#!/usr/bin/env python3
+"""s9 doctor — 네트워크/자원 상태 진단과 즉시 복구 (REQ-20260825-099).
+
+배경(2026-08-25 실측): WSL virtioproxy 모드에서 새로 bind 한 리스닝 포트는
+곧바로 접속되지 않는다 — 호스트에 공개(publish)되기까지 지연이 있고, 그
+사이 127.0.0.1 접속은 ECONNREFUSED 다. 평소 ~1초지만 윈도우 측이 압박을
+받으면(동시 캡처·대량 포트 생성) 수 초~무한으로 늘어나고, 그때 브라우저는
+ERR_NO_BUFFER_SPACE 를 낸다. 기존에 떠 있던 포트는 멀쩡해서 증상이
+"방화벽이 막았다"처럼 보이고 OS 재시작으로 대응하기 쉽다.
+
+그래서 이 명령은 **공개 지연을 초 단위로 재고**, 우리가 흘린 자원을 회수한다.
+
+그리고 **윈도우 쪽 동적 포트 소진도**를 함께 본다(REQ-20260825-100). 실제
+원인은 리눅스가 아니라 호스트였다 — WSL 포트 중계 COM 대리 프로세스가 동적
+포트 16,384개 중 15,709개를 Bound 로 잡고 놓지 않았다. 이 상태에서 리눅스
+쪽 자원을 아무리 회수해도 풀리지 않으므로, 그 점유자를 지목해 회수한다.
+회수는 `wsl --shutdown` 보다 훨씬 덜 파괴적이다 — COM 대리는 필요할 때 다시
+뜨고, 실행 중인 세션·에이전트는 살아남는다.
+
+사용:
+  s9-doctor            진단만 (읽기 전용)
+  s9-doctor --fix      우리가 흘린 자원 회수(고아 테스트 서버·좀비 캡처·임시 파일)
+  s9-doctor --recover  동적 포트를 독차지한 WSL 포트 중계 프로세스 회수(확인 후)
+  s9-doctor --json     기계 판독용
+"""
+import argparse
+import json
+import os
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+
+ROOT = os.environ.get("S9_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))
+ORPHAN_AGE = 180          # 이보다 오래 산 테스트 서버는 고아로 본다
+PROBE_TIMEOUT = 2.0
+
+# 윈도우 동적 포트 소진도 — 고갈된 뒤가 아니라 임계에서 먼저 알린다.
+PORT_WARN = 0.60
+PORT_CRIT = 0.85
+# 회수 대상 판정: 한 프로세스가 범위의 이만큼을 혼자 잡고 있으면 지배적 점유다.
+RELAY_SHARE = 0.30
+# 2026-08-25 실측된 WSL 포트 중계 COM 대리의 CLSID (확증용 — 판정 필수 조건은 아니다)
+WIN_RELAY_CLSID = "{17696EAC-9568-4CF5-BB8C-82515AAD6C09}"
+
+
+def probe_new_port(budget=12.0):
+    """새 포트를 열고 접속 가능해질 때까지 걸리는 시간을 잰다.
+
+    binary 판정이 아니라 **지연 측정**인 이유: 이 증상은 "안 된다"가 아니라
+    "늦어진다"이고, 늦어지는 정도가 곧 윈도우 측 압박의 크기다. 0초면 건강,
+    1~3초면 정상 범위(virtioproxy 공개 지연), 그 이상이면 서버 기동 코드가
+    타임아웃으로 죽기 시작한다."""
+    srv = socket.socket()
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(8)
+        port = srv.getsockname()[1]
+    except OSError as e:
+        srv.close()
+        return {"ok": False, "stage": "bind", "error": str(e), "latency": None}
+
+    import threading
+
+    def accept_loop():
+        while True:
+            try:
+                c, _a = srv.accept()
+                c.close()
+            except OSError:
+                return
+    threading.Thread(target=accept_loop, daemon=True).start()
+
+    t0 = time.time()
+    while time.time() - t0 < budget:
+        try:
+            socket.create_connection(("127.0.0.1", port), 1).close()
+            lat = time.time() - t0
+            srv.close()
+            return {"ok": True, "port": port, "latency": round(lat, 2)}
+        except OSError:
+            time.sleep(0.25)
+    srv.close()
+    return {"ok": False, "stage": "publish", "port": port,
+            "error": f"{budget:.0f}초 안에 공개되지 않음", "latency": None}
+
+
+def ps_rows():
+    """(pid, 경과초, 커맨드) — ps 한 번으로 끝낸다(의존성 0)."""
+    try:
+        out = subprocess.run(["ps", "-eo", "pid,etimes,args"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return []
+    rows = []
+    for line in out.splitlines()[1:]:
+        parts = line.strip().split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            rows.append((int(parts[0]), int(parts[1]), parts[2]))
+    return rows
+
+
+def scan(rows):
+    serves, orphans, chromes = [], [], []
+    for pid, age, cmd in rows:
+        if "s9 serve" in cmd or "bin/s9 serve" in cmd:
+            serves.append((pid, age, cmd))
+            # 테스트가 띄우는 서버는 --host 127.0.0.1 + 임의 포트 형태다.
+            # 정상 종료되면 몇 초 안에 사라지므로, 오래 살아남았으면 누수다.
+            if "--host 127.0.0.1" in cmd and age > ORPHAN_AGE:
+                orphans.append((pid, age, cmd))
+        elif "chrome" in cmd.lower() and "--headless" in cmd:
+            chromes.append((pid, age, cmd))
+    return serves, orphans, chromes
+
+
+def listeners():
+    try:
+        out = subprocess.run(["ss", "-ltn"], capture_output=True, text=True,
+                             timeout=10).stdout
+        return max(len(out.splitlines()) - 1, 0)
+    except Exception:
+        return -1
+
+
+def socket_summary():
+    try:
+        out = subprocess.run(["ss", "-s"], capture_output=True, text=True,
+                             timeout=10).stdout
+        for line in out.splitlines():
+            if line.startswith("TCP:"):
+                return line.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def wsl_mode():
+    for cmd in (["wslinfo", "--networking-mode"],):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.strip()
+        except Exception:
+            pass
+    return ""
+
+
+def windows_ports(timeout=25):
+    """윈도우 동적 포트 소진도와 최다 점유자 — 실패해도 진단을 막지 않는다.
+
+    WSL(virtioproxy)은 리스닝 포트를 호스트에 공개하면서 호스트의 동적 포트를
+    소비한다. 그 범위가 마르면 새 포트 공개가 실패하고, 윈도우 앱은
+    WSAENOBUFS(브라우저의 ERR_NO_BUFFER_SPACE)를 본다."""
+    ps = shutil.which("powershell.exe")
+    if not ps:
+        return {}
+    script = (
+        "$ErrorActionPreference='SilentlyContinue';"
+        "$b=@(Get-NetTCPConnection -State Bound);"
+        "$g=$b | Group-Object OwningProcess | Sort-Object Count -Descending"
+        " | Select-Object -First 1;"
+        "$pr=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $g.Name);"
+        "$s=Get-NetTCPSetting -SettingName InternetCustom;"
+        "[pscustomobject]@{bound=$b.Count;start=$s.DynamicPortRangeStartPort;"
+        "count=$s.DynamicPortRangeNumberOfPorts;top_pid=[int]$g.Name;"
+        "top_count=$g.Count;top_name=$pr.Name;top_cmd=$pr.CommandLine}"
+        " | ConvertTo-Json -Compress")
+    try:
+        r = subprocess.run([ps, "-NoProfile", "-NonInteractive", "-Command",
+                            script], capture_output=True, text=True,
+                           timeout=timeout)
+        return json.loads(r.stdout.strip().splitlines()[-1])
+    except Exception:
+        return {}
+
+
+def port_verdict(win):
+    """소진도 등급 — 윈도우 쪽을 못 읽었으면 빈 판정(진단은 계속된다)."""
+    if not win or not win.get("count"):
+        return {}
+    used = win.get("bound") or 0
+    total = win["count"]
+    ratio = used / total if total else 0.0
+    level = ("critical" if ratio >= PORT_CRIT
+             else "warn" if ratio >= PORT_WARN else "ok")
+    return {"bound": used, "total": total, "ratio": round(ratio, 3),
+            "level": level}
+
+
+def relay_hoarder(win, share=RELAY_SHARE):
+    """동적 포트를 독차지한 WSL 포트 중계 프로세스 — 회수해도 되는 유일한 대상.
+
+    조건 둘을 모두 만족해야 한다: (1) 범위의 지배적 비율을 혼자 점유,
+    (2) COM 대리(dllhost.exe). 사용자의 브라우저·앱은 아무리 많이 잡고 있어도
+    대상이 아니다 — 그건 안내로만 다룬다."""
+    if not win or not win.get("count"):
+        return None
+    cnt = win.get("top_count") or 0
+    if cnt < share * win["count"]:
+        return None
+    if (win.get("top_name") or "").lower() != "dllhost.exe":
+        return None
+    cmd = win.get("top_cmd") or ""
+    return {"pid": win.get("top_pid"), "name": win.get("top_name"),
+            "count": cnt, "cmd": cmd,
+            "is_known_relay": WIN_RELAY_CLSID.lower() in cmd.lower()}
+
+
+def reclaim_relay(target, timeout=30):
+    """지목된 중계 프로세스를 종료해 점유 포트를 즉시 반환시킨다."""
+    tk = shutil.which("taskkill.exe") or "taskkill.exe"
+    r = subprocess.run([tk, "/PID", str(target["pid"]), "/F"],
+                       capture_output=True, text=True, timeout=timeout)
+    return {"pid": target["pid"], "rc": r.returncode,
+            "out": (r.stdout or r.stderr).strip()}
+
+
+def scratch_bytes():
+    """캡처·임시 산출물이 쌓인 크기 — 정리 대상 규모 파악용."""
+    total = 0
+    for base in (os.path.join(ROOT, "state", "shots"),):
+        for dirpath, _d, files in os.walk(base):
+            for fn in files:
+                try:
+                    total += os.path.getsize(os.path.join(dirpath, fn))
+                except OSError:
+                    pass
+    return total
+
+
+def human(n):
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.0f}{unit}"
+        n /= 1024
+    return f"{n:.0f}TB"
+
+
+def diagnose():
+    rows = ps_rows()
+    serves, orphans, chromes = scan(rows)
+    probe = probe_new_port()
+    d = {
+        "probe": probe,
+        "degraded": not probe["ok"],
+        "listeners": listeners(),
+        "tcp": socket_summary(),
+        "wsl_networking": wsl_mode(),
+        "serve_procs": len(serves),
+        "orphan_test_servers": [{"pid": p, "age": a} for p, a, _ in orphans],
+        "headless_chrome": [{"pid": p, "age": a} for p, a, _ in chromes],
+        "shots_bytes": scratch_bytes(),
+        "windows_ports": windows_ports(),
+    }
+    return d, orphans, chromes
+
+
+def fix(orphans, chromes, older_than=ORPHAN_AGE):
+    """우리가 흘린 것만 회수한다 — 사용자의 서버·브라우저는 건드리지 않는다."""
+    killed = []
+    for pid, age, _cmd in orphans:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            killed.append(("orphan-server", pid, age))
+        except OSError:
+            pass
+    for pid, age, _cmd in chromes:
+        if age > older_than:      # 진행 중 캡처는 죽이지 않는다
+            try:
+                os.kill(pid, signal.SIGTERM)
+                killed.append(("headless-chrome", pid, age))
+            except OSError:
+                pass
+    return killed
+
+
+def advise(d):
+    """덜 파괴적인 순서로 다음 조치를 제시한다.
+
+    순서의 근거: 리눅스 쪽 회수(비파괴) → 유발 행위 중단 → 대기 → 호스트
+    점유자 회수(중계만 죽고 세션은 산다) → wsl --shutdown(모든 세션이 죽는다).
+    호스트 포트가 이미 고갈됐다면 리눅스 회수로는 절대 안 풀리므로, 그때는
+    회수 단계를 앞으로 당긴다."""
+    out = []
+    lat = (d.get("probe") or {}).get("latency")
+    win = d.get("windows_ports") or {}
+    pv = port_verdict(win)
+    target = relay_hoarder(win)
+    pct = f"{pv['ratio'] * 100:.0f}%" if pv else ""
+
+    if pv and pv["level"] != "ok":
+        out.append(f"윈도우 동적 포트 {pv['bound']}/{pv['total']} 사용 "
+                   f"({pct}) — WSL이 새 포트를 호스트에 공개할 자리가 "
+                   f"{'없다' if pv['level'] == 'critical' else '얼마 남지 않았다'}. "
+                   f"이건 리눅스 쪽 문제가 아니라 호스트 쪽 소진이다.")
+        if target:
+            kind = ("WSL 포트 중계(COM 대리)" if target["is_known_relay"]
+                    else "COM 대리 프로세스")
+            out.append(f"점유자: pid {target['pid']} {target['name']} — "
+                       f"{target['count']}개. {kind}로 보인다.")
+            out.append(f"`s9-doctor --recover` — 그 프로세스를 종료해 포트를 "
+                       f"즉시 반환시킨다. 중계는 필요할 때 다시 뜨고, 실행 중인 "
+                       f"세션·에이전트는 살아남는다(wsl --shutdown 과 다르다).")
+        elif win.get("top_name"):
+            out.append(f"최다 점유자는 pid {win.get('top_pid')} "
+                       f"{win['top_name']} ({win.get('top_count')}개) — "
+                       f"우리 자원이 아니라 자동 회수 대상이 아니다. "
+                       f"그 앱을 먼저 종료하라.")
+
+    if d["degraded"]:
+        out.append("degraded — 새 포트가 제한 시간 안에 공개되지 않는다. "
+                   "기존에 떠 있던 서버는 계속 동작하므로 증상이 헷갈린다.")
+        steps = []
+        recover_step = ("`s9-doctor --recover` — 동적 포트를 독차지한 중계 "
+                        "프로세스를 회수한다(세션은 유지된다).")
+        if target and pv.get("level") == "critical":
+            # 호스트 포트가 이미 말랐다면 리눅스 쪽 회수로는 풀리지 않는다.
+            steps.append(recover_step)
+        steps.append("`s9-doctor --fix` — 고아 테스트 서버·좀비 헤드리스 "
+                     "브라우저를 회수한다(비파괴).")
+        steps.append("동시 실행 중인 캡처·서버 기동을 멈춘다 — 포트 생성이 "
+                     "계속되면 공개 지연이 더 늘어난다.")
+        steps.append("1~2분 뒤 재실행. 지연은 윈도우 측이 자원을 회수하면 "
+                     "스스로 줄어든다 — 이 상태는 영구 고장이 아니다.")
+        if target and pv.get("level") != "critical":
+            steps.append(recover_step)
+        steps.append("마지막 수단이 `wsl --shutdown` 이다(실행 중인 "
+                     "세션·에이전트가 함께 죽는다).")
+        out += [f"{i}) {t}" for i, t in enumerate(steps, 1)]
+        return out
+
+    if lat is not None and lat >= 3:
+        out.append(f"느림 — 새 포트 공개까지 {lat}초 걸렸다. 서버 기동 대기가 "
+                   f"5초 안팎인 코드는 이 상태에서 실패한다.")
+        out.append("동시 캡처·테스트 수를 줄이고, 서버 기동 대기 시간을 "
+                   "넉넉히(20초 이상) 잡아라.")
+        return out
+
+    out.append(f"정상 — 새 포트 공개까지 {lat if lat is not None else 0}초.")
+    if d["orphan_test_servers"]:
+        out.append(f"고아 테스트 서버 {len(d['orphan_test_servers'])}개가 남아 "
+                   f"있다 — `s9-doctor --fix` 로 회수하라.")
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="s9-doctor", description=__doc__)
+    ap.add_argument("--fix", action="store_true",
+                    help="고아 테스트 서버·좀비 헤드리스 브라우저 회수")
+    ap.add_argument("--recover", action="store_true",
+                    help="동적 포트를 독차지한 WSL 포트 중계 프로세스 회수")
+    ap.add_argument("--yes", action="store_true",
+                    help="--recover 확인 프롬프트 생략(무인 실행용)")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args()
+
+    d, orphans, chromes = diagnose()
+    if args.recover:
+        target = relay_hoarder(d.get("windows_ports") or {})
+        if not target:
+            print("회수 대상이 없다 — 동적 포트를 독차지한 중계 프로세스가 "
+                  "확인되지 않는다. 진단만 출력한다.\n", file=sys.stderr)
+        else:
+            pv = port_verdict(d["windows_ports"])
+            print(f"회수 대상: pid {target['pid']} {target['name']} — 동적 포트 "
+                  f"{target['count']}개 점유 (전체 {pv['bound']}/{pv['total']})")
+            print(f"  {target['cmd']}")
+            print("종료하면 그 포트가 즉시 반환된다. COM 대리 프로세스라 필요 시 "
+                  "다시 뜨고, 실행 중인 WSL 세션은 유지된다. 다만 현재 공개된 "
+                  "포트는 재공개까지 잠깐 끊길 수 있다.")
+            go = args.yes
+            if not go:
+                try:
+                    go = input("종료할까? [y/N] ").strip().lower() == "y"
+                except EOFError:
+                    go = False
+            if go:
+                d["recovered"] = reclaim_relay(target)
+                time.sleep(2.0)
+                d["windows_ports"] = windows_ports()
+                d["probe_after_recover"] = probe_new_port()
+                d["degraded"] = not d["probe_after_recover"]["ok"]
+            else:
+                print("취소했다.\n")
+    if args.fix:
+        d["fixed"] = [{"kind": k, "pid": p, "age": a}
+                      for k, p, a in fix(orphans, chromes)]
+        time.sleep(0.5)
+        d["probe_after_fix"] = probe_new_port()
+        d["degraded"] = not d["probe_after_fix"]["ok"]
+    d["advice"] = advise(d)
+
+    if args.json:
+        print(json.dumps(d, ensure_ascii=False, indent=1))
+        return 0 if not d["degraded"] else 1
+
+    lat = (d.get("probe") or {}).get("latency")
+    mark = ("✗ degraded" if d["degraded"]
+            else f"✓ 정상 (공개 지연 {lat}초)" if lat is not None else "✓ 정상")
+    print(f"네트워크(신규 포트 공개): {mark}")
+    if d["probe"].get("error"):
+        print(f"  프로브 실패: {d['probe']['stage']} — {d['probe']['error']}")
+    print(f"리스너 {d['listeners']}개 · {d['tcp']}")
+    if d["wsl_networking"]:
+        print(f"WSL 네트워킹 모드: {d['wsl_networking']}")
+    print(f"s9 serve 프로세스 {d['serve_procs']}개 "
+          f"(고아 테스트 서버 {len(d['orphan_test_servers'])}개) · "
+          f"헤드리스 브라우저 {len(d['headless_chrome'])}개 · "
+          f"캡처 산출물 {human(d['shots_bytes'])}")
+    pv = port_verdict(d.get("windows_ports") or {})
+    if pv:
+        mark2 = {"ok": "✓", "warn": "△", "critical": "✗"}[pv["level"]]
+        print(f"윈도우 동적 포트: {mark2} {pv['bound']}/{pv['total']} "
+              f"({pv['ratio'] * 100:.0f}%)")
+    if d.get("recovered"):
+        r = d["recovered"]
+        print(f"  회수: WSL 포트 중계 pid={r['pid']} "
+              f"({'성공' if r['rc'] == 0 else 'rc=' + str(r['rc'])}) {r['out']}")
+    if "probe_after_recover" in d:
+        print("회수 후 프로브: "
+              + ("✓ 정상" if d["probe_after_recover"]["ok"]
+                 else "✗ 여전히 degraded"))
+    for f in d.get("fixed", []):
+        print(f"  회수: {f['kind']} pid={f['pid']} ({f['age']}s)")
+    if "probe_after_fix" in d:
+        print("회수 후 프로브: "
+              + ("✓ 정상" if d["probe_after_fix"]["ok"] else "✗ 여전히 degraded"))
+    print()
+    for line in d["advice"]:
+        print(line)
+    return 0 if not d["degraded"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
