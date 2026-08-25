@@ -2609,7 +2609,11 @@ function termCloseSSE(T){
 function termConnectSSE(T){
   termCloseSSE(T);
   if (!T.sid) return;
-  if (!window.EventSource){ termPollFallback(T); return; }
+  // ?nosse: 진단·헤드리스 캡처용 — SSE 상시 연결이 virtual-time 스크린샷을
+  // 막아 터미널 탭이 자가 검증 불가였다 (REQ-20260825-037 반려 재작업)
+  if (!window.EventSource || /[?&]nosse/.test(location.search)){
+    termPollFallback(T); return;
+  }
   const es = new EventSource(`/api/stream/sse?session=${encodeURIComponent(T.sid)}&after=${T.offset}`);
   T.es = es; T.poll = false;
   termMeta(T);
