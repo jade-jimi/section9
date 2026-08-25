@@ -773,6 +773,31 @@ def update_active_reqs(doc_id, new_status):
         release_lock()
 
 
+def _title_is_raw(title, body):
+    """auto-audit 임시 제목(원문 앞 24자 절단) 판별 (REQ-20260825-042) —
+    절단 마커(…)가 있거나, Original 첫 줄이 제목으로 그대로 시작하면 원문."""
+    t = (title or "").strip()
+    if not t:
+        return False
+    if t.endswith("…"):
+        return True
+    if len(t) < 12:
+        return False   # 짧은 명사구가 우연히 원문 서두와 겹치는 오검 방지
+    first = ""
+    in_orig = False
+    for ln in (body or "").splitlines():
+        s = ln.strip()
+        if s == "## Original":
+            in_orig = True
+            continue
+        if in_orig and s.startswith("## "):
+            break
+        if in_orig and s:
+            first = s
+            break
+    return bool(first) and first.startswith(t)
+
+
 def do_transition(doc_id, new_status, note="", user=None, force=False, auto=False,
                   judge=False):
     """상태 전이의 단일 코드 경로 — CLI(cmd_status)와 웹 서버(POST /api/status)가
@@ -811,6 +836,16 @@ def do_transition(doc_id, new_status, note="", user=None, force=False, auto=Fals
     # 그 자체가 완료 근거 — goal/TDD 게이트를 적용하지 않는다 (019 실사고:
     # 승인이 거부되고 CLI용 오류 문구가 사용자에게 노출됨)
     approved = judge and old == "review" and new_status == "done"
+    # 원문 제목 게이트 (REQ-20260825-042): auto-audit 임시 제목(원문 앞부분)을
+    # 정리하지 않으면 에이전트 전이를 거부 — 제목 교체 규율이 접수 단계에서
+    # 반복 누락되던 재발(035 정리 후에도 041 등)의 구조적 차단. 사람 전이(judge)
+    # 는 막지 않는다.
+    if meta.get("type") == "request" and not force and not judge \
+            and "auto-audit" in (meta.get("tags") or []) \
+            and _title_is_raw(meta.get("title", ""), body):
+        raise ValueError(
+            "제목이 원문 그대로다 — `s9 set <id> --title '20자 이내 명사구' "
+            "--summary ...` 로 정리한 뒤 전이하라 (REQ-20260825-042)")
     # done 가드: 요청은 goal(무엇이 충족되면 끝인가) 없이 완료할 수 없다 —
     # original만 있고 목표·충족 판정이 없던 구조 공백 (REQ-20260824-030)
     if new_status == "done" and meta.get("type") == "request" \
@@ -1097,7 +1132,8 @@ def chat_target(sid8=None):
 def chat_send(text, sid8=None, sender="", kind="chat", req=""):
     """수신함에 한 줄 append — 대상 세션의 Monitor가 즉시 깨어난다.
     req: 서버측 audit(chat_audit)이 만든 REQ id — 수신 세션이 중복 생성 없이
-    그 id로 상태를 관리하도록 줄에 동봉한다 (REQ-20260825-001)."""
+    그 id로 상태를 관리하도록 줄에 동봉한다 (REQ-20260825-001).
+    review_refs: 메시지가 지목한 판정 대기 문서 (REQ-20260825-041)."""
     text = (text or "").strip()
     if not text:
         raise ValueError("빈 메시지")
@@ -1110,6 +1146,10 @@ def chat_send(text, sid8=None, sender="", kind="chat", req=""):
             "text": text}
     if req:
         line["req"] = req
+    if kind == "chat":
+        refs = _review_refs(text)
+        if refs:
+            line["review_refs"] = refs
     with open(chat_inbox_path(b["session"], make=True), "a",
               encoding="utf-8") as f:
         f.write(json.dumps(line, ensure_ascii=False) + "\n")
@@ -1384,6 +1424,30 @@ def restart_session(sid8, model="", effort="", account=""):
         return {"ok": True, "mode": "wrapper", "cmd": manual}
     except Exception as ex:
         return {"ok": False, "reason": f"오류: {ex}"}
+
+
+def _review_refs(text):
+    """채팅이 지목한 review 상태 REQ 감지 (REQ-20260825-041) — 전문/축약 id
+    또는 review 문서의 순번(3자리, 단어 경계) 언급을 수신함 줄에 동봉해,
+    리드가 '반려성 지적이면 먼저 in-progress 전이' 규율을 지킬 근거를 준다.
+    review 집합으로 한정해 맨 숫자 오검을 억제한다."""
+    out = []
+    try:
+        t = text or ""
+        for r in load_catalog():
+            if r.get("type") != "request" or r.get("status") != "review":
+                continue
+            rid = r["id"]
+            m = re.match(r"^REQ-\d{8}-(\d{3,})", rid)
+            num = m.group(1) if m else ""
+            base = rid.rsplit("-", 1)[0] \
+                if re.search(r"-[0-9a-z]{4}$", rid) else rid
+            if rid in t or base in t \
+                    or (num and re.search(rf"(?<!\d){num}(?!\d)", t)):
+                out.append(rid)
+    except Exception:
+        pass
+    return out[:5]
 
 
 def _chat_context(sid8, sender, window_sec=900, limit=5):

@@ -174,7 +174,10 @@ def pending_context(sid8):
                 f"`tail -c +{size + 1} -f {inbox}` 를 persistent로 다시 arm하라. "
                 f"줄에 req 필드가 있으면 이미 그 REQ로 기록돼 있다 — 새로 만들지 "
                 f"말고 그 id로 상태를 관리하되, 제목이 원문 그대로면 착수 시 "
-                f"20자 이내 명사구로 교체하라(s9 set):\n" + "\n".join(shown) + "\n")
+                f"20자 이내 명사구로 교체하라(s9 set). review_refs 필드가 있으면 "
+                f"그 문서에 대한 반려성 지적일 수 있다 — 지적이 맞으면 먼저 "
+                f"in-progress 전이 후 재작업하라(REQ-041):\n"
+                + "\n".join(shown) + "\n")
     except Exception:
         return ""
 
