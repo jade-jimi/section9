@@ -1241,6 +1241,17 @@ RESTART_FRESH_SEC = 60
 _model_cache = {}
 
 
+def claude_profiles():
+    """계정 프로필 목록 (REQ-037) — ~/.claude-profiles/<이름>/ 디렉토리.
+    프로필 생성·최초 로그인은 터미널에서: CLAUDE_CONFIG_DIR=~/.claude-profiles/<이름> claude"""
+    base = os.path.join(os.path.expanduser("~"), ".claude-profiles")
+    try:
+        return sorted(d for d in os.listdir(base)
+                      if os.path.isdir(os.path.join(base, d)))
+    except OSError:
+        return []
+
+
 def _restart_marker_path(sid8):
     return os.path.join(ROOT, "state", "terminal",
                         f"restart-{safe_name(sid8)}.json")
@@ -4545,7 +4556,8 @@ def cmd_serve(args):
                                 "live": chat_live(b),
                                 "listening": _inbox_watch_alive(
                                     b.get("session", "")),
-                                "model": session_model(b)})
+                                "model": session_model(b),
+                                "profiles": claude_profiles()})
             elif parsed.path == "/api/chat/log":
                 sid = qs.get("sid", [""])[0]
                 lines = []
