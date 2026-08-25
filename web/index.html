@@ -250,6 +250,10 @@ main{padding:18px 22px}
 /* 문서 뷰 첨부 (REQ-20260825-023) — 계기판 언어: 라운드 0, 1px 보더 */
 .attimg{max-width:min(100%,760px);display:block;margin:8px 0;border:1px solid var(--border)}
 .attlink{display:inline-block;text-decoration:none}
+.attfile{font-family:var(--mono);font-size:12px;color:var(--text);
+  border:1px solid var(--border);padding:2px 8px;text-decoration:none;
+  display:inline-block;margin:4px 0}
+.attfile:hover{background:var(--text);color:var(--bg)}
 .attchip{font-family:var(--mono);font-size:11px;color:var(--muted);
   border:1px solid var(--hairline);padding:1px 6px}
 .metatbl{width:100%;border-collapse:collapse;margin:16px 0 24px;font-size:12.5px;
@@ -1993,8 +1997,11 @@ function md2html(src){
         (mm, rel, did, f) => hold(
           `<a class="attlink" href="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(f)}" target="_blank">` +
           `<img class="attimg" src="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(f)}" alt="${f}" loading="lazy"></a>`))
+      .replace(/\[File: (assets\/([A-Z]{3}-[\w-]+)\/([^\]\/\n]+))\]/g,
+        (mm, rel, did, f) => hold(
+          `<a class="attfile" href="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(f)}" target="_blank">📎 ${f}</a>`))
       // 레거시 절대경로(미이전) — 로드 불가라 파일명 칩으로만
-      .replace(/\[Image: ([^\]\n]*\/([^\]\/\n]+))\]/g,
+      .replace(/\[(?:Image|File): ([^\]\n]*\/([^\]\/\n]+))\]/g,
         (mm, full, f) => hold(`<span class="attchip" title="${full}">🖼 ${f}</span>`));
     return linkifyIds(src2
       .replace(/`([^`]+)`/g, "<code>$1</code>")
@@ -2245,8 +2252,8 @@ function ccText(raw){
       .replace(/```\w*\n?([\s\S]*?)```/g, (m0, c) =>
         keep(`<span class="ccblk">${c.replace(/\n$/, "")}</span>`))
       // 첨부 참조 강조 (REQ-20260825-012): CC처럼 시안 칩 — 경로는 파일명만 표시
-      .replace(/\[Image: ([^\]\n]+)\]/g, (m0, p) =>
-        keep(`<span class="ccatt" title="${p}">🖼 ${p.split(/[\\/]/).pop()}</span>`))
+      .replace(/\[(Image|File): ([^\]\n]+)\]/g, (m0, k, p) =>
+        keep(`<span class="ccatt" title="${p}">${k === "Image" ? "🖼" : "📎"} ${p.split(/[\\/]/).pop()}</span>`))
       .replace(/\[Image #(\d+)\]/g, m0 =>
         keep(`<span class="ccatt">🖼 ${m0.slice(1, -1)}</span>`))
       .replace(/`([^`\n]+)`/g, (m0, c) =>
@@ -2479,7 +2486,7 @@ function renderTerminal(){
     <div class="ccerr" id="chat-err" hidden></div>
     <div class="ccpal" id="cc-pal" hidden></div>
     <div class="ccatt" id="cc-att" hidden></div>
-    <div class="ccinputrow"><span class="ccp">❯</span><textarea id="chat-in" rows="1" disabled placeholder="connecting…"></textarea><button class="ccclip" id="cc-clip" title="이미지 첨부 (붙여넣기·드래그도 가능)">📎</button><input type="file" id="cc-file" accept="image/*" multiple hidden></div>
+    <div class="ccinputrow"><span class="ccp">❯</span><textarea id="chat-in" rows="1" disabled placeholder="connecting…"></textarea><button class="ccclip" id="cc-clip" title="파일 첨부 — 이미지·문서·로그 등 (붙여넣기·드래그도 가능, 10MB)">📎</button><input type="file" id="cc-file" multiple hidden></div>
     <div class="ccstatus">
       <div class="ccs1"><span class="ccmode">▶▶ <span id="cc-live" class="ccwarn">connecting</span><span id="cc-tgt"></span></span><span id="cc-conn" class="ccconn" hidden></span><span class="r ccrc" title="Remote Control — 터미널에서 /rc 로 연결하면 폰·다른 기기에서도 이 세션과 대화할 수 있다">/rc</span></div>
       <div class="ag ccmain" title="메인 타임라인으로 복귀"><span class="g">●</span> <b>main</b></div>
@@ -3403,7 +3410,11 @@ async function sendChat(){
   const atts = T.atts.filter(a => a.path);
   if (!raw && !atts.length) return;
   let text = raw;
-  atts.forEach(a => { text += `\n[Image: ${a.path}]`; });
+  // 이미지는 [Image:], 그 외 일반 파일은 [File:] — 문서 뷰 렌더가 갈린다
+  atts.forEach(a => {
+    const img = /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(a.name || a.path || "");
+    text += `\n[${img ? "Image" : "File"}: ${a.path}]`;
+  });
   // 로컬 에코 + 입력 클리어는 즉시(동기) — 네트워크 왕복과 결합하지 않는다 (L1).
   // 성공 시 수신함 echo 도착이 .pending을 제거·대체한다. 전송 중 입력 비활성화 금지.
   const out = $("#ccout"), w = $("#cc-wait");

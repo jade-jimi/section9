@@ -169,5 +169,78 @@ class TestInlineRenderContract(unittest.TestCase):
                         "첨부 HTML이 linkifyIds보다 먼저 보호돼야 한다")
 
 
+class TestFileAttachments(unittest.TestCase):
+    """일반 파일 첨부 + 첨부 태깅 (REQ-20260825-053)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="s9file-")
+        cls.env = {**os.environ, "S9_ROOT": cls.tmp, "S9_MACHINE": "testbox",
+                   "S9_USER": "tester"}
+        cls.env.pop("S9_SESSION", None)
+        cls.cli("init")
+        cls.cli("user", "add", "tester")
+
+    @classmethod
+    def cli(cls, *argv):
+        r = subprocess.run([S9, *argv], capture_output=True, text=True,
+                           env=cls.env, timeout=20, stdin=subprocess.DEVNULL)
+        if r.returncode != 0:
+            raise AssertionError(f"s9 {' '.join(argv)}: {r.stdout}{r.stderr}")
+        return r.stdout
+
+    def _tmpfile(self, name, content=b"x"):
+        d = os.path.join(self.tmp, "state", "terminal", "uploads", "tester")
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, name)
+        with open(p, "wb") as f:
+            f.write(content)
+        return p
+
+    def _doc(self, rid):
+        import glob
+        p = glob.glob(os.path.join(self.tmp, "vault", "**", rid + ".md"),
+                      recursive=True)[0]
+        with open(p, encoding="utf-8") as f:
+            return f.read()
+
+    # F1. [File: ...] 첨부도 문서 옆으로 이전되고 상대경로로 재작성
+    def test_f1_generic_file_ingest(self):
+        src = self._tmpfile("report.log", b"deploy failed at step 3\n")
+        rid = self.cli("new", "request", "--title", "로그 첨부", "--summary", "s",
+                       "--size", "S", "--goal", "g",
+                       "--body", f"확인 바람\n[File: {src}]").split()[0]
+        self.cli("assets", "ingest", rid)
+        body = self._doc(rid)
+        self.assertIn(f"[File: assets/{rid}/report.log]", body)
+        self.assertFalse(os.path.exists(src))
+
+    # F2. 첨부 문서에 attached 태그 + 내용 키워드가 붙는다
+    def test_f2_attachment_tags(self):
+        src = self._tmpfile("notes.md",
+                            "깃 동기화 리모트 커밋 푸시 백업 계획".encode())
+        rid = self.cli("new", "request", "--title", "무관한 제목", "--summary", "",
+                       "--size", "S", "--goal", "g",
+                       "--body", f"[File: {src}]").split()[0]
+        self.cli("assets", "ingest", rid)
+        meta = self._doc(rid).split("---")[1]
+        tagline = [l for l in meta.splitlines() if l.startswith("tags:")][0]
+        tags = json.loads(tagline.split(":", 1)[1].strip())
+        self.assertIn("attached", tags)
+        self.assertIn("sync", tags)        # 첨부 내용에서 파생된 주제 태그
+
+    # F3. 바이너리는 내용 대신 파일명만 키워드로 (읽기 실패로 죽지 않는다)
+    def test_f3_binary_safe(self):
+        src = self._tmpfile("screenshot-dashboard.png", PNG)
+        rid = self.cli("new", "request", "--title", "바이너리", "--summary", "",
+                       "--size", "S", "--goal", "g",
+                       "--body", f"[Image: {src}]").split()[0]
+        self.cli("assets", "ingest", rid)
+        meta = self._doc(rid).split("---")[1]
+        tags = json.loads([l for l in meta.splitlines()
+                           if l.startswith("tags:")][0].split(":", 1)[1].strip())
+        self.assertIn("attached", tags)
+        self.assertIn("dashboard", tags)   # 파일명 키워드
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
