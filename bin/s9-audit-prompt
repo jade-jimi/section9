@@ -40,6 +40,13 @@ META_VERB = re.compile(
     r"되돌려|롤백|다시\s?해|재시도|정리해|치워|진행$)")
 # 기존 REQ/DOC id 참조 (특정 문서를 가리키는 지시)
 REF_ID = re.compile(r"\b(REQ|DOC|SES)-\d")
+# 즉석 인터랙션 (REQ-20260825-028): 응답으로 완결되는 요청 — 출력·표시·대기·
+# 관찰용. 지속 산출물 동사(PRODUCE)와 결합하지 않은 짧은 문장이면 카드를
+# 만들지 않는다(규약 2조: 단순 인터랙션은 세션 로그만). 애매하면 카드가 안전.
+INTERACTION = re.compile(
+    r"(출력해|보여\s?줘|알려\s?줘|확인해\s?줘|대기해|기다려|확인용|테스트용|관찰용)")
+PRODUCE = re.compile(
+    r"(만들|구현|수정|고쳐|추가|등록|적용|반영|작성|개선|배포|삭제|지워|바꿔|리팩|설계|검토|점검)")
 
 
 FRAGMENT_MAX = 20  # 이하 길이 + 명령형/질문 표지 없음 → 파편(REQ 미생성)
@@ -184,6 +191,10 @@ def classify(text):
     if len(t1) <= 60 and (META_VERB.search(t1) or
                           (REF_ID.search(t1) and len(t1) <= 40)):
         return "nothing"
+    # 즉석 인터랙션 (REQ-028): 짧고 출력/대기/관찰 동사뿐이면 응답으로 완결 —
+    # question 취급(카드 없음·응답은 정상). 지속 산출물 동사가 섞이면 request.
+    if len(t1) <= 40 and INTERACTION.search(t1) and not PRODUCE.search(t1):
+        return "question"
     if IMPERATIVE.search(text):
         return "request"  # "왜 이래? 고쳐줘" — 명령형이 있으면 질문 표지보다 우선
     last = text.splitlines()[-1].strip()

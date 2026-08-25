@@ -226,6 +226,26 @@ class TestReworkWatcher(unittest.TestCase):
         p = [s for s in argv if isinstance(s, str) and R5 in s][0]
         self.assertIn("제한 권한", p)
 
+    # D1 (REQ-20260825-039): 대시보드 드래그 착수(open→in-progress [via
+    # dashboard])도 워처 후보 — 유예 후 미클레임이면 스폰. CLI 착수는 제외.
+    def test_drag_start_spawns(self):
+        def new_open(title):
+            return self.cli("eeee5555", "new", "request", "--title", title,
+                            "--summary", "t", "--goal", "t", "--size", "S",
+                            "--user", "alice", "--body", "x").split()[0]
+        old = time.time() - 600
+        os.utime(self.transcript, (old, old))
+        # 드래그 착수(via dashboard 마커) → 스폰 대상
+        D = new_open("drag-start")
+        self.cli(None, "status", D, "in-progress", "--note", "drag 이동 [via dashboard]")
+        spawned, calls = self.tick(grace=0)
+        self.assertIn(D, spawned, (spawned, self.spawn_log()))
+        # CLI 착수(마커 없음) → 그 세션이 작업 중 — 스폰 제외
+        C = new_open("cli-start")
+        self.cli("eeee5555", "status", C, "in-progress", "--note", "착수")
+        spawned, calls = self.tick(grace=0)
+        self.assertNotIn(C, spawned, spawned)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

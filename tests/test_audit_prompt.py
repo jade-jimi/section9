@@ -131,6 +131,24 @@ class TestAutoResumeTurn(unittest.TestCase):
         self.assertIn("s9 last REQ-20260823-078 --add --session eeee5555", printed)
 
 
+class TestInteraction(unittest.TestCase):
+    # N1. 즉석 인터랙션 (REQ-20260825-028): 응답으로 완결 — 카드 없음(question)
+    def test_n1_interactions_no_card(self):
+        for t in ("스피너 확인용 프롬프트다", "지금 상태 출력해줘",
+                  "10초만 대기해줘", "웨이팅 텍스트 테스트용이다",
+                  "현재 모델 알려줘"):
+            self.assertEqual(hook.classify(t), "question", t)
+
+    # N2. 지속 산출물 동사가 섞이면 request 유지 (애매하면 카드가 안전)
+    def test_n2_produce_still_request(self):
+        for t in ("이 화면 보여줘 그리고 정렬 고쳐줘",
+                  "상태 출력 기능을 추가해줘"):
+            self.assertEqual(hook.classify(t), "request", t)
+        # 길이가 길면(설명 동반) 인터랙션 단서만으로 카드 생략하지 않는다
+        long = "지금 대시보드 터미널의 웨이팅 스피너와 텍스트가 어떤 상태로 출력되는지 각 항목별로 알려줘"
+        self.assertEqual(hook.classify(long), "request")
+
+
 class TestIsCommand(unittest.TestCase):
     # I1. 커맨드 판별 정밀화 (REQ-20260825-014): /이름 토큰만 커맨드
     def test_i1_commands_vs_paths(self):

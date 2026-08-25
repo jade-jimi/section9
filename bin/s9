@@ -1780,7 +1780,14 @@ def rework_watch_tick(grace=None, now=None):
             continue
         meta, body = read_doc(path)
         lt = _last_transition(body)
-        if not lt or (lt[1], lt[2]) != ("review", "in-progress"):
+        if not lt:
+            continue
+        # 후보: 반려(review→in-progress) + 대시보드 드래그 착수(open→in-progress
+        # [via dashboard], REQ-20260825-039 — 드래그가 상태 기록일 뿐 아무도
+        # 착수하지 않던 공백). CLI 착수는 그 세션이 이미 작업 중이므로 제외.
+        if not ((lt[1], lt[2]) == ("review", "in-progress")
+                or ((lt[1], lt[2]) == ("open", "in-progress")
+                    and "[via dashboard]" in (lt[3] or ""))):
             continue
         try:
             ts = datetime.datetime.fromisoformat(lt[0]).timestamp()
