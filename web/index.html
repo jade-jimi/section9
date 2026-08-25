@@ -430,6 +430,11 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    인덱스 = round(5·(1-cos(2πt/2000))/2): 2초에 한 번 숨쉬는 펄스 —
    · 와 ✽ 양끝에서 각 ~0.4s 머물고 중간을 부드럽게 지난다(코사인 이징).
    키프레임 오프셋 = 그 곡선의 프레임 전환 시점. 색은 claude 주황. */
+/* 글리프 폭 고정 (REQ-20260825-057): ·/✢/*/✶/✻/✽ 는 폭이 제각각이라 프레임이
+   바뀔 때마다 뒤 텍스트가 좌우로 흔들렸다. 고정폭 인라인 박스에 중앙 정렬하고
+   이모지 폰트 폴백을 끊어(mono 강제 + 텍스트 표현) 렌더 폭을 일정하게 만든다. */
+.ccspin{display:inline-block;width:1.25ch;text-align:center;flex:none;
+  font-family:var(--mono);font-variant-emoji:text}
 .ccspin::before{content:"✻";color:rgb(215,119,87);animation:ccglyph 2s steps(1,end) infinite}
 @keyframes ccglyph{0%{content:"·"}10.2%{content:"✢"}18.5%{content:"*"}25%{content:"✶"}31.6%{content:"✻"}39.8%{content:"✽"}60.2%{content:"✻"}68.5%{content:"✶"}75%{content:"*"}81.6%{content:"✢"}89.8%{content:"·"}100%{content:"·"}}
 /* 웨이팅 텍스트 shimmer — CC 실측: 80ms에 1글자씩 이동(사이클=글자수+20≈30스텝),

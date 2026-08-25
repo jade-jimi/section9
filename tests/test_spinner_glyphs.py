@@ -81,5 +81,26 @@ class TestSpinnerGlyphs(unittest.TestCase):
                     f"비이모지 글리프로 교체하라 (REQ-20260825-017)")
 
 
+class TestSpinnerWidth(unittest.TestCase):
+    """글리프 폭 고정 (REQ-20260825-057): 프레임마다 폭이 달라 뒤 텍스트가
+    흔들리던 문제 — 고정폭 박스 + mono 강제 + 이모지 표현 차단."""
+    def setUp(self):
+        import os as _os
+        here = _os.path.dirname(_os.path.abspath(__file__))
+        with open(_os.path.join(here, "..", "web", "index.html"),
+                  encoding="utf-8") as f:
+            self.html = f.read()
+
+    def test_fixed_width_box(self):
+        import re as _re
+        m = _re.search(r"\.ccspin\{([^}]*)\}", self.html)
+        self.assertIsNotNone(m, ".ccspin 규칙이 없다")
+        css = m.group(1)
+        self.assertIn("display:inline-block", css)
+        self.assertIn("text-align:center", css)
+        self.assertRegex(css, r"width:\s*[\d.]+(ch|em|px)")
+        self.assertIn("font-family:var(--mono)", css)   # 이모지 폰트 폴백 차단
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
