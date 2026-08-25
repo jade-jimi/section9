@@ -1054,6 +1054,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   --c-review:#7a5af8; --c-done:#0f9d76; --c-cancelled:#98a2b3;
   --c-draft:#98a2b3; --c-published:#0e7090;
   --t-request:#2f6bff; --t-knowledge:#0e7090; --t-session:#8a5a2b;
+  --accent-soft:#e4eaf5; --accent-line:#2f6bff;
 }
 /* ================= tone: graphite — 그래파이트 다크
    애플 다크 계보: 완전 검정 대신 청색이 도는 흑연, 면은 한 단계 밝은 판,
@@ -1066,6 +1067,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   --c-review:#a78bfa; --c-done:#34d3a6; --c-cancelled:#6b7688;
   --c-draft:#6b7688; --c-published:#3fb6c8;
   --t-request:#5b9dff; --t-knowledge:#3fb6c8; --t-session:#e0a14a;
+  --accent-soft:#232a35; --accent-line:#5b9dff;
 }
 
 
@@ -1075,7 +1077,8 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    ③ 타이포 스케일 — 제목을 키우고 메타를 낮춰 위계를 크게 벌린다
    ④ 셸 — 컬럼이 회색 웰이 아니라 캔버스 위 카드 묶음, 여백이 리듬.
    ledger(선으로 나눈 계기판)와 정반대 축이라 썸네일에서 즉시 구분된다. */
-[data-skin="calm"]{ --calm-r:14px; --calm-shadow:0 1px 2px rgba(16,24,40,.06),0 10px 28px -18px rgba(16,24,40,.35); }
+/* --calm-r / --calm-shadow 실값은 아래 재설계 블록이 단일 소유 (토큰 파생) */
+[data-skin="calm"]{ --calm-r:14px }
 [data-skin="calm"] body{background:var(--bg)}
 [data-skin="calm"] header{background:var(--panel);border-bottom:0;
   box-shadow:0 1px 0 var(--hairline);padding:14px 26px 10px}
@@ -1103,8 +1106,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="calm"] .cards{display:flex;flex-direction:column;gap:10px}
 [data-skin="calm"] .card{background:var(--panel);border:0;border-radius:var(--calm-r);
   box-shadow:var(--calm-shadow);padding:16px 18px;transition:box-shadow .16s ease,transform .16s ease}
-[data-skin="calm"] .card:hover{box-shadow:0 2px 4px rgba(16,24,40,.07),0 16px 34px -20px rgba(16,24,40,.45);
-  transform:translateY(-1px)}
+/* hover 실값도 재설계 블록이 단일 소유 — 여기서는 선언하지 않는다 */
 [data-skin="calm"] .card .t{font-size:15px;font-weight:650;line-height:1.4;margin:6px 0 10px}
 [data-skin="calm"] .card .id{font-size:11px;letter-spacing:.01em}
 [data-skin="calm"] .card .m{font-size:11.5px;gap:8px}
@@ -1123,55 +1125,205 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   box-shadow:var(--calm-shadow);text-align:center;padding:22px 16px}
 [data-skin="calm"] .more{border-radius:999px;padding:6px 14px}
 [data-skin="calm"] .hovercard{border-radius:12px;border:0;box-shadow:var(--calm-shadow)}
-/* --- calm 심미 보강 (REQ-20260825-068) — 색·리듬·상태 식별 ------------- */
-/* 컬럼 헤더 = 상태 배지: 색 점 대신 연한 상태색 필 + 카운트를 한 덩어리로 */
-[data-skin="calm"] .col h2{display:flex;align-items:center;gap:8px;padding:2px 4px 12px}
-[data-skin="calm"] .col h2 .cdot{width:8px;height:8px;border-radius:50%}
-[data-skin="calm"] .col h2 .n{margin-left:auto;background:color-mix(in srgb,var(--sc) 14%,transparent);
-  color:var(--sc);border-radius:999px;padding:2px 9px;font-size:11px;font-weight:600}
-/* 카드: 여백 리듬과 타이포 위계를 한 단계 더 벌리고, 상태는 왼쪽 얇은 띠로 */
-[data-skin="calm"] .card{padding:15px 17px;overflow:hidden}
-[data-skin="calm"] .card .id{color:var(--faint);font-size:10.5px}
-[data-skin="calm"] .card .t{font-size:15.5px;line-height:1.38;margin:5px 0 11px;letter-spacing:-.012em}
-[data-skin="calm"] .card .m{gap:6px;align-items:center}
-/* 태그: 해시 색조로 구분 — 저채도 배경 + 진한 글자(라이트) */
-[data-skin="calm"] .card .tag{background:none;border:1px solid var(--hairline);
-  color:var(--muted);font-size:11px;font-weight:500}
-[data-skin="calm"] .card .badge{background:color-mix(in srgb,var(--text) 6%,transparent);color:var(--muted)}
-[data-skin="calm"] .card .size{background:none;color:var(--faint);padding:2px 4px}
-[data-skin="calm"] .card .elapsed{font-size:10.5px;color:var(--faint)}
-/* 확인 포인트: 카드 안에서 비중을 낮추되 읽기는 편하게 */
-/* 확인 포인트: 색 블록으로 칠하지 않는다 — 얇은 좌측 규칙 + 낮춘 잉크만
-   (REQ-20260825-069: 틴트 하이라이트 반대). */
-/* calm: 판정 블록만 헤어라인으로 분리, 본문은 잉크 위계로 (색면·띠 없음) */
-[data-skin="calm"] .judge{margin-top:12px;padding-top:11px}
-[data-skin="calm"] .rvpt{font-size:11.5px;line-height:1.65;margin:0 0 9px;
-  background:none;border:0;padding:0;color:var(--muted)}
-[data-skin="calm"] .rvcap{font-size:9.5px;color:var(--faint)}
-/* 빈 컬럼: 카드가 아니라 점선 자리 — "여기에 놓을 수 있다"는 신호 */
-[data-skin="calm"] .colempty{background:none;box-shadow:none;
-  border:1.5px dashed color-mix(in srgb,var(--text) 12%,transparent);
-  color:var(--faint);font-size:12px;padding:26px 16px}
-/* 컬럼은 고정 폭 + 가로 스크롤(균등 분할은 태그가 잘려 정보가 사라졌다 —
-   실험 후 되돌림). 폭만 살짝 넓혀 카드 안이 답답하지 않게 한다. */
-[data-skin="calm"] .col{min-width:300px;width:300px}
-[data-skin="calm"] .card .tag{white-space:nowrap}
-/* 스크롤바를 얇게 — 보드가 화면을 덜 잡아먹는다 */
+/* --- calm 보드 재설계 (REQ-20260825-072) — "색은 면이 아니라 잉크로" ------
+   제약(사용자 확정): ① 카드 안 틴트 색면 금지 ② 카드 좌측 세로 컬러 띠·규칙선
+   금지 ③ 무채색 미니멀 일변도 금지. → 색은 **글자·윤곽·마크**로만 쓰고,
+   예쁨은 타이포 위계·여백 리듬·깊이에서 만든다.
+
+   설계 4축
+   ① 읽기 순서: 마크업은 [id → 제목 → 메타 → 판정]이지만 카드에서 먼저
+      읽혀야 할 것은 제목이다. flex order로 [제목 → 메타 → 판정 → id·경과]로
+      재배치한다(마크업 무변경). id·경과는 참조 정보라 푸터로 내린다.
+   ② 색의 위치: 컬럼 카운트(큰 상태색 숫자) · 태그 글자(해시 hue) ·
+      담당자 이니셜 링(hue) · hover 시 카드 테두리(상태색) · TDD 칩(윤곽).
+      면적을 가진 색은 캔버스의 공기(파랑~청록 저알파 그라디언트)뿐이다.
+   ③ 깊이: 톤마다 수단이 다르다 — 라이트는 2단 그림자, 다크는 링+면 밝기.
+      hover는 2px 부상 + 상태색 테두리(120~180ms ease-out, reduced-motion 존중).
+   ④ 리듬: 컬럼 카운트가 보드 상단에 정렬된 눈금을 만들고, 간격은 4/8 배수.
+
+   hue 파생색(--ah 사용자, --th 태그)은 hue만 JS 해시에서 오고 채도/명도는
+   톤별 변수(--hu-, --av- 계열)로 분리해 라이트·다크 모두 본문 대비를 지킨다. */
+[data-skin="calm"]{
+  --calm-r:12px;
+  --calm-shadow:
+    0 1px 2px color-mix(in srgb,var(--text) 7%,transparent),
+    0 8px 18px -8px color-mix(in srgb,var(--text) 24%,transparent);
+  /* 참조용 조용한 잉크 — faint(2.4:1)는 본문 대비 미달이라 muted 쪽으로 당긴다 */
+  --calm-quiet:color-mix(in srgb,var(--muted) 82%,var(--faint));
+  --hu-s:58%; --hu-l:31%;                /* 태그 글자 — 전 hue 4.8:1 이상의 주얼톤 */
+  --av-s:54%; --av-l:32%; --av-bl:64%;   /* 이니셜 글자 / 링 */
+}
+/* 캔버스: 파랑–청록 계열의 아주 옅은 공기. 연보라/연주황 틴트 인상을 피한다 */
+[data-skin="calm"] body{
+  background:
+    radial-gradient(1150px 470px at 6% -12%, color-mix(in srgb,var(--c-open) 12%,transparent) 0, transparent 68%),
+    radial-gradient(950px 420px at 97% -8%, color-mix(in srgb,var(--c-published) 10%,transparent) 0, transparent 66%),
+    var(--bg);
+  background-attachment:fixed;
+}
+
+/* ---- 헤더: 활성 탭은 색면 pill이 아니라 잉크 필 (대비 최대·색면 0) ---- */
+[data-skin="calm"] .tabs button{font-weight:500}
+[data-skin="calm"] .tabs button:hover{
+  background:color-mix(in srgb,var(--text) 6%,transparent);color:var(--text)}
+[data-skin="calm"] .tabs button.active{
+  background:var(--text);color:var(--bg);font-weight:600}
+[data-skin="calm"] .tabs button.active .pbadge{color:var(--bg)}
+[data-skin="calm"] .count{color:var(--faint);margin-bottom:12px}
+
+/* ---- 필터 줄: 보드보다 조용하게. 숫자에만 상태색, 활성만 잉크 필 ---- */
+[data-skin="calm"] .stats{gap:6px;margin-bottom:18px}
+[data-skin="calm"] .stat{background:none;box-shadow:none;border:1px solid transparent;
+  border-right:0;border-radius:999px;padding:6px 13px;font-size:10.5px;gap:7px;
+  color:var(--muted);transition:border-color .15s ease,color .15s ease}
+[data-skin="calm"] .stat b{color:var(--sc,var(--text));font-size:13px;font-weight:700;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+[data-skin="calm"] .stat:hover{background:none;border-color:var(--border);color:var(--text)}
+[data-skin="calm"] .stat.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+[data-skin="calm"] .stat.on b,[data-skin="calm"] .stat.on:hover{color:var(--bg)}
+[data-skin="calm"] .stat .cdot{width:6px;height:6px;border-radius:50%}
+
+/* ---- 보드: 컬럼은 캔버스 위 카드 묶음. 넓으면 균등, 좁으면 가로 스크롤 ---- */
+/* 보드 자체는 판이 아니라 캔버스다 — base의 흰 패널/보더를 걷어내야 카드가
+   "떠 있고" 배경의 옅은 색 공기가 보인다 (calm 깊이 반전의 전제) */
+[data-skin="calm"] .board{gap:16px;padding-bottom:14px;background:none;border:0}
+/* 1440px에서 5개 상태 컬럼이 모두 보이는 폭 — 워크플로 전체가 한 화면에 든다 */
+[data-skin="calm"] .col{flex:1 1 262px;min-width:262px;max-width:340px;width:auto;padding:0}
+/* 컬럼 헤더 = 타이포 앵커: 상태명(잉크) + 오른쪽 끝 큰 상태색 숫자.
+   숫자가 컬럼마다 같은 x에 서서 보드 상단에 눈금 리듬을 만든다. */
+[data-skin="calm"] .col h2{display:flex;align-items:baseline;gap:8px;margin:0;
+  padding:0 3px 11px;border-bottom:0;font-family:inherit;font-size:13px;font-weight:600;
+  text-transform:none;letter-spacing:-.005em;color:var(--text)}
+[data-skin="calm"] .col h2 .cdot{width:7px;height:7px;border-radius:50%;flex:none;
+  align-self:center;background:var(--sc)}
+[data-skin="calm"] .col h2 .n{margin-left:auto;background:none;padding:0;border-radius:0;
+  color:var(--sc);font-size:19px;font-weight:700;line-height:1;letter-spacing:-.035em;
+  font-variant-numeric:tabular-nums}
+[data-skin="calm"] .cards{gap:11px}
+
+/* ---- 카드: 흰 종이. 색은 hover 테두리에만, 면은 끝까지 무채 ---- */
+[data-skin="calm"] .card{display:flex;flex-direction:column;padding:14px 16px 13px;
+  border-radius:var(--calm-r);border:1px solid color-mix(in srgb,var(--text) 8%,transparent);
+  box-shadow:var(--calm-shadow);overflow:hidden;
+  transition:box-shadow .18s cubic-bezier(.22,1,.36,1),
+             transform .18s cubic-bezier(.22,1,.36,1),border-color .18s ease}
+[data-skin="calm"] .card:hover{background:var(--panel);transform:translateY(-2px);
+  border-color:color-mix(in srgb,var(--sc) 45%,transparent);
+  box-shadow:0 2px 4px color-mix(in srgb,var(--text) 9%,transparent),
+             0 14px 28px -12px color-mix(in srgb,var(--text) 28%,transparent)}
+[data-skin="calm"] .card:focus-visible{outline:2px solid var(--sc);outline-offset:2px}
+/* 읽기 순서 재배치 — 제목이 카드의 첫 줄 */
+[data-skin="calm"] .card .t{order:1;margin:0;padding-right:0;font-size:15px;font-weight:600;
+  line-height:1.45;letter-spacing:-.014em;color:var(--text)}
+[data-skin="calm"] .card .m{order:2;margin-top:9px;gap:9px;row-gap:5px;font-size:11px;
+  align-items:center}
+[data-skin="calm"] .card .judge,[data-skin="calm"] .card>.rvpt{order:3}
+[data-skin="calm"] .card .id{order:4;margin-top:11px;display:flex;align-items:center;gap:2px;
+  font-size:10px;color:var(--calm-quiet);letter-spacing:.03em}
+[data-skin="calm"] .card .elapsed{position:absolute;right:16px;bottom:12px;top:auto;
+  font-size:10px;color:var(--calm-quiet);letter-spacing:.01em}
+
+/* 담당자 = 이니셜 링(면이 아니라 윤곽) + 이름. base의 "@" 접두는 링이 대신한다 */
+[data-skin="calm"] .card .badge{display:inline-flex;align-items:center;gap:6px;
+  background:none;border:0;padding:0;color:var(--muted);font-size:11px}
+[data-skin="calm"] .card .badge::before{content:none}
+[data-skin="calm"] .card .av{flex:none;display:inline-flex;align-items:center;
+  justify-content:center;width:18px;height:18px;border-radius:50%;background:none;
+  border:1.5px solid hsl(var(--ah) var(--av-s) var(--av-bl));
+  color:hsl(var(--ah) var(--av-s) var(--av-l));
+  font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:0;line-height:1}
+/* 태그 = 색 글자. 배경도 테두리도 없이 '#'과 글자색만으로 구분한다 */
+[data-skin="calm"] .card .tag{background:none;border:0;padding:0;white-space:nowrap;
+  font-size:11px;font-weight:500;color:hsl(var(--th) var(--hu-s) var(--hu-l))}
+[data-skin="calm"] .card .tag::before{content:none}
+/* 규모(S/M/L)는 담당자 이니셜과 같은 낱글자라 혼동된다 — 중립 윤곽 칩으로 분리 */
+[data-skin="calm"] .card .size{background:none;color:var(--calm-quiet);font-size:9.5px;
+  letter-spacing:.06em;border-radius:4px;padding:1px 5px;line-height:1.4;
+  border:1px solid color-mix(in srgb,var(--text) 14%,transparent)}
+[data-skin="calm"] .card .tdd{border-radius:999px;padding:1px 7px;font-size:9.5px}
+
+/* ---- 판정 블록: 캡션은 상태색 글자, 본문은 3줄로 접어 컬럼 리듬을 지킨다.
+   접힌 내용은 카드 호버·키보드 포커스에서 전문으로 펼친다 (REQ-071 반려:
+   3줄만으로는 리뷰 내용 파악 불가 — 호버 시 클램프 해제 + max-height 확장,
+   포인터가 떠나면 3줄 리듬으로 복귀) ---- */
+[data-skin="calm"] .judge{margin-top:12px;padding-top:11px;border-top:1px solid var(--hairline)}
+[data-skin="calm"] .card>.rvpt{margin-top:12px;padding-top:11px;
+  border-top:1px solid var(--hairline)}
+[data-skin="calm"] .rvpt{background:none;border:0;padding:0;margin:0;font-size:11.5px;
+  line-height:1.6;color:var(--muted);
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  max-height:4.9em;transition:max-height .28s ease}
+[data-skin="calm"] .card:hover .rvpt,[data-skin="calm"] .card:focus-within .rvpt{
+  -webkit-line-clamp:unset;max-height:60em}
+[data-skin="calm"] .rvcap{display:inline;margin:0 6px 0 0;font-size:9.5px;font-weight:700;
+  letter-spacing:.08em;color:var(--faint)}
+[data-skin="calm"] .judge .rvcap{color:var(--c-review)}
+[data-skin="calm"] .card[data-status="blocked"] .rvcap{color:var(--c-blocked)}
+[data-skin="calm"] .acts{gap:7px;margin-top:10px}
+[data-skin="calm"] .acts button{border-radius:999px;border:1px solid var(--border);
+  background:none;color:var(--muted);font-size:10.5px;padding:5px 12px;
+  transition:background .15s ease,color .15s ease,border-color .15s ease}
+[data-skin="calm"] .acts button:hover{background:var(--text);color:var(--bg);
+  border-color:var(--text)}
+
+/* ---- 빈 컬럼: 카드가 아니라 '놓을 자리' ---- */
+[data-skin="calm"] .colempty{background:none;box-shadow:none;text-align:center;
+  border:1px dashed color-mix(in srgb,var(--text) 15%,transparent);
+  border-radius:var(--calm-r);color:var(--faint);font-size:11.5px;padding:24px 14px}
+/* ---- 더 보기: 전폭 블록이 아니라 조용한 pill ---- */
+/* .cards가 flex column이라 align-self 없이는 pill이 컬럼 폭으로 늘어난다 */
+[data-skin="calm"] .more{display:inline-block;width:auto;align-self:flex-start;
+  border:1px solid transparent;border-radius:999px;padding:6px 12px;margin:9px 0 0 2px;
+  font-size:11px;color:var(--muted)}
+[data-skin="calm"] .col .more{padding-left:12px}
+[data-skin="calm"] .more:hover{background:color-mix(in srgb,var(--text) 6%,transparent);
+  color:var(--text);border-color:var(--border);text-decoration:none}
+/* 가로 스크롤바는 얇게 — 보드가 화면을 덜 잡아먹는다 */
 [data-skin="calm"] .board::-webkit-scrollbar{height:9px}
 [data-skin="calm"] .board::-webkit-scrollbar-thumb{
   background:color-mix(in srgb,var(--text) 14%,transparent);border-radius:999px}
 [data-skin="calm"] .board::-webkit-scrollbar-track{background:none}
-/* 다크 톤: 태그·틴트를 어두운 면 위에서 성립하도록 반전 */
-[data-skin="calm"][data-theme="graphite"] .card .tag,
-[data-skin="calm"][data-theme="carbon"] .card .tag{
-  background:none;border-color:var(--border);color:var(--muted)}
+
+/* ---- 다크 톤: 같은 설계를 다른 수단으로 성립시킨다 ----
+   면 대비가 낮아 그림자가 안 보이므로 깊이는 링+면 밝기로, hue 색은 명도를
+   뒤집어(글자 밝게·링 어둡게) 본문 대비를 유지한다. */
+[data-skin="calm"][data-theme="graphite"],
+[data-skin="calm"][data-theme="carbon"]{
+  --calm-quiet:color-mix(in srgb,var(--muted) 84%,var(--faint));
+  --hu-s:62%; --hu-l:72%;
+  --av-s:55%; --av-l:76%; --av-bl:44%;
+}
+[data-skin="calm"][data-theme="graphite"] body,
+[data-skin="calm"][data-theme="carbon"] body{
+  background:
+    radial-gradient(1150px 470px at 6% -12%, color-mix(in srgb,var(--c-open) 9%,transparent) 0, transparent 68%),
+    radial-gradient(950px 420px at 97% -8%, color-mix(in srgb,var(--c-published) 8%,transparent) 0, transparent 66%),
+    var(--bg);
+  background-attachment:fixed;
+}
+[data-skin="calm"][data-theme="graphite"] .card,
+[data-skin="calm"][data-theme="carbon"] .card{border-color:var(--border)}
+[data-skin="calm"][data-theme="graphite"] .card:hover,
+[data-skin="calm"][data-theme="carbon"] .card:hover{
+  border-color:color-mix(in srgb,var(--sc) 55%,transparent)}
 @media (prefers-color-scheme: dark){
-  :root[data-theme="system"][data-skin="calm"] .card .tag{
-    background:none;border-color:var(--border);color:var(--muted)}
+  :root[data-theme="system"][data-skin="calm"]{
+    --calm-quiet:color-mix(in srgb,var(--muted) 84%,var(--faint));
+    --hu-s:62%; --hu-l:72%;
+    --av-s:55%; --av-l:76%; --av-bl:44%;
+  }
+  :root[data-theme="system"][data-skin="calm"] .card{border-color:var(--border)}
+  :root[data-theme="system"][data-skin="calm"] .card:hover{
+    border-color:color-mix(in srgb,var(--sc) 55%,transparent)}
+}
+/* 움직임은 인과 설명용 — 사용자가 줄이길 원하면 끈다 (ux-craft 5) */
+@media (prefers-reduced-motion: reduce){
+  [data-skin="calm"] .card{transition:border-color .12s ease}
+  [data-skin="calm"] .card:hover{transform:none}
 }
 /* 육안 검증에서 드러난 미완성 지점 보정 (REQ-062 재작업 2): Docs·Settings·
    Terminal·Audit이 아직 ledger의 각진 판이라 카드 언어와 충돌했다. */
-[data-skin="calm"] .docs{gap:14px}
+[data-skin="calm"] .docs{gap:14px;background:none;border:0}  /* board와 같은 이유 — 목록·뷰어가 캔버스 위 판 */
 [data-skin="calm"] .doclist{border-right:0;background:var(--panel);width:320px;
   border-radius:var(--calm-r);box-shadow:var(--calm-shadow);overflow:hidden}
 [data-skin="calm"] .doclist .row{border-bottom:1px solid var(--hairline);padding:11px 16px}
@@ -1360,11 +1512,27 @@ function isDarkTheme(){
 // → 로그인한 사용자는 어느 머신에서든 자기 설정이 따라온다.
 const UI_DIMS = [
   {key:"s9skin", attr:"skin", cfg:"ui_skin", def:"ledger", label:"skin — 디자인 언어",
-   opts:[["ledger","ledger — 계기판/장부 (기본)"],["soft","soft — 사이드바 앱 셸"],["terminal","terminal — 모노 브루탈"],["glass","glass — 반투명 레이어"],["field","field — 컬러 필드"],["cobalt","cobalt — 헤더 밴드"],["grid","grid — 고밀도 그리드"],["cockpit","cockpit — 다크 관제실"],["slate","slate — 라이트 SaaS 블루"],["cork","cork — 컬러 보드 웰"],["calm","calm — 여백과 카드 (Apple·토스 계보)"]]},
+   opts:[["ledger","ledger · 장부 — 선으로 나눈 계기판 (기본)"],
+         ["calm","calm · 여백과 카드 — 떠 있는 카드, 넓은 여백"],
+         ["soft","soft · 사이드바 — 좌측 세로 탭 앱 셸"],
+         ["glass","glass · 유리 — 반투명 레이어와 블러"],
+         ["terminal","terminal · 모노 — 전면 고정폭, 인버스 강조"],
+         ["grid","grid · 그리드 — 고밀도 표형 배치"],
+         ["cockpit","cockpit · 관제실 — 상시 다크, 엘리베이션"],
+         ["slate","slate · 슬레이트 — 밝은 SaaS 블루"],
+         ["cobalt","cobalt · 코발트 — 짙은 헤더 밴드"],
+         ["field","field · 필드 — 컬러 배경에 플랫 패널"],
+         ["cork","cork · 코르크 — 컬러 보드 위 카드"]]},
   {key:"s9theme", attr:"theme", cfg:"ui_tone", def:"system", label:"tone — 색",
-   opts:[["system","system — OS 추종"],["paper","paper — 라이트 고정"],["carbon","carbon — 다크 고정"],["phosphor","phosphor — CRT 그린"],["mist","mist — 안개 회청 라이트"],["graphite","graphite — 그래파이트 다크"]]},
+   opts:[["system","system · 자동 — OS 설정 따라감 (기본)"],
+         ["paper","paper · 종이 — 밝은 웜 그레이"],
+         ["mist","mist · 안개 — 밝은 회청, 파랑 강조"],
+         ["carbon","carbon · 카본 — 어두운 뉴트럴"],
+         ["graphite","graphite · 그래파이트 — 어두운 청회색"],
+         ["phosphor","phosphor · 인광 — CRT 그린"]]},
   {key:"s9density", attr:"density", cfg:"ui_density", def:"normal", label:"density — 밀도",
-   opts:[["normal","normal"],["compact","compact"]]},
+   opts:[["normal","normal · 보통 — 표준 여백 (기본)"],
+         ["compact","compact · 촘촘 — 여백을 줄여 더 많이"]]},
 ];
 
 // 개명된 skin의 저장값 구제 (localStorage·user config 공통). 제거된 skin은 아래 opts 검증에서 기본으로 폴백.
@@ -1844,7 +2012,7 @@ function cardHTML(r){
     <div class="id">${liveDot}${esc(shortId(r.id))}</div>
     <div class="t">${esc(r.title)}</div>
     <div class="m">
-      <span class="badge">${esc(r.user)}</span>
+      <span class="badge" style="--ah:${tagHue(r.user||"?")}"><i class="av">${esc((r.user||"?").slice(0,1).toUpperCase())}</i>${esc(r.user)}</span>
       ${r.size ? `<span class="size">${esc(r.size)}</span>` : ""}
       ${r.tdd ? `<span class="tdd${r.tdd.passed===r.tdd.total?" full":""}" title="TDD 시나리오 ${r.tdd.passed}/${r.tdd.total} 통과">TDD ${r.tdd.passed}/${r.tdd.total}</span>` : ""}
       ${(r.tags||[]).filter(t=>!SYS_TAGS.has(t)).slice(0,2).map(t=>`<span class="tag" style="--th:${tagHue(t)}">#${esc(t)}</span>`).join("")}
@@ -3071,7 +3239,7 @@ function termSpinnerEval(T){
         if (TERM !== T || !T.waitOn || w.hidden) return;
         const el = w.querySelector(".ccwe");
         if (el)
-          el.textContent = `(${Math.max(0, Math.round((Date.now() - T.waitBase) / 1000))}s)`;
+          el.textContent = `(${fmtElapsed(new Date(T.waitBase).toISOString())})`;
         if (Date.now() - (T.verbAt || 0) > 9000){
           const wv = w.querySelector(".ccwv");
           if (wv) wv.textContent = ` ${termVerbRotate(T)} `;
@@ -3081,14 +3249,15 @@ function termSpinnerEval(T){
     }
   }
   const el = w.querySelector(".ccwe");
-  if (el) el.textContent = `(${Math.max(0, Math.round((Date.now() - T.waitBase) / 1000))}s)`;
+  if (el) el.textContent = `(${fmtElapsed(new Date(T.waitBase).toISOString())})`;
 }
 function termSpinnerFinalize(T, base){
   const w = $("#cc-wait");
-  const secs = Math.max(0, Math.round((Date.now() - (base != null ? base : T.waitBase)) / 1000));
+  const since = new Date(base != null ? base : T.waitBase).toISOString();
+  const secs = fmtElapsed(since);
   if (w && T.waitOn)
     w.insertAdjacentHTML("beforebegin",
-      `<div class="ln ccdim"><span class="g" style="color:var(--cc-dim)">✻</span><span class="b" style="color:var(--cc-faint)">응답까지 ${secs}s</span></div>`);
+      `<div class="ln ccdim"><span class="g" style="color:var(--cc-dim)">✻</span><span class="b" style="color:var(--cc-faint)">응답까지 ${secs}</span></div>`);
   T.waitOn = false;
   if (w) w.hidden = true;
 }
@@ -3599,12 +3768,12 @@ function termRestartDone(T, kind, model){
   if (!r) return;
   clearInterval(r.timer);
   T.restart = null;
-  const secs = Math.round((Date.now() - r.t0) / 1000);
+  const secs = fmtElapsed(new Date(r.t0).toISOString());
   if (r.el && r.el.isConnected){
     const b = r.el.querySelector(".b");
     if (b) b.innerHTML = kind === "timeout"
-      ? `<span style="color:var(--cc-red)">✗ 재시작 확인 실패 (${secs}s) — 세션 터미널 상태를 확인하라</span>`
-      : `<span style="color:var(--cc-green)">✓ 재시작 완료 (${secs}s) — ${esc((model || "").replace(/^claude-/, "") || "새 설정")}으로 재개됨</span>`;
+      ? `<span style="color:var(--cc-red)">✗ 재시작 확인 실패 (${secs}) — 세션 터미널 상태를 확인하라</span>`
+      : `<span style="color:var(--cc-green)">✓ 재시작 완료 (${secs}) — ${esc((model || "").replace(/^claude-/, "") || "새 설정")}으로 재개됨</span>`;
     const g = r.el.querySelector(".g");
     if (g) g.textContent = kind === "timeout" ? "✗" : "✓";
   }
@@ -4149,7 +4318,7 @@ function renderSettingsSection(meAdmin){
     v.innerHTML = `<h1 style="margin:0 0 4px">디스플레이</h1>
       <div class="path">${me ? `@${me} 계정에 저장 — 다른 기기에서도 적용됩니다.` : "미등록 계정 — s9 user add 로 등록하면 계정에 저장되어 기기 간 동기화됩니다. 지금은 이 브라우저에만 저장."}</div>
       <table class="metatbl">${rows}</table>
-      <div class="path">skin=레이아웃/컴포넌트 문법 · tone=색 팔레트 · density=여백 밀도. 조합은 자유. 변경 즉시 적용됩니다.</div>`;
+      <div class="path">skin은 화면의 구조와 형태, tone은 색, density는 여백을 바꿉니다. 세 축은 자유롭게 조합되고 변경 즉시 적용됩니다.</div>`;
     // 각 select에 change 바인딩 — render() 없이 값만 적용(재렌더로 select 파괴되던 버그 수정).
     // skin/density는 다른 탭 레이아웃에 영향 → Settings에 머무는 동안엔 즉시 CSS 반영으로 충분.
     v.querySelectorAll("select[data-dim]").forEach(sel => {

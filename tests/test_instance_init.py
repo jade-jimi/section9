@@ -31,6 +31,9 @@ class TestInstanceInit(unittest.TestCase):
         cls.env = {**os.environ}
         cls.env.pop("S9_ROOT", None)
         cls.env.pop("S9_SESSION", None)
+        # 무인 워커 세션 상속분 격리 — 훅이 auto-resume 턴으로 오인해
+        # REQ 생성을 건너뛴다 (i4/i5가 단독 실행에서만 깨지던 원인)
+        cls.env.pop("S9_AUTO_RESUME", None)
         r = sh(S9, "instance", "init", cls.origin, "--dir", cls.target,
                env=cls.env)
         assert r.returncode == 0, r.stdout + r.stderr
@@ -54,7 +57,9 @@ class TestInstanceInit(unittest.TestCase):
         self.assertTrue(os.path.exists(
             os.path.join(self.target, "web", "index.html")))
 
-    # I2. 데이터 track: 인스턴스에서 만든 REQ 문서가 git 스테이징에 잡힌다
+    # I2. 데이터 track: 인스턴스에서 만든 REQ 문서가 git에 추적된다.
+    # REQ-20260824-048 이후 문서 이벤트가 즉시 commit→push 되므로
+    # 스테이징 예정(add -An)이 아니라 추적 여부(ls-files)로 검증한다.
     def test_i2_data_tracked(self):
         env = {**self.env, "S9_ROOT": self.target}
         r = sh(S9, "new", "request", "--title", "인스턴스 요청",
@@ -62,8 +67,9 @@ class TestInstanceInit(unittest.TestCase):
                "--user", "alice", "--body", "b", env=env)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         st = sh("git", "add", "-An", cwd=self.target).stdout
-        self.assertIn("vault/requests", st)
-        self.assertNotIn("index/", st)          # 파생물은 여전히 제외
+        ls = sh("git", "ls-files", cwd=self.target).stdout
+        self.assertIn("vault/requests", st + ls)
+        self.assertNotIn("\nindex/", "\n" + st + "\n" + ls)  # 파생물은 여전히 제외
 
     # I3. 푸시 불가(원격 미존재) → 단계별 가이드 출력, 비정상 종료 아님
     def test_i3_push_fail_guide(self):

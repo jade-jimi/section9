@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- REQ-20260825-071 검증 하니스 (same-origin 보조 페이지):
+     calm 스킨 리뷰 카드의 .rvpt 접힘이 :focus-within(=:hover와 동일 규칙군)으로
+     전문 펼침되는지 실 대시보드 위에서 확인한다. headless 스크린샷은 마우스
+     호버를 만들 수 없으므로, 같은 셀렉터 목록에 묶인 focus-within 경로로
+     실제 배포 CSS를 그대로 검증한다. 검증 후 삭제해도 무방. -->
+<html><head><meta charset="utf-8"><title>verify rvpt hover</title>
+<style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%}</style>
+</head><body>
+<iframe id="f" src="/?skin=calm"></iframe>
+<script>
+const f = document.getElementById("f");
+f.addEventListener("load", () => {
+  const doc = f.contentDocument;
+  let tries = 0;
+  const t = setInterval(() => {
+    tries++;
+    // 리뷰 컬럼 카드 중 확인 포인트(.rvpt)가 가장 긴 카드의 판정 버튼에 포커스
+    // → .card:focus-within .rvpt 규칙(호버와 동일 선언)이 발동해 전문이 펼쳐진다
+    const cards = [...doc.querySelectorAll('.card .judge .rvpt')]
+      .sort((a, b) => b.textContent.length - a.textContent.length);
+    const btn = cards[0] && cards[0].parentElement.querySelector(".acts button");
+    if (btn) {
+      btn.focus();
+      cards[0].closest(".card").scrollIntoView({block: "center"});
+      clearInterval(t);
+    } else if (tries > 40) clearInterval(t);
+  }, 250);
+});
+</script>
+</body></html>

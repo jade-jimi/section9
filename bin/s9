@@ -667,6 +667,34 @@ def read_body_arg(args):
     return ""
 
 
+def _recent_duplicate(doc_type, title, body, window_sec=180):
+    """직전 동일 요청 탐지 (REQ-20260825-073) — 훅이 중복 등록되면 같은
+    프롬프트가 두 장씩 카드화된다. 설정 정리는 다음 세션부터 적용되므로
+    생성 시점에서 막는다: 같은 타입·같은 원문(본문 해시)이 window 안에
+    이미 있으면 그 id를 돌려주고 새로 만들지 않는다."""
+    import hashlib
+    import time as _time
+    key = hashlib.sha1(((body or title or "").strip()).encode("utf-8")).hexdigest()
+    now = _time.time()
+    for r in reversed(load_catalog()):
+        if r.get("type") != doc_type:
+            continue
+        try:
+            ts = datetime.datetime.fromisoformat(r.get("created") or "").timestamp()
+        except ValueError:
+            continue
+        if now - ts > window_sec:
+            continue
+        p2 = locate(r["id"])
+        if not p2:
+            continue
+        _m, b2 = read_doc(p2)
+        orig = b2.split("## Original", 1)[-1].split("## Notes", 1)[0].strip()
+        if hashlib.sha1(orig.encode("utf-8")).hexdigest() == key:
+            return r["id"]
+    return None
+
+
 def cmd_new(args):
     if args.doc_type not in TYPES:
         die(f"unknown type: {args.doc_type}")
@@ -694,6 +722,14 @@ def cmd_new(args):
             proj = mine[0]["slug"]
     proj = proj or ""
 
+    # 멱등 가드는 훅이 만든 카드(auto-audit)에만 적용한다 — 사람이 같은 본문으로
+    # 일부러 여러 건을 만드는 경우까지 막으면 안 된다 (테스트·일괄 등록 회귀)
+    dup = (_recent_duplicate(args.doc_type, args.title, original)
+           if "auto-audit" in (args.tag_list or []) else None)
+    if dup:
+        # 이중 접수 — 기존 카드를 알려주고 종료 (REQ-20260825-073)
+        print(f"{dup}  (중복 접수 — 기존 카드 재사용)")
+        return
     acquire_lock()
     try:
         doc_id = next_id(prefix, subdir)
@@ -4685,9 +4721,84 @@ def cmd_shot(args):
         sys.exit(3)
 
 
+def _port_busy(host, port, timeout=0.4):
+    """포트 점유 판정 — **bind 시도**로 확인한다 (REQ-20260825-075).
+    connect() 기반 판정은 WSL2 미러 네트워킹에서 아무도 듣지 않는 포트에도
+    성공해(호스트가 대신 받아) '이미 실행 중' 오검을 냈고, 그 결과 테스트가
+    띄운 서버가 즉시 종료돼 ConnectionReset이 무더기로 났다."""
+    import socket as _s
+    sock = _s.socket()
+    # 서버와 같은 조건으로 본다 — SO_REUSEADDR 없이 재면 TIME_WAIT 소켓까지
+    # '사용 중'으로 잡혀, 방금 내린 서버 때문에 재기동이 막힌다.
+    sock.setsockopt(_s.SOL_SOCKET, _s.SO_REUSEADDR, 1)
+    try:
+        sock.bind(("127.0.0.1" if host in ("0.0.0.0", "") else host, port))
+        return False          # 바인딩 성공 = 비어 있다
+    except OSError:
+        return True
+    finally:
+        sock.close()
+
+
+def _wait_port_free(host, port, tries=20):
+    import time as _t
+    for _ in range(tries):
+        if not _port_busy(host, port):
+            return True
+        _t.sleep(0.5)
+    return not _port_busy(host, port)
+
+
 def cmd_serve(args):
     if args.port is None:
         args.port = s9_port()
+    # 재기동 안정화 (REQ-20260825-075): 같은 포트에 이미 서버가 있으면
+    # "Address already in use"로 죽지 않고 상황에 맞게 처리한다.
+    #  - 기본: 이미 떠 있으면 그대로 두고 종료(멱등) — 실수로 두 번 띄워도 안전
+    #  - --restart: 기존 프로세스를 정리하고 포트가 풀릴 때까지 기다린 뒤 기동
+    if _port_busy(args.host, args.port):
+        if getattr(args, "restart", False):
+            import signal as _sig
+            import subprocess as _sp
+            killed = 0
+            try:
+                out = _sp.run(["ss", "-ltnp"], capture_output=True, text=True,
+                              timeout=5).stdout
+            except Exception:
+                out = ""
+            for line in out.splitlines():
+                if f":{args.port} " not in line:
+                    continue
+                for tok in line.split("pid=")[1:]:
+                    pid = tok.split(",")[0].strip()
+                    if pid.isdigit() and int(pid) != os.getpid():
+                        try:
+                            os.kill(int(pid), _sig.SIGTERM)
+                            killed += 1
+                        except OSError:
+                            pass
+            if killed:
+                print(f"기존 서버 {killed}개 종료 — 포트 대기 중…")
+            # SSE 장수명 연결 탓에 SIGTERM만으로는 포트가 늦게 풀린다 —
+            # 유예 후에도 잡혀 있으면 SIGKILL로 확실히 회수한다.
+            if not _wait_port_free(args.host, args.port, tries=10):
+                for line in (out or "").splitlines():
+                    if f":{args.port} " not in line:
+                        continue
+                    for tok in line.split("pid=")[1:]:
+                        pid = tok.split(",")[0].strip()
+                        if pid.isdigit() and int(pid) != os.getpid():
+                            try:
+                                os.kill(int(pid), _sig.SIGKILL)
+                            except OSError:
+                                pass
+                if not _wait_port_free(args.host, args.port, tries=20):
+                    die(f"포트 {args.port} 가 아직 사용 중이다 — "
+                        f"`ss -ltnp | grep {args.port}` 로 점유 프로세스를 확인하라")
+        else:
+            print(f"이미 실행 중: http://127.0.0.1:{args.port}/ "
+                  f"(재기동하려면 s9 serve --restart)")
+            return
     # 관계 무결성 자동 복구 (REQ-20260825-061): 기동 시 1회 — 사람이 명령을
     # 기억하지 않아도 깨진 관계가 쌓이지 않는다. 실패해도 서버는 뜬다.
     try:
@@ -5960,6 +6071,8 @@ def main():
     cd2.set_defaults(fn=cmd_code)
 
     sv = sub.add_parser("serve", help="local web dashboard (read-only)")
+    sv.add_argument("--restart", action="store_true",
+                    help="이미 떠 있으면 정리하고 다시 띄운다 (포트 해제 대기)")
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=None)
     sv.set_defaults(fn=cmd_serve)
