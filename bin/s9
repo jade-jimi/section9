@@ -3630,6 +3630,42 @@ def cmd_instance(args):
 업그레이드(관리자): cd {target} && git fetch upstream && git merge upstream/main && git push""")
 
 
+def _maybe_update_claude():
+    """s9 code 시 claude CLI 자동 업그레이드 (REQ-20260825-025).
+    24h 1회 스로틀(시도 기준 — 실패해도 스탬프를 남겨 고장·오프라인 환경에서
+    매 기동 지연을 막는다), 실패·오프라인은 조용히 스킵(세션 시작 차단 금지).
+    옵트아웃: user config code_autoupdate=off."""
+    import subprocess
+    import time as _time
+    try:
+        if str(user_config(resolve_user(None)).get("code_autoupdate", "")
+               ).lower() in ("off", "0", "false"):
+            return
+    except Exception:
+        pass
+    stamp = os.path.join(ROOT, "state", "claude-update.ts")
+    try:
+        if _time.time() - os.path.getmtime(stamp) < 86400:
+            return
+    except OSError:
+        pass
+    try:
+        os.makedirs(os.path.dirname(stamp), exist_ok=True)
+        with open(stamp, "w") as f:
+            f.write(str(_time.time()))
+    except OSError:
+        pass
+    print("◌ claude 업데이트 확인 중… (24h 1회 · 실패해도 세션은 그대로 시작)")
+    try:
+        r = subprocess.run(["claude", "update"], timeout=120,
+                           capture_output=True, text=True)
+        tailln = (r.stdout + r.stderr).strip().splitlines()
+        if tailln:
+            print("  " + tailln[-1][:120])
+    except Exception:
+        pass  # 오프라인/타임아웃 — 다음 24h 후 재시도
+
+
 def cmd_code(args):
     """통합 진입 명령 (REQ-20260824-032): 대시보드를 보장(이미 떠 있으면 스킵)하고
     이 터미널에서 claude를 실행한다 — 한 명령으로 관제(대시보드)+대화(터미널) 시작.
@@ -3698,6 +3734,7 @@ def cmd_code(args):
         if os.environ.get("S9_CODE_DRYRUN"):
             print(json.dumps(base_cmd, ensure_ascii=False))  # 테스트 시임
             return
+        _maybe_update_claude()  # claude 자동 업그레이드 (REQ-025) — 실패 무해
         # 재시작 루프 (REQ-20260825-037): exec 대신 자식 실행 — TTY를 이 래퍼가
         # 계속 소유하므로, 대시보드가 재시작 마커+SIGTERM으로 유휴 세션을 내리면
         # 같은 대화를 새 설정(--resume --model --effort, 계정 프로필)으로 재개

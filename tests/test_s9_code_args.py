@@ -8,16 +8,76 @@ exec 대신 최종 명령을 JSON으로 출력한다(테스트 시임).
 없다 — 여기서는 더미 리스너를 띄워 대시보드 보장 단계를 스킵시킨다.
 실행: python3 tests/test_s9_code_args.py
 """
+import importlib.machinery
+import importlib.util
 import json
 import os
 import socket
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
+
+
+class TestAutoUpdate(unittest.TestCase):
+    """claude 자동 업그레이드 (REQ-20260825-025): 24h 스로틀·옵트아웃·실패 무해."""
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="s9upd-")
+        prev = {k: os.environ.get(k) for k in ("S9_ROOT", "S9_MACHINE", "S9_USER")}
+        os.environ["S9_ROOT"] = cls.tmp
+        os.environ["S9_MACHINE"] = "testbox"
+        os.environ["S9_USER"] = "updtester"
+        try:
+            spec = importlib.util.spec_from_loader(
+                "s9_mod_upd", importlib.machinery.SourceFileLoader("s9_mod_upd", S9))
+            cls.mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(cls.mod)
+        finally:
+            for k, v in prev.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        cls.stamp = os.path.join(cls.tmp, "state", "claude-update.ts")
+
+    def run_update(self, cfg=None):
+        calls = []
+
+        def fake_run(argv, **kw):
+            calls.append(argv)
+            return mock.Mock(stdout="updated", stderr="")
+        with mock.patch.object(self.mod, "user_config",
+                               lambda u: dict(cfg or {})), \
+             mock.patch("subprocess.run", side_effect=fake_run):
+            self.mod._maybe_update_claude()
+        return calls
+
+    # U1. 최초 실행 → claude update 1회 + 스탬프 생성 (시도 기준 스로틀)
+    def test_u1_first_run_updates(self):
+        if os.path.exists(self.stamp):
+            os.remove(self.stamp)
+        calls = self.run_update()
+        self.assertEqual(calls, [["claude", "update"]])
+        self.assertTrue(os.path.exists(self.stamp))
+        # U2. 24h 내 재실행 → 스킵
+        self.assertEqual(self.run_update(), [])
+        # U3. 스탬프가 낡으면 다시 시도
+        old = time.time() - 90000
+        os.utime(self.stamp, (old, old))
+        self.assertEqual(self.run_update(), [["claude", "update"]])
+
+    # U4. 옵트아웃(code_autoupdate=off) → 시도 없음
+    def test_u4_opt_out(self):
+        if os.path.exists(self.stamp):
+            os.remove(self.stamp)
+        self.assertEqual(self.run_update({"code_autoupdate": "off"}), [])
+        self.assertFalse(os.path.exists(self.stamp))
 
 
 class TestCodeArgs(unittest.TestCase):
