@@ -164,6 +164,13 @@ class TestRestartUiContract(unittest.TestCase):
     def test_r9_nosse_diag_flag(self):
         self.assertIn("nosse", self.html)
 
+    # R11 (REQ-20260825-045): ultracode는 숨은 기능이 아니어야 한다 —
+    #      패널에 설명 + 키워드 삽입 버튼이 있고, effort와 구분해 안내한다.
+    def test_r11_ultracode_documented(self):
+        self.assertIn("mpuc", self.html)
+        self.assertIn("ultracode", self.html)
+        self.assertIn("다중 에이전트", self.html)
+
     # R10 (실사고): 모델 선택지에 fable 누락 → opus로 바꾼 뒤 되돌아갈 수 없었다.
     #      claude --help의 별칭(fable/opus/sonnet)이 모두 선택 가능해야 한다.
     def test_r10_model_choices_include_fable(self):

@@ -3244,12 +3244,25 @@ function termModelChange(T){            // 라벨 클릭 → 인라인 선택 �
   p.innerHTML = row("m", "model", ["", "fable", "opus", "sonnet", "haiku"])
     + row("e", "effort", ["", "low", "medium", "high", "xhigh", "max"])
     + (profs.length ? row("a", "account", ["", ...profs]) : "")
-    + `<div class="mprow"><button type="button" class="mpgo">적용 — 같은 대화로 재시작</button><button type="button" class="mpx">닫기</button></div>
+    + `<div class="mprow"><span class="mplab">ultra</span><button type="button" class="mpuc">＋ 메시지에 ultracode 넣기</button></div>
+       <div class="mpnote">ultracode = effort가 아니라 별개 기능(다중 에이전트 오케스트레이션) — 메시지에 그 단어가 있으면 그 요청만 여러 에이전트로 병렬 처리한다. 재시작 불필요.</div>
+       <div class="mprow"><button type="button" class="mpgo">적용 — 같은 대화로 재시작</button><button type="button" class="mpx">닫기</button></div>
        <div class="mpnote">유휴 상태에서만 재시작된다 · 현재 모델은 상태줄 라벨 참조(되돌리려면 그 모델 선택) · effort 현재값은 CC가 기록하지 않아 미표시${profs.length ? "" : " · 계정 프로필 없음 — 터미널에서 CLAUDE_CONFIG_DIR=~/.claude-profiles/&lt;이름&gt; claude 로 로그인해 만들면 여기서 전환 가능"}</div>`;
   p.addEventListener("click", e => {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.classList.contains("mpx")){ p.remove(); return; }
+    if (b.classList.contains("mpuc")){        // ultracode 키워드를 입력줄에 삽입
+      const ta = $("#chat-in");
+      if (ta && !/\bultracode\b/.test(ta.value)){
+        ta.value = (ta.value ? ta.value.replace(/\s*$/, " ") : "") + "ultracode ";
+        ta.style.height = "auto";
+        ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+      }
+      p.remove();
+      if (ta) ta.focus();
+      return;
+    }
     if (b.dataset.m !== undefined || b.dataset.e !== undefined
         || b.dataset.a !== undefined){
       [...b.parentElement.querySelectorAll("button")].forEach(x => x.classList.toggle("sel", x === b));
