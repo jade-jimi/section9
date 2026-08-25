@@ -1489,7 +1489,10 @@ def _chat_context(sid8, sender, window_sec=900, limit=5):
             continue
         if l.get("kind") != "chat":
             continue
-        if l.get("from") != sender or l.get("req"):
+        if l.get("from") != sender:
+            break
+        if l.get("req"):
+            out.append(l)      # 문서화된 줄 — 문맥 인용은 않되 관계용으로 전달
             break
         txt = (l.get("text") or "").strip()
         if not txt or re.match(r"^/[A-Za-z0-9_:-]+(\s|$)", txt):
@@ -1543,11 +1546,12 @@ def chat_audit(text, sender, sid8):
         title = first[:24] + ("…" if len(first) > 24 else "")
         body = t
         ctx = _chat_context(sid8, sender)
-        if ctx:
+        quoted = [l for l in ctx if not l.get("req")]
+        if quoted:
             body = ("[선행 대화 — 직전 미문서화 메시지]\n" + "\n".join(
                 f"- ({(l.get('ts') or '')[11:16]}) "
                 + " ".join((l.get("text") or "").split())
-                for l in ctx) + "\n\n" + t)
+                for l in quoted) + "\n\n" + t)
         out = subprocess.run(
             [me, "new", "request", "--title", title, "--tag", "auto-audit",
              "--user", sender or "dashboard"],
@@ -1557,6 +1561,22 @@ def chat_audit(text, sender, sid8):
         doc_id = out.stdout.split()[0]
         try:
             ingest_assets(doc_id)   # 첨부를 문서 옆으로 (REQ-20260825-050)
+        except Exception:
+            pass
+        try:
+            # 관계 자동 연결 (REQ-20260825-059): 이 메시지가 지목한 판정 대기
+            # 문서 + 직전 선행 대화가 만든 REQ를 relates로 — 채팅 카드가
+            # 맥락 없이 고립되던 공백("연관 요청이 분명히 있잖아")
+            rel = list(_review_refs(t))
+            for l in ctx:
+                if l.get("req") and l["req"] not in rel:
+                    rel.append(l["req"])
+            rel = [r for r in rel if r != doc_id][:5]
+            if rel:
+                subprocess.run([me, "link", doc_id] +
+                               [x for r in rel for x in ("--relates", r)],
+                               capture_output=True, text=True, env=env,
+                               timeout=15)
         except Exception:
             pass
         subprocess.run([me, "log", f"dashboard chat {doc_id} 기록: {title}"],
@@ -2015,6 +2035,18 @@ def cmd_link(args):
                 pmeta["children"] = children
                 pmeta["updated"] = ts
                 write_doc(ppath, pmeta, pbody)
+        # relates 대칭 기록 (REQ-20260825-059): 단방향으로 남으면 반대편
+        # 문서에서 관계가 보이지 않아 "연관이 누락됐다"가 된다
+        for rid in (args.relates or []):
+            rp = locate(rid)
+            if not rp:
+                continue
+            rmeta, rbody = read_doc(rp)
+            rrel = rmeta.get("relates", [])
+            if args.id not in rrel:
+                rmeta["relates"] = rrel + [args.id]
+                rmeta["updated"] = ts
+                write_doc(rp, rmeta, rbody)
         rebuild_index(quiet=True)
     finally:
         release_lock()
@@ -2463,6 +2495,120 @@ def cmd_assets(args):
                 print(f"  {os.path.relpath(f, ROOT)}")
     else:
         die(f"unknown assets action: {args.action}")
+
+
+def link_audit(fix=False):
+    """문서 관계 전수 검사 (REQ-20260825-059). 검사 항목:
+    parent/children/derived_from/relates의 대상 존재, parent↔children 양방향,
+    relates 대칭, 자기참조, parent 순환. fix=True면 복구 가능한 것을 고친다
+    (역참조 보강·대칭 보강·미존재 참조 제거). 반환: (문제 목록, 고친 수)."""
+    docs = {}
+    for p in walk_docs():
+        meta, body = read_doc(p)
+        if meta.get("id"):
+            docs[meta["id"]] = [p, meta, body, False]   # [경로,메타,본문,변경]
+    issues = []
+
+    def mark(did):
+        docs[did][3] = True
+
+    for did, (p, meta, _b, _c) in list(docs.items()):
+        par = (meta.get("parent") or "").strip()
+        if par:
+            if par == did:
+                issues.append(f"{did}: 자기 자신을 부모로 지정")
+                if fix:
+                    meta["parent"] = ""
+                    mark(did)
+            elif par not in docs:
+                issues.append(f"{did}: 부모 {par} 미존재")
+                if fix:
+                    meta["parent"] = ""
+                    mark(did)
+            else:
+                pm = docs[par][1]
+                if did not in (pm.get("children") or []):
+                    issues.append(f"{par}: 자식 {did} 역참조 누락")
+                    if fix:
+                        pm["children"] = (pm.get("children") or []) + [did]
+                        mark(par)
+        for c in list(meta.get("children") or []):
+            if c not in docs:
+                issues.append(f"{did}: 자식 {c} 미존재")
+                if fix:
+                    meta["children"] = [x for x in meta["children"] if x != c]
+                    mark(did)
+            elif (docs[c][1].get("parent") or "") != did:
+                # 진실은 자식의 parent 필드 — 부모가 비어 있을 때만 입양하고,
+                # 다른 부모가 이미 있으면 이쪽 children에서 뺀다. (양쪽을
+                # 번갈아 고쳐 왕복하던 규칙 충돌 제거, REQ-059)
+                cpar = (docs[c][1].get("parent") or "").strip()
+                if not cpar:
+                    issues.append(f"{c}: 부모 미지정인데 {did}의 자식 목록에 있음")
+                    if fix:
+                        docs[c][1]["parent"] = did
+                        mark(c)
+                else:
+                    issues.append(f"{did}: 자식 {c}의 실제 부모는 {cpar}")
+                    if fix:
+                        meta["children"] = [x for x in meta["children"] if x != c]
+                        mark(did)
+        for r in list(meta.get("relates") or []):
+            if r == did:
+                issues.append(f"{did}: 자기 자신을 relates로 지정")
+                if fix:
+                    meta["relates"] = [x for x in meta["relates"] if x != did]
+                    mark(did)
+            elif r not in docs:
+                issues.append(f"{did}: relates {r} 미존재")
+                if fix:
+                    meta["relates"] = [x for x in meta["relates"] if x != r]
+                    mark(did)
+            elif did not in (docs[r][1].get("relates") or []):
+                issues.append(f"{r}: relates {did} 대칭 누락")
+                if fix:
+                    docs[r][1]["relates"] = (docs[r][1].get("relates") or []) + [did]
+                    mark(r)
+        df = (meta.get("derived_from") or "").strip()
+        if df and df not in docs:
+            issues.append(f"{did}: derived_from {df} 미존재")
+            if fix:
+                meta["derived_from"] = ""
+                mark(did)
+    # parent 순환
+    for did in docs:
+        seen, cur = set(), did
+        while cur:
+            if cur in seen:
+                issues.append(f"{did}: 부모 체인 순환")
+                if fix:
+                    docs[did][1]["parent"] = ""
+                    mark(did)
+                break
+            seen.add(cur)
+            cur = (docs.get(cur, [None, {}, "", False])[1].get("parent") or "").strip()
+    fixed = 0
+    if fix:
+        for did, (p, meta, body, changed) in docs.items():
+            if changed:
+                meta["updated"] = now_iso()
+                write_doc(p, meta, body)
+                fixed += 1
+        if fixed:
+            rebuild_index(quiet=True)
+    return issues, fixed
+
+
+def cmd_linkcheck(args):
+    issues, fixed = link_audit(fix=args.fix)
+    for i in issues[:80]:
+        print(f"  {i}")
+    if len(issues) > 80:
+        print(f"  … 외 {len(issues) - 80}건")
+    print(f"관계 검사: 문제 {len(issues)}건" + (f" · 복구 {fixed}건" if args.fix else ""))
+    if issues and not args.fix:
+        print("복구하려면: s9 linkcheck --fix")
+    return 1 if (issues and not args.fix) else 0
 
 
 def cmd_index(args):
@@ -5387,6 +5533,9 @@ def main():
 
     ix = sub.add_parser("index", help="index maintenance")
     ix.add_argument("action", choices=["rebuild"])
+    lc = sub.add_parser("linkcheck", help="문서 관계 전수 검사/복구")
+    lc.add_argument("--fix", action="store_true")
+    lc.set_defaults(fn=cmd_linkcheck)
     tg = sub.add_parser("tag", help="태그 유지보수 (통제 어휘 백필)")
     tg.add_argument("action", choices=["backfill"])
     tg.set_defaults(fn=cmd_tag)

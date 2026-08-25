@@ -435,8 +435,13 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    이모지 폰트 폴백을 끊어(mono 강제 + 텍스트 표현) 렌더 폭을 일정하게 만든다. */
 .ccspin{display:inline-block;width:1.25ch;text-align:center;flex:none;
   font-family:var(--mono);font-variant-emoji:text}
-.ccspin::before{content:"✻";color:rgb(215,119,87);animation:ccglyph 2s steps(1,end) infinite}
-@keyframes ccglyph{0%{content:"·"}10.2%{content:"✢"}18.5%{content:"*"}25%{content:"✶"}31.6%{content:"✻"}39.8%{content:"✽"}60.2%{content:"✻"}68.5%{content:"✶"}75%{content:"*"}81.6%{content:"✢"}89.8%{content:"·"}100%{content:"·"}}
+.ccspin::before{content:"✻";display:inline-block;color:rgb(215,119,87);
+  transform-origin:50% 50%;animation:ccglyph 2s steps(1,end) infinite}
+/* 프레임 = 글리프 교체 → 스케일 펄스로 전환 (REQ-20260825-058): 별 글리프들이
+   서로 다른 폰트에서 와(브라우저 폰트 폴백) 크기·중심이 달라 프레임마다
+   덜컹였다. 한 글리프(✻)를 CC와 같은 6단 코사인 타이밍으로 키웠다 줄여
+   "피고 지는" 인상은 유지하되 렌더 지터를 없앤다. 폭은 .ccspin이 고정. */
+@keyframes ccglyph{0%{transform:scale(.30);opacity:.55}10.2%{transform:scale(.46);opacity:.7}18.5%{transform:scale(.62);opacity:.82}25%{transform:scale(.78);opacity:.9}31.6%{transform:scale(.90);opacity:.96}39.8%{transform:scale(1);opacity:1}60.2%{transform:scale(.90);opacity:.96}68.5%{transform:scale(.78);opacity:.9}75%{transform:scale(.62);opacity:.82}81.6%{transform:scale(.46);opacity:.7}89.8%{transform:scale(.30);opacity:.55}100%{transform:scale(.30);opacity:.55}}
 /* 웨이팅 텍스트 shimmer — CC 실측: 80ms에 1글자씩 이동(사이클=글자수+20≈30스텝),
    claude 주황 볼드 위 살짝 밝은 주황(claudeShimmer rgb(245,149,117))의 좁은 하이라이트.
    steps(30)으로 글자 단위 이산 이동을 재현 — 연속 질주 띠 아님. */

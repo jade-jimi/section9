@@ -63,9 +63,15 @@ class TestSpinnerGlyphs(unittest.TestCase):
         return out
 
     def test_frames_exist(self):
-        """프레임이 진행(≥5단계)을 이룬다 — 단일 글리프 정지가 아니다."""
-        kf_frames = self._spinner_contents()
-        self.assertGreaterEqual(len(kf_frames), 5, f"프레임 부족: {kf_frames}")
+        """진행이 ≥5단계다 — 정지 화면이 아니다. 글리프 교체(content)든
+        스케일 펄스(transform)든 진행 표현 방식은 무관하다 (REQ-058: 폰트
+        폴백 지터 때문에 글리프 교체 → 스케일 펄스로 전환)."""
+        i = self.html.index("@keyframes ccglyph")
+        block = self.html[i:self.html.index("}\n", i + 1200) + 1] \
+            if "}\n" in self.html[i:i + 2000] else self.html[i:i + 2000]
+        steps = len(re.findall(r"content:", block)) or \
+            len(re.findall(r"transform:scale", block))
+        self.assertGreaterEqual(steps, 5, f"진행 단계 부족: {steps}")
 
     def test_no_emoji_candidate_glyphs(self):
         """어떤 프레임에도 이모지 후보 코드포인트가 없다 (반려 원인 재발 방지)."""

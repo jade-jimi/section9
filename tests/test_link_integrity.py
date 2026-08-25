@@ -1,0 +1,125 @@
+"""문서 관계 무결성 (REQ-20260825-059).
+
+parent/children/relates/derived_from가 깨지면 "연관 요청이 없다"가 된다 —
+전수 검사(link_audit)로 검출하고 --fix로 복구한다. 복구는 멱등이어야
+한다(왕복 수정 금지). 채팅 카드는 지목한 문서·선행 카드와 자동 연결된다.
+
+실행: python3 tests/ link_integrity
+"""
+import importlib.machinery
+import importlib.util
+import json
+import os
+import subprocess
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+S9 = os.path.join(HERE, "..", "bin", "s9")
+
+TMP = tempfile.mkdtemp(prefix="s9link-")
+_prev = {k: os.environ.get(k) for k in ("S9_ROOT", "S9_MACHINE", "S9_USER")}
+os.environ.update({"S9_ROOT": TMP, "S9_MACHINE": "testbox", "S9_USER": "tester"})
+try:
+    spec = importlib.util.spec_from_loader(
+        "s9_mod_link", importlib.machinery.SourceFileLoader("s9_mod_link", S9))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+finally:
+    for k, v in _prev.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
+class TestLinkAudit(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.env = {**os.environ, "S9_ROOT": TMP, "S9_MACHINE": "testbox",
+                   "S9_USER": "tester"}
+        cls.env.pop("S9_SESSION", None)
+        cls.cli("init")
+        cls.cli("user", "add", "tester")
+
+    @classmethod
+    def cli(cls, *argv, expect=0):
+        r = subprocess.run([S9, *argv], capture_output=True, text=True,
+                           env=cls.env, timeout=20, stdin=subprocess.DEVNULL)
+        if expect is not None and r.returncode != expect:
+            raise AssertionError(f"s9 {' '.join(argv)}: {r.stdout}{r.stderr}")
+        return r.stdout
+
+    def new(self, title):
+        return self.cli("new", "request", "--title", title, "--summary", "s",
+                        "--size", "S", "--goal", "g", "--body", "b").split()[0]
+
+    def _path(self, rid):
+        import glob
+        return glob.glob(os.path.join(TMP, "vault", "**", rid + ".md"),
+                         recursive=True)[0]
+
+    def _meta(self, rid):
+        with open(self._path(rid), encoding="utf-8") as f:
+            fm = f.read().split("---")[1]
+        out = {}
+        for ln in fm.splitlines():
+            if ": " in ln:
+                k, v = ln.split(": ", 1)
+                try:
+                    out[k] = json.loads(v)
+                except Exception:
+                    out[k] = v.strip()
+        return out
+
+    def _write_meta(self, rid, key, value):
+        p = self._path(rid)
+        with open(p, encoding="utf-8") as f:
+            txt = f.read()
+        head, fm, body = txt.split("---", 2)
+        lines = [l for l in fm.splitlines() if not l.startswith(key + ":")]
+        lines.append(f"{key}: {json.dumps(value, ensure_ascii=False)}"
+                     if isinstance(value, list) else f"{key}: {value}")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(head + "---" + "\n".join(lines) + "\n---" + body)
+        self.cli("index", "rebuild")
+
+    # L1. 정상 상태에서는 문제 0건
+    def test_l1_clean(self):
+        a, b = self.new("부모"), self.new("자식")
+        self.cli("link", b, "--parent", a)
+        issues, _ = mod.link_audit()
+        self.assertEqual([i for i in issues if a in i or b in i], [])
+
+    # L2. relates는 양방향으로 기록된다 (단방향이 "연관 누락"의 원인)
+    def test_l2_relates_symmetric(self):
+        a, b = self.new("A"), self.new("B")
+        self.cli("link", a, "--relates", b)
+        self.assertIn(a, self._meta(b).get("relates") or [])
+
+    # L3. 깨진 관계 검출 + 복구, 복구는 멱등(재실행 시 문제 0)
+    def test_l3_detect_and_fix(self):
+        a, b = self.new("고아 부모"), self.new("고아 자식")
+        self._write_meta(b, "parent", a)          # 역참조 없는 부모 지정
+        self._write_meta(a, "relates", ["REQ-90000000-999"])  # 미존재 참조
+        issues, _ = mod.link_audit()
+        self.assertTrue(any("역참조 누락" in i for i in issues), issues)
+        self.assertTrue(any("미존재" in i for i in issues), issues)
+        _i2, fixed = mod.link_audit(fix=True)
+        self.assertGreater(fixed, 0)
+        again, _ = mod.link_audit()
+        self.assertEqual(again, [], f"복구가 멱등하지 않다: {again}")
+
+    # L4. 자기참조·순환 검출
+    def test_l4_cycles(self):
+        a, b = self.new("순환1"), self.new("순환2")
+        self._write_meta(a, "parent", b)
+        self._write_meta(b, "parent", a)
+        issues, _ = mod.link_audit()
+        self.assertTrue(any("순환" in i for i in issues), issues)
+        mod.link_audit(fix=True)
+        self.assertEqual([i for i in mod.link_audit()[0] if "순환" in i], [])
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
