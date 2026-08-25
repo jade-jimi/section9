@@ -710,7 +710,12 @@ def cmd_new(args):
             "derived_from": args.derived_from or "", "relates": args.relates or [],
             "refs_docs": args.ref_doc or [], "refs_links": args.ref_link or [],
             "refs_files": args.ref_file or [],
-            "tags": args.tag_list or [],
+            # 통제 어휘 자동 태깅 (REQ-20260825-052) — 사람 태그가 있으면
+            # 그대로, 없거나 기계 태그(auto-audit)뿐이면 본문에서 보강한다
+            "tags": ((args.tag_list or []) + (
+                derive_tags(args.title, args.summary, original)
+                if not [t for t in (args.tag_list or []) if t != "auto-audit"]
+                else [])),
             "created": ts, "updated": ts,
         }
         body = (f"\n## Original\n\n{original or args.title}\n"
@@ -2100,6 +2105,62 @@ def cmd_search(args):
         for i, line in enumerate(text.splitlines(), 1):
             if any(t in line for t in terms):
                 print(f"    {rel}:{i}: {line.strip()[:120]}")
+
+
+# --------------------------------------------- 태그 (REQ-20260825-052)
+# 태그가 auto-audit(기계 태그)뿐이면 태그 필터·주제 검색이 죽는다. 생성 시점에
+# 통제 어휘로 자동 부여한다 — 어휘를 좁게 유지해야 태그가 의미를 갖는다.
+# 사람이 붙인 태그가 항상 우선(자동은 보강만, 최대 3개).
+
+TAG_RULES = [
+    ("dashboard", r"대시보드|보드|카드|컬럼|목록|뷰어|화면"),
+    ("terminal", r"터미널|스피너|웨이팅|채팅|수신함|입력줄|Esc|인터럽트"),
+    ("session", r"세션|재시작|resume|모델|effort|계정|프로필|로그인"),
+    ("audit", r"audit|분류|카드화|제목|요약|요청 ?문서|훅|hook"),
+    ("assets", r"첨부|이미지|업로드|uploads|스크린샷"),
+    ("index", r"카탈로그|인덱스|발번|채번|uid|중복 ?번호|id ?체계"),
+    ("sync", r"동기화|깃|git|커밋|푸시|리모트|백업|vault"),
+    ("workflow", r"자동 ?재작업|무인|워커|스폰|auto-?resume|워처|배정"),
+    ("design", r"디자인|스킨|색상|렌더|가시성 ?표시|글리프|폰트|레이아웃"),
+    ("access", r"권한|격리|가시성|인가|admin|멤버|비공개"),
+    ("test", r"테스트|검증|회귀|TDD"),
+    ("docs", r"가이드|문서화|안내|설명서|README"),
+    ("project", r"프로젝트|PRJ|멤버십"),
+]
+
+
+def derive_tags(*texts, limit=3):
+    """제목·요약·본문에서 통제 어휘 태그를 뽑는다 (매칭 수 많은 순, 최대 limit)."""
+    hay = " ".join(t or "" for t in texts)
+    scored = []
+    for tag, pat in TAG_RULES:
+        n = len(re.findall(pat, hay, re.I))
+        if n:
+            scored.append((n, tag))
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [t for _n, t in scored[:limit]]
+
+
+def cmd_tag(args):
+    if args.action != "backfill":
+        die(f"unknown tag action: {args.action}")
+    n = 0
+    for p in walk_docs():
+        meta, body = read_doc(p)
+        if meta.get("type") != "request":
+            continue
+        tags = list(meta.get("tags") or [])
+        if [t for t in tags if t != "auto-audit"]:
+            continue                      # 이미 의미 태그가 있다 — 건드리지 않는다
+        add = derive_tags(meta.get("title"), meta.get("summary"), body[:1200])
+        if not add:
+            continue
+        meta["tags"] = tags + [t for t in add if t not in tags]
+        write_doc(p, meta, body)
+        n += 1
+        print(f"  {meta['id']}: +{','.join(add)}")
+    rebuild_index(quiet=True)
+    print(f"백필 완료: {n}건")
 
 
 # ------------------------------------------- 첨부 (REQ-20260825-013/-050)
@@ -5110,6 +5171,9 @@ def main():
 
     ix = sub.add_parser("index", help="index maintenance")
     ix.add_argument("action", choices=["rebuild"])
+    tg = sub.add_parser("tag", help="태그 유지보수 (통제 어휘 백필)")
+    tg.add_argument("action", choices=["backfill"])
+    tg.set_defaults(fn=cmd_tag)
     ast = sub.add_parser("assets", help="첨부 이전/정리 (문서 옆 assets/)")
     ast.add_argument("action", choices=["ingest", "migrate"])
     ast.add_argument("id", nargs="?")
