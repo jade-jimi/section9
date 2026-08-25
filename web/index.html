@@ -247,6 +247,11 @@ main{padding:18px 22px}
 .gate-h[open] summary::before{content:"▾ "}
 .gate-r{margin:7px 0 0;font-size:12px;line-height:1.5}
 .gate-r .path{display:block;margin-bottom:2px}
+/* 문서 뷰 첨부 (REQ-20260825-023) — 계기판 언어: 라운드 0, 1px 보더 */
+.attimg{max-width:min(100%,760px);display:block;margin:8px 0;border:1px solid var(--border)}
+.attlink{display:inline-block;text-decoration:none}
+.attchip{font-family:var(--mono);font-size:11px;color:var(--muted);
+  border:1px solid var(--hairline);padding:1px 6px}
 .metatbl{width:100%;border-collapse:collapse;margin:16px 0 24px;font-size:12.5px;
   border-top:1px solid var(--border)}
 .metatbl td{border-bottom:1px solid var(--hairline);padding:7px 10px 7px 0;vertical-align:top}
@@ -1976,12 +1981,29 @@ function md2html(src){
   let out = [], inCode = false, inList = false, para = [];
   const flushPara = () => { if (para.length){ out.push("<p>" + inline(para.join(" ")) + "</p>"); para = []; } };
   const flushList = () => { if (inList){ out.push("</ul>"); inList = false; } };
-  const inline = s => linkifyIds(s
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[\[((?:REQ|DOC|SES)-\d{8}-\d{3,}(?:-[0-9a-z]{4})?)\]\]/g,
-      (mm, id) => `<a class="doclink" data-doc="${id}">${shortId(id)}</a>`)
-    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>'));
+  // 첨부 인라인 렌더 (REQ-20260825-023/-050): [Image: assets/<id>/<f>] →
+  // 문서 가시성을 상속하는 /api/asset 라우트로 <img>. 생성한 HTML은 자리표시자로
+  // 보관했다가 마지막에 되돌린다 — linkifyIds가 src/href 속성 안의 문서 id까지
+  // 링크로 바꿔 태그를 깨뜨리던 결함(자가 캡처로 발견) 방지.
+  const inline = s => {
+    const held = [];
+    const hold = html => `\u0000${held.push(html) - 1}\u0000`;
+    const src2 = s
+      .replace(/\[Image: (assets\/([A-Z]{3}-[\w-]+)\/([^\]\/\n]+))\]/g,
+        (mm, rel, did, f) => hold(
+          `<a class="attlink" href="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(f)}" target="_blank">` +
+          `<img class="attimg" src="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(f)}" alt="${f}" loading="lazy"></a>`))
+      // 레거시 절대경로(미이전) — 로드 불가라 파일명 칩으로만
+      .replace(/\[Image: ([^\]\n]*\/([^\]\/\n]+))\]/g,
+        (mm, full, f) => hold(`<span class="attchip" title="${full}">🖼 ${f}</span>`));
+    return linkifyIds(src2
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\[\[((?:REQ|DOC|SES)-\d{8}-\d{3,}(?:-[0-9a-z]{4})?)\]\]/g,
+        (mm, id) => `<a class="doclink" data-doc="${id}">${shortId(id)}</a>`)
+      .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>'))
+      .replace(/\u0000(\d+)\u0000/g, (mm, i) => held[+i]);
+  };
   for (const raw of lines){
     if (raw.startsWith("```")){ flushPara(); flushList();
       out.push(inCode ? "</code></pre>" : "<pre><code>"); inCode = !inCode; continue; }

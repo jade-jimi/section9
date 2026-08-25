@@ -1550,6 +1550,10 @@ def chat_audit(text, sender, sid8):
         if out.returncode != 0:
             return None
         doc_id = out.stdout.split()[0]
+        try:
+            ingest_assets(doc_id)   # 첨부를 문서 옆으로 (REQ-20260825-050)
+        except Exception:
+            pass
         subprocess.run([me, "log", f"dashboard chat {doc_id} 기록: {title}"],
                        capture_output=True, text=True, env=env, timeout=15)
         return doc_id
@@ -2096,6 +2100,93 @@ def cmd_search(args):
         for i, line in enumerate(text.splitlines(), 1):
             if any(t in line for t in terms):
                 print(f"    {rel}:{i}: {line.strip()[:120]}")
+
+
+# ------------------------------------------- 첨부 (REQ-20260825-013/-050)
+# 첨부는 요청 문서의 일부다 — 문서와 같은 월 디렉토리의 assets/<문서ID>/에 두어
+# 동기화·이동·삭제가 문서와 한 몸으로 움직이게 한다(승인된 B안). 본문에는
+# 상대경로로 기록하고, 열람은 문서 가시성을 상속하는 /api/asset 라우트로만.
+
+ASSET_RE = re.compile(r"\[Image: ([^\]\n]+)\]")
+
+
+def doc_asset_dir(doc_id, make=False):
+    """문서의 첨부 디렉토리 — <문서 디렉토리>/assets/<문서ID>/. 문서 없으면 ""."""
+    p = locate(doc_id)
+    if not p:
+        return ""
+    d = os.path.join(os.path.dirname(p), "assets", doc_id)
+    if make:
+        os.makedirs(d, exist_ok=True)
+    return d
+
+
+def ingest_assets(doc_id):
+    """본문의 절대경로 첨부를 문서 옆 assets/로 이전하고 상대경로로 재작성.
+    업로드 임시본(state/)은 이동, 남의 파일(CC 이미지 캐시 등)은 복사.
+    반환: 이전한 파일 수."""
+    path = locate(doc_id)
+    if not path:
+        return 0
+    meta, body = read_doc(path)
+    state_dir = os.path.join(ROOT, "state")
+    moved = []
+
+    def repl(m):
+        src = m.group(1).strip()
+        if not os.path.isabs(src) or not os.path.exists(src):
+            return m.group(0)          # 이미 상대경로거나 원본 부재 — 그대로
+        dst_dir = doc_asset_dir(doc_id, make=True)
+        name = safe_name(os.path.basename(src))
+        dst, i = os.path.join(dst_dir, name), 2
+        stem, ext = os.path.splitext(name)
+        while os.path.exists(dst):
+            dst = os.path.join(dst_dir, f"{stem}-{i}{ext}")
+            i += 1
+        try:
+            if os.path.commonpath([os.path.realpath(src), state_dir]) == state_dir:
+                shutil.move(src, dst)          # 우리 업로드 임시본
+            else:
+                shutil.copyfile(src, dst)      # CC 캐시 등 — 원본 보존
+        except (OSError, ValueError):
+            return m.group(0)
+        moved.append(dst)
+        return f"[Image: assets/{doc_id}/{os.path.basename(dst)}]"
+
+    new_body = ASSET_RE.sub(repl, body)
+    if moved:
+        meta["updated"] = now_iso()
+        write_doc(path, meta, new_body)
+        rebuild_index(quiet=True)
+    return len(moved)
+
+
+def cmd_assets(args):
+    if args.action == "ingest":
+        args.id or die("usage: s9 assets ingest <doc-id>")
+        print(f"{args.id}: {ingest_assets(args.id)}개 이전")
+    elif args.action == "migrate":
+        total = docs = 0
+        for p in walk_docs():
+            meta, body = read_doc(p)
+            if not meta.get("id") or "[Image: /" not in body:
+                continue
+            n = ingest_assets(meta["id"])
+            if n:
+                docs += 1
+                total += n
+                print(f"  {meta['id']}: {n}개")
+        print(f"이전 완료: 문서 {docs}건 · 파일 {total}개")
+        # 참조되지 않은 업로드 잔여물 보고 (판단은 사람 몫 — 자동 삭제 금지)
+        up = os.path.join(ROOT, "state", "terminal", "uploads")
+        left = [os.path.join(dp, f) for dp, _d, fs in os.walk(up) for f in fs] \
+            if os.path.isdir(up) else []
+        if left:
+            print(f"미참조 업로드 잔여 {len(left)}개 (수동 확인):")
+            for f in left[:20]:
+                print(f"  {os.path.relpath(f, ROOT)}")
+    else:
+        die(f"unknown assets action: {args.action}")
 
 
 def cmd_index(args):
@@ -2646,6 +2737,11 @@ def cmd_rm(args):
     try:
         trash = os.path.join(os.path.dirname(path), ".trash")
         os.makedirs(trash, exist_ok=True)
+        adir = os.path.join(os.path.dirname(path), "assets", args.id)
+        if os.path.isdir(adir):     # 첨부도 함께 tombstone (REQ-050)
+            tdst = os.path.join(trash, "assets-" + args.id)
+            shutil.rmtree(tdst, ignore_errors=True)
+            shutil.move(adir, tdst)
         shutil.move(path, os.path.join(trash, os.path.basename(path)))
         rebuild_index(quiet=True)
     finally:
@@ -4715,6 +4811,28 @@ def cmd_serve(args):
                 except OSError:
                     pass
                 self._json({"sid": sid, "lines": lines})
+            elif parsed.path == "/api/asset":
+                # 첨부 서빙 (REQ-20260825-050): 소유 문서의 가시성을 그대로
+                # 상속 — 비가시 문서의 첨부는 존재를 숨기는 404. 파일명은
+                # basename+safe_name으로 정규화해 경로 탈출을 차단한다.
+                doc_id = qs.get("doc", [""])[0]
+                fn = safe_name(os.path.basename(qs.get("f", [""])[0]))
+                me = viewer_of(qs)
+                dp = locate(doc_id)
+                ok = False
+                if dp and fn:
+                    meta_a = read_doc(dp)[0]
+                    if doc_visible(meta_a, me):
+                        full = os.path.join(doc_asset_dir(doc_id), fn)
+                        if os.path.isfile(full):
+                            import mimetypes
+                            ctype = (mimetypes.guess_type(full)[0]
+                                     or "application/octet-stream")
+                            with open(full, "rb") as f:
+                                self._send(200, ctype, f.read())
+                            ok = True
+                if not ok:
+                    self._send(404, "text/plain", b"not found")
             elif parsed.path == "/api/doc":
                 doc_id = qs.get("id", [""])[0]
                 path = locate(doc_id)
@@ -4871,7 +4989,8 @@ def cmd_serve(args):
                         raise ValueError("base64 디코딩 실패")
                     if not blob:
                         raise ValueError("빈 첨부")
-                    updir = os.path.join(ROOT, "state", "terminal", "uploads")
+                    updir = os.path.join(ROOT, "state", "terminal", "uploads",
+                                         safe_name(actor or "anon"))
                     os.makedirs(updir, exist_ok=True)
                     stamp = now_iso().replace(":", "").replace("-", "")[:15]
                     path = os.path.join(updir, f"{stamp}-{name}")
@@ -4991,6 +5110,10 @@ def main():
 
     ix = sub.add_parser("index", help="index maintenance")
     ix.add_argument("action", choices=["rebuild"])
+    ast = sub.add_parser("assets", help="첨부 이전/정리 (문서 옆 assets/)")
+    ast.add_argument("action", choices=["ingest", "migrate"])
+    ast.add_argument("id", nargs="?")
+    ast.set_defaults(fn=cmd_assets)
     ix.set_defaults(fn=cmd_index)
 
     ip = sub.add_parser("init", help="create directory skeleton")
