@@ -1119,6 +1119,57 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   box-shadow:var(--calm-shadow);text-align:center;padding:22px 16px}
 [data-skin="calm"] .more{border-radius:999px;padding:6px 14px}
 [data-skin="calm"] .hovercard{border-radius:12px;border:0;box-shadow:var(--calm-shadow)}
+/* --- calm 심미 보강 (REQ-20260825-068) — 색·리듬·상태 식별 ------------- */
+/* 캔버스에 아주 옅은 수직 그라데이션: 화면 상단이 뜨고 아래가 가라앉는다 */
+[data-skin="calm"] body{
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,var(--bg)) 0,var(--bg) 420px) no-repeat,var(--bg);
+}
+/* 컬럼 헤더 = 상태 배지: 색 점 대신 연한 상태색 필 + 카운트를 한 덩어리로 */
+[data-skin="calm"] .col h2{display:flex;align-items:center;gap:8px;padding:2px 4px 12px}
+[data-skin="calm"] .col h2 .cdot{width:8px;height:8px;border-radius:50%}
+[data-skin="calm"] .col h2 .n{margin-left:auto;background:color-mix(in srgb,var(--sc) 14%,transparent);
+  color:var(--sc);border-radius:999px;padding:2px 9px;font-size:11px;font-weight:600}
+/* 카드: 여백 리듬과 타이포 위계를 한 단계 더 벌리고, 상태는 왼쪽 얇은 띠로 */
+[data-skin="calm"] .card{padding:15px 17px;overflow:hidden;position:relative}
+[data-skin="calm"] .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--sc);opacity:.85}
+[data-skin="calm"] .card .id{color:var(--faint);font-size:10.5px}
+[data-skin="calm"] .card .t{font-size:15.5px;line-height:1.38;margin:5px 0 11px;letter-spacing:-.012em}
+[data-skin="calm"] .card .m{gap:6px;align-items:center}
+/* 태그: 해시 색조로 구분 — 저채도 배경 + 진한 글자(라이트) */
+[data-skin="calm"] .card .tag{background:hsl(var(--th) 62% 95%);color:hsl(var(--th) 42% 38%);
+  font-size:11px;font-weight:500}
+[data-skin="calm"] .card .badge{background:color-mix(in srgb,var(--text) 6%,transparent);color:var(--muted)}
+[data-skin="calm"] .card .size{background:none;color:var(--faint);padding:2px 4px}
+[data-skin="calm"] .card .elapsed{font-size:10.5px;color:var(--faint)}
+/* 확인 포인트: 카드 안에서 비중을 낮추되 읽기는 편하게 */
+[data-skin="calm"] .rvpt{font-size:11.5px;line-height:1.65;padding:11px 13px;
+  background:color-mix(in srgb,var(--c-review) 7%,transparent);
+  color:color-mix(in srgb,var(--c-review) 72%,var(--text))}
+[data-skin="calm"] .card[data-status="blocked"] .rvpt{
+  background:color-mix(in srgb,var(--c-blocked) 7%,transparent);
+  color:color-mix(in srgb,var(--c-blocked) 72%,var(--text))}
+/* 빈 컬럼: 카드가 아니라 점선 자리 — "여기에 놓을 수 있다"는 신호 */
+[data-skin="calm"] .colempty{background:none;box-shadow:none;
+  border:1.5px dashed color-mix(in srgb,var(--text) 12%,transparent);
+  color:var(--faint);font-size:12px;padding:26px 16px}
+/* 컬럼은 고정 폭 + 가로 스크롤(균등 분할은 태그가 잘려 정보가 사라졌다 —
+   실험 후 되돌림). 폭만 살짝 넓혀 카드 안이 답답하지 않게 한다. */
+[data-skin="calm"] .col{min-width:300px;width:300px}
+[data-skin="calm"] .card .tag{white-space:nowrap}
+/* 스크롤바를 얇게 — 보드가 화면을 덜 잡아먹는다 */
+[data-skin="calm"] .board::-webkit-scrollbar{height:9px}
+[data-skin="calm"] .board::-webkit-scrollbar-thumb{
+  background:color-mix(in srgb,var(--text) 14%,transparent);border-radius:999px}
+[data-skin="calm"] .board::-webkit-scrollbar-track{background:none}
+/* 다크 톤: 태그·틴트를 어두운 면 위에서 성립하도록 반전 */
+[data-skin="calm"][data-theme="graphite"] .card .tag,
+[data-skin="calm"][data-theme="carbon"] .card .tag{
+  background:hsl(var(--th) 38% 22%);color:hsl(var(--th) 70% 78%)}
+@media (prefers-color-scheme: dark){
+  :root[data-theme="system"][data-skin="calm"] .card .tag{
+    background:hsl(var(--th) 38% 22%);color:hsl(var(--th) 70% 78%)}
+}
 /* 육안 검증에서 드러난 미완성 지점 보정 (REQ-062 재작업 2): Docs·Settings·
    Terminal·Audit이 아직 ledger의 각진 판이라 카드 언어와 충돌했다. */
 [data-skin="calm"] .docs{gap:14px}
@@ -1240,7 +1291,14 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g,
 // uid 표시 축약 (REQ-20260825-031/-034): 지문 접미(-xxxx)는 같은
 // (타입-날짜-순번)이 실제로 겹칠 때만 보여준다 — git 짧은 해시 원리.
 // 참조(data-doc)는 항상 전문 uid, 축약은 렌더 시점에만.
-const SYS_TAGS = new Set(["auto-audit"]);   // 출처 표식 — 태그 UI에서 숨김
+const SYS_TAGS = new Set(["auto-audit"]);
+// 태그별 안정적 색조 — 같은 태그는 항상 같은 색(문자열 해시 → hue).
+// 무채색 칩만 늘어놓으면 눈이 태그를 구분하지 못한다(REQ-20260825-068).
+function tagHue(t){
+  let h = 0;
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) % 360;
+  return h;
+}   // 출처 표식 — 태그 UI에서 숨김
 let idBaseCount = new Map();
 function rebuildIdMap(){
   idBaseCount = new Map();
@@ -1790,7 +1848,7 @@ function cardHTML(r){
       <span class="badge">${esc(r.user)}</span>
       ${r.size ? `<span class="size">${esc(r.size)}</span>` : ""}
       ${r.tdd ? `<span class="tdd${r.tdd.passed===r.tdd.total?" full":""}" title="TDD 시나리오 ${r.tdd.passed}/${r.tdd.total} 통과">TDD ${r.tdd.passed}/${r.tdd.total}</span>` : ""}
-      ${(r.tags||[]).filter(t=>!SYS_TAGS.has(t)).slice(0,2).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}
+      ${(r.tags||[]).filter(t=>!SYS_TAGS.has(t)).slice(0,2).map(t=>`<span class="tag" style="--th:${tagHue(t)}">#${esc(t)}</span>`).join("")}
     </div>${acts}
     ${r.status_since ? `<span class="elapsed" data-since="${esc(r.status_since)}" title="현재 상태(${esc(r.status)}) 시작 이후 경과">${fmtElapsed(r.status_since)}</span>` : ""}</div>`;
 }
