@@ -50,45 +50,38 @@ class TestUxAgents(unittest.TestCase):
         self.assertIn("s9-design", s)
 
 
-class TestBoardUxApplied(unittest.TestCase):
-    """ux-craft 기준의 실제 적용 (REQ-20260825-062) — 보드 화면 계약."""
+class TestNewSkin(unittest.TestCase):
+    """새 스킨·톤 (REQ-20260825-062 재작업): 기존 화면을 손대는 대신 선택
+    가능한 스킨/톤으로 제공한다 — Apple·토스 계보(여백·카드·라운드·단일 강조)."""
     def setUp(self):
         with open(os.path.join(HERE, "..", "web", "index.html"),
                   encoding="utf-8") as f:
             self.html = f.read()
 
-    def test_b1_review_point_clamped(self):
-        """판정 대기 카드를 훑을 수 있게 확인 포인트는 3줄 클램프."""
-        self.assertIn("-webkit-line-clamp:3", self.html)
+    def test_s1_skin_registered(self):
+        self.assertIn('[data-skin="calm"]', self.html)
+        self.assertIn('["calm","calm', self.html)
 
-    def test_b2_no_elapsed_on_terminal(self):
-        """완료·취소 카드의 경과시간은 소음 — 표시하지 않는다."""
-        self.assertIn("showElapsed", self.html)
-        self.assertIn("!TERMINAL.has(r.status)", self.html)
+    def test_s2_tones_registered(self):
+        for t in ("mist", "graphite"):
+            self.assertIn(f':root[data-theme="{t}"]', self.html)
+            self.assertIn(f'["{t}","{t}', self.html)
 
-    def test_b3_empty_states_actionable(self):
-        """빈 컬럼은 다음 행동을 준다(안내문만 있는 빈칸 금지)."""
-        self.assertIn("EMPTY_COL", self.html)
-        for key in ("open:", '"in-progress":', "review:"):
-            self.assertIn(key, self.html)
-        self.assertIn("끌어다 놓으면", self.html)
+    def test_s3_distinct_axes(self):
+        """썸네일 구분 조건: 기본(ledger)과 배경·모양·깊이가 다르다."""
+        i = self.html.index('[data-skin="calm"]')
+        seg = self.html[i:i + 4000]
+        self.assertIn("border-radius", seg)     # 모양
+        self.assertIn("box-shadow", seg)        # 깊이
+        self.assertIn("border:0", seg)          # 선 대신 면
 
-    def test_b4_keyboard_reachable(self):
-        """카드는 키보드로 도달 가능하고 포커스가 보인다."""
-        self.assertIn('tabindex="0"', self.html)
-        self.assertIn(".card:focus-visible", self.html)
-
-    def test_b5_raw_title_pressure_not_decoration(self):
-        """제목 미정리는 카드 표식(약한 신호)이 아니라 매 턴 컨텍스트 주입으로
-        강제한다 (REQ-062 후속 지적) — 훅이 s9 untitled를 조회해 주입한다."""
-        import os as _os
-        root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
-        with open(_os.path.join(root, "bin", "s9-audit-prompt"),
-                  encoding="utf-8") as f:
-            hook = f.read()
-        self.assertIn('"untitled"', hook)
-        self.assertIn("제목이 원문 그대로인 요청", hook)
-        self.assertNotIn("rawt", self.html)   # 장식 표식은 두지 않는다
+    def test_s4_tokens_only(self):
+        """스킨은 tone 토큰 위에서 동작 — 색 하드코딩 최소(그림자 제외)."""
+        i = self.html.index('[data-skin="calm"]')
+        seg = self.html[i:i + 4000]
+        hard = [l for l in seg.splitlines()
+                if "#" in l and "rgba(" not in l and "shadow" not in l]
+        self.assertEqual(hard, [], hard)
 
 
 if __name__ == "__main__":

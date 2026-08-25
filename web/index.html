@@ -484,9 +484,6 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 /* 무인 작업자 기동 중(스폰 후 클레임 전) — 앰버 점멸 (REQ-20260824-008) */
 .livedot.spawn{background:#d97706;box-shadow:0 0 0 0 rgba(217,119,6,.6);animation:livepulse 1.6s infinite}
 @keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.5)}70%{box-shadow:0 0 0 5px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
-/* 확인 포인트는 3줄까지 — 판정 대기 카드를 훑을 수 있어야 한다(ux-craft:
-   한 화면 한 결정). 전문은 문서에서 본다. */
-.rvpt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .card:focus-visible{outline:2px solid var(--text);outline-offset:-2px}
 .col .colempty{padding:14px;color:var(--faint);font-size:11.5px;line-height:1.5}
 .rvpt{margin-top:7px;font-size:11px;color:var(--c-review);line-height:1.4;
@@ -1038,6 +1035,102 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   font-size:11px;font-family:var(--mono);text-align:left}
 .em-add:hover{color:var(--text);text-decoration:underline}
 
+/* ================= tone: mist — 안개 회청 라이트 (REQ-20260825-062 재작업)
+   토스/애플 계보의 밝은 화면: 캔버스는 옅은 회청, 면은 순백, 잉크는 남색조
+   회흑. 강조는 단일 파랑 하나로 몰아 시선을 분산시키지 않는다. */
+:root[data-theme="mist"]{
+  --bg:#eef1f6; --panel:#ffffff; --border:#dde3ec; --hairline:#e9edf4;
+  --text:#101828; --muted:#5a6474; --faint:#98a2b3; --accent:#2f6bff;
+  --c-open:#2f6bff; --c-inprogress:#b25e09; --c-blocked:#d92d20;
+  --c-review:#7a5af8; --c-done:#0f9d76; --c-cancelled:#98a2b3;
+  --c-draft:#98a2b3; --c-published:#0e7090;
+  --t-request:#2f6bff; --t-knowledge:#0e7090; --t-session:#8a5a2b;
+}
+/* ================= tone: graphite — 그래파이트 다크
+   애플 다크 계보: 완전 검정 대신 청색이 도는 흑연, 면은 한 단계 밝은 판,
+   강조는 청록 섞인 파랑. 야간 장시간 작업에서 눈이 덜 피로하도록 대비를
+   과하게 올리지 않는다(본문 대비 ~9:1). */
+:root[data-theme="graphite"]{
+  --bg:#15181d; --panel:#1c2028; --border:#2c323d; --hairline:#242932;
+  --text:#e6e9ef; --muted:#9aa4b2; --faint:#6b7688; --accent:#5b9dff;
+  --c-open:#5b9dff; --c-inprogress:#e0a14a; --c-blocked:#f27171;
+  --c-review:#a78bfa; --c-done:#34d3a6; --c-cancelled:#6b7688;
+  --c-draft:#6b7688; --c-published:#3fb6c8;
+  --t-request:#5b9dff; --t-knowledge:#3fb6c8; --t-session:#e0a14a;
+}
+
+
+/* ================= skin: calm — 여백과 카드 (REQ-20260825-062 재작업)
+   애플 HIG·토스류 제품 언어: ① 배경/깊이 반전 — 캔버스는 낮고 카드는 떠 있다
+   (보더 대신 얕은 그림자) ② 모양 — 라운드 14px, 선이 아니라 면으로 구획
+   ③ 타이포 스케일 — 제목을 키우고 메타를 낮춰 위계를 크게 벌린다
+   ④ 셸 — 컬럼이 회색 웰이 아니라 캔버스 위 카드 묶음, 여백이 리듬.
+   ledger(선으로 나눈 계기판)와 정반대 축이라 썸네일에서 즉시 구분된다. */
+[data-skin="calm"]{ --calm-r:14px; --calm-shadow:0 1px 2px rgba(16,24,40,.06),0 10px 28px -18px rgba(16,24,40,.35); }
+[data-skin="calm"] body{background:var(--bg)}
+[data-skin="calm"] header{background:var(--panel);border-bottom:0;
+  box-shadow:0 1px 0 var(--hairline);padding:14px 26px 10px}
+[data-skin="calm"] .brand{font-size:17px;letter-spacing:-.02em}
+[data-skin="calm"] .tabs button{border-bottom:0;border-radius:999px;padding:7px 15px;
+  font-size:13px;color:var(--muted)}
+[data-skin="calm"] .tabs button:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+[data-skin="calm"] .tabs button.active{background:color-mix(in srgb,var(--accent) 12%,transparent);
+  color:var(--accent);font-weight:600}
+[data-skin="calm"] main{padding:22px 26px}
+[data-skin="calm"] input[type="search"],[data-skin="calm"] select,
+[data-skin="calm"] .uf{border-radius:10px;border:1px solid var(--border);
+  background:var(--panel);padding:7px 11px}
+[data-skin="calm"] .stats{border:0;gap:8px;background:none;margin-bottom:20px}
+[data-skin="calm"] .stat{border:0;border-radius:999px;background:var(--panel);
+  box-shadow:var(--calm-shadow);padding:9px 16px;font-size:12px}
+[data-skin="calm"] .stat.on{background:var(--text);color:var(--bg)}
+[data-skin="calm"] .stat.on .cdot{background:var(--bg)}
+[data-skin="calm"] .board{gap:14px}
+[data-skin="calm"] .col{border-right:0;background:none;min-width:288px;width:288px;padding:0 2px}
+[data-skin="calm"] .col h2{font-size:12.5px;letter-spacing:0;text-transform:none;
+  font-weight:600;color:var(--text);padding:0 6px 10px;border-bottom:0}
+[data-skin="calm"] .col .n{color:var(--faint);font-weight:500}
+[data-skin="calm"] .cards{display:flex;flex-direction:column;gap:10px}
+[data-skin="calm"] .card{background:var(--panel);border:0;border-radius:var(--calm-r);
+  box-shadow:var(--calm-shadow);padding:16px 18px;transition:box-shadow .16s ease,transform .16s ease}
+[data-skin="calm"] .card:hover{box-shadow:0 2px 4px rgba(16,24,40,.07),0 16px 34px -20px rgba(16,24,40,.45);
+  transform:translateY(-1px)}
+[data-skin="calm"] .card .t{font-size:15px;font-weight:650;line-height:1.4;margin:6px 0 10px}
+[data-skin="calm"] .card .id{font-size:11px;letter-spacing:.01em}
+[data-skin="calm"] .card .m{font-size:11.5px;gap:8px}
+[data-skin="calm"] .card .tag,[data-skin="calm"] .card .size,[data-skin="calm"] .card .badge{
+  border-radius:999px;padding:2px 9px;background:color-mix(in srgb,var(--text) 5%,transparent);border:0}
+[data-skin="calm"] .card .elapsed{color:var(--faint);font-size:11px}
+[data-skin="calm"] .rvpt{border-radius:10px;padding:10px 12px;margin-top:10px;
+  background:color-mix(in srgb,var(--c-review) 8%,transparent);border-left:0}
+[data-skin="calm"] .acts button{border-radius:999px;border:1px solid var(--border);
+  padding:5px 13px;background:var(--panel)}
+[data-skin="calm"] .acts button:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+[data-skin="calm"] .viewer,[data-skin="calm"] .doclist{background:var(--panel);
+  border-radius:var(--calm-r);box-shadow:var(--calm-shadow);border:0}
+[data-skin="calm"] .metatbl{border-top:0}
+[data-skin="calm"] .metatbl td{border-bottom:1px solid var(--hairline);padding:10px 12px 10px 0}
+[data-skin="calm"] .colempty{border-radius:var(--calm-r);background:var(--panel);
+  box-shadow:var(--calm-shadow);text-align:center;padding:22px 16px}
+[data-skin="calm"] .more{border-radius:999px;padding:6px 14px}
+[data-skin="calm"] .hovercard{border-radius:12px;border:0;box-shadow:var(--calm-shadow)}
+/* 어두운 톤에서는 그림자가 보이지 않는다 — 깊이를 얇은 링 + 면 밝기로 준다
+   (같은 요소를 톤에 따라 다른 수단으로 띄운다) */
+[data-skin="calm"][data-theme="graphite"],
+[data-skin="calm"][data-theme="carbon"]{
+  --calm-shadow:0 0 0 1px var(--hairline),0 14px 32px -26px #000;
+}
+[data-skin="calm"][data-theme="graphite"] .card:hover,
+[data-skin="calm"][data-theme="carbon"] .card:hover{
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 40%,var(--hairline)),
+             0 18px 38px -26px #000;
+}
+@media (prefers-color-scheme: dark){
+  :root[data-theme="system"][data-skin="calm"]{
+    --calm-shadow:0 0 0 1px var(--hairline),0 14px 32px -26px #000;
+  }
+}
+
 /* ------- hovercard ------- */
 .hovercard{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--text);
   padding:11px 14px;max-width:340px;font-size:12.5px;pointer-events:none;opacity:0;
@@ -1183,9 +1276,9 @@ function isDarkTheme(){
 // → 로그인한 사용자는 어느 머신에서든 자기 설정이 따라온다.
 const UI_DIMS = [
   {key:"s9skin", attr:"skin", cfg:"ui_skin", def:"ledger", label:"skin — 디자인 언어",
-   opts:[["ledger","ledger — 계기판/장부 (기본)"],["soft","soft — 사이드바 앱 셸"],["terminal","terminal — 모노 브루탈"],["glass","glass — 반투명 레이어"],["field","field — 컬러 필드"],["cobalt","cobalt — 헤더 밴드"],["grid","grid — 고밀도 그리드"],["cockpit","cockpit — 다크 관제실"],["slate","slate — 라이트 SaaS 블루"],["cork","cork — 컬러 보드 웰"]]},
+   opts:[["ledger","ledger — 계기판/장부 (기본)"],["soft","soft — 사이드바 앱 셸"],["terminal","terminal — 모노 브루탈"],["glass","glass — 반투명 레이어"],["field","field — 컬러 필드"],["cobalt","cobalt — 헤더 밴드"],["grid","grid — 고밀도 그리드"],["cockpit","cockpit — 다크 관제실"],["slate","slate — 라이트 SaaS 블루"],["cork","cork — 컬러 보드 웰"],["calm","calm — 여백과 카드 (Apple·토스 계보)"]]},
   {key:"s9theme", attr:"theme", cfg:"ui_tone", def:"system", label:"tone — 색",
-   opts:[["system","system — OS 추종"],["paper","paper — 라이트 고정"],["carbon","carbon — 다크 고정"],["phosphor","phosphor — CRT 그린"]]},
+   opts:[["system","system — OS 추종"],["paper","paper — 라이트 고정"],["carbon","carbon — 다크 고정"],["phosphor","phosphor — CRT 그린"],["mist","mist — 안개 회청 라이트"],["graphite","graphite — 그래파이트 다크"]]},
   {key:"s9density", attr:"density", cfg:"ui_density", def:"normal", label:"density — 밀도",
    opts:[["normal","normal"],["compact","compact"]]},
 ];
@@ -1663,8 +1756,6 @@ function cardHTML(r){
          ? `<span class="livedot spawn" title="무인 재작업 작업자가 기동됨(${r.live_age}s 전 스폰) — 클레임 등록 대기 중"></span>`
          : `<span class="livedot off" title="in-progress지만 스트림 조용함 — 실제 동작 아닐 수 있음"></span>`)
     : "";
-  // 완료·취소 카드의 경과시간은 소음이다 — 진행 중인 것만 시간을 센다 (ux-craft)
-  const showElapsed = r.status_since && !TERMINAL.has(r.status);
   return `<div class="card" ${isReq ? 'draggable="true"' : ""} tabindex="0" role="button" style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
     <div class="id">${liveDot}${esc(shortId(r.id))}</div>
     <div class="t">${esc(r.title)}</div>
@@ -1674,7 +1765,7 @@ function cardHTML(r){
       ${r.tdd ? `<span class="tdd${r.tdd.passed===r.tdd.total?" full":""}" title="TDD 시나리오 ${r.tdd.passed}/${r.tdd.total} 통과">TDD ${r.tdd.passed}/${r.tdd.total}</span>` : ""}
       ${(r.tags||[]).filter(t=>!SYS_TAGS.has(t)).slice(0,2).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}
     </div>${acts}
-    ${showElapsed ? `<span class="elapsed" data-since="${esc(r.status_since)}" title="현재 상태(${esc(r.status)}) 시작 이후 경과">${fmtElapsed(r.status_since)}</span>` : ""}</div>`;
+    ${r.status_since ? `<span class="elapsed" data-since="${esc(r.status_since)}" title="현재 상태(${esc(r.status)}) 시작 이후 경과">${fmtElapsed(r.status_since)}</span>` : ""}</div>`;
 }
 
 // 반려: 사유 필수 (빈 값이면 재요구, 취소면 중단). Board·문서 뷰어 공용.
@@ -1700,11 +1791,11 @@ async function postStatus(id, to, note){
 
 // 빈 상태는 안내가 아니라 다음 행동을 주는 자리다 (ux-craft 3)
 const EMPTY_COL = {
-  open: '<div class="colempty">대기 중인 요청이 없습니다.<br>터미널이나 채팅으로 요청하면 여기에 카드가 생깁니다.</div>',
-  "in-progress": '<div class="colempty">진행 중인 작업이 없습니다.<br>open 카드를 이 칸으로 끌어다 놓으면 착수됩니다.</div>',
-  blocked: '<div class="colempty">막힌 작업이 없습니다.</div>',
-  review: '<div class="colempty">판정 대기가 없습니다.<br>검증이 끝난 작업은 바로 done으로 갑니다.</div>',
-  done: '<div class="colempty">완료된 요청이 아직 없습니다.</div>',
+  open: '<div class="colempty">비어 있음</div>',
+  "in-progress": '<div class="colempty">비어 있음</div>',
+  blocked: '<div class="colempty">비어 있음</div>',
+  review: '<div class="colempty">비어 있음</div>',
+  done: '<div class="colempty">비어 있음</div>',
 };
 
 function colHTML(key, label, color, grp){
