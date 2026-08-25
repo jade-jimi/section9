@@ -1120,35 +1120,27 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="calm"] .more{border-radius:999px;padding:6px 14px}
 [data-skin="calm"] .hovercard{border-radius:12px;border:0;box-shadow:var(--calm-shadow)}
 /* --- calm 심미 보강 (REQ-20260825-068) — 색·리듬·상태 식별 ------------- */
-/* 캔버스에 아주 옅은 수직 그라데이션: 화면 상단이 뜨고 아래가 가라앉는다 */
-[data-skin="calm"] body{
-  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,var(--bg)) 0,var(--bg) 420px) no-repeat,var(--bg);
-}
 /* 컬럼 헤더 = 상태 배지: 색 점 대신 연한 상태색 필 + 카운트를 한 덩어리로 */
 [data-skin="calm"] .col h2{display:flex;align-items:center;gap:8px;padding:2px 4px 12px}
 [data-skin="calm"] .col h2 .cdot{width:8px;height:8px;border-radius:50%}
 [data-skin="calm"] .col h2 .n{margin-left:auto;background:color-mix(in srgb,var(--sc) 14%,transparent);
   color:var(--sc);border-radius:999px;padding:2px 9px;font-size:11px;font-weight:600}
 /* 카드: 여백 리듬과 타이포 위계를 한 단계 더 벌리고, 상태는 왼쪽 얇은 띠로 */
-[data-skin="calm"] .card{padding:15px 17px;overflow:hidden;position:relative}
-[data-skin="calm"] .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
-  background:var(--sc);opacity:.85}
+[data-skin="calm"] .card{padding:15px 17px;overflow:hidden}
 [data-skin="calm"] .card .id{color:var(--faint);font-size:10.5px}
 [data-skin="calm"] .card .t{font-size:15.5px;line-height:1.38;margin:5px 0 11px;letter-spacing:-.012em}
 [data-skin="calm"] .card .m{gap:6px;align-items:center}
 /* 태그: 해시 색조로 구분 — 저채도 배경 + 진한 글자(라이트) */
-[data-skin="calm"] .card .tag{background:hsl(var(--th) 62% 95%);color:hsl(var(--th) 42% 38%);
-  font-size:11px;font-weight:500}
+[data-skin="calm"] .card .tag{background:none;border:1px solid hsl(var(--th) 30% 82%);
+  color:hsl(var(--th) 28% 42%);font-size:11px;font-weight:500}
 [data-skin="calm"] .card .badge{background:color-mix(in srgb,var(--text) 6%,transparent);color:var(--muted)}
 [data-skin="calm"] .card .size{background:none;color:var(--faint);padding:2px 4px}
 [data-skin="calm"] .card .elapsed{font-size:10.5px;color:var(--faint)}
 /* 확인 포인트: 카드 안에서 비중을 낮추되 읽기는 편하게 */
-[data-skin="calm"] .rvpt{font-size:11.5px;line-height:1.65;padding:11px 13px;
-  background:color-mix(in srgb,var(--c-review) 7%,transparent);
-  color:color-mix(in srgb,var(--c-review) 72%,var(--text))}
-[data-skin="calm"] .card[data-status="blocked"] .rvpt{
-  background:color-mix(in srgb,var(--c-blocked) 7%,transparent);
-  color:color-mix(in srgb,var(--c-blocked) 72%,var(--text))}
+/* 확인 포인트: 색 블록으로 칠하지 않는다 — 얇은 좌측 규칙 + 낮춘 잉크만
+   (REQ-20260825-069: 틴트 하이라이트 반대). */
+[data-skin="calm"] .rvpt{font-size:11.5px;line-height:1.65;padding:0 0 0 11px;
+  background:none;border-left:2px solid var(--hairline);color:var(--muted)}
 /* 빈 컬럼: 카드가 아니라 점선 자리 — "여기에 놓을 수 있다"는 신호 */
 [data-skin="calm"] .colempty{background:none;box-shadow:none;
   border:1.5px dashed color-mix(in srgb,var(--text) 12%,transparent);
@@ -1165,10 +1157,10 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 /* 다크 톤: 태그·틴트를 어두운 면 위에서 성립하도록 반전 */
 [data-skin="calm"][data-theme="graphite"] .card .tag,
 [data-skin="calm"][data-theme="carbon"] .card .tag{
-  background:hsl(var(--th) 38% 22%);color:hsl(var(--th) 70% 78%)}
+  background:none;border-color:hsl(var(--th) 22% 34%);color:hsl(var(--th) 35% 68%)}
 @media (prefers-color-scheme: dark){
   :root[data-theme="system"][data-skin="calm"] .card .tag{
-    background:hsl(var(--th) 38% 22%);color:hsl(var(--th) 70% 78%)}
+    background:none;border-color:hsl(var(--th) 22% 34%);color:hsl(var(--th) 35% 68%)}
 }
 /* 육안 검증에서 드러난 미완성 지점 보정 (REQ-062 재작업 2): Docs·Settings·
    Terminal·Audit이 아직 ledger의 각진 판이라 카드 언어와 충돌했다. */
