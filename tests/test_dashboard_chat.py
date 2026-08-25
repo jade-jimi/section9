@@ -459,6 +459,39 @@ class TestDashboardChat(unittest.TestCase):
         self.assertEqual(code, 200, res)
         self.assertEqual(res.get("new"), "done")
 
+    # C20. 드래그 착수 즉시 통지 (REQ-20260825-040): open→in-progress 대시보드
+    #      전이가 수신 대기(tail) 리드 수신함에 착수 지시 이벤트로 즉시 도착
+    def test_c20_drag_start_notifies_lead(self):
+        import shutil
+        tail = shutil.which("tail")
+        if not tail:
+            self.skipTest("tail 없음")
+        inbox = os.path.join(self.tmp, "state", "terminal",
+                             "inbox-livesess.jsonl")
+        os.makedirs(os.path.dirname(inbox), exist_ok=True)
+        open(inbox, "a").close()
+        r = self.cli("new", "request", "--title", "드래그 통지 검증",
+                     "--summary", "s", "--size", "S", "--body", "b",
+                     env_extra={"S9_SESSION": self.sid, "S9_ORIGIN": "dgnt"})
+        rid = r.stdout.split()[0]
+        p = subprocess.Popen([tail, "-f", inbox],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(0.2)
+            self.touch_stream()
+            code, res = self.api("/api/status",
+                                 {"id": rid, "to": "in-progress",
+                                  "note": "drag 이동"})
+            self.assertEqual(code, 200, res)
+            last = self.inbox(self.sid)[-1]
+            self.assertEqual(last["kind"], "event")
+            self.assertIn("착수 지시", last["text"])
+            self.assertIn(rid, last["text"])
+        finally:
+            p.terminate()
+            p.wait(timeout=5)
+
     # C14. SessionStart: 유휴 중 쌓인 미처리 줄 주입 + EOF 오프셋 arm + seen 갱신
     def test_c14_hook_pending_injection(self):
         sid = "pendsess"

@@ -1588,6 +1588,28 @@ def chat_notify_transition(doc_id, old, new, note, actor):
     수신함에 이벤트를 append — 리드가 워처 유예를 기다리지 않고 즉시 반응한다.
     실패해도 조용히 무시(워처가 폴백)."""
     import glob as _glob, time as _time
+    # 드래그 착수 (REQ-20260825-040): open→in-progress도 반려와 동일한 즉응
+    # 경로 — 수신 대기(tail) 중인 리드 수신함에 착수 지시를 즉시 통지한다.
+    # 리드가 없으면 조용히 None(워처가 유예 후 무인 스폰 — 폴백 불변).
+    if old == "open" and new == "in-progress":
+        try:
+            b = chat_target(None)
+            sid = (b or {}).get("session", "")
+            if not sid or not _inbox_watch_alive(sid):
+                return None
+            line = {"ts": now_iso(), "from": "dashboard", "kind": "event",
+                    "text": (f"[전이 통지] {doc_id} 착수 지시 "
+                             f"(open → in-progress, by {actor})"
+                             + (f" — 메모: {note}" if (note or "").strip() else "")
+                             + f". 지금 `s9 last {doc_id} --add` 로 클레임하고 "
+                             f"즉시 착수하라 — 유예 내 클레임이 없으면 무인 "
+                             f"작업자가 스폰된다.")}
+            with open(chat_inbox_path(sid, make=True), "a",
+                      encoding="utf-8") as f:
+                f.write(json.dumps(line, ensure_ascii=False) + "\n")
+            return sid
+        except Exception:
+            return None
     kind_txt = {"in-progress": "반려", "done": "승인"}.get(new)
     if old != "review" or not kind_txt:
         return None
