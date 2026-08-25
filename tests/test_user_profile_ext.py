@@ -137,5 +137,34 @@ class TestProfileExt(unittest.TestCase):
         self.assertIn("GitHub", r.stdout)          # github은 여전히 촉구
 
 
+class TestProfileWarnScope(unittest.TestCase):
+    """프로필 경고 범위 (REQ-20260825-046): 조직 GitHub은 비필수(사용자 확정,
+    REQ-038) — 헤더 ⚠ 배지·"필수" 문구 경로에서 제외돼야 한다."""
+    def setUp(self):
+        import os as _os
+        here = _os.path.dirname(_os.path.abspath(__file__))
+        with open(_os.path.join(here, "..", "web", "index.html"),
+                  encoding="utf-8") as f:
+            self.html = f.read()
+        with open(_os.path.join(here, "..", "bin", "s9"),
+                  encoding="utf-8") as f:
+            self.s9 = f.read()
+
+    def test_w1_badge_excludes_org(self):
+        import re as _re
+        m = _re.search(r"function profileMissing[\s\S]{0,400}?\n\}", self.html)
+        self.assertIsNotNone(m)
+        self.assertNotIn('miss.push("조직 GitHub")', m.group(0))
+
+    def test_w2_no_contradictory_wording(self):
+        self.assertNotIn("필수 권장", self.html)   # "필수"와 "권장"은 모순
+
+    def test_w3_digest_nag_excludes_org(self):
+        # digest 촉구(REQ-038 수복)와 대시보드가 같은 정책을 유지한다
+        import re as _re
+        seg = self.s9.split("프로필 필수 권장 필드 촉구")[-1][:800]             if "프로필" in self.s9 else self.s9
+        self.assertNotIn('missing.append("조직 GitHub', seg)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

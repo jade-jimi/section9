@@ -1223,7 +1223,8 @@ function profileMissing(u){
   const miss = [];
   if (!((u.emails || []).length || u.email)) miss.push("회사 이메일");
   if (!u.github) miss.push("개인 GitHub");
-  if (!u.github_org) miss.push("조직 GitHub");
+  // 조직 GitHub은 경고 대상 제외 (REQ-20260825-046) — 사용자 확정: "조직
+  // 깃헙이 필수는 아니다"(08-25 08:26). digest 촉구(REQ-038)와 정합.
   return miss;
 }
 // 헤더 Settings 탭의 ⚠ 배지 — __users 갱신 시점(boot·renderSettings)에 호출
@@ -3928,7 +3929,7 @@ function showUserForm(u, host, isAdminEdit){
   const emRowHTML = val => `<div class="emrow">
       <input class="uf em-val" value="${esc(val)}" placeholder="name@company.com">
       <button type="button" class="em-rm" title="이 이메일 행 삭제">− 삭제</button></div>`;
-  const reqhint = `<span class="reqhint">필수 권장 — 미기재</span>`;
+  const reqhint = `<span class="reqhint">권장 — 미기재</span>`;
   host.innerHTML = `
     <div class="path">users/${esc(u.name)}/profile.md · 등록 ${esc((u.registered||"?").slice(0,16))} @ ${esc(u.registered_on||"?")}</div>
     <h1 style="margin:6px 0 14px">@${esc(u.name)}</h1>
@@ -3939,7 +3940,7 @@ function showUserForm(u, host, isAdminEdit){
         <button type="button" class="em-add" id="uf-em-add">＋ 이메일 추가</button>${seedEmails.length ? "" : reqhint}
         <div class="path">회사 이메일 N개 — 빈 행은 저장 시 제외됩니다</div></td></tr>
       <tr><td>github (개인)</td><td><input class="uf" id="uf-github" value="${esc(u.github||"")}" placeholder="개인 GitHub 계정명">${u.github ? "" : reqhint}</td></tr>
-      <tr><td>github (조직)</td><td><input class="uf" id="uf-github-org" value="${esc(u.github_org||"")}" placeholder="조직 GitHub 계정/org">${u.github_org ? "" : reqhint}</td></tr>
+      <tr><td>github (조직)</td><td><input class="uf" id="uf-github-org" value="${esc(u.github_org||"")}" placeholder="조직 GitHub 계정/org (선택)"></td></tr>
       <tr><td>role</td><td><select class="uf" id="uf-role">
         ${["admin","member","viewer"].map(r => `<option${r===u.role?" selected":""}>${r}</option>`).join("")}
       </select> <span class="path">변경은 admin만</span></td></tr>
