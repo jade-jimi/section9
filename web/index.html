@@ -2518,7 +2518,10 @@ function termStatus(T, nt){
   lv.title = (T.live && !listen)
     ? "세션이 유휴 상태(수신 대기 미가동) — 보낸 메시지는 요청 문서로 즉시 기록되고, 세션 터미널에서 아무 입력이나 하면 밀린 메시지를 소화합니다"
     : "";
-  if (tg) tg.innerHTML = ` · target <span class="cccyan">${esc(nt.sid)}</span> <span class="cccyan">@${esc(nt.user || "?")}</span>`;
+  // 모델 표시·변경 (REQ-20260825-037): 클릭 = 같은 대화를 새 설정으로 재개
+  const mdl = nt.model ? String(nt.model).replace(/^claude-/, "") : "";
+  if (tg) tg.innerHTML = ` · target <span class="cccyan">${esc(nt.sid)}</span> <span class="cccyan">@${esc(nt.user || "?")}</span>`
+    + (mdl ? ` · <span class="ccmodelbtn" title="현재 모델 — 클릭하면 model/effort를 바꿔 같은 대화로 재시작한다 (유휴 시에만)" style="cursor:pointer;text-decoration:underline dotted">${esc(mdl)}</span>` : "");
 }
 
 function termWaitingGuide(T){
@@ -2950,6 +2953,9 @@ function termBindInput(T){
     e.preventDefault(); e.stopPropagation();
     fs.forEach(f => termUpload(T, f));
   });
+  root.addEventListener("click", e => {          // 모델 라벨 클릭 → 변경 플로우
+    if (e.target.closest(".ccmodelbtn")) termModelChange(T);
+  });
   pal.addEventListener("mousedown", e => {       // mousedown — blur 전에 선택
     const pi = e.target.closest("[data-pi]");
     if (!pi) return;
@@ -3141,6 +3147,34 @@ function termErr(msg){
 function termErrClear(){
   const err = $("#chat-err");
   if (err) err.hidden = true;
+}
+
+/* 모델/effort 변경 (REQ-20260825-037): CC는 실행 중 변경을 안 열어주므로
+   같은 대화를 --resume --model --effort 로 재개 재기동한다. s9 code 신버전
+   래퍼 세션이면 자동, 아니면 실행할 명령을 안내한다. */
+async function termModelChange(T){
+  if (!T.sid) return;
+  const model = prompt("모델 (빈칸=유지 · 예: opus, sonnet, haiku 또는 전체 모델 id):", "");
+  if (model === null) return;
+  const effort = prompt("effort (빈칸=유지 · low|medium|high|xhigh|max):", "");
+  if (effort === null) return;
+  if (!model.trim() && !effort.trim()) return;
+  const out = $("#ccout"), w = $("#cc-wait");
+  let d = null;
+  try{
+    const r = await fetch("/api/session/restart", {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({sid: T.sid, model: model.trim(), effort: effort.trim()})});
+    d = await r.json();
+  }catch(ex){ d = {ok: false, reason: "서버 연결 실패"}; }
+  if (TERM !== T || !out || !w) return;
+  const body = !d.ok
+    ? `<span style="color:var(--cc-red)">✗ 재시작 거부 — ${esc(d.reason || "")}</span>`
+    : d.mode === "wrapper"
+    ? `<span style="color:var(--cc-yellow)">↻ 세션 재시작 중 — 같은 대화가 새 설정으로 재개된다 (몇 초 내 자동 복귀)</span>`
+    : `<span style="color:var(--cc-dim)">이 세션은 수동 재시작 필요 — 세션 터미널에서 종료 후 실행:</span> <span class="cccode">${esc(d.cmd || "")}</span>`;
+  w.insertAdjacentHTML("beforebegin", ccLine("↻", "var(--cc-dim)", body));
+  out.scrollTop = out.scrollHeight;
 }
 
 /* Esc 중단 (REQ-20260825-001): 대시보드는 CC 프로세스에 키를 보낼 수 없다 —

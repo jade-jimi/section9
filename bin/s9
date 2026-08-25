@@ -1231,6 +1231,148 @@ def interrupt_session(sid8):
         return {"signal": "skipped", "reason": f"오류: {ex}"}
 
 
+# ---- 세션 모델 제어 (REQ-20260825-037) ------------------------------------
+# CC는 실행 중 세션의 model/effort 외부 변경을 지원하지 않는다(가이드 확인).
+# 대신 `claude --resume <full-sid> --model --effort` 재개가 공식 지원되므로,
+# s9 code를 재시작 루프 래퍼로 만들어 TTY를 유지한 채 같은 대화를 새 설정으로
+# 재개한다: 대시보드 → 마커 기록 + SIGTERM(유휴 확인 후) → 래퍼가 재기동.
+
+RESTART_FRESH_SEC = 60
+_model_cache = {}
+
+
+def _restart_marker_path(sid8):
+    return os.path.join(ROOT, "state", "terminal",
+                        f"restart-{safe_name(sid8)}.json")
+
+
+def session_model(b):
+    """대상 세션의 현재 모델 — 트랜스크립트 마지막 assistant 이벤트의 model.
+    (effort는 트랜스크립트에 기록되지 않아 미표시.) mtime 캐시로 폴링 부담 차단."""
+    tp = b.get("transcript_path") or ""
+    if not tp or not os.path.exists(tp):
+        return ""
+    try:
+        mt = os.path.getmtime(tp)
+    except OSError:
+        return ""
+    hit = _model_cache.get(tp)
+    if hit and hit[0] == mt:
+        return hit[1]
+    model = ""
+    try:
+        with open(tp, encoding="utf-8") as f:
+            for ln in f:
+                if '"assistant"' not in ln or '"model"' not in ln:
+                    continue
+                try:
+                    d = json.loads(ln)
+                except ValueError:
+                    continue
+                if d.get("type") == "assistant":
+                    m = (d.get("message") or {}).get("model")
+                    if m:
+                        model = m
+    except OSError:
+        return ""
+    _model_cache[tp] = (mt, model)
+    return model
+
+
+def _consume_restart_marker():
+    """s9 code 래퍼용: 내 pid를 지목한 신선한 재시작 마커를 소비(반환+삭제).
+    낡은 마커는 정리. 없으면 None — 래퍼는 정상 종료한다."""
+    import glob as _glob
+    import time as _time
+    me = os.getpid()
+    for mp in _glob.glob(os.path.join(ROOT, "state", "terminal",
+                                      "restart-*.json")):
+        try:
+            with open(mp, encoding="utf-8") as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            continue
+        fresh = _time.time() - float(m.get("ts") or 0) <= RESTART_FRESH_SEC
+        if not fresh:
+            try:
+                os.remove(mp)
+            except OSError:
+                pass
+            continue
+        if m.get("wrapper_pid") == me:
+            try:
+                os.remove(mp)
+            except OSError:
+                pass
+            return m
+    return None
+
+
+def restart_session(sid8, model="", effort="", account=""):
+    """유휴 세션을 같은 대화로 재기동 요청. 래퍼(s9 code 루프) 세션이면 마커+
+    SIGTERM으로 자동(mode=wrapper), 아니면 사용자가 세션 터미널에서 실행할
+    명령을 돌려준다(mode=manual). 모든 거부는 사유와 함께 ok=False."""
+    import time as _time
+    import signal as _signal
+    try:
+        b = chat_target(sid8)
+        if not b or b.get("ended"):
+            return {"ok": False, "reason": "세션 없음/종료됨"}
+        sid = b.get("session", "")
+        pid = int(b.get("attach_pid") or 0)
+        if pid <= 0 or not os.path.exists(f"/proc/{pid}"):
+            return {"ok": False, "reason": "attach 프로세스 미생존"}
+        if not _pid_is_claude(pid):
+            return {"ok": False,
+                    "reason": f"pid {pid}가 claude 프로세스가 아님(재사용 의심)"}
+        tp = b.get("transcript_path") or ""
+        full = os.path.splitext(os.path.basename(tp))[0] if tp else ""
+        if not full:
+            return {"ok": False, "reason": "세션 전체 id 미상 — 트랜스크립트 없음"}
+        if _transcript_busy(tp):
+            return {"ok": False,
+                    "reason": "턴 진행 중 — 유휴 상태에서만 재기동(작업 보호)"}
+        if effort and effort not in ("low", "medium", "high", "xhigh", "max"):
+            return {"ok": False,
+                    "reason": f"effort '{effort}' 무효 (low|medium|high|xhigh|max)"}
+        if not (model or effort or account):
+            return {"ok": False, "reason": "변경할 항목이 없다"}
+        flags = (["--model", model] if model else []) \
+            + (["--effort", effort] if effort else [])
+        manual = "claude --resume " + full \
+            + ((" " + " ".join(flags)) if flags else "")
+        if account:
+            manual = (f"CLAUDE_CONFIG_DIR=~/.claude-profiles/"
+                      f"{safe_name(account)} " + manual)
+        # 래퍼 감지: claude의 부모 cmdline에 s9 + code (재시작 루프 보유 여부)
+        wrapper = 0
+        try:
+            with open(f"/proc/{pid}/status") as f:
+                for ln in f:
+                    if ln.startswith("PPid:"):
+                        wrapper = int(ln.split()[1])
+                        break
+            with open(f"/proc/{wrapper}/cmdline", "rb") as f:
+                wcmd = f.read().decode("utf-8", "replace")
+            if "s9" not in wcmd or "code" not in wcmd:
+                wrapper = 0
+        except OSError:
+            wrapper = 0
+        if not wrapper:
+            return {"ok": True, "mode": "manual", "cmd": manual, "reason":
+                    "재시작 루프(s9 code 신버전) 밖의 세션 — 세션 터미널에서 위 명령 실행"}
+        mp = _restart_marker_path(sid)
+        os.makedirs(os.path.dirname(mp), exist_ok=True)
+        with open(mp, "w", encoding="utf-8") as f:
+            json.dump({"wrapper_pid": wrapper, "resume": full, "model": model,
+                       "effort": effort, "account": account,
+                       "ts": _time.time()}, f, ensure_ascii=False)
+        os.kill(pid, _signal.SIGTERM)
+        return {"ok": True, "mode": "wrapper", "cmd": manual}
+    except Exception as ex:
+        return {"ok": False, "reason": f"오류: {ex}"}
+
+
 def _chat_context(sid8, sender, window_sec=900, limit=5):
     """직전 미문서화 채팅(req 미동봉 kind=chat, 같은 발신자)을 원안 문맥으로 수집
     (REQ-20260825-007) — 질문→요청 연속 대화에서 Question 분류로 문서화되지
@@ -2070,8 +2212,9 @@ def cmd_digest(args):
                 missing.append("회사 이메일(--emails a@b,c@d)")
             if not pmeta.get("github"):
                 missing.append("개인 GitHub(--github 계정)")
-            if not pmeta.get("github_org"):
-                missing.append("조직 GitHub(--github-org 계정)")
+            # 조직 GitHub은 촉구 제외 (REQ-20260825-038): 사용자 확정 —
+            # "조직 깃헙이 필수는 아니다. 필수 항목들은 별도로 나중에 정리하겠다"
+            # (2026-08-25 08:26, 대시보드). 필수 목록 재정리 시 재검토.
             if missing:
                 profile_nag = (
                     f"⚠ 프로필 미완성({user}): {', '.join(missing)} — "
@@ -3506,14 +3649,38 @@ def cmd_code(args):
             extra = cfgv.split() if isinstance(cfgv, str) and cfgv.strip() else []
         except Exception:
             extra = []
-        cmd = ["claude"] + extra + (args.claude_args or [])
+        base_cmd = ["claude"] + extra + (args.claude_args or [])
         # 정식 진입 마커 (REQ-032): 훅이 바인딩에 entry=code 기록 → 채팅 자동
         # 대상 선택에서 이 세션이 최우선이 된다
         os.environ["S9_ENTRY"] = "code"
         if os.environ.get("S9_CODE_DRYRUN"):
-            print(json.dumps(cmd, ensure_ascii=False))  # 테스트 시임: exec 대신 출력
+            print(json.dumps(base_cmd, ensure_ascii=False))  # 테스트 시임
             return
-        os.execvp(cmd[0], cmd)
+        # 재시작 루프 (REQ-20260825-037): exec 대신 자식 실행 — TTY를 이 래퍼가
+        # 계속 소유하므로, 대시보드가 재시작 마커+SIGTERM으로 유휴 세션을 내리면
+        # 같은 대화를 새 설정(--resume --model --effort, 계정 프로필)으로 재개
+        # 할 수 있다. Ctrl+C는 claude 몫 — 래퍼는 무시(커스텀 핸들러라 자식
+        # exec 시 기본값으로 복원되어 claude의 Ctrl+C 처리에 영향 없음).
+        import signal as _signal
+        _signal.signal(_signal.SIGINT, lambda *_a: None)
+        cmd, env = list(base_cmd), None
+        while True:
+            subprocess.run(cmd, env=env)
+            m = _consume_restart_marker()
+            if not m:
+                return
+            cmd = list(base_cmd) + ["--resume", m["resume"]]
+            if m.get("model"):
+                cmd += ["--model", m["model"]]
+            if m.get("effort"):
+                cmd += ["--effort", m["effort"]]
+            env = None
+            if m.get("account"):
+                prof = os.path.join(os.path.expanduser("~"),
+                                    ".claude-profiles", safe_name(m["account"]))
+                os.makedirs(prof, exist_ok=True)
+                env = {**os.environ, "CLAUDE_CONFIG_DIR": prof}
+            print(f"◌ 세션 재시작: {' '.join(cmd[1:])}")
     except FileNotFoundError:
         die("claude 명령을 찾을 수 없다 — Claude Code 설치 확인")
 
@@ -4375,7 +4542,8 @@ def cmd_serve(args):
                                 or whoami_info().get("user", ""),
                                 "live": chat_live(b),
                                 "listening": _inbox_watch_alive(
-                                    b.get("session", ""))})
+                                    b.get("session", "")),
+                                "model": session_model(b)})
             elif parsed.path == "/api/chat/log":
                 sid = qs.get("sid", [""])[0]
                 lines = []
@@ -4522,6 +4690,14 @@ def cmd_serve(args):
                     self._json({"ok": True, "sid": sid, "req": req_id,
                                 **({"signal": sig["signal"],
                                     "reason": sig["reason"]} if sig else {})})
+                elif parsed.path == "/api/session/restart":
+                    # 모델·effort·계정 변경 = 같은 대화 재개 재기동 (REQ-037)
+                    res = restart_session(
+                        str(req.get("sid") or "") or None,
+                        model=str(req.get("model") or "").strip(),
+                        effort=str(req.get("effort") or "").strip(),
+                        account=str(req.get("account") or "").strip())
+                    self._json(res, 200 if res.get("ok") else 409)
                 elif parsed.path == "/api/chat/upload":
                     # 이미지/파일 첨부 (REQ-040): base64 저장 → 절대경로 반환.
                     # 세션은 CC 터미널 첨부처럼 [Image: <경로>] 참조를 Read한다.
