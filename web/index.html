@@ -490,8 +490,13 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 @keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.5)}70%{box-shadow:0 0 0 5px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
 .card:focus-visible{outline:2px solid var(--text);outline-offset:-2px}
 .col .colempty{padding:14px;color:var(--faint);font-size:11.5px;line-height:1.5}
-.rvpt{margin-top:7px;font-size:11px;color:var(--c-review);line-height:1.4;
-  border-left:2px solid var(--c-review);padding-left:7px}
+/* 판정 블록 (REQ-20260825-071): 색면·띠 없이 "무엇을 판정하는가"를 드러낸다 —
+   캡션 + 잉크 위계 + 헤어라인. 확인 포인트와 버튼을 한 덩어리로 묶어
+   판정 단위가 눈에 잡히게 한다. */
+.rvpt{margin-top:7px;font-size:11px;color:var(--muted);line-height:1.5}
+.rvcap{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+.judge{margin-top:9px;padding-top:9px;border-top:1px solid var(--hairline)}
 .acts{display:flex;gap:6px;margin-top:8px}
 .acts button{border:1px solid var(--border);background:var(--panel);color:var(--text);
   font-family:var(--mono);font-size:10.5px;padding:3px 10px;cursor:pointer;letter-spacing:.03em}
@@ -1130,19 +1135,19 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="calm"] .card .t{font-size:15.5px;line-height:1.38;margin:5px 0 11px;letter-spacing:-.012em}
 [data-skin="calm"] .card .m{gap:6px;align-items:center}
 /* 태그: 해시 색조로 구분 — 저채도 배경 + 진한 글자(라이트) */
-[data-skin="calm"] .card .tag{background:none;border:1px solid hsl(var(--th) 30% 82%);
-  color:hsl(var(--th) 28% 42%);font-size:11px;font-weight:500}
+[data-skin="calm"] .card .tag{background:none;border:1px solid var(--hairline);
+  color:var(--muted);font-size:11px;font-weight:500}
 [data-skin="calm"] .card .badge{background:color-mix(in srgb,var(--text) 6%,transparent);color:var(--muted)}
 [data-skin="calm"] .card .size{background:none;color:var(--faint);padding:2px 4px}
 [data-skin="calm"] .card .elapsed{font-size:10.5px;color:var(--faint)}
 /* 확인 포인트: 카드 안에서 비중을 낮추되 읽기는 편하게 */
 /* 확인 포인트: 색 블록으로 칠하지 않는다 — 얇은 좌측 규칙 + 낮춘 잉크만
    (REQ-20260825-069: 틴트 하이라이트 반대). */
-/* 확인 포인트: 색면도 띠도 쓰지 않는다 (REQ-20260825-070) — 위쪽 헤어라인
-   구분선과 낮춘 잉크만으로 본문과 구분한다. */
-[data-skin="calm"] .rvpt{font-size:11.5px;line-height:1.65;padding:10px 0 0;
-  background:none;border-left:0;border-top:1px solid var(--hairline);
-  color:var(--muted);margin-top:12px}
+/* calm: 판정 블록만 헤어라인으로 분리, 본문은 잉크 위계로 (색면·띠 없음) */
+[data-skin="calm"] .judge{margin-top:12px;padding-top:11px}
+[data-skin="calm"] .rvpt{font-size:11.5px;line-height:1.65;margin:0 0 9px;
+  background:none;border:0;padding:0;color:var(--muted)}
+[data-skin="calm"] .rvcap{font-size:9.5px;color:var(--faint)}
 /* 빈 컬럼: 카드가 아니라 점선 자리 — "여기에 놓을 수 있다"는 신호 */
 [data-skin="calm"] .colempty{background:none;box-shadow:none;
   border:1.5px dashed color-mix(in srgb,var(--text) 12%,transparent);
@@ -1159,10 +1164,10 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 /* 다크 톤: 태그·틴트를 어두운 면 위에서 성립하도록 반전 */
 [data-skin="calm"][data-theme="graphite"] .card .tag,
 [data-skin="calm"][data-theme="carbon"] .card .tag{
-  background:none;border-color:hsl(var(--th) 22% 34%);color:hsl(var(--th) 35% 68%)}
+  background:none;border-color:var(--border);color:var(--muted)}
 @media (prefers-color-scheme: dark){
   :root[data-theme="system"][data-skin="calm"] .card .tag{
-    background:none;border-color:hsl(var(--th) 22% 34%);color:hsl(var(--th) 35% 68%)}
+    background:none;border-color:var(--border);color:var(--muted)}
 }
 /* 육안 검증에서 드러난 미완성 지점 보정 (REQ-062 재작업 2): Docs·Settings·
    Terminal·Audit이 아직 ledger의 각진 판이라 카드 언어와 충돌했다. */
@@ -1823,9 +1828,9 @@ function render(){
 function cardHTML(r){
   const isReq = r.type === "request";
   const acts = isReq && r.status === "review"
-    ? `${r.review_point ? `<div class="rvpt" title="확인 포인트">👁 ${esc(r.review_point)}</div>` : ""}<div class="acts"><button data-approve="${esc(r.id)}" title="done으로 전이">✓ 승인</button><button data-reject="${esc(r.id)}" title="in-progress로 반려">↺ 반려</button></div>`
+    ? `<div class="judge">${r.review_point ? `<div class="rvpt"><span class="rvcap">확인 요청</span>${esc(r.review_point)}</div>` : ""}<div class="acts"><button data-approve="${esc(r.id)}" title="done으로 전이">✓ 승인</button><button data-reject="${esc(r.id)}" title="in-progress로 반려">↺ 반려</button></div></div>`
     : isReq && r.status === "blocked" && r.block_reason
-    ? `<div class="rvpt" title="대기 사유 (마지막 blocked 전이 note)">⛔ ${esc(r.block_reason)}</div>`
+    ? `<div class="rvpt"><span class="rvcap">대기 사유</span>${esc(r.block_reason)}</div>`
     : "";
   const liveDot = r.status === "in-progress"
     ? (r.live ? `<span class="livedot on" title="이 요청을 실행 중인 세션이 활동 중 (${r.live_age}s 전 갱신 — last_req/active_reqs 등록)"></span>`
