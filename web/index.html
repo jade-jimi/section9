@@ -1106,8 +1106,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="calm"] .card .tag,[data-skin="calm"] .card .size,[data-skin="calm"] .card .badge{
   border-radius:999px;padding:2px 9px;background:color-mix(in srgb,var(--text) 5%,transparent);border:0}
 [data-skin="calm"] .card .elapsed{color:var(--faint);font-size:11px}
-[data-skin="calm"] .rvpt{border-radius:10px;padding:10px 12px;margin-top:10px;
-  background:color-mix(in srgb,var(--c-review) 8%,transparent);border-left:0}
+[data-skin="calm"] .rvpt{border-radius:0;margin-top:10px;border-left:0}
 [data-skin="calm"] .acts button{border-radius:999px;border:1px solid var(--border);
   padding:5px 13px;background:var(--panel)}
 [data-skin="calm"] .acts button:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
@@ -1139,8 +1138,11 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 /* 확인 포인트: 카드 안에서 비중을 낮추되 읽기는 편하게 */
 /* 확인 포인트: 색 블록으로 칠하지 않는다 — 얇은 좌측 규칙 + 낮춘 잉크만
    (REQ-20260825-069: 틴트 하이라이트 반대). */
-[data-skin="calm"] .rvpt{font-size:11.5px;line-height:1.65;padding:0 0 0 11px;
-  background:none;border-left:2px solid var(--hairline);color:var(--muted)}
+/* 확인 포인트: 색면도 띠도 쓰지 않는다 (REQ-20260825-070) — 위쪽 헤어라인
+   구분선과 낮춘 잉크만으로 본문과 구분한다. */
+[data-skin="calm"] .rvpt{font-size:11.5px;line-height:1.65;padding:10px 0 0;
+  background:none;border-left:0;border-top:1px solid var(--hairline);
+  color:var(--muted);margin-top:12px}
 /* 빈 컬럼: 카드가 아니라 점선 자리 — "여기에 놓을 수 있다"는 신호 */
 [data-skin="calm"] .colempty{background:none;box-shadow:none;
   border:1.5px dashed color-mix(in srgb,var(--text) 12%,transparent);
