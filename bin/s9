@@ -561,9 +561,16 @@ def rebuild_index(quiet=False):
     rows.sort(key=lambda r: r["id"])
 
     os.makedirs(INDEX, exist_ok=True)
-    with open(CATALOG, "w", encoding="utf-8") as f:
+    # 원자적 교체 (REQ-20260825-049): 제자리 truncate+재작성은 조회자(대시보드
+    # 폴링·병행 CLI)가 그 순간 부분 목록을 읽게 만든다 — 카드가 늘었다 사라지는
+    # 현상의 원인. tmp에 쓰고 os.replace로 바꿔 항상 완전한 스냅샷만 노출한다.
+    tmp = CATALOG + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, CATALOG)
 
     for dim in INDEX_DIMS:
         d = os.path.join(INDEX, dim)
