@@ -78,9 +78,17 @@ class TestBoardUxApplied(unittest.TestCase):
         self.assertIn('tabindex="0"', self.html)
         self.assertIn(".card:focus-visible", self.html)
 
-    def test_b5_raw_title_flagged(self):
-        """제목이 원문인 카드는 표식으로 드러난다(방치 방지)."""
-        self.assertIn("rawt", self.html)
+    def test_b5_raw_title_pressure_not_decoration(self):
+        """제목 미정리는 카드 표식(약한 신호)이 아니라 매 턴 컨텍스트 주입으로
+        강제한다 (REQ-062 후속 지적) — 훅이 s9 untitled를 조회해 주입한다."""
+        import os as _os
+        root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+        with open(_os.path.join(root, "bin", "s9-audit-prompt"),
+                  encoding="utf-8") as f:
+            hook = f.read()
+        self.assertIn('"untitled"', hook)
+        self.assertIn("제목이 원문 그대로인 요청", hook)
+        self.assertNotIn("rawt", self.html)   # 장식 표식은 두지 않는다
 
 
 if __name__ == "__main__":

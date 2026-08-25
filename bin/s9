@@ -2611,6 +2611,34 @@ def cmd_linkcheck(args):
     return 1 if (issues and not args.fix) else 0
 
 
+def untitled_requests():
+    """제목이 원문 그대로인 요청 (REQ-20260825-062 후속): auto-audit 카드 중
+    _title_is_raw. 표식(⚠)은 약한 신호였다 — 매 턴 컨텍스트로 밀어넣어
+    에이전트가 지나칠 수 없게 만드는 것이 실제 장치다."""
+    out = []
+    for r in load_catalog():
+        if r.get("type") != "request" or r.get("status") in ("done", "cancelled"):
+            continue
+        if "auto-audit" not in (r.get("tags") or []):
+            continue
+        p = locate(r["id"])
+        if not p:
+            continue
+        meta, body = read_doc(p)
+        if _title_is_raw(meta.get("title", ""), body):
+            out.append((r["id"], meta.get("title", "")))
+    return out
+
+
+def cmd_untitled(args):
+    rows = untitled_requests()
+    for rid, title in rows:
+        print(f"- {rid} {title}")
+    if not args.quiet:
+        print(f"제목 미정리 {len(rows)}건" if rows else "제목 미정리 없음")
+    return 0
+
+
 def cmd_index(args):
     if args.action == "rebuild":
         rebuild_index()
@@ -5541,6 +5569,9 @@ def main():
 
     ix = sub.add_parser("index", help="index maintenance")
     ix.add_argument("action", choices=["rebuild"])
+    ut = sub.add_parser("untitled", help="제목이 원문 그대로인 요청 목록")
+    ut.add_argument("--quiet", action="store_true")
+    ut.set_defaults(fn=cmd_untitled)
     lc = sub.add_parser("linkcheck", help="문서 관계 전수 검사/복구")
     lc.add_argument("--fix", action="store_true")
     lc.set_defaults(fn=cmd_linkcheck)

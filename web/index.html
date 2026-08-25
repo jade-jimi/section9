@@ -488,7 +488,6 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    한 화면 한 결정). 전문은 문서에서 본다. */
 .rvpt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .card:focus-visible{outline:2px solid var(--text);outline-offset:-2px}
-.card .rawt{color:var(--c-inprogress)}
 .col .colempty{padding:14px;color:var(--faint);font-size:11.5px;line-height:1.5}
 .rvpt{margin-top:7px;font-size:11px;color:var(--c-review);line-height:1.4;
   border-left:2px solid var(--c-review);padding-left:7px}
@@ -1664,14 +1663,11 @@ function cardHTML(r){
          ? `<span class="livedot spawn" title="무인 재작업 작업자가 기동됨(${r.live_age}s 전 스폰) — 클레임 등록 대기 중"></span>`
          : `<span class="livedot off" title="in-progress지만 스트림 조용함 — 실제 동작 아닐 수 있음"></span>`)
     : "";
-  // 제목 미정리(원문 절단) 표식 — 카드가 open에 방치되면 사용자가 먼저 본다
-  const rawTitle = isReq && (r.tags||[]).includes("auto-audit")
-    && (r.title||"").endsWith("…");
   // 완료·취소 카드의 경과시간은 소음이다 — 진행 중인 것만 시간을 센다 (ux-craft)
   const showElapsed = r.status_since && !TERMINAL.has(r.status);
   return `<div class="card" ${isReq ? 'draggable="true"' : ""} tabindex="0" role="button" style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
     <div class="id">${liveDot}${esc(shortId(r.id))}</div>
-    <div class="t">${rawTitle ? '<span class="rawt" title="제목이 원문 그대로다 — 착수 시 명사구로 정리된다">⚠</span> ' : ""}${esc(r.title)}</div>
+    <div class="t">${esc(r.title)}</div>
     <div class="m">
       <span class="badge">${esc(r.user)}</span>
       ${r.size ? `<span class="size">${esc(r.size)}</span>` : ""}
