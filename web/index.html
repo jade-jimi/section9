@@ -388,6 +388,12 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .ccstatus .ccwarn{color:var(--cc-red)}
 .ccstatus .cccyan{color:var(--cc-cyan)}
 .ccstatus .ccs1 .r{color:var(--cc-dim);text-decoration:underline;text-underline-offset:3px}
+/* 수신 연결 상태 (REQ-20260825-032) — 단절/폴백을 상태줄에 가시화 */
+.ccstatus .ccconn{font-weight:600}
+.ccstatus .ccconn.ccdim{color:var(--cc-dim);font-weight:400}
+.ccstatus .ccconn.ccwarn{animation:ccconnblink 1.4s step-end infinite}
+@keyframes ccconnblink{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.ccstatus .ccconn.ccwarn{animation:none}}
 .ccstatus .ag{display:flex;gap:9px}
 .ccstatus .ag .g{flex:none;width:14px}
 .ccstatus .ag .r{margin-left:auto;color:var(--cc-dim)}
@@ -2436,6 +2442,7 @@ function renderTerminal(){
   const T = TERM = {
     sid: null, live: false, offset: 0, evCount: 0, chatCount: 0,
     es: null, esFails: 0, esRetryT: null, poll: false, pollT: null,
+    conn: null, pollFails: 0,
     timers: [], raf: 0, buf: [],
     atts: termKeep.atts.slice(), hist: termKeep.hist.slice(),
     histIdx: null, agents: [],
@@ -2451,7 +2458,7 @@ function renderTerminal(){
     <div class="ccatt" id="cc-att" hidden></div>
     <div class="ccinputrow"><span class="ccp">❯</span><textarea id="chat-in" rows="1" disabled placeholder="connecting…"></textarea><button class="ccclip" id="cc-clip" title="이미지 첨부 (붙여넣기·드래그도 가능)">📎</button><input type="file" id="cc-file" accept="image/*" multiple hidden></div>
     <div class="ccstatus">
-      <div class="ccs1"><span class="ccmode">▶▶ <span id="cc-live" class="ccwarn">connecting</span><span id="cc-tgt"></span></span><span class="r ccrc" title="Remote Control — 터미널에서 /rc 로 연결하면 폰·다른 기기에서도 이 세션과 대화할 수 있다">/rc</span></div>
+      <div class="ccs1"><span class="ccmode">▶▶ <span id="cc-live" class="ccwarn">connecting</span><span id="cc-tgt"></span></span><span id="cc-conn" class="ccconn" hidden></span><span class="r ccrc" title="Remote Control — 터미널에서 /rc 로 연결하면 폰·다른 기기에서도 이 세션과 대화할 수 있다">/rc</span></div>
       <div class="ag ccmain" title="메인 타임라인으로 복귀"><span class="g">●</span> <b>main</b></div>
       <div id="cc-agents"></div>
       <div class="ag sub"><span class="g">○</span> <span id="cc-src">transcript</span><span class="r" id="cc-meta"></span></div>
@@ -2568,6 +2575,7 @@ async function termAttach(T, nt){
   const sid = nt.sid;
   T.sid = sid; T.offset = 0; T.evCount = 0; T.chatCount = 0;
   T.buf = []; T.agents = []; T.lastRole = null; T.lastToolName = "";
+  T.pollFails = 0; T.conn = "init"; termConnSet(T, null);   // 이전 세션 단절 표시 소거
   termCloseSSE(T);
   termClearOut(T);
   termStatus(T, nt);
@@ -2637,10 +2645,13 @@ function termConnectSSE(T){
   const es = new EventSource(`/api/stream/sse?session=${encodeURIComponent(T.sid)}&after=${T.offset}`);
   T.es = es; T.poll = false;
   termMeta(T);
-  es.onopen = () => { if (TERM === T && T.es === es) T.esFails = 0; };
+  es.onopen = () => {
+    if (TERM !== T || T.es !== es) return;
+    T.esFails = 0; termConnSet(T, "sse");
+  };
   es.onmessage = m => {
     if (TERM !== T || T.es !== es){ try{ es.close(); }catch(e){} return; }
-    T.esFails = 0;
+    T.esFails = 0; termConnSet(T, "sse");
     let d = null; try{ d = JSON.parse(m.data); }catch(e){}
     if (!d) return;
     if (typeof d.offset === "number") T.offset = d.offset;
@@ -2653,6 +2664,7 @@ function termConnectSSE(T){
     try{ es.close(); }catch(e){}
     if (TERM !== T || T.es !== es) return;
     T.es = null; T.esFails++;
+    termConnSet(T, "retry");
     if (T.esFails >= 4){ termPollFallback(T); return; }
     T.esRetryT = setTimeout(() => {
       if (TERM === T && !document.hidden) termConnectSSE(T);
@@ -2661,6 +2673,8 @@ function termConnectSSE(T){
 }
 function termPollFallback(T){
   T.poll = true;
+  T.pollFails = 0;
+  termConnSet(T, "poll");
   termMeta(T);
   if (T.pollT) return;   // 폴백 인터벌은 1개만 — SSE 복귀 후 재폴백에도 재사용
   let n = 0;
@@ -2668,7 +2682,14 @@ function termPollFallback(T){
     if (document.hidden || tab !== "terminal" || !T.sid || T.es) return;
     if (++n % 12 === 0 && window.EventSource){ termConnectSSE(T); return; }
     const nd = await ccFetch(`/api/stream?session=${encodeURIComponent(T.sid)}&after=${T.offset}`, 6000);
-    if (TERM !== T || !nd || T.es) return;
+    if (TERM !== T || T.es) return;
+    // 폴백마저 연속 실패 = 서버 불통(재기동 등) — 경고로 승격 (REQ-032)
+    if (!nd){
+      if (++T.pollFails >= 2) termConnSet(T, "down");
+      return;
+    }
+    T.pollFails = 0;
+    termConnSet(T, "poll");
     T.offset = nd.offset;
     if (nd.events && nd.events.length){
       T.buf.push(...nd.events);
@@ -2729,7 +2750,39 @@ function termTrim(T, out, nearBottom){
 function termMeta(T){
   const m = $("#cc-meta");
   if (m) m.textContent =
-    `${T.es ? "sse" : T.poll ? "poll 2.5s" : "…"} · ↓ ${T.evCount} events`;
+    `${T.conn === "retry" ? "sse 재접속" : T.conn === "down" ? "수신 불통"
+      : T.es ? "sse" : T.poll ? "poll 2.5s" : "…"} · ↓ ${T.evCount} events`;
+}
+
+/* ---- 수신 연결 상태 (REQ-20260825-032): 서버 재기동 등으로 수신 스트림이
+   끊겨도 화면 무표시라 무응답으로 오인, 같은 질문을 재전송하던 실사고 방지 —
+   단절/폴백/재접속을 상태줄에 가시화하고 복구되면 지운다. ---- */
+const TERM_CONN = {
+  retry: ["✗ 수신 끊김 — 재접속 중…", "ccwarn",
+    "수신 스트림(SSE)이 끊겨 자동 재접속 중입니다 — 새 출력이 잠시 늦게 보일 수 있습니다"],
+  down: ["✗ 서버 응답 없음 — 수신 중단", "ccwarn",
+    "폴백 수신까지 실패했습니다(서버 재기동 가능성) — 자동 재시도 중이며 복구되면 이 표시가 사라집니다. 이미 보낸 메시지는 다시 보내지 않아도 됩니다"],
+  poll: ["폴백 수신 (~2.5s 지연)", "ccdim",
+    "SSE 대신 주기 폴링으로 수신 중 — 새 출력 표시가 조금 늦을 수 있습니다"],
+};
+// ?conn=retry|down|poll: 진단·헤드리스 캡처용 상태 고정 — 실단절은 실시간
+// 재현이라 virtual-time 캡처(s9 shot)로 못 찍는다 (?nosse·?mpanel 선례)
+const TERM_CONN_FORCE =
+  (location.search.match(/[?&]conn=(retry|down|poll)/) || [])[1] || null;
+function termConnSet(T, state){
+  if (TERM_CONN_FORCE) state = TERM_CONN_FORCE;
+  if (T.conn === state) return;
+  T.conn = state;
+  const el = $("#cc-conn"), m = TERM_CONN[state];
+  if (el){
+    el.hidden = !m;   // 정상(sse)·미지정 상태는 표시 없음 = 복구 시 소거
+    if (m){
+      el.textContent = m[0];
+      el.className = "ccconn " + m[1];
+      el.title = m[2];
+    }
+  }
+  termMeta(T);
 }
 
 /* ---- 웨이팅 상태줄 (L6): 마지막 이벤트가 user/tool_use이고 후속이 없으면
