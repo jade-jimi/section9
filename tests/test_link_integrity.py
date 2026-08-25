@@ -121,5 +121,24 @@ class TestLinkAudit(unittest.TestCase):
         self.assertEqual([i for i in mod.link_audit()[0] if "순환" in i], [])
 
 
+class TestAutoRepairEntrypoint(unittest.TestCase):
+    """자동화 계약 (REQ-20260825-061): 관계 복구가 사람의 명령 기억에
+    의존하지 않는다 — 서버 기동 경로에 자동 복구가 걸려 있고, 규약에
+    3층 관계 규칙이 명시돼 있다."""
+    def test_serve_auto_repairs(self):
+        with open(S9, encoding="utf-8") as f:
+            src = f.read()
+        i = src.index("def cmd_serve(")
+        self.assertIn("link_audit(fix=True)", src[i:i + 2500],
+                      "serve 기동 경로에 자동 복구가 없다")
+
+    def test_protocol_documents_model(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(S9)))
+        with open(os.path.join(root, "CLAUDE.md"), encoding="utf-8") as f:
+            proto = f.read()
+        self.assertIn("derived_from", proto)
+        self.assertIn("다중 부모는 쓰지 않는다", proto)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

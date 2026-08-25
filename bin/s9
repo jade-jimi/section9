@@ -4432,6 +4432,14 @@ def cmd_shot(args):
 def cmd_serve(args):
     if args.port is None:
         args.port = s9_port()
+    # 관계 무결성 자동 복구 (REQ-20260825-061): 기동 시 1회 — 사람이 명령을
+    # 기억하지 않아도 깨진 관계가 쌓이지 않는다. 실패해도 서버는 뜬다.
+    try:
+        _iss, _fx = link_audit(fix=True)
+        if _fx:
+            print(f"관계 무결성 자동 복구: {_fx}건")
+    except Exception:
+        pass
     import http.server
     import urllib.parse
     web_index = os.path.join(ROOT, "web", "index.html")
