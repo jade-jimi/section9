@@ -231,6 +231,15 @@ main{padding:18px 22px}
 .viewer{flex:1;padding:24px 34px;min-height:300px;max-height:calc(100vh - 150px);overflow-y:auto}
 .viewer .empty{color:var(--faint);font-family:var(--mono);font-size:12px}
 .viewer h1{letter-spacing:-.015em;font-size:21px}
+/* review/blocked 판단 근거 callout — 본문 최하단 History에 묻히는 전이 사유(확인
+   포인트/대기 사유)를 뷰어 상단으로 끌어올린다 (REQ-20260825-006 반려 재작업).
+   계기판 언어: 라운드 0·그림자 0, 1px 보더 + mono 캡션. */
+.gate{border:1px solid var(--border);margin:14px 0 0;padding:10px 12px;background:var(--panel)}
+.gate-k{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--muted);display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.gate-k .cdot{width:7px;height:7px;flex:none}
+.gate-k .path{margin-left:auto}
+.gate-b{font-size:12.5px;line-height:1.55}
 .metatbl{width:100%;border-collapse:collapse;margin:16px 0 24px;font-size:12.5px;
   border-top:1px solid var(--border)}
 .metatbl td{border-bottom:1px solid var(--hairline);padding:7px 10px 7px 0;vertical-align:top}
@@ -291,7 +300,8 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .streamwrap .doclist{border-right:1px solid var(--border)}
 .term{flex:1;background:#101418;color:#cfd8e3;padding:16px 20px;
   max-height:calc(100vh - 150px);overflow-y:auto;
-  font-family:var(--mono);font-size:12px;line-height:1.55}
+  font-family:var(--mono),"Segoe UI Emoji","Noto Color Emoji";
+  font-size:12px;line-height:1.55}
 .term .ev{margin:11px 0;white-space:pre-wrap;word-break:break-word}
 .term .ev.agent{opacity:.7;padding-left:12px;border-left:1px solid #3a4655}
 .term .hd{font-weight:600}
@@ -308,8 +318,9 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   --cc-border:#3a3d44;
   background:var(--cc-bg);color:var(--cc-text);border:1px solid var(--border);
   display:flex;flex-direction:column;height:calc(100vh - 168px);
-  font-family:var(--mono);font-size:12.5px;line-height:1.7;
-  font-variant-ligatures:none;letter-spacing:0}
+  font-family:var(--mono),"Segoe UI Emoji","Noto Color Emoji";font-size:12.5px;
+  line-height:1.7;font-variant-ligatures:none;letter-spacing:0}
+.ccterm .ccatt{color:var(--cc-cyan);background:rgba(86,200,216,.12);padding:0 5px}
 .ccout{flex:1;overflow-y:auto;padding:16px 20px}
 .ccout .ln{display:flex;gap:9px;margin:0 0 13px}
 .ccout .ln .g{flex:none;width:14px;text-align:left;user-select:none}
@@ -1240,8 +1251,16 @@ const TABS = ["board","docs","graph","audit","stream","terminal","settings"];
 // URL 해시 ↔ 상태. 형태: #<tab> 또는 #docs/REQ-.. 또는 #settings/account
 function applyRoute(hash, doRender){
   const parts = (hash || "").replace(/^#/, "").split("/");
+  const raw0 = parts[0];
   if (parts[0] === "chat") parts[0] = "terminal";  // 구 해시 alias (REQ-037 개명)
   const t = TABS.includes(parts[0]) ? parts[0] : "board";
+  // 해시 정규화 (REQ-20260825-010): alias(#chat)·미지 해시 엔트리가 history에
+  // 그대로 남으면 뒤로가기가 같은 화면 재방문·엉뚱한 탭 점프로 어긋난다 —
+  // 현재 엔트리를 정규형으로 교체한다 (스택 방향은 보존)
+  if (raw0 !== t){
+    const canon = "#" + t + (TABS.includes(parts[0]) && parts[1] ? "/" + parts[1] : "");
+    try{ history.replaceState(null, "", canon); }catch(e){}
+  }
   tab = t;
   if (t === "docs" && parts[1]) selectedDoc = parts[1];
   if (t === "stream" && parts[1]) selectedStream = parts[1];
@@ -1738,9 +1757,25 @@ async function loadDoc(id, bg){
     ? `<div class="acts" style="margin:10px 0 0">` + targets.map(to =>
         `<button data-goto="${esc(m.id)}|${to}|${esc(m.status)}" title="${esc(m.status)} → ${to}">→ ${to}</button>`).join("") + `</div>`
     : "";
+  // review/blocked 문서: 판단 근거(전이 --note)가 본문 최하단 History 한 줄에만
+  // 있어 확인 포인트가 묻힌다 (REQ-20260825-006 반려) — 최근 해당 전이의 note를
+  // 상단 callout으로. 패턴은 s9 do_transition의 History 라인 형식과 계약
+  // (tests/test_review_gate.py 가 실제 s9 출력으로 동형 검증).
+  const GATE_RE_SRC = "^- (\\S+) status: [a-z-]+ -> STATUS \\(by ([^)]+)\\)(?: — (.*))?$";
+  let gate = "";
+  if (m.type === "request" && (m.status === "review" || m.status === "blocked")){
+    const gre = new RegExp(GATE_RE_SRC.replace("STATUS", m.status));
+    let hit = null;
+    for (const ln of d.body.split("\n")){ const t = ln.match(gre); if (t) hit = t; }
+    if (hit && hit[3]) gate = `<div class="gate">
+      <div class="gate-k"><span class="cdot" style="background:${SCOLOR[m.status]}"></span>
+        ${m.status === "review" ? "확인 요청 — 사용자 판단 필요" : "blocked — 대기 사유"}
+        <span class="path">${esc(hit[1].slice(0, 16).replace("T", " "))} · ${esc(hit[2])}</span></div>
+      <div class="gate-b">${linkifyIds(esc(hit[3]))}</div></div>`;
+  }
   viewer.innerHTML = `
     <div class="path">${esc(d.path)}</div>
-    <h1 style="margin:6px 0 2px">${esc(m.title)} <span class="path" style="font-size:13px">${esc(m.id)}</span></h1>${reviewActs}
+    <h1 style="margin:6px 0 2px">${esc(m.title)} <span class="path" style="font-size:13px">${esc(m.id)}</span></h1>${reviewActs}${gate}
     <table class="metatbl">${fields.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td></tr>`).join("")}</table>
     <div class="md">${md2html(d.body)}</div>${streamSec}
     <div class="backlinks" id="backlinks"></div>`;
@@ -2092,7 +2127,11 @@ function ccText(raw){
   const parts = raw.split(/\x1b\[([0-9;]*)m/);
   const md = s => esc(s)                                     // 마크다운 근사 (CC식)
     .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
-    .replace(/`([^`\n]+)`/g, '<span class="cccode">$1</span>');
+    .replace(/`([^`\n]+)`/g, '<span class="cccode">$1</span>')
+    // 첨부 참조 강조 (REQ-20260825-012): CC처럼 시안 칩 — 경로는 파일명만 표시
+    .replace(/\[Image: ([^\]\n]+)\]/g, (m0, p) =>
+      `<span class="ccatt" title="${p}">🖼 ${p.split(/[\\/]/).pop()}</span>`)
+    .replace(/\[Image #(\d+)\]/g, '<span class="ccatt">🖼 Image #$1</span>');
   let st = {fg:null, bg:null, b:false, d:false, i:false, u:false};
   const wrap = h => {
     const css = [];

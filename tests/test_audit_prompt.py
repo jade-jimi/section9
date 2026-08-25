@@ -131,6 +131,19 @@ class TestAutoResumeTurn(unittest.TestCase):
         self.assertIn("s9 last REQ-20260823-078 --add --session eeee5555", printed)
 
 
+class TestIsCommand(unittest.TestCase):
+    # I1. 커맨드 판별 정밀화 (REQ-20260825-014): /이름 토큰만 커맨드
+    def test_i1_commands_vs_paths(self):
+        self.assertTrue(hook.is_command("/compact"))
+        self.assertTrue(hook.is_command("/rc"))
+        self.assertTrue(hook.is_command("/code-review high"))
+        # 절대경로로 시작하는 실메시지 — 커맨드가 아니다 (audit 누락 실사고)
+        self.assertFalse(hook.is_command(
+            "/home/tester/section9/state/terminal/uploads 이 경로도 문제가 있다"))
+        self.assertFalse(hook.is_command("/etc/hosts 좀 봐줘"))
+        self.assertFalse(hook.is_command("일반 텍스트"))
+
+
 class TestAttachments(unittest.TestCase):
     # A1. 프롬프트의 [Image #N] → 이미지 캐시 실경로 매핑 (REQ-20260825-002:
     #     첨부도 요청 원문 — REQ body에 경로가 보존돼야 한다)

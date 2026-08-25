@@ -376,6 +376,48 @@ class TestDashboardChat(unittest.TestCase):
         self.assertIn("발번 구조가 왜 이렇게", r.stdout)   # 원안 메시지 보존
         self.assertIn("그 발번 구조를 개선해줘", r.stdout)
 
+    # C17. 절대경로 시작 메시지도 REQ 기록 (REQ-20260825-014) — 커맨드(/이름)만 제외
+    def test_c17_path_message_audited(self):
+        self.touch_stream()
+        code, res = self.api("/api/chat", {
+            "text": "/home/tester/repo/state 이 경로 구조가 문제다. 재설계해줘"})
+        self.assertEqual(code, 200, res)
+        self.assertTrue((res.get("req") or "").startswith("REQ-"), res)
+
+    # C18. 타깃 우선순위 (REQ-20260825-015): 수신 대기(tail) 세션이 활동
+    #      신선도·워커보다 우선 — 리드가 타깃을 뺏기지 않는다
+    def test_c18_listening_priority(self):
+        import shutil
+        tail = shutil.which("tail")
+        if not tail:
+            self.skipTest("tail 없음")
+        inbox = os.path.join(self.tmp, "state", "terminal",
+                             "inbox-livesess.jsonl")
+        os.makedirs(os.path.dirname(inbox), exist_ok=True)
+        open(inbox, "a").close()
+        # 경쟁 세션: 더 신선한 활동 + entry=code (기존 규칙으로는 이쪽이 이김)
+        env_w = {"S9_SESSION": "workerses"}
+        self.cli("log", "session start", env_extra=env_w)
+        self.cli("bind", "attach_pid", "1", env_extra=env_w)
+        self.cli("bind", "entry", "code", env_extra=env_w)
+        ws = os.path.join(self.tmp, "streams", "workerses-full.jsonl")
+        with open(ws, "w") as f:
+            f.write("{}\n")
+        p = subprocess.Popen([tail, "-f", inbox],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(0.2)
+            os.utime(ws, None)                     # 워커 활동이 더 신선해도
+            code, res = self.api("/api/chat/target")
+            self.assertEqual(code, 200)
+            self.assertEqual(res["sid"], self.sid)  # tail 중인 livesess 유지
+            self.assertTrue(res["listening"])
+        finally:
+            p.terminate()
+            p.wait(timeout=5)
+            self.cli("bind", "ended", "1", env_extra=env_w)
+
     # C14. SessionStart: 유휴 중 쌓인 미처리 줄 주입 + EOF 오프셋 arm + seen 갱신
     def test_c14_hook_pending_injection(self):
         sid = "pendsess"

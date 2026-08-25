@@ -82,6 +82,13 @@ def _detect_root(data):
             and os.path.isdir(os.path.join(cwd, "vault")):
         os.environ["S9_ROOT"] = cwd
 
+def is_command(text):
+    """슬래시 커맨드 판별 (REQ-20260825-014) — startswith('/')는 절대경로
+    메시지("/home/… 이 경로도 문제가 있다")까지 커맨드로 오인해 audit이
+    누락된다. 커맨드 = '/이름' 단독 토큰(이름에 추가 '/' 없음)일 때만."""
+    return bool(re.match(r"^/[A-Za-z0-9_:-]+(\s|$)", text or ""))
+
+
 def attachment_paths(prompt, session_full, home=None):
     """프롬프트의 [Image #N] 참조 → CC 이미지 캐시 실경로 (REQ-20260825-002).
     첨부도 요청 원문이다 — REQ body에 경로를 보존해야 세션이 사라진 뒤에도
@@ -237,7 +244,7 @@ def main():
     data = json.load(sys.stdin)
     _detect_root(data)
     prompt = (data.get("prompt") or "").strip()
-    if not prompt or prompt.startswith(("/", "!")):
+    if not prompt or prompt.startswith("!") or is_command(prompt):
         return
     # 시스템 통지 턴(백그라운드 태스크 완료 등)은 사용자 요청이 아니다 — 카드 금지
     # (REQ-20260823-084: task-notification이 REQ로 오생성되던 결함)
