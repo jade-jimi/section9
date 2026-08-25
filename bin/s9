@@ -738,6 +738,10 @@ def cmd_new(args):
     finally:
         release_lock()
     print(f"{doc_id}  {os.path.relpath(path, ROOT)}")
+    try:
+        maybe_sync(f"new {doc_id}")   # REQ-048: 생성마다 순차 동기화
+    except Exception:
+        pass
     if proj:
         guide = context_guide(proj)
         if guide:
@@ -903,6 +907,10 @@ def do_transition(doc_id, new_status, note="", user=None, force=False, auto=Fals
         rebuild_index(quiet=True)
     finally:
         release_lock()
+    try:
+        maybe_sync(f"{doc_id} {old}->{new_status}")   # REQ-048: 전이마다 순차 동기화
+    except Exception:
+        pass
     return old
 
 
@@ -1376,6 +1384,61 @@ def _consume_restart_marker():
                 pass
             return m
     return None
+
+
+def wake_session():
+    """대시보드에서 세션 띄우기 (REQ-20260825-067). claude는 TTY가 필요하므로
+    서버가 직접 붙잡을 수 없다 — 대신 **새 터미널 창**을 열어 s9 code를 실행한다.
+    WSL이면 Windows Terminal(wt.exe) → cmd start 순으로 시도하고, 리눅스 데스크톱
+    이면 x-terminal-emulator류를 시도한다. 어느 것도 없으면 실행 명령을 돌려준다
+    (mode=manual). S9_WAKE_DRYRUN=1 이면 실행 대신 명령만 반환(테스트)."""
+    import glob
+    import subprocess
+    b = chat_target(None)
+    if b and chat_live(b) and not b.get("ended"):
+        return {"ok": False, "reason": f"이미 살아있는 세션이 있다 ({b.get('session')})"}
+    inner = f"cd {ROOT} && exec bin/s9 code"
+    manual = f"cd {ROOT} && bin/s9 code"
+    is_wsl = False
+    try:
+        with open("/proc/version") as f:
+            is_wsl = "microsoft" in f.read().lower()
+    except OSError:
+        pass
+    cands = []
+    if is_wsl:
+        wt = None
+        for g in glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/WindowsApps/wt.exe"):
+            wt = g
+            break
+        if wt:
+            cands.append([wt, "wsl.exe", "-e", "bash", "-lc", inner])
+        cmd_exe = "/mnt/c/Windows/System32/cmd.exe"
+        if os.path.exists(cmd_exe):
+            cands.append([cmd_exe, "/c", "start", "", "wsl.exe", "-e",
+                          "bash", "-lc", inner])
+    for term in ("x-terminal-emulator", "gnome-terminal", "konsole", "xterm"):
+        if shutil.which(term):
+            cands.append([term, "-e", "bash", "-lc", inner])
+    if not cands:
+        return {"ok": True, "mode": "manual", "cmd": manual,
+                "reason": "이 환경에서는 창을 열 수 없다 — 터미널에서 직접 실행"}
+    if os.environ.get("S9_WAKE_DRYRUN"):
+        return {"ok": True, "mode": "dryrun", "cmd": " ".join(cands[0]),
+                "candidates": len(cands)}
+    for argv in cands:
+        try:
+            subprocess.Popen(argv, cwd="/mnt/c" if is_wsl else ROOT,
+                             stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            return {"ok": True, "mode": "spawned", "cmd": " ".join(argv[:2]),
+                    "reason": "새 터미널 창에서 세션을 시작했다 — 창이 뜨면 몇 초 뒤 live"}
+        except Exception:
+            continue
+    return {"ok": True, "mode": "manual", "cmd": manual,
+            "reason": "창 열기 실패 — 터미널에서 직접 실행"}
 
 
 def restart_session(sid8, model="", effort="", account=""):
@@ -1978,6 +2041,151 @@ def trigger_dependents(done_id):
     return freed
 
 
+# --------------------------------------------- git sync (REQ-20260824-048)
+# 반려 확정 방향(2026-08-25): 문서 이벤트(생성·전이·노트·수정·링크·삭제)마다
+# commit → pull --rebase → push 를 **순차** 수행 — 혼자 써도 즉시 백업되고,
+# 여럿이 쓰면 실시간에 준해 서로의 변경이 반영된다. 활성 조건은 리포 루트의
+# `.s9-sync` 마커(instance init이 생성·track) — section9 코드 리포를 그냥
+# 클론한 사람에게는 어떤 git 쓰기도 일어나지 않는다(REQ-20260824-051 제약).
+
+SYNC_MARKER = os.path.join(ROOT, ".s9-sync")
+SYNC_DATA_PATHS = ["vault", "users", "projects", "streams", "state/sessions",
+                   ".s9-sync"]
+
+
+def sync_enabled():
+    if os.environ.get("S9_SYNC", "").lower() == "off":
+        return False
+    return os.path.exists(SYNC_MARKER) and os.path.isdir(
+        os.path.join(ROOT, ".git"))
+
+
+def _sync_log(msg):
+    try:
+        os.makedirs(os.path.join(ROOT, "state"), exist_ok=True)
+        with open(os.path.join(ROOT, "state", "sync.log"), "a",
+                  encoding="utf-8") as f:
+            f.write(f"{now_iso()} {msg}\n")
+    except OSError:
+        pass
+
+
+def _sync_git(*argv, timeout=6):
+    import subprocess
+    return subprocess.run(["git", "-C", ROOT, *argv], capture_output=True,
+                          text=True, timeout=timeout)
+
+
+_SYNC_FAIL_TS = os.path.join(ROOT, "state", ".sync-fail.ts")
+
+
+def _sync_net_backoff(active):
+    """네트워크 실패 백오프 — 오프라인에서 매 이벤트가 타임아웃을 물지 않게.
+    실패 후 60s 동안은 로컬 커밋만 하고 네트워크(pull/push)는 건너뛴다."""
+    import time as _time
+    if active:
+        try:
+            with open(_SYNC_FAIL_TS, "w") as f:
+                f.write(str(_time.time()))
+        except OSError:
+            pass
+        return True
+    try:
+        return _time.time() - float(open(_SYNC_FAIL_TS).read().strip()) < 60
+    except (OSError, ValueError):
+        return False
+
+
+def sync_run(reason=""):
+    """이벤트 동기화 1회: 데이터 경로 커밋 → pull --rebase → push (순차).
+    어떤 실패도 원래 작업을 막지 않는다 — state/sync.log에 기록하고 반환."""
+    import subprocess
+    lock = os.path.join(ROOT, "state", ".sync.lock")
+    try:
+        os.makedirs(os.path.dirname(lock), exist_ok=True)
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(fd)
+    except FileExistsError:
+        import time as _time
+        try:
+            if _time.time() - os.path.getmtime(lock) < 30:
+                return "busy"   # 다른 이벤트가 동기화 중 — 그쪽이 함께 실어 감
+            os.remove(lock)
+            return sync_run(reason)
+        except OSError:
+            return "busy"
+    except OSError:
+        return "error"
+    try:
+        try:
+            _sync_git("add", "-A", "--", *[p for p in SYNC_DATA_PATHS
+                                           if os.path.exists(
+                                               os.path.join(ROOT, p))])
+            staged = _sync_git("diff", "--cached", "--quiet")
+            if staged.returncode != 0:
+                r = _sync_git("commit", "-q", "-m",
+                              f"s9 sync: {reason or 'update'}"[:72])
+                if r.returncode != 0:
+                    _sync_log(f"commit 실패: {r.stderr.strip()[:120]}")
+                    return "error"
+            if _sync_net_backoff(False):
+                _sync_log(f"skip(net-backoff) {reason}")
+                return "local"
+            pl = _sync_git("pull", "--rebase", "-q", timeout=8)
+            if pl.returncode != 0:
+                _sync_git("rebase", "--abort", timeout=6)
+                _sync_net_backoff(True)
+                _sync_log(f"⚠ pull 실패({reason}): {pl.stderr.strip()[:160]} "
+                          f"— 로컬 커밋은 보존, 수동 확인 필요 시 s9 sync")
+                return "pull-fail"
+            ps = _sync_git("push", "-q", timeout=8)
+            if ps.returncode != 0:
+                _sync_net_backoff(True)
+                _sync_log(f"⚠ push 실패({reason}): {ps.stderr.strip()[:160]}")
+                return "push-fail"
+            try:
+                os.remove(_SYNC_FAIL_TS)
+            except OSError:
+                pass
+            return "ok"
+        except subprocess.TimeoutExpired:
+            _sync_net_backoff(True)
+            _sync_log(f"⚠ 시간 초과({reason}) — 네트워크 백오프 60s")
+            return "timeout"
+    except Exception as e:
+        _sync_log(f"⚠ 예외({reason}): {type(e).__name__}")
+        return "error"
+    finally:
+        try:
+            os.remove(lock)
+        except OSError:
+            pass
+
+
+def maybe_sync(reason):
+    """문서 이벤트 훅 — 활성일 때만. 반환값은 참고용(호출부는 무시 가능)."""
+    if not sync_enabled():
+        return None
+    return sync_run(reason)
+
+
+def cmd_sync(args):
+    """수동 동기화 / 상태 확인 (REQ-20260824-048)."""
+    if getattr(args, "status", False):
+        print(f"활성: {sync_enabled()}  (마커 {SYNC_MARKER}"
+              f"{' 존재' if os.path.exists(SYNC_MARKER) else ' 없음'})")
+        log = os.path.join(ROOT, "state", "sync.log")
+        if os.path.exists(log):
+            with open(log, encoding="utf-8") as f:
+                tail = f.read().splitlines()[-5:]
+            print("\n".join(tail) or "(로그 없음)")
+        return
+    if not sync_enabled():
+        die("sync 비활성 — 인스턴스 리포에서만 동작한다 "
+            "(마커 .s9-sync, instance init이 생성)")
+    print(f"sync: {sync_run('manual')}")
+
+
 def cmd_status(args):
     try:
         old = do_transition(args.id, args.new_status, note=args.note or "",
@@ -2051,6 +2259,10 @@ def cmd_link(args):
     finally:
         release_lock()
     print(f"{args.id}: links updated")
+    try:
+        maybe_sync(f"link {args.id}")
+    except Exception:
+        pass
 
 
 def cmd_set(args):
@@ -2073,6 +2285,10 @@ def cmd_set(args):
     finally:
         release_lock()
     print(f"{args.id}: updated {', '.join(changed)}")
+    try:
+        maybe_sync(f"set {args.id}")
+    except Exception:
+        pass
     # 프롬프트가 특정 프로젝트로 확정된 순간 — 컨텍스트 진입점을 안내 (1단계 경로 안내)
     if "project" in changed and meta.get("project"):
         guide = context_guide(meta["project"])
@@ -3002,6 +3218,10 @@ def cmd_note(args):
     finally:
         release_lock()
     print(f"{args.id}: note appended ({len(text)} chars)")
+    try:
+        maybe_sync(f"note {args.id}")
+    except Exception:
+        pass
 
 
 def _discover_transcript(sid8):
@@ -3202,6 +3422,10 @@ def cmd_rm(args):
         cmd_log(_ap.Namespace(text=f"{args.id} removed ({reason})",
                               session=None, user=None))
     print(f"{args.id}: removed ({reason})")
+    try:
+        maybe_sync(f"rm {args.id}")
+    except Exception:
+        pass
 
 
 def cmd_log(args):
@@ -4204,6 +4428,10 @@ def cmd_instance(args):
     subprocess.run([os.path.join(target, "bin", "s9"), "init"],
                    env={**os.environ, "S9_ROOT": target},
                    capture_output=True, text=True)
+    # 이벤트 동기화 마커 (REQ-048): 인스턴스는 문서 이벤트마다 commit→pull→push.
+    # track되는 파일이라 팀원 클론에도 자동 적용된다 — 명시적 opt-in 산물(051 제약).
+    with open(os.path.join(target, ".s9-sync"), "w", encoding="utf-8") as f:
+        f.write("on — 문서 이벤트마다 commit→pull→push (끄기: 파일 삭제 또는 S9_SYNC=off)\n")
     # 인스턴스별 대시보드 포트 자동 배정 (REQ-060): 9909(기본 워크스페이스)와
     # 공존하도록 9910부터 빈 포트를 찾아 state/port에 기록(로컬 전용, git 제외)
     import socket as _sock
@@ -5424,6 +5652,8 @@ def cmd_serve(args):
                     self._json({"ok": True, "sid": sid, "req": req_id,
                                 **({"signal": sig["signal"],
                                     "reason": sig["reason"]} if sig else {})})
+                elif parsed.path == "/api/session/wake":
+                    self._json(wake_session())
                 elif parsed.path == "/api/session/restart":
                     # 모델·effort·계정 변경 = 같은 대화 재개 재기동 (REQ-037)
                     res = restart_session(
@@ -5709,6 +5939,10 @@ def main():
     sh.add_argument("--wait", default="3000",
                     help="캡처 전 대기 ms (async 렌더용, 기본 3000)")
     sh.set_defaults(fn=cmd_shot)
+
+    sy = sub.add_parser("sync", help="문서 이벤트 git 동기화 — 수동 실행/상태 (REQ-048)")
+    sy.add_argument("--status", action="store_true", help="활성 여부·최근 로그")
+    sy.set_defaults(fn=cmd_sync)
 
     ins = sub.add_parser("instance", help="인스턴스 리포 초기화 (업스트림-인스턴스 플로우, docs/08)")
     ins.add_argument("action", choices=["init"])

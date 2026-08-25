@@ -336,6 +336,10 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   display:flex;flex-direction:column;height:calc(100vh - 168px);
   font-family:var(--mono),"Segoe UI Emoji","Noto Color Emoji";font-size:12.5px;
   line-height:1.7;font-variant-ligatures:none;letter-spacing:0}
+.ccterm .ccwake{background:none;border:1px solid var(--cc-green);color:var(--cc-green);
+  padding:3px 12px;font:inherit;font-size:12px;cursor:pointer;margin:2px 0}
+.ccterm .ccwake:hover:not(:disabled){background:var(--cc-green);color:var(--cc-bg)}
+.ccterm .ccwake:disabled{opacity:.6;cursor:default}
 .ccterm .ccatt{color:var(--cc-cyan);background:rgba(86,200,216,.12);padding:0 5px}
 /* 모델/effort 선택 패널 (REQ-20260825-037 재작업 — 브라우저 prompt 대체) */
 .ccterm{position:relative}
@@ -1084,6 +1088,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="calm"] .stat{border:0;border-radius:999px;background:var(--panel);
   box-shadow:var(--calm-shadow);padding:9px 16px;font-size:12px}
 [data-skin="calm"] .stat.on{background:var(--text);color:var(--bg)}
+[data-skin="calm"] .stat.on b{color:var(--bg)}  /* 잉크 필 위 카운트 — 미복원 시 숫자가 안 보인다 */
 [data-skin="calm"] .stat.on .cdot{background:var(--bg)}
 [data-skin="calm"] .board{gap:14px}
 [data-skin="calm"] .col{border-right:0;background:none;min-width:288px;width:288px;padding:0 2px}
@@ -1114,6 +1119,28 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   box-shadow:var(--calm-shadow);text-align:center;padding:22px 16px}
 [data-skin="calm"] .more{border-radius:999px;padding:6px 14px}
 [data-skin="calm"] .hovercard{border-radius:12px;border:0;box-shadow:var(--calm-shadow)}
+/* 육안 검증에서 드러난 미완성 지점 보정 (REQ-062 재작업 2): Docs·Settings·
+   Terminal·Audit이 아직 ledger의 각진 판이라 카드 언어와 충돌했다. */
+[data-skin="calm"] .docs{gap:14px}
+[data-skin="calm"] .doclist{border-right:0;background:var(--panel);width:320px;
+  border-radius:var(--calm-r);box-shadow:var(--calm-shadow);overflow:hidden}
+[data-skin="calm"] .doclist .row{border-bottom:1px solid var(--hairline);padding:11px 16px}
+[data-skin="calm"] .doclist .row:last-child{border-bottom:0}
+[data-skin="calm"] .doclist .row:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+[data-skin="calm"] .doclist .row.sel{box-shadow:none;
+  background:color-mix(in srgb,var(--accent) 10%,transparent)}
+[data-skin="calm"] .viewer .empty{display:flex;align-items:center;justify-content:center;
+  min-height:220px}
+[data-skin="calm"] .ccterm,[data-skin="calm"] .term{border:0;border-radius:var(--calm-r);
+  box-shadow:var(--calm-shadow);overflow:hidden}
+[data-skin="calm"] .settings-panel{border-radius:var(--calm-r);border:0;
+  box-shadow:var(--calm-shadow)}
+[data-skin="calm"] .settings-panel select{border-radius:10px;padding:8px 11px}
+[data-skin="calm"] .settings-h{letter-spacing:0;text-transform:none;font-size:12px}
+[data-skin="calm"] .tblwrap{border-radius:var(--calm-r);overflow:hidden;
+  background:var(--panel);box-shadow:var(--calm-shadow)}
+[data-skin="calm"] .graphwrap{border:0;border-radius:var(--calm-r);overflow:hidden;
+  box-shadow:var(--calm-shadow)}
 /* 어두운 톤에서는 그림자가 보이지 않는다 — 깊이를 얇은 링 + 면 밝기로 준다
    (같은 요소를 톤에 따라 다른 수단으로 띄운다) */
 [data-skin="calm"][data-theme="graphite"],
@@ -1123,7 +1150,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="calm"][data-theme="graphite"] .card:hover,
 [data-skin="calm"][data-theme="carbon"] .card:hover{
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 40%,var(--hairline)),
-             0 18px 38px -26px #000;
+             0 18px 38px -26px rgba(0,0,0,1);
 }
 @media (prefers-color-scheme: dark){
   :root[data-theme="system"][data-skin="calm"]{
@@ -1941,7 +1968,7 @@ async function loadDoc(id, bg){
     ["refs_docs", li(m.refs_docs)],
     ["refs_links", (m.refs_links||[]).map(u => `<a href="${esc(u)}" target="_blank">${esc(u)}</a>`).join("<br>") || null],
     ["refs_files", li(m.refs_files)],
-    ["tags", (m.tags||[]).map(t => `<span class="badge">#${esc(t)}</span>`).join(" ") || null],
+    ["tags", (m.tags||[]).map(t => `<span class="tag">#${esc(t)}</span>`).join(" ") || null],  // badge는 @사용자 전용 — 태그에 쓰면 "@#tag"로 렌더
     ["created / updated", esc(m.created) + (m.updated && m.updated !== m.created ? " → " + esc(m.updated) : "")],
   ];
   const streamSec = (m.type === "request" && m.session) ? `
@@ -2641,7 +2668,7 @@ async function termTargetLoop(T){
       if (TERM !== T) return;
     }
     if (nt && nt.hint) T.hint = nt.hint;   // 빈 상태 안내용 실행 명령(실경로)
-    if (!nt){ termStatus(T, null); return; }
+    if (!nt){ termStatus(T, null, "offline"); return; }   // 서버 무응답
     if (nt.sid && nt.sid !== T.sid){ termAttach(T, nt); return; }
     termStatus(T, nt.sid ? nt : null);
   };
@@ -2673,14 +2700,19 @@ async function termTargetLoop(T){
   T.timers.push(setInterval(agTick, 10000));
 }
 
-function termStatus(T, nt){
+function termStatus(T, nt, why){
   const lv = $("#cc-live"), tg = $("#cc-tgt");
   if (!lv) return;
   if (!nt || !nt.sid){
     T.live = false;
-    lv.textContent = T.sid ? "stale" : "no session";
+    // 서버 무응답(재기동 중)과 "세션이 없음"은 다른 상태다 — 같은 문구로
+    // 뭉뚱그리면 사용자가 세션을 다시 띄우려 한다 (실사고: 배포 중 no session)
+    const off = why === "offline";
+    lv.textContent = off ? "서버 재연결 중" : (T.sid ? "stale" : "no session");
     lv.className = "ccwarn";
-    if (!T.sid && tg) tg.textContent = " · waiting";
+    lv.title = off ? "대시보드 서버 응답 없음(재기동 중일 수 있음) — 자동으로 다시 연결합니다. 세션은 그대로입니다."
+                   : "";
+    if (!T.sid && tg) tg.textContent = off ? " · 서버 대기" : " · waiting";
     return;
   }
   T.live = !!nt.live;
@@ -2721,10 +2753,11 @@ function termWaitingGuide(T){
   w.insertAdjacentHTML("beforebegin",
     ccLine("✻", "var(--cc-dim)",
       '<span style="color:var(--cc-dim)">Waiting for a live Claude session…</span>') +
-    ccLine("⎿", null, `라이브 클로드 세션이 없습니다 — 세션이 뜨면 이 화면이 자동 전환됩니다.
-  1. 터미널을 연다
-  2. <span class="cccode">${cmd}</span> 실행
-  3. 세션이 뜨면 이 탭에서 전송`, "sub"));
+    ccLine("⎿", null, `라이브 클로드 세션이 없습니다.
+  <button class="ccwake" id="cc-wake">▶ 여기서 세션 깨우기</button>  새 터미널 창이 열리고 세션이 시작됩니다.
+  수동으로 하려면: <span class="cccode">${cmd}</span>`, "sub"));
+  const wb = $("#cc-wake");
+  if (wb) wb.addEventListener("click", () => termWake(T));
   const ta = $("#chat-in");
   ta.disabled = true;
   ta.placeholder = "no live session";
@@ -3385,6 +3418,31 @@ function termErr(msg){
 function termErrClear(){
   const err = $("#chat-err");
   if (err) err.hidden = true;
+}
+
+/* 세션 깨우기 (REQ-20260825-067): 세션이 없으면 대시보드만으로는 되살릴 수
+   없었다 — 서버가 새 터미널 창을 열어 s9 code를 실행한다. 창을 열 수 없는
+   환경이면 실행 명령을 안내한다. */
+async function termWake(T){
+  const btn = $("#cc-wake");
+  if (btn){ btn.disabled = true; btn.textContent = "세션 시작 중…"; }
+  let d = null;
+  try{
+    const r = await fetch("/api/session/wake", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: "{}"});
+    d = await r.json();
+  }catch(ex){ d = {ok: false, reason: "서버 연결 실패"}; }
+  const out = $("#ccout"), w = $("#cc-wait");
+  if (out && w){
+    const body = !d.ok
+      ? `<span style="color:var(--cc-red)">✗ ${esc(d.reason || "실패")}</span>`
+      : d.mode === "spawned"
+      ? `<span style="color:var(--cc-green)">▶ 새 터미널 창에서 세션 시작 — 몇 초 뒤 자동으로 연결됩니다</span>`
+      : `<span style="color:var(--cc-dim)">${esc(d.reason || "")} — 실행:</span> <span class="cccode">${esc(d.cmd || "")}</span>`;
+    w.insertAdjacentHTML("beforebegin", ccLine("▶", "var(--cc-dim)", body));
+    out.scrollTop = out.scrollHeight;
+  }
+  if (btn){ btn.disabled = false; btn.textContent = "▶ 여기서 세션 깨우기"; }
 }
 
 /* 모델/effort 변경 (REQ-20260825-037): CC는 실행 중 변경을 안 열어주므로
