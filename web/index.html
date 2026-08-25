@@ -2486,7 +2486,7 @@ function renderTerminal(){
     <div class="ccerr" id="chat-err" hidden></div>
     <div class="ccpal" id="cc-pal" hidden></div>
     <div class="ccatt" id="cc-att" hidden></div>
-    <div class="ccinputrow"><span class="ccp">❯</span><textarea id="chat-in" rows="1" disabled placeholder="connecting…"></textarea><button class="ccclip" id="cc-clip" title="파일 첨부 — 이미지·문서·로그 등 (붙여넣기·드래그도 가능, 10MB)">📎</button><input type="file" id="cc-file" multiple hidden></div>
+    <div class="ccinputrow"><span class="ccp">❯</span><textarea id="chat-in" rows="1" disabled placeholder="connecting…"></textarea><button class="ccclip" id="cc-clip" title="파일 첨부 — 이미지·문서·로그 등 (붙여넣기·드래그도 가능, 30MB)">📎</button><input type="file" id="cc-file" multiple hidden></div>
     <div class="ccstatus">
       <div class="ccs1"><span class="ccmode">▶▶ <span id="cc-live" class="ccwarn">connecting</span><span id="cc-tgt"></span></span><span id="cc-conn" class="ccconn" hidden></span><span class="r ccrc" title="Remote Control — 터미널에서 /rc 로 연결하면 폰·다른 기기에서도 이 세션과 대화할 수 있다">/rc</span></div>
       <div class="ag ccmain" title="메인 타임라인으로 복귀"><span class="g">●</span> <b>main</b></div>
@@ -3231,7 +3231,7 @@ function termAttRender(T){
     `<span class="chip">[Image #${i + 1}] ${esc(a.name)}${a.up ? ' <span class="up">uploading…</span>' : ""}<button data-attrm="${i}" title="제거">×</button></span>`).join("");
 }
 async function termUpload(T, file){
-  if (file.size > 10 * 1024 * 1024){ termErr("✗ 첨부가 너무 크다 (10MB 한도)"); return; }
+  if (file.size > 30 * 1024 * 1024){ termErr("✗ 첨부가 너무 크다 (30MB 한도)"); return; }
   const a = {name: file.name || "pasted.png", up: true, path: null};
   T.atts.push(a);
   termAttRender(T);

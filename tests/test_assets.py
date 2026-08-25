@@ -242,5 +242,87 @@ class TestFileAttachments(unittest.TestCase):
         self.assertIn("dashboard", tags)   # 파일명 키워드
 
 
+class TestAttachExtraction(unittest.TestCase):
+    """첨부 본문 추출·타입 태깅 (REQ-20260825-054) — 전부 stdlib."""
+    @classmethod
+    def setUpClass(cls):
+        import importlib.machinery
+        import importlib.util
+        cls.tmp = tempfile.mkdtemp(prefix="s9ext-")
+        prev = {k: os.environ.get(k) for k in ("S9_ROOT", "S9_MACHINE")}
+        os.environ["S9_ROOT"] = cls.tmp
+        os.environ["S9_MACHINE"] = "testbox"
+        try:
+            spec = importlib.util.spec_from_loader(
+                "s9_mod_ext",
+                importlib.machinery.SourceFileLoader("s9_mod_ext", S9))
+            cls.mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(cls.mod)
+        finally:
+            for k, v in prev.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    def _write(self, name, data):
+        p = os.path.join(self.tmp, name)
+        with open(p, "wb") as f:
+            f.write(data)
+        return p
+
+    # E1. PDF 본문 추출 (비압축 스트림)
+    def test_e1_pdf_text(self):
+        body = (b"%PDF-1.4\n1 0 obj\n<< /Length 60 >>\nstream\n"
+                b"BT /F1 12 Tf (deploy pipeline commit push remote) Tj ET\n"
+                b"endstream\nendobj\n%%EOF\n")
+        p = self._write("doc.pdf", body)
+        txt = self.mod.attach_text(p)
+        self.assertIn("commit", txt)
+        self.assertIn("sync", self.mod.attach_tags([p]))
+
+    # E1b. zlib 압축 스트림도 추출
+    def test_e1b_pdf_flate(self):
+        import zlib
+        inner = zlib.compress(b"BT (dashboard board render layout) Tj ET")
+        p = self._write("z.pdf", b"%PDF-1.4\nstream\n" + inner
+                        + b"\nendstream\n%%EOF")
+        self.assertIn("dashboard", self.mod.attach_text(p))
+
+    # E2. docx/xlsx 본문 추출 (zip+xml)
+    def test_e2_ooxml_text(self):
+        import zipfile
+        p = os.path.join(self.tmp, "a.docx")
+        with zipfile.ZipFile(p, "w") as z:
+            z.writestr("word/document.xml",
+                       "<w:document><w:t>세션 모델 재시작 계획</w:t></w:document>")
+        self.assertIn("세션", self.mod.attach_text(p))
+        x = os.path.join(self.tmp, "b.xlsx")
+        with zipfile.ZipFile(x, "w") as z:
+            z.writestr("xl/sharedStrings.xml", "<sst><si><t>테스트 검증 회귀</t></si></sst>")
+        self.assertIn("검증", self.mod.attach_text(x))
+
+    # E3. 확장자·타입군 태그 + assets 제외(attached와 혼용 정리)
+    def test_e3_type_tags(self):
+        p = self._write("plan.pdf", b"%PDF-1.4\n%%EOF")
+        tags = self.mod.attach_tags([p])
+        self.assertIn("attached", tags)
+        self.assertIn("pdf", tags)          # 확장자
+        self.assertIn("document", tags)     # 타입군
+        self.assertNotIn("assets", tags)    # 주제 태그와 분리
+
+    # E4. 손상 파일·미지원 형식은 조용히 빈 텍스트 (첨부 저장은 계속)
+    def test_e4_robust(self):
+        bad = self._write("broken.pdf", b"not really a pdf")
+        self.assertEqual(self.mod.attach_text(bad), "")
+        z = self._write("x.zip", b"PK\x03\x04broken")
+        self.assertEqual(self.mod.attach_text(z), "")
+        self.assertIn("archive", self.mod.attach_tags([z]))
+
+    # E5. 상한 30MB
+    def test_e5_limit(self):
+        self.assertEqual(self.mod.ATTACH_MAX_BYTES, 30 * 1024 * 1024)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -2159,6 +2159,21 @@ def cmd_tag(args):
         if meta.get("type") != "request":
             continue
         tags = list(meta.get("tags") or [])
+        # 이미 이전된 첨부의 타입·확장자·본문 태그 보강 (REQ-054)
+        rels = [m.group(2) for m in ASSET_RE.finditer(body)
+                if m.group(2).startswith("assets/")]
+        if rels:
+            base = os.path.dirname(p)
+            files = [os.path.join(base, r) for r in rels]
+            files = [f for f in files if os.path.isfile(f)]
+            if files:
+                add = [t for t in attach_tags(files) if t not in tags]
+                if add:
+                    meta["tags"] = tags + add
+                    write_doc(p, meta, body)
+                    tags = meta["tags"]
+                    n += 1
+                    print(f"  {meta['id']}: +{','.join(add)} (첨부)")
         if [t for t in tags if t != "auto-audit"]:
             continue                      # 이미 의미 태그가 있다 — 건드리지 않는다
         add = derive_tags(meta.get("title"), meta.get("summary"), body[:1200])
@@ -2178,10 +2193,118 @@ def cmd_tag(args):
 # 상대경로로 기록하고, 열람은 문서 가시성을 상속하는 /api/asset 라우트로만.
 
 ASSET_RE = re.compile(r"\[(Image|File): ([^\]\n]+)\]")
-# 텍스트로 읽어 키워드를 뽑을 수 있는 확장자 (의존성 0 — PDF·바이너리는 파일명만)
+# 첨부 본문 추출 (REQ-20260825-054) — 전부 stdlib로 처리한다(의존성 0 원칙):
+# 텍스트류는 그대로, PDF는 zlib 스트림에서 텍스트 연산자, OOXML(docx/xlsx/pptx)은
+# zip 내부 XML에서 태그를 걷어내 뽑는다. 실패는 조용히 빈 문자열(첨부는 저장됨).
 TEXTISH = {".txt", ".md", ".log", ".json", ".csv", ".tsv", ".yaml", ".yml",
            ".py", ".js", ".ts", ".html", ".css", ".sh", ".sql", ".ini",
-           ".conf", ".xml", ".diff", ".patch"}
+           ".conf", ".xml", ".diff", ".patch", ".rst", ".toml", ".env"}
+OOXML = {".docx", ".xlsx", ".pptx"}
+# 파일 타입군 — 확장자와 함께 태그가 된다 (검색: type:image 대신 image)
+TYPE_GROUPS = {
+    "image": {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".heic"},
+    "document": {".pdf", ".docx", ".doc", ".md", ".txt", ".rtf", ".odt", ".hwp"},
+    "spreadsheet": {".xlsx", ".xls", ".csv", ".tsv", ".ods"},
+    "slides": {".pptx", ".ppt", ".odp"},
+    "code": {".py", ".js", ".ts", ".sh", ".sql", ".html", ".css", ".json",
+             ".yaml", ".yml", ".xml", ".diff", ".patch", ".toml"},
+    "archive": {".zip", ".tar", ".gz", ".tgz", ".7z", ".rar"},
+    "video": {".mp4", ".mov", ".avi", ".mkv", ".webm"},
+    "audio": {".mp3", ".wav", ".m4a", ".flac", ".ogg"},
+}
+ATTACH_MAX_BYTES = 30 * 1024 * 1024      # 첨부 상한 (REQ-054: 10MB → 30MB)
+
+
+def _pdf_text(path, limit=8000):
+    """PDF 본문 최선 추출 — 스트림을 zlib로 풀고 텍스트 연산자의 문자열을 모은다.
+    CID 인코딩(한글 서브셋 폰트) 등은 완전하지 않을 수 있으나, 키워드 추출 목적엔
+    충분하다. 외부 라이브러리 없이 stdlib만 사용."""
+    import zlib
+    out, total = [], 0
+    try:
+        with open(path, "rb") as f:
+            raw = f.read(8 * 1024 * 1024)
+    except OSError:
+        return ""
+    for m in re.finditer(rb"stream\r?\n(.*?)endstream", raw, re.S):
+        chunk = m.group(1)
+        try:
+            chunk = zlib.decompress(chunk)
+        except Exception:
+            pass                                  # 비압축 스트림 — 그대로 시도
+        for t in re.findall(rb"\((?:\\.|[^\\()])*\)", chunk):
+            piece = re.sub(rb"\\([()\\])", rb"\1", t[1:-1])
+            if not piece.strip():
+                continue
+            out.append(piece.decode("utf-8", "replace"))
+            total += len(piece)
+        if total > limit:
+            break
+    return " ".join(out)[:limit]
+
+
+def _ooxml_text(path, limit=8000):
+    """docx/xlsx/pptx 본문 추출 — zip 내부 XML에서 마크업을 걷어낸다(stdlib)."""
+    import zipfile
+    want = ("word/document.xml", "xl/sharedStrings.xml")
+    txt, total = [], 0
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = [n for n in z.namelist()
+                     if n in want or n.startswith("ppt/slides/slide")
+                     or n.startswith("xl/worksheets/sheet")]
+            for n in names:
+                data = z.read(n).decode("utf-8", "replace")
+                piece = re.sub(r"<[^>]+>", " ", data)
+                piece = re.sub(r"\s+", " ", piece).strip()
+                if piece:
+                    txt.append(piece)
+                    total += len(piece)
+                if total > limit:
+                    break
+    except Exception:
+        return ""
+    return " ".join(txt)[:limit]
+
+
+def attach_text(path, limit=8000):
+    """첨부 파일에서 키워드 추출용 텍스트 — 형식별 디스패치, 실패는 빈 문자열."""
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        if ext in TEXTISH:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                return f.read(limit)
+        if ext == ".pdf":
+            return _pdf_text(path, limit)
+        if ext in OOXML:
+            return _ooxml_text(path, limit)
+    except OSError:
+        pass
+    return ""
+
+
+def attach_tags(paths):
+    """첨부 태그 (REQ-054): attached(사실) + 확장자 + 타입군 + 본문·파일명 키워드.
+    'assets'는 첨부 기능을 다루는 문서의 주제 태그이므로 첨부 보유 태깅에서는
+    제외한다 — attached와 혼용되던 것을 정리(사실 vs 주제)."""
+    tags, exts, groups = ["attached"], [], []
+    sample = " ".join(os.path.basename(p) for p in paths)
+    for p in paths:
+        ext = os.path.splitext(p)[1].lower()
+        if ext and ext[1:] not in exts:
+            exts.append(ext[1:])
+        for g, exts_of in TYPE_GROUPS.items():
+            if ext in exts_of and g not in groups:
+                groups.append(g)
+        sample += " " + attach_text(p)
+    tags += exts[:3] + groups[:2]
+    tags += [t for t in derive_tags(sample) if t != "assets"]
+    seen, out = set(), []
+    for t in tags:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
 
 
 def doc_asset_dir(doc_id, make=False):
@@ -2229,21 +2352,10 @@ def ingest_assets(doc_id):
 
     new_body = ASSET_RE.sub(repl, body)
     if moved:
-        # 첨부 태깅 (REQ-20260825-053): attached + 첨부 내용/파일명 키워드 —
-        # 첨부가 있다는 사실과 그 내용으로도 검색되게 한다. 텍스트류만 내용을
-        # 읽고(앞 4KB) 바이너리·PDF는 파일명만 — 의존성 0 원칙 유지.
+        # 첨부 태깅 (REQ-20260825-053/-054): attached(사실) + 확장자 + 타입군
+        # + 본문 키워드. PDF·docx·xlsx도 본문을 추출한다(stdlib).
         tags = list(meta.get("tags") or [])
-        if "attached" not in tags:
-            tags.append("attached")
-        sample = " ".join(os.path.basename(d) for d in moved)
-        for d in moved:
-            if os.path.splitext(d)[1].lower() in TEXTISH:
-                try:
-                    with open(d, encoding="utf-8", errors="replace") as f:
-                        sample += " " + f.read(4096)
-                except OSError:
-                    pass
-        for t in derive_tags(sample):
+        for t in attach_tags(moved):
             if t not in tags:
                 tags.append(t)
         meta["tags"] = tags
@@ -5073,8 +5185,9 @@ def cmd_serve(args):
                     import base64 as _b64
                     name = safe_name(str(req.get("name") or "file"))[:80]
                     raw = str(req.get("data") or "")
-                    if len(raw) > 14_000_000:      # ~10MB 실데이터
-                        raise ValueError("첨부가 너무 크다 (10MB 한도)")
+                    # base64는 원본의 4/3 — 30MB 실데이터 기준 (REQ-054)
+                    if len(raw) > int(ATTACH_MAX_BYTES * 1.4):
+                        raise ValueError("첨부가 너무 크다 (30MB 한도)")
                     try:
                         blob = _b64.b64decode(raw.split(",", 1)[-1],
                                               validate=True)
