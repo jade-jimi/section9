@@ -716,10 +716,14 @@ def update_active_reqs(doc_id, new_status):
         release_lock()
 
 
-def do_transition(doc_id, new_status, note="", user=None, force=False, auto=False):
+def do_transition(doc_id, new_status, note="", user=None, force=False, auto=False,
+                  judge=False):
     """상태 전이의 단일 코드 경로 — CLI(cmd_status)와 웹 서버(POST /api/status)가
     공유한다. 검증/History 기록/인덱스 갱신을 우회하는 쓰기 경로는 없다.
-    auto=True면 History note에 [auto] 마커 (자동 스폰 무한루프 차단 근거)."""
+    auto=True면 History note에 [auto] 마커 (자동 스폰 무한루프 차단 근거).
+    judge=True는 대시보드의 사람 판정 경로 (REQ-20260825-030): review→done
+    승인에 한해 goal/TDD 게이트를 면제한다 — 게이트는 에이전트의 자의적
+    완료를 막는 장치지 사용자의 승인을 막는 장치가 아니다."""
     path = locate(doc_id)
     if not path:
         raise ValueError(f"document not found: {doc_id}")
@@ -746,9 +750,14 @@ def do_transition(doc_id, new_status, note="", user=None, force=False, auto=Fals
     # 카드 카운터가 N/N 완료처럼 남아 반려 반영 여부를 오독하게 하던 문제 (REQ-20260824-009)
     if old == "review" and new_status == "in-progress":
         body = re.sub(r"(?m)^- \[[xX]\]", "- [ ]", body)
+    # 사람 판정 면제 (REQ-20260825-030): 대시보드 승인(review→done)은 판정
+    # 그 자체가 완료 근거 — goal/TDD 게이트를 적용하지 않는다 (019 실사고:
+    # 승인이 거부되고 CLI용 오류 문구가 사용자에게 노출됨)
+    approved = judge and old == "review" and new_status == "done"
     # done 가드: 요청은 goal(무엇이 충족되면 끝인가) 없이 완료할 수 없다 —
     # original만 있고 목표·충족 판정이 없던 구조 공백 (REQ-20260824-030)
-    if new_status == "done" and meta.get("type") == "request" and not force \
+    if new_status == "done" and meta.get("type") == "request" \
+            and not force and not approved \
             and not (meta.get("goal") or "").strip():
         raise ValueError(
             "goal 미기재 — `s9 set <id> --goal '충족 기준 한 문장'` 으로 목표를 명시하고 "
@@ -757,7 +766,7 @@ def do_transition(doc_id, new_status, note="", user=None, force=False, auto=Fals
     # — 객관 검증을 마치고 체크하거나, 시나리오를 개정(새 tdd 노트)하거나, 사용자
     # 판정만 남은 예외적 경우 --force로 사유와 함께 전이하라.
     if new_status in ("review", "done") and meta.get("type") == "request" \
-            and not force:
+            and not force and not approved:
         prog = _tdd_progress(body)
         if prog and prog["passed"] < prog["total"]:
             raise ValueError(
@@ -4358,10 +4367,12 @@ def cmd_serve(args):
                 if parsed.path == "/api/status":
                     note = (req.get("note") or "").strip()[:500]
                     tid, tto = str(req.get("id", "")), str(req.get("to", ""))
+                    # judge=True: 대시보드 전이는 사람의 행위 — review→done
+                    # 승인에 한해 goal/TDD 게이트 면제 (REQ-20260825-030)
                     old = do_transition(
                         tid, tto,
                         note=(note + (" " if note else "") + "[via dashboard]"),
-                        user=actor)
+                        user=actor, judge=True)
                     try:
                         update_active_reqs(tid, tto)
                     except Exception:

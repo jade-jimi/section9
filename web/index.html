@@ -240,6 +240,13 @@ main{padding:18px 22px}
 .gate-k .cdot{width:7px;height:7px;flex:none}
 .gate-k .path{margin-left:auto}
 .gate-b{font-size:12.5px;line-height:1.55}
+.gate-h{margin-top:8px;border-top:1px solid var(--hairline);padding-top:6px}
+.gate-h summary{cursor:pointer;font-family:var(--mono);font-size:10px;
+  color:var(--faint);text-transform:uppercase;letter-spacing:.05em;list-style:none}
+.gate-h summary::before{content:"▸ "}
+.gate-h[open] summary::before{content:"▾ "}
+.gate-r{margin:7px 0 0;font-size:12px;line-height:1.5}
+.gate-r .path{display:block;margin-bottom:2px}
 .metatbl{width:100%;border-collapse:collapse;margin:16px 0 24px;font-size:12.5px;
   border-top:1px solid var(--border)}
 .metatbl td{border-bottom:1px solid var(--hairline);padding:7px 10px 7px 0;vertical-align:top}
@@ -385,12 +392,19 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .ccclip:hover{color:var(--cc-text)}
 .ccterm.dragover{outline:1px dashed var(--cc-cyan);outline-offset:-5px}
 .ccwaitline{padding:0 0 13px;color:var(--cc-dim)}
-/* 한 별이 피고 지는 진행(· ✢ ✳ ✶ ✻ ✽ …)으로 통일 (REQ-20260825-017/-018).
-   ✳(U+2733)는 이모지 후보 코드포인트라 \FE0E로 텍스트 표현 강제 — 이모지 폰트
-   폴백(REQ-20260825-012)이 이 글리프만 컬러로 그려 "다른 종류가 섞이는" 원인. */
-.ccspin::before{content:"✻";color:var(--cc-yellow);animation:ccglyph 1.2s steps(1,end) infinite}
-@keyframes ccglyph{0%{content:"·"}10%{content:"✢"}20%{content:"✳\FE0E"}30%{content:"✶"}40%{content:"✻"}50%{content:"✽"}60%{content:"✻"}70%{content:"✶"}80%{content:"✳\FE0E"}90%{content:"✢"}100%{content:"·"}}
-@media (prefers-reduced-motion: reduce){.ccspin::before{animation:none}}
+/* 한 별이 피고 지는 진행(· ✢ ✱ ✶ ✻ ✽ …)으로 통일 (REQ-20260825-017/-018).
+   구 프레임의 ✳(U+2733)은 이모지 후보 코드포인트 — 이모지 폰트 폴백(REQ-012)이
+   이 글리프만 컬러 타일로 그려 "다른 종류가 섞이는" 원인이라 비이모지 ✱(U+2731)로
+   대체(변형 선택자 지원 여부와 무관하게 안전). */
+.ccspin::before{content:"✻";color:var(--cc-yellow);animation:ccglyph 2.4s steps(1,end) infinite}
+@keyframes ccglyph{0%{content:"·"}10%{content:"✢"}20%{content:"✱"}30%{content:"✶"}40%{content:"✻"}50%{content:"✽"}60%{content:"✻"}70%{content:"✶"}80%{content:"✱"}90%{content:"✢"}100%{content:"·"}}
+/* CC식 웨이팅 텍스트 shimmer — 밝은 띠가 좌→우로 흐르는 그라데이션 웨이브 (REQ-20260825-027) */
+.ccwv{background:linear-gradient(90deg,var(--cc-dim) 40%,var(--cc-text) 50%,var(--cc-dim) 60%);
+  background-size:250% 100%;-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;color:transparent;animation:ccshimmer 3.6s linear infinite}
+@keyframes ccshimmer{0%{background-position:125% 0}100%{background-position:-125% 0}}
+@media (prefers-reduced-motion: reduce){.ccspin::before{animation:none}
+  .ccwv{animation:none;background:none;-webkit-text-fill-color:currentColor;color:var(--cc-dim)}}
 .ccout .ln.ccagent{color:var(--cc-dim);opacity:.75;margin-left:14px}
 .ccout .ln.ccagent .g{color:var(--cc-faint)}
 .ccout .b .full .ln{margin:0 0 6px}
@@ -1760,21 +1774,41 @@ async function loadDoc(id, bg){
     ? `<div class="acts" style="margin:10px 0 0">` + targets.map(to =>
         `<button data-goto="${esc(m.id)}|${to}|${esc(m.status)}" title="${esc(m.status)} → ${to}">→ ${to}</button>`).join("") + `</div>`
     : "";
-  // review/blocked 문서: 판단 근거(전이 --note)가 본문 최하단 History 한 줄에만
-  // 있어 확인 포인트가 묻힌다 (REQ-20260825-006 반려) — 최근 해당 전이의 note를
-  // 상단 callout으로. 패턴은 s9 do_transition의 History 라인 형식과 계약
-  // (tests/test_review_gate.py 가 실제 s9 출력으로 동형 검증).
-  const GATE_RE_SRC = "^- (\\S+) status: [a-z-]+ -> STATUS \\(by ([^)]+)\\)(?: — (.*))?$";
+  // review/blocked 문서: 판단 근거(전이 --note)가 본문 최하단 History에 묻힌다
+  // (REQ-20260825-006 반려) — 현재 회차의 note를 상단 callout으로, 과거 회차
+  // (이전 확인 포인트·반려 사유)는 접힘 이력으로 (REQ-20260825-011 반려:
+  // 다회차 반려 시 회차별 선택지와 최신 선택지가 구분돼 보여야 한다).
+  // 패턴은 s9 do_transition의 History 라인 형식과 계약(tests/test_review_gate.py).
+  const GATE_RE_SRC = "^- (\\S+) status: ([a-z-]+) -> ([a-z-]+) \\(by ([^)]+)\\)(?: — (.*))?$";
   let gate = "";
   if (m.type === "request" && (m.status === "review" || m.status === "blocked")){
-    const gre = new RegExp(GATE_RE_SRC.replace("STATUS", m.status));
-    let hit = null;
-    for (const ln of d.body.split("\n")){ const t = ln.match(gre); if (t) hit = t; }
-    if (hit && hit[3]) gate = `<div class="gate">
+    const gre = new RegExp(GATE_RE_SRC);
+    const clean = s => s.replace(/\s*\[via dashboard\]\s*$/, "");
+    const rounds = [];  // 시간순: 확인 요청(→현상태) + 반려(review→in-progress)
+    for (const ln of d.body.split("\n")){
+      const t = ln.match(gre);
+      if (!t || !t[5]) continue;
+      if (t[3] === m.status)
+        rounds.push({ts: t[1], by: t[4], note: clean(t[5]),
+                     kind: m.status === "review" ? "확인 요청" : "대기 사유"});
+      else if (m.status === "review" && t[2] === "review" && t[3] === "in-progress")
+        rounds.push({ts: t[1], by: t[4], note: clean(t[5]), kind: "반려"});
+    }
+    let curIdx = -1;
+    rounds.forEach((r, i) => { if (r.kind !== "반려") curIdx = i; });
+    if (curIdx >= 0){
+      const cur = rounds[curIdx], prev = rounds.slice(0, curIdx);
+      const nth = rounds.filter(r => r.kind !== "반려").length;
+      const hist = prev.length
+        ? `<details class="gate-h"><summary>이전 판정 이력 ${prev.length}건 — 회차별 확인 포인트·반려 사유</summary>${prev.map(r =>
+            `<div class="gate-r"><span class="path">${esc(r.ts.slice(0, 16).replace("T", " "))} · ${r.kind} · ${esc(r.by)}</span><div>${linkifyIds(esc(r.note))}</div></div>`).join("")}</details>`
+        : "";
+      gate = `<div class="gate">
       <div class="gate-k"><span class="cdot" style="background:${SCOLOR[m.status]}"></span>
-        ${m.status === "review" ? "확인 요청 — 사용자 판단 필요" : "blocked — 대기 사유"}
-        <span class="path">${esc(hit[1].slice(0, 16).replace("T", " "))} · ${esc(hit[2])}</span></div>
-      <div class="gate-b">${linkifyIds(esc(hit[3]))}</div></div>`;
+        ${m.status === "review" ? (nth > 1 ? `확인 요청 ${nth}차 — 사용자 판단 필요` : "확인 요청 — 사용자 판단 필요") : "blocked — 대기 사유"}
+        <span class="path">${esc(cur.ts.slice(0, 16).replace("T", " "))} · ${esc(cur.by)}</span></div>
+      <div class="gate-b">${linkifyIds(esc(cur.note))}</div>${hist}</div>`;
+    }
   }
   viewer.innerHTML = `
     <div class="path">${esc(d.path)}</div>

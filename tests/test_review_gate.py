@@ -46,16 +46,23 @@ class TestReviewGate(unittest.TestCase):
         self.assertNotIn("box-shadow", css)
 
     def test_gate_conditional_on_note(self):
-        """S3: 전이 note가 없으면 callout을 만들지 않는다 (hit[3] 가드)."""
-        self.assertIn("hit && hit[3]", self.html)
+        """S3: 전이 note가 없으면 회차로 세지 않는다 (t[5] 가드)."""
+        self.assertIn("!t || !t[5]", self.html)
+
+    def test_gate_round_history(self):
+        """S5 (REQ-20260825-011 반려): 다회차 반려 시 이전 회차의 확인 포인트·
+        반려 사유가 접힘 이력으로, 현재 회차가 메인 callout으로 구분 노출된다."""
+        self.assertIn("gate-h", self.html)           # 이력 접힘 컨테이너
+        self.assertIn("이전 판정 이력", self.html)
+        self.assertIn('kind: "반려"', self.html)      # 반려 회차 수집
 
     # --- S4: 형식 계약 — JS 정규식이 s9 실제 출력과 일치 ---
 
-    def _gate_re(self, status):
+    def _gate_re(self):
         m = re.search(r'GATE_RE_SRC\s*=\s*"([^"]+)"', self.html)
         self.assertIsNotNone(m, "GATE_RE_SRC 정의가 index.html에 없다")
         # JS 문자열 리터럴 이스케이프(\\S 등)를 실제 패턴으로 복원
-        return m.group(1).replace("\\\\", "\\").replace("STATUS", status)
+        return m.group(1).replace("\\\\", "\\")
 
     def test_regex_matches_real_s9_history_line(self):
         tmp = tempfile.mkdtemp(prefix="s9gate-")
@@ -79,23 +86,30 @@ class TestReviewGate(unittest.TestCase):
         self.assertEqual(len(docs), 1)
         rid = os.path.splitext(os.path.basename(docs[0]))[0]
         cli("status", rid, "in-progress", "--note", "착수")
-        note = "확인 포인트: (1) A안 채택 여부 — 예: 201 점프 허용?"
-        cli("status", rid, "review", "--note", note)
+        note1 = "확인 포인트 v1: (1) A안 채택 여부 — 예: 201 점프 허용?"
+        cli("status", rid, "review", "--note", note1)
+        cli("status", rid, "in-progress", "--note", "반려: 예시가 부족하다")
+        note2 = "확인 포인트 v2: 예시 보강판"
+        cli("status", rid, "review", "--note", note2)
         with open(docs[0], encoding="utf-8") as f:
             body = f.read()
 
-        pat = re.compile(self._gate_re("review"))
-        hit = None
+        # JS와 동일한 회차 수집 로직을 s9 실출력에 적용 (형식 계약 + 다회차)
+        pat = re.compile(self._gate_re())
+        rounds = []
         for ln in body.split("\n"):
             t = pat.match(ln)
-            if t:
-                hit = t
-        self.assertIsNotNone(hit, "-> review 전이 라인이 JS 정규식과 불일치")
-        self.assertEqual(hit.group(2), "tester")
-        self.assertEqual(hit.group(3), note)
-        # 다른 상태 패턴은 이 라인에 걸리지 않아야 한다 (S3의 정적 짝)
-        self.assertFalse(any(re.match(self._gate_re("blocked"), ln)
-                             for ln in body.split("\n")))
+            if not t or not t.group(5):
+                continue
+            if t.group(3) == "review":
+                rounds.append(("확인 요청", t.group(4), t.group(5)))
+            elif t.group(2) == "review" and t.group(3) == "in-progress":
+                rounds.append(("반려", t.group(4), t.group(5)))
+        self.assertEqual([r[0] for r in rounds], ["확인 요청", "반려", "확인 요청"])
+        self.assertTrue(all(r[1] == "tester" for r in rounds))
+        self.assertEqual(rounds[0][2], note1)   # 1차 확인 포인트 보존
+        self.assertIn("반려:", rounds[1][2])     # 반려 사유 보존
+        self.assertEqual(rounds[-1][2], note2)  # 현재(최신) 회차 = 메인 callout
 
 
 if __name__ == "__main__":

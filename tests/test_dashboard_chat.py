@@ -418,6 +418,26 @@ class TestDashboardChat(unittest.TestCase):
             p.wait(timeout=5)
             self.cli("bind", "ended", "1", env_extra=env_w)
 
+    # C19. 사람 판정 면제 (REQ-20260825-030): 대시보드 승인(review→done)은
+    #      goal 미기재여도 성공 — 게이트는 에이전트용, CLI done은 여전히 거부
+    def test_c19_dashboard_approve_bypasses_goal_gate(self):
+        self.touch_stream()
+        code, res = self.api("/api/chat", {"text": "게이트 면제 검증용 더미 요청 만들어줘"})
+        self.assertEqual(code, 200, res)
+        rid = res["req"]
+        env_s = {"S9_SESSION": self.sid}
+        self.cli("status", rid, "in-progress", env_extra=env_s)
+        self.cli("status", rid, "review", "--note", "판정 요청", env_extra=env_s)
+        # CLI done은 goal 게이트에 막힌다 (기존 규율 유지)
+        r = self.cli("status", rid, "done", env_extra=env_s, expect=None)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("goal", r.stdout + r.stderr)
+        # 대시보드 승인(judge 경로)은 통과
+        code, res = self.api("/api/status", {"id": rid, "to": "done",
+                                             "note": "승인"})
+        self.assertEqual(code, 200, res)
+        self.assertEqual(res.get("new"), "done")
+
     # C14. SessionStart: 유휴 중 쌓인 미처리 줄 주입 + EOF 오프셋 arm + seen 갱신
     def test_c14_hook_pending_injection(self):
         sid = "pendsess"
