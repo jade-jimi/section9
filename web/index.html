@@ -385,8 +385,11 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .ccclip:hover{color:var(--cc-text)}
 .ccterm.dragover{outline:1px dashed var(--cc-cyan);outline-offset:-5px}
 .ccwaitline{padding:0 0 13px;color:var(--cc-dim)}
-.ccspin::before{content:"✻";color:var(--cc-yellow);animation:ccglyph 1s steps(1,end) infinite}
-@keyframes ccglyph{0%{content:"✻"}33%{content:"✳"}66%{content:"✶"}100%{content:"✻"}}
+/* 한 별이 피고 지는 진행(· ✢ ✳ ✶ ✻ ✽ …)으로 통일 (REQ-20260825-017/-018).
+   ✳(U+2733)는 이모지 후보 코드포인트라 \FE0E로 텍스트 표현 강제 — 이모지 폰트
+   폴백(REQ-20260825-012)이 이 글리프만 컬러로 그려 "다른 종류가 섞이는" 원인. */
+.ccspin::before{content:"✻";color:var(--cc-yellow);animation:ccglyph 1.2s steps(1,end) infinite}
+@keyframes ccglyph{0%{content:"·"}10%{content:"✢"}20%{content:"✳\FE0E"}30%{content:"✶"}40%{content:"✻"}50%{content:"✽"}60%{content:"✻"}70%{content:"✶"}80%{content:"✳\FE0E"}90%{content:"✢"}100%{content:"·"}}
 @media (prefers-reduced-motion: reduce){.ccspin::before{animation:none}}
 .ccout .ln.ccagent{color:var(--cc-dim);opacity:.75;margin-left:14px}
 .ccout .ln.ccagent .g{color:var(--cc-faint)}
@@ -2614,6 +2617,23 @@ function termMeta(T){
 
 /* ---- 웨이팅 상태줄 (L6): 마지막 이벤트가 user/tool_use이고 후속이 없으면
    점멸 글리프(CSS 애니메이션, reduced-motion 존중) + 동사 + 경과초. ---- */
+// CC식 웨이팅 동사 풀 (REQ-20260825-019): 대기 시작 시 무작위 선택, 9s마다 교체.
+// 글리프는 REQ-017/018의 "피고 지는 별" 통일 유지 — CC의 다양성은 동사 쪽이다.
+const CC_VERBS = ["Thinking","Pondering","Musing","Brewing","Percolating",
+  "Simmering","Marinating","Cogitating","Ruminating","Noodling","Scheming",
+  "Conjuring","Distilling","Weaving","Forging","Crunching","Untangling",
+  "Polishing","Sketching","Assembling","Calibrating","Tinkering","Incubating",
+  "Contemplating","Mulling","Hatching","Wrangling","Sifting","Stewing",
+  "Churning","Divining","Reckoning","Whirring","Computing","Synthesizing",
+  "Deciphering","Composing","Cooking","Baking","Levitating","Meandering",
+  "Puzzling","Spelunking","Burrowing","Sprouting","Blooming","Orbiting",
+  "Daydreaming"];
+function termVerbRotate(T){
+  T.verbAt = Date.now();
+  T.verbIdx = ((T.verbIdx ?? -1) + 1
+    + Math.floor(Math.random() * (CC_VERBS.length - 1))) % CC_VERBS.length;
+  return CC_VERBS[T.verbIdx] + "…";
+}
 function termSpinnerEval(T){
   const w = $("#cc-wait");
   if (!w) return;
@@ -2622,23 +2642,22 @@ function termSpinnerEval(T){
     T.waitOn = false; w.hidden = true;
     return;
   }
-  const verb = T.lastRole === "user" ? "Thinking…"
-             : T.lastToolName === "Bash" ? "Running…" : "Doing…";
   if (!T.waitOn){
     T.waitOn = true; w.hidden = false;
-    w.innerHTML = `<span class="ccspin"></span><span class="ccwv"> ${verb} </span><span class="ccwe"></span>`;
+    w.innerHTML = `<span class="ccspin"></span><span class="ccwv"> ${termVerbRotate(T)} </span><span class="ccwe"></span>`;
     if (!T.waitT){
       T.waitT = setInterval(() => {
-        if (TERM !== T) return;
+        if (TERM !== T || !T.waitOn || w.hidden) return;
         const el = w.querySelector(".ccwe");
-        if (el && T.waitOn && !w.hidden)
+        if (el)
           el.textContent = `(${Math.max(0, Math.round((Date.now() - T.waitBase) / 1000))}s)`;
+        if (Date.now() - (T.verbAt || 0) > 9000){
+          const wv = w.querySelector(".ccwv");
+          if (wv) wv.textContent = ` ${termVerbRotate(T)} `;
+        }
       }, 1000);
       T.timers.push(T.waitT);
     }
-  } else {
-    const wv = w.querySelector(".ccwv");
-    if (wv) wv.textContent = ` ${verb} `;
   }
   const el = w.querySelector(".ccwe");
   if (el) el.textContent = `(${Math.max(0, Math.round((Date.now() - T.waitBase) / 1000))}s)`;
