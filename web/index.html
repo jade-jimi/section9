@@ -484,6 +484,12 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 /* 무인 작업자 기동 중(스폰 후 클레임 전) — 앰버 점멸 (REQ-20260824-008) */
 .livedot.spawn{background:#d97706;box-shadow:0 0 0 0 rgba(217,119,6,.6);animation:livepulse 1.6s infinite}
 @keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.5)}70%{box-shadow:0 0 0 5px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
+/* 확인 포인트는 3줄까지 — 판정 대기 카드를 훑을 수 있어야 한다(ux-craft:
+   한 화면 한 결정). 전문은 문서에서 본다. */
+.rvpt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.card:focus-visible{outline:2px solid var(--text);outline-offset:-2px}
+.card .rawt{color:var(--c-inprogress)}
+.col .colempty{padding:14px;color:var(--faint);font-size:11.5px;line-height:1.5}
 .rvpt{margin-top:7px;font-size:11px;color:var(--c-review);line-height:1.4;
   border-left:2px solid var(--c-review);padding-left:7px}
 .acts{display:flex;gap:6px;margin-top:8px}
@@ -1658,16 +1664,21 @@ function cardHTML(r){
          ? `<span class="livedot spawn" title="무인 재작업 작업자가 기동됨(${r.live_age}s 전 스폰) — 클레임 등록 대기 중"></span>`
          : `<span class="livedot off" title="in-progress지만 스트림 조용함 — 실제 동작 아닐 수 있음"></span>`)
     : "";
-  return `<div class="card" ${isReq ? 'draggable="true"' : ""} style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
+  // 제목 미정리(원문 절단) 표식 — 카드가 open에 방치되면 사용자가 먼저 본다
+  const rawTitle = isReq && (r.tags||[]).includes("auto-audit")
+    && (r.title||"").endsWith("…");
+  // 완료·취소 카드의 경과시간은 소음이다 — 진행 중인 것만 시간을 센다 (ux-craft)
+  const showElapsed = r.status_since && !TERMINAL.has(r.status);
+  return `<div class="card" ${isReq ? 'draggable="true"' : ""} tabindex="0" role="button" style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
     <div class="id">${liveDot}${esc(shortId(r.id))}</div>
-    <div class="t">${esc(r.title)}</div>
+    <div class="t">${rawTitle ? '<span class="rawt" title="제목이 원문 그대로다 — 착수 시 명사구로 정리된다">⚠</span> ' : ""}${esc(r.title)}</div>
     <div class="m">
       <span class="badge">${esc(r.user)}</span>
       ${r.size ? `<span class="size">${esc(r.size)}</span>` : ""}
       ${r.tdd ? `<span class="tdd${r.tdd.passed===r.tdd.total?" full":""}" title="TDD 시나리오 ${r.tdd.passed}/${r.tdd.total} 통과">TDD ${r.tdd.passed}/${r.tdd.total}</span>` : ""}
       ${(r.tags||[]).filter(t=>!SYS_TAGS.has(t)).slice(0,2).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}
     </div>${acts}
-    ${r.status_since ? `<span class="elapsed" data-since="${esc(r.status_since)}" title="현재 상태(${esc(r.status)}) 시작 이후 경과">${fmtElapsed(r.status_since)}</span>` : ""}</div>`;
+    ${showElapsed ? `<span class="elapsed" data-since="${esc(r.status_since)}" title="현재 상태(${esc(r.status)}) 시작 이후 경과">${fmtElapsed(r.status_since)}</span>` : ""}</div>`;
 }
 
 // 반려: 사유 필수 (빈 값이면 재요구, 취소면 중단). Board·문서 뷰어 공용.
@@ -1691,13 +1702,22 @@ async function postStatus(id, to, note){
   }catch(e){ alert("서버에 연결할 수 없습니다"); }
 }
 
+// 빈 상태는 안내가 아니라 다음 행동을 주는 자리다 (ux-craft 3)
+const EMPTY_COL = {
+  open: '<div class="colempty">대기 중인 요청이 없습니다.<br>터미널이나 채팅으로 요청하면 여기에 카드가 생깁니다.</div>',
+  "in-progress": '<div class="colempty">진행 중인 작업이 없습니다.<br>open 카드를 이 칸으로 끌어다 놓으면 착수됩니다.</div>',
+  blocked: '<div class="colempty">막힌 작업이 없습니다.</div>',
+  review: '<div class="colempty">판정 대기가 없습니다.<br>검증이 끝난 작업은 바로 done으로 갑니다.</div>',
+  done: '<div class="colempty">완료된 요청이 아직 없습니다.</div>',
+};
+
 function colHTML(key, label, color, grp){
   const limit = TERMINAL.has(key) ? COL_LIMIT_TERMINAL : COL_LIMIT;
   const open = expanded.has("col:"+key);
   const shown = open ? grp : grp.slice(0, limit);
   const hidden = grp.length - shown.length;
   return `<div class="col" style="--sc:${color}"${key !== "etc" ? ` data-colstatus="${key}"` : ""}><h2><span class="cdot"></span>${label}<span class="n">${grp.length}</span></h2>
-    <div class="cards">${shown.map(cardHTML).join("")}
+    <div class="cards">${grp.length ? shown.map(cardHTML).join("") : EMPTY_COL[key] || ""}
     ${hidden>0 ? `<button class="more" data-expand="col:${key}">${hidden}개 더 보기</button>`
       : (open && grp.length>limit ? `<button class="more" data-expand="col:${key}">접기</button>` : "")}
     </div></div>`;
@@ -1718,7 +1738,8 @@ function renderBoard(rows){
   html += `<div class="board">`;
   for (const st of STATUSES){
     const grp = shown.filter(r => r.status === st);
-    if (!grp.length && (cur || !["open","in-progress","done"].includes(st))) continue;
+    // 주요 컬럼은 비어도 자리를 지킨다 — 드롭 대상이자 상태 안내 자리(ux-craft)
+    if (!grp.length && (cur || !["open","in-progress","review","done"].includes(st))) continue;
     html += colHTML(st, st, SCOLOR[st], grp);
   }
   if (others.length && !cur) html += colHTML("etc", "knowledge / session", "var(--c-published)", others);

@@ -50,5 +50,38 @@ class TestUxAgents(unittest.TestCase):
         self.assertIn("s9-design", s)
 
 
+class TestBoardUxApplied(unittest.TestCase):
+    """ux-craft 기준의 실제 적용 (REQ-20260825-062) — 보드 화면 계약."""
+    def setUp(self):
+        with open(os.path.join(HERE, "..", "web", "index.html"),
+                  encoding="utf-8") as f:
+            self.html = f.read()
+
+    def test_b1_review_point_clamped(self):
+        """판정 대기 카드를 훑을 수 있게 확인 포인트는 3줄 클램프."""
+        self.assertIn("-webkit-line-clamp:3", self.html)
+
+    def test_b2_no_elapsed_on_terminal(self):
+        """완료·취소 카드의 경과시간은 소음 — 표시하지 않는다."""
+        self.assertIn("showElapsed", self.html)
+        self.assertIn("!TERMINAL.has(r.status)", self.html)
+
+    def test_b3_empty_states_actionable(self):
+        """빈 컬럼은 다음 행동을 준다(안내문만 있는 빈칸 금지)."""
+        self.assertIn("EMPTY_COL", self.html)
+        for key in ("open:", '"in-progress":', "review:"):
+            self.assertIn(key, self.html)
+        self.assertIn("끌어다 놓으면", self.html)
+
+    def test_b4_keyboard_reachable(self):
+        """카드는 키보드로 도달 가능하고 포커스가 보인다."""
+        self.assertIn('tabindex="0"', self.html)
+        self.assertIn(".card:focus-visible", self.html)
+
+    def test_b5_raw_title_flagged(self):
+        """제목이 원문인 카드는 표식으로 드러난다(방치 방지)."""
+        self.assertIn("rawt", self.html)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
