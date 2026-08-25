@@ -535,6 +535,53 @@ def _contrib_state(meta):
             "item": worst.get("item", ""), "reason": worst.get("reason", "")}
 
 
+# 우선순위 가중치 (REQ-20260826-005). 저장은 언제나 정수 하나 —
+# 별칭은 입력 편의일 뿐이고, 정렬 규칙을 하나로 유지하기 위해 즉시 수치가 된다.
+PRIORITY_DEFAULT = 50
+PRIORITY_ALIASES = {"low": 25, "normal": 50, "high": 75, "urgent": 90}
+PRIORITY_MIN, PRIORITY_MAX = 1, 99
+
+
+def parse_priority(value):
+    """'high' 또는 '75' → 75. 범위 밖·비수치는 ValueError.
+
+    조용히 기본값으로 되돌리지 않는다 — 그러면 사람이 매긴 우선순위가
+    소리 없이 사라지고, 사라졌다는 사실조차 안 남는다."""
+    if isinstance(value, bool):
+        raise ValueError("priority: 참/거짓이 아니라 가중치여야 한다")
+    if isinstance(value, int):
+        n = value
+    else:
+        s = str(value).strip().lower()
+        if s in PRIORITY_ALIASES:
+            return PRIORITY_ALIASES[s]
+        if not s.isdigit():
+            raise ValueError(
+                f"priority: '{value}' — {PRIORITY_MIN}~{PRIORITY_MAX} 정수이거나 "
+                f"{'/'.join(PRIORITY_ALIASES)} 중 하나여야 한다")
+        n = int(s)
+    if not PRIORITY_MIN <= n <= PRIORITY_MAX:
+        raise ValueError(f"priority: {n} — {PRIORITY_MIN}~{PRIORITY_MAX} 범위 밖")
+    return n
+
+
+def doc_priority(meta):
+    """문서의 가중치. 필드가 없거나 망가졌으면 기본값 — 기존 문서 299건이
+    아무 변경 없이 제자리(중간)에 놓이게 하려는 것이다."""
+    try:
+        return parse_priority(meta.get("priority"))
+    except (ValueError, AttributeError, TypeError):
+        return PRIORITY_DEFAULT
+
+
+def work_order(rows):
+    """작업 순서 — 가중치 내림차순, 같으면 **오래 기다린 것 먼저**.
+
+    2차 키를 갱신 순으로 두면 손이 자주 가는 항목이 계속 앞에 서서 뒤엣것이
+    굶는다. 기다린 시간이 길수록 앞으로 오는 편이 대기열로서 정직하다."""
+    return sorted(rows, key=lambda r: (-doc_priority(r), r.get("created", "")))
+
+
 def catalog_row(meta, path, body=""):
     return {
         "id": meta.get("id", ""),
@@ -543,6 +590,7 @@ def catalog_row(meta, path, body=""):
         "summary": meta.get("summary", ""),
         "status": meta.get("status", ""),
         "size": meta.get("size", ""),
+        "priority": doc_priority(meta),
         "user": meta.get("user", ""),
         "project": meta.get("project", ""),
         "slug": meta.get("slug", ""),  # 프로젝트 문서를 slug로도 검색 (REQ-20260824-024)
@@ -718,11 +766,16 @@ def apply_filters(rows, a):
 
 
 def print_rows(rows):
-    for r in rows:
+    # 조회가 곧 작업 순서다 (REQ-20260826-005) — 높은 가중치가 위로,
+    # 같으면 오래 기다린 것이 위로. 가중치는 기본값과 다를 때만 찍는다:
+    # 전부 !50 이 붙으면 목록이 시끄러워지고 정작 다른 것이 안 보인다.
+    for r in work_order(rows):
         proj = f" ({r['project']})" if r["project"] else ""
         tags = " " + " ".join("#" + t for t in r["tags"]) if r["tags"] else ""
-        print(f"{r['id']}  [{r['status']}]  {r['user']}  {r['created'][:10]}  "
-              f"{r['title']}{proj}{tags}")
+        p = doc_priority(r)
+        prio = f" !{p}" if p != PRIORITY_DEFAULT else ""
+        print(f"{r['id']}  [{r['status']}]{prio}  {r['user']}  "
+              f"{r['created'][:10]}  {r['title']}{proj}{tags}")
 
 
 # ---------------------------------------------------------------- commands
@@ -795,6 +848,12 @@ def cmd_new(args):
 
     # 멱등 가드는 훅이 만든 카드(auto-audit)에만 적용한다 — 사람이 같은 본문으로
     # 일부러 여러 건을 만드는 경우까지 막으면 안 된다 (테스트·일괄 등록 회귀)
+    try:
+        prio = (parse_priority(args.priority) if getattr(args, "priority", None)
+                else PRIORITY_DEFAULT)
+    except ValueError as e:
+        die(str(e))
+
     dup = (_recent_duplicate(args.doc_type, args.title, original)
            if "auto-audit" in (args.tag_list or []) else None)
     if dup:
@@ -811,6 +870,7 @@ def cmd_new(args):
             "id": doc_id, "type": args.doc_type, "title": args.title,
             "summary": args.summary or "", "goal": args.goal or "",
             "status": args.status or default_status, "size": args.size or "",
+            "priority": prio,
             "user": user, "machine": machine, "session": session,
             "project": proj,
             "parent": args.parent or "", "children": [],
@@ -2293,7 +2353,10 @@ def rework_watch_tick(grace=None, now=None):
     if os.environ.get("S9_AUTO_RESUME_DISABLE"):
         return spawned
     nowt = now or _time.time()
-    for r in load_catalog():
+    # 후보가 여럿이면 우선순위 높은 것부터 집는다 (REQ-20260826-005) —
+    # 무인 스폰은 사람이 순서를 고를 수 없는 자리라, 유도가 아니라 실제
+    # 집는 순서가 여기서 정해진다.
+    for r in work_order(load_catalog()):
         if r.get("type") != "request" or r.get("status") != "in-progress":
             continue
         path = locate(r["id"])
@@ -2326,7 +2389,10 @@ def rework_watch_tick(grace=None, now=None):
             spawned.append(r["id"])
     # 승인 메모 후속 (REQ-20260824-028): 유예 내 리드(훅 주입 fast-path)가 소비하지
     # 않은 승인 메모는 무인 후속 작업자가 집는다 — 반려 루프와 대칭.
-    for a in approvals_unseen(consume=False):
+    prio_of = {r["id"]: doc_priority(r) for r in load_catalog()}
+    for a in sorted(approvals_unseen(consume=False),
+                    key=lambda a: (-prio_of.get(a["id"], PRIORITY_DEFAULT),
+                                   a["ts"])):
         try:
             ats = datetime.datetime.fromisoformat(a["ts"]).timestamp()
         except ValueError:
@@ -2697,8 +2763,17 @@ def cmd_set(args):
         if val is not None:
             meta[key] = val
             changed.append(key)
+    if getattr(args, "priority", None) is not None:
+        # 거부되면 문서를 건드리지 않고 끝낸다 — 잘못된 입력이 기존 값을
+        # 지우면 사람이 매긴 우선순위가 소리 없이 사라진다.
+        try:
+            meta["priority"] = parse_priority(args.priority)
+        except ValueError as e:
+            die(str(e))
+        changed.append("priority")
     if not changed:
-        die("nothing to set (use --title/--summary/--goal/--size/--project)")
+        die("nothing to set (use --title/--summary/--goal/--size/--project"
+            "/--priority)")
     meta["updated"] = now_iso()
 
     acquire_lock()
@@ -3567,7 +3642,10 @@ def cmd_digest(args):
     rows = load_catalog()
     reqs = [r for r in rows if r["type"] == "request"]
     active_states = ("open", "in-progress", "blocked", "review")
-    active = [r for r in reqs if r["status"] in active_states]
+    # 우선순위 유도 (REQ-20260826-005): digest 는 세션이 무엇부터 집을지
+    # 정하는 자리다. 높은 가중치가 위로, 같으면 오래 기다린 것이 위로.
+    # 강제가 아니라 유도다 — 아래엣것을 집는 것을 막지는 않는다.
+    active = work_order([r for r in reqs if r["status"] in active_states])
     mine = [r for r in active if r["user"] == user]
     others = [r for r in active if r["user"] != user]
     closed = sorted((r for r in reqs if r["status"] in ("done", "cancelled")),
@@ -3584,7 +3662,10 @@ def cmd_digest(args):
             "s9 digest --budget N. 프롬프트는 훅이 자동 REQ화한다.")
 
     def line(r):
-        return f"- {r['id']} [{r['status']}] {r['title']} ({r['user']}, {r['updated'][:10]})"
+        p = doc_priority(r)
+        prio = f" !{p}" if p != PRIORITY_DEFAULT else ""
+        return (f"- {r['id']} [{r['status']}]{prio} {r['title']} "
+                f"({r['user']}, {r['updated'][:10]})")
 
     reopened = reopened_requests()
     review = review_requests()
@@ -7088,6 +7169,8 @@ def main():
     np.add_argument("--goal")
     np.add_argument("--status")
     np.add_argument("--size", choices=["S", "M", "L"], help="요청 크기 (소/중/대)")
+    np.add_argument("--priority", help="우선순위 가중치 1~99 또는 "
+                    "low/normal/high/urgent (기본 50)")
     np.add_argument("--user")
     np.add_argument("--project")
     np.add_argument("--parent")
@@ -7135,6 +7218,8 @@ def main():
     se2.add_argument("--summary")
     se2.add_argument("--goal")
     se2.add_argument("--size", choices=["S", "M", "L"])
+    se2.add_argument("--priority", help="우선순위 가중치 1~99 또는 "
+                     "low/normal/high/urgent")
     se2.add_argument("--project")
     se2.set_defaults(fn=cmd_set)
 

@@ -28,6 +28,7 @@ cat index/by-user/user1.md
 
 ```
 s9 new request --title T [--summary S] [--goal G] [--size S|M|L]
+   [--priority N|low|normal|high|urgent]
    [--user U] [--project P] [--parent ID] [--derived-from ID]
    [--relates ID]... [--ref-doc ID]... [--ref-link URL]... [--ref-file PATH]...
    [--tag TAG]... [--status ST] [--body TEXT | --body-file F | stdin]
@@ -39,6 +40,32 @@ s9 new request --title T [--summary S] [--goal G] [--size S|M|L]
 - user/machine/session은 `--user`, `$S9_USER`, `$S9_MACHINE`, `$S9_SESSION`
   환경변수로 주입 (미지정 시 OS 계정명/hostname).
 - 출력: `ID  상대경로` 한 줄.
+
+### 우선순위 가중치
+
+요청은 `priority` 정수 하나를 가진다 — **1~99, 기본 50**. 별칭
+`low`(25) · `normal`(50) · `high`(75) · `urgent`(90) 로도 줄 수 있고,
+저장은 언제나 수치라 정렬 규칙이 하나로 유지된다. 별칭을 두는 이유는
+매번 숫자를 고르게 하면 실제로는 아무도 쓰지 않기 때문이다.
+
+기본이 중간값인 이유는 **기존 문서를 손대지 않고도 양방향이 살아야** 해서다.
+0 이나 100 을 기본으로 두면 한쪽 방향이 죽는다. 값이 없거나 망가진 문서는
+기본값으로 읽혀 제자리(중간)에 놓인다.
+
+작업 순서는 **가중치 내림차순, 같으면 오래 기다린 것 먼저**(생성 순)다.
+2차 키를 갱신 순으로 두면 손이 자주 가는 항목이 계속 앞에 서서 뒤엣것이 굶는다.
+
+이 순서를 따르는 곳: `s9 ls`·`s9 search` 출력, `s9 digest` 의 active 목록,
+무인 재개(반려 재작업·승인 후속) 워커가 후보를 집는 순서. 앞의 둘은 **유도**다 —
+사람이 아래엣것을 집는 것을 막지 않는다. 무인 스폰은 사람이 순서를 고를 수
+없는 자리라, 거기서는 이 순서가 실제로 집는 순서가 된다.
+
+목록에서 가중치는 **기본값과 다를 때만** `!75` 형태로 붙는다. 전부 `!50` 이
+붙으면 정작 다른 것이 눈에 안 들어온다.
+
+설정: `s9 new --priority high`, `s9 set <id> --priority 90`.
+잘못된 값은 거부되고 기존 값이 보존된다 — 조용히 기본값으로 되돌리면
+사람이 매긴 우선순위가 소리 없이 사라진다.
 
 ### s9 show ID [--meta]
 ### s9 ls [필터]
