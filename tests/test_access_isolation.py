@@ -64,11 +64,11 @@ class TestAccessIsolation(unittest.TestCase):
         r = cli("new", "request", "--title", "px doc", "--summary", "px",
                 "--goal", "t", "--project", "px", "--user", "alice",
                 "--body", "zebra-token-px")
-        cls.px_doc = re.search(r"REQ-\d{8}-\d{3}", r.stdout).group(0)
+        cls.px_doc = re.search(r"REQ-\d{8}-\d{3,}(?:-[0-9a-z]{4})?", r.stdout).group(0)
         # 무소속 문서 — bob은 프로젝트가 없어 auto-assign이 안 걸린다 (V5)
         r = cli("new", "request", "--title", "solo doc", "--summary", "solo",
                 "--goal", "t", "--user", "bob", "--body", "zebra-token-solo")
-        cls.solo_doc = re.search(r"REQ-\d{8}-\d{3}", r.stdout).group(0)
+        cls.solo_doc = re.search(r"REQ-\d{8}-\d{3,}(?:-[0-9a-z]{4})?", r.stdout).group(0)
         # alice의 세션 audit 문서 (V7) — SES 문서는 project 없음 → 작성자만
         cli("log", "alice-private-event", "--session", "aaaa1111",
             "--user", "alice")

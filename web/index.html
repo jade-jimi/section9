@@ -348,7 +348,10 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    라이트 tone에서 항상-다크 터미널 배경과 구분 불가 — 터미널 인버스 비디오로 재정의 */
 .ccterm::selection,.ccterm ::selection{background:var(--cc-text);color:var(--cc-bg)}
 .term::selection,.term ::selection{background:#cfd8e3;color:#101418}
-.ccterm .cccode{background:rgba(255,255,255,.09);padding:0 4px}
+.ccterm .cccode{background:rgba(255,255,255,.09);padding:0 4px;color:var(--cc-cyan)}
+.ccterm .ccblk{display:block;background:rgba(255,255,255,.06);border-left:2px solid var(--cc-border);
+  padding:6px 10px;margin:5px 0;white-space:pre-wrap;color:var(--cc-cyan)}
+.ccterm .ccval{color:var(--cc-cyan)}
 .ccterm details summary{cursor:pointer;list-style:none;display:inline}
 .ccterm details summary::-webkit-details-marker{display:none}
 .ccterm details summary::after{content:" [+]";color:var(--cc-faint)}
@@ -392,19 +395,23 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .ccclip:hover{color:var(--cc-text)}
 .ccterm.dragover{outline:1px dashed var(--cc-cyan);outline-offset:-5px}
 .ccwaitline{padding:0 0 13px;color:var(--cc-dim)}
-/* 한 별이 피고 지는 진행(· ✢ ✱ ✶ ✻ ✽ …)으로 통일 (REQ-20260825-017/-018).
-   구 프레임의 ✳(U+2733)은 이모지 후보 코드포인트 — 이모지 폰트 폴백(REQ-012)이
-   이 글리프만 컬러 타일로 그려 "다른 종류가 섞이는" 원인이라 비이모지 ✱(U+2731)로
-   대체(변형 선택자 지원 여부와 무관하게 안전). */
-.ccspin::before{content:"✻";color:var(--cc-yellow);animation:ccglyph 2.4s steps(1,end) infinite}
-@keyframes ccglyph{0%{content:"·"}10%{content:"✢"}20%{content:"✱"}30%{content:"✶"}40%{content:"✻"}50%{content:"✽"}60%{content:"✻"}70%{content:"✶"}80%{content:"✱"}90%{content:"✢"}100%{content:"·"}}
-/* CC식 웨이팅 텍스트 shimmer — 밝은 띠가 좌→우로 흐르는 그라데이션 웨이브 (REQ-20260825-027) */
-.ccwv{background:linear-gradient(90deg,var(--cc-dim) 40%,var(--cc-text) 50%,var(--cc-dim) 60%);
-  background-size:250% 100%;-webkit-background-clip:text;background-clip:text;
-  -webkit-text-fill-color:transparent;color:transparent;animation:ccshimmer 3.6s linear infinite}
-@keyframes ccshimmer{0%{background-position:125% 0}100%{background-position:-125% 0}}
+/* 스피너 — CC v2.1.243 실측 이식 v5 (REQ-20260825-017/-027, DOC-20260825-001).
+   메인 스피너(Po)는 6프레임 배열을 쓴다: 비-ghostty 터미널용 ["·","✢","*","✶","✻","✽"]
+   — CC 스스로 ✳(U+2733) 대신 ASCII *를 쓴다(이모지 오염 회피, REQ-017과 같은 이유).
+   인덱스 = round(5·(1-cos(2πt/2000))/2): 2초에 한 번 숨쉬는 펄스 —
+   · 와 ✽ 양끝에서 각 ~0.4s 머물고 중간을 부드럽게 지난다(코사인 이징).
+   키프레임 오프셋 = 그 곡선의 프레임 전환 시점. 색은 claude 주황. */
+.ccspin::before{content:"✻";color:rgb(215,119,87);animation:ccglyph 2s steps(1,end) infinite}
+@keyframes ccglyph{0%{content:"·"}10.2%{content:"✢"}18.5%{content:"*"}25%{content:"✶"}31.6%{content:"✻"}39.8%{content:"✽"}60.2%{content:"✻"}68.5%{content:"✶"}75%{content:"*"}81.6%{content:"✢"}89.8%{content:"·"}100%{content:"·"}}
+/* 웨이팅 텍스트 shimmer — CC 실측: 80ms에 1글자씩 이동(사이클=글자수+20≈30스텝),
+   claude 주황 볼드 위 살짝 밝은 주황(claudeShimmer rgb(245,149,117))의 좁은 하이라이트.
+   steps(30)으로 글자 단위 이산 이동을 재현 — 연속 질주 띠 아님. */
+.ccwv{font-weight:700;background:linear-gradient(90deg,rgb(215,119,87) 44%,rgb(245,149,117) 50%,rgb(215,119,87) 56%);
+  background-size:220% 100%;-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;color:transparent;animation:ccshimmer 2.4s steps(30,end) infinite}
+@keyframes ccshimmer{0%{background-position:110% 0}100%{background-position:-110% 0}}
 @media (prefers-reduced-motion: reduce){.ccspin::before{animation:none}
-  .ccwv{animation:none;background:none;-webkit-text-fill-color:currentColor;color:var(--cc-dim)}}
+  .ccwv{animation:none;background:none;-webkit-text-fill-color:currentColor;color:rgb(215,119,87)}}
 .ccout .ln.ccagent{color:var(--cc-dim);opacity:.75;margin-left:14px}
 .ccout .ln.ccagent .g{color:var(--cc-faint)}
 .ccout .b .full .ln{margin:0 0 6px}
@@ -1066,9 +1073,31 @@ const sortRecent = rows => [...rows].sort((a, b) =>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g,
   c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// uid 표시 축약 (REQ-20260825-031/-034): 지문 접미(-xxxx)는 같은
+// (타입-날짜-순번)이 실제로 겹칠 때만 보여준다 — git 짧은 해시 원리.
+// 참조(data-doc)는 항상 전문 uid, 축약은 렌더 시점에만.
+let idBaseCount = new Map();
+function rebuildIdMap(){
+  idBaseCount = new Map();
+  for (const r of catalog){
+    const m = /^([A-Z]{3}-\d{8}-\d+)-[0-9a-z]{4}$/.exec(r.id || "");
+    if (m) idBaseCount.set(m[1], (idBaseCount.get(m[1]) || 0) + 1);
+  }
+}
+function shortId(id){
+  const m = /^([A-Z]{3}-\d{8}-\d+)-[0-9a-z]{4}$/.exec(id || "");
+  if (!m) return id;
+  return (idBaseCount.get(m[1]) || 0) > 1 ? id : m[1];
+}
+function catFind(id){         // 정확 일치 우선, 아니면 유일 prefix (resolve와 동형)
+  const r = catalog.find(x => x.id === id);
+  if (r) return r;
+  const c = catalog.filter(x => x.id.startsWith(id + "-"));
+  return c.length === 1 ? c[0] : null;
+}
 const linkifyIds = escaped => escaped.replace(
-  /(^|[^"\w-])((?:REQ|DOC|SES)-\d{8}-\d{3})/g,
-  '$1<a class="doclink" data-doc="$2">$2</a>');
+  /(^|[^"\w-])((?:REQ|DOC|SES)-\d{8}-\d{3,}(?:-[0-9a-z]{4})?)/g,
+  (mm, pre, id) => `${pre}<a class="doclink" data-doc="${id}">${shortId(id)}</a>`);
 
 // 경과시간 포맷: <60s=Ns, <60m=Mm Ss, <24h=Hh Mm, 그 이상=Dd Hh
 function fmtElapsed(sinceIso){
@@ -1312,6 +1341,7 @@ async function refreshCatalog(rerender){
     const changed = JSON.stringify(fresh) !== JSON.stringify(catalog)
                  || JSON.stringify(projects) !== before;
     catalog = fresh;
+    rebuildIdMap();   // uid 축약 표시의 겹침 판정 갱신 (REQ-20260825-031)
     if (changed){ fillFilters(); graph = null; }
     // Settings는 폼 입력 중일 수 있다 — 폴링발 재렌더로 DOM(입력값)을 파괴하지
     // 않는다. 탭을 떠날 때 render()가 최신 catalog로 다시 그린다 (REQ-055 E7).
@@ -1586,7 +1616,7 @@ function cardHTML(r){
          : `<span class="livedot off" title="in-progress지만 스트림 조용함 — 실제 동작 아닐 수 있음"></span>`)
     : "";
   return `<div class="card" ${isReq ? 'draggable="true"' : ""} style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
-    <div class="id">${liveDot}${esc(r.id)}</div>
+    <div class="id">${liveDot}${esc(shortId(r.id))}</div>
     <div class="t">${esc(r.title)}</div>
     <div class="m">
       <span class="badge">${esc(r.user)}</span>
@@ -1685,7 +1715,7 @@ async function renderDocs(rows){
         `<div class="snip">${m.n}: ${hl(m.text, q)}</div>`).join("") : "";
       return `<div class="row${r.id===selectedDoc?" sel":""}" data-doc="${esc(r.id)}" style="--sc:${SCOLOR[r.status]}">
         <span class="st">${esc(r.status)}</span>
-        <div class="id">${esc(r.id)}</div><div>${esc(r.title)}</div>${snips}</div>`;
+        <div class="id">${esc(shortId(r.id))}</div><div>${esc(r.title)}</div>${snips}</div>`;
     }).join("");
     if (grp.length > shown.length)
       list += `<button class="more" data-expand="grp:${g}">${grp.length - shown.length}개 더 보기</button>`;
@@ -1747,9 +1777,9 @@ async function loadDoc(id, bg){
   }
   const d = await res.json(), m = d.meta;
   const li = v => Array.isArray(v) && v.length
-    ? v.map(x => /^(REQ|DOC|SES)-\d{8}-\d{3}$/.test(x)
-        ? `<a class="doclink" data-doc="${esc(x)}">${esc(x)}</a>` : esc(x)).join(", ") : null;
-  const rel = v => v ? `<a class="doclink" data-doc="${esc(v)}">${esc(v)}</a>` : null;
+    ? v.map(x => /^(REQ|DOC|SES)-\d{8}-\d{3,}(-[0-9a-z]{4})?$/.test(x)
+        ? `<a class="doclink" data-doc="${esc(x)}">${esc(shortId(x))}</a>` : esc(x)).join(", ") : null;
+  const rel = v => v ? `<a class="doclink" data-doc="${esc(v)}">${esc(shortId(v))}</a>` : null;
   const fields = [
     ["status", m.status ? `<span style="color:${SCOLOR[m.status]}">●</span> ${esc(m.status)}` : null],
     ["summary", esc(m.summary) || null], ["goal", esc(m.goal) || null],
@@ -1812,7 +1842,7 @@ async function loadDoc(id, bg){
   }
   viewer.innerHTML = `
     <div class="path">${esc(d.path)}</div>
-    <h1 style="margin:6px 0 2px">${esc(m.title)} <span class="path" style="font-size:13px">${esc(m.id)}</span></h1>${reviewActs}${gate}
+    <h1 style="margin:6px 0 2px">${esc(m.title)} <span class="path" style="font-size:13px" title="${esc(m.id)}">${esc(shortId(m.id))}</span></h1>${reviewActs}${gate}
     <table class="metatbl">${fields.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td></tr>`).join("")}</table>
     <div class="md">${md2html(d.body)}</div>${streamSec}
     <div class="backlinks" id="backlinks"></div>`;
@@ -1903,9 +1933,9 @@ document.body.appendChild(hovercard);
 document.addEventListener("mouseover", e => {
   const a = e.target.closest("a.doclink");
   if (!a){ hovercard.classList.remove("show"); return; }
-  const r = catalog.find(x => x.id === a.dataset.doc);
+  const r = catFind(a.dataset.doc);   // uid·짧은 지칭 모두 해석 (REQ-034)
   if (!r){ hovercard.classList.remove("show"); return; }
-  hovercard.innerHTML = `<div class="hid">${esc(r.id)} · ${esc(r.user)} · ${esc((r.updated||"").slice(0,10))}</div>
+  hovercard.innerHTML = `<div class="hid">${esc(shortId(r.id))} · ${esc(r.user)} · ${esc((r.updated||"").slice(0,10))}</div>
     <div class="ht">${esc(r.title)}</div>
     ${r.summary ? `<div class="hs">${esc(r.summary)}</div>` : ""}
     <div class="hs" style="margin-top:4px"><span style="color:${SCOLOR[r.status]||"inherit"}">●</span> ${esc(r.status)}${r.project ? " · " + esc(r.project) : ""}</div>`;
@@ -1928,7 +1958,8 @@ function md2html(src){
   const inline = s => linkifyIds(s
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[\[((?:REQ|DOC|SES)-\d{8}-\d{3})\]\]/g, '<a class="doclink" data-doc="$1">$1</a>')
+    .replace(/\[\[((?:REQ|DOC|SES)-\d{8}-\d{3,}(?:-[0-9a-z]{4})?)\]\]/g,
+      (mm, id) => `<a class="doclink" data-doc="${id}">${shortId(id)}</a>`)
     .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>'));
   for (const raw of lines){
     if (raw.startsWith("```")){ flushPara(); flushList();
@@ -2162,13 +2193,30 @@ function ccText(raw){
     .replace(/\x1b\[[0-9;?]*[A-HJKSTfhilnsu]/g, "")          // 비-SGR CSI 제거
     .replace(/\x1b[=>]/g, "");
   const parts = raw.split(/\x1b\[([0-9;]*)m/);
-  const md = s => esc(s)                                     // 마크다운 근사 (CC식)
-    .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
-    .replace(/`([^`\n]+)`/g, '<span class="cccode">$1</span>')
-    // 첨부 참조 강조 (REQ-20260825-012): CC처럼 시안 칩 — 경로는 파일명만 표시
-    .replace(/\[Image: ([^\]\n]+)\]/g, (m0, p) =>
-      `<span class="ccatt" title="${p}">🖼 ${p.split(/[\\/]/).pop()}</span>`)
-    .replace(/\[Image #(\d+)\]/g, '<span class="ccatt">🖼 Image #$1</span>');
+  // 마크다운 근사 (CC식). 완성 조각은 placeholder로 보호해 후속 정규식의
+  // 속성/중첩 오염을 막는다 (REQ-20260825-033: 코드블록·경로·해시 값 강조)
+  const md = s => {
+    const ph = [];
+    const keep = h => { ph.push(h); return `\x00${ph.length - 1}\x00`; };
+    return esc(s)
+      .replace(/```\w*\n?([\s\S]*?)```/g, (m0, c) =>
+        keep(`<span class="ccblk">${c.replace(/\n$/, "")}</span>`))
+      // 첨부 참조 강조 (REQ-20260825-012): CC처럼 시안 칩 — 경로는 파일명만 표시
+      .replace(/\[Image: ([^\]\n]+)\]/g, (m0, p) =>
+        keep(`<span class="ccatt" title="${p}">🖼 ${p.split(/[\\/]/).pop()}</span>`))
+      .replace(/\[Image #(\d+)\]/g, m0 =>
+        keep(`<span class="ccatt">🖼 ${m0.slice(1, -1)}</span>`))
+      .replace(/`([^`\n]+)`/g, (m0, c) =>
+        keep(`<span class="cccode">${c}</span>`))
+      .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+      // 파일 경로(절대/~, :라인 허용) — CC처럼 값 자체를 시안으로
+      .replace(/(^|[\s([])(~?\/[\w.@-]+(?:\/[\w.@-]+)+(?::\d+)?)/gm,
+        (m0, a, p) => a + keep(`<span class="ccval">${p}</span>`))
+      // 해시류(7~40자리 16진, 영문자 포함 필수 — 날짜 등 순수 숫자 제외)
+      .replace(/\b(?=[0-9a-f]*[a-f])([0-9a-f]{7,40})\b/g,
+        (m0, h) => keep(`<span class="ccval">${h}</span>`))
+      .replace(/\x00(\d+)\x00/g, (m0, i) => ph[+i]);
+  };
   let st = {fg:null, bg:null, b:false, d:false, i:false, u:false};
   const wrap = h => {
     const css = [];

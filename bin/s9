@@ -308,7 +308,9 @@ def write_doc(path, meta, body):
 # ----------------------------------------------------------------- catalog
 
 def walk_docs():
-    for dirpath, _dirs, files in os.walk(VAULT):
+    for dirpath, dirs, files in os.walk(VAULT):
+        # tombstone(.trash)은 목록·카탈로그에서 제외 — 발번 스캔(next_id)만 포함
+        dirs[:] = [d for d in dirs if d != ".trash"]
         for fn in sorted(files):
             if fn.endswith(".md"):
                 yield os.path.join(dirpath, fn)
@@ -342,12 +344,13 @@ def normalize_ids(text, known=None):
         return text, []
     if known is None:
         known = _all_doc_ids()
-    # 접미 3자리 → 후보 full id들 (같은 prefix)
+    # 접미 3자리 → 후보 full id들 (같은 prefix). uid(지문 접미)도 수용 (REQ-031)
     by_suffix = {}
     for fid in known:
-        m = re.match(r"^(REQ|DOC|SES)-\d{8}-(\d{3})$", fid)
+        m = re.match(r"^(REQ|DOC|SES)-\d{8}-(\d{3,})(?:-[0-9a-z]{4})?$", fid)
         if m:
-            by_suffix.setdefault((m.group(1), m.group(2)), []).append(fid)
+            by_suffix.setdefault((m.group(1), m.group(2)[-3:].zfill(3)),
+                                 []).append(fid)
     changes = []
     # short 패턴: PREFIX-<1~3자리>, 단 뒤에 -나 숫자가 이어지면(=full) 제외
     def repl(mo):
@@ -359,39 +362,93 @@ def normalize_ids(text, known=None):
             return cands[0]
         return mo.group(0)  # 0개·2개+ = 애매 → 유지
     out = re.sub(r"\b(REQ|DOC|SES)-(\d{1,3})(?![\d-])", repl, text)
+    # 지문 없는 date형(레거시 표기·짧은 지칭)이 유일한 uid를 가리키면 전문으로
+    def repl_date(mo):
+        base = mo.group(0)
+        if base in known:
+            return base  # 레거시 정확 일치 — 그대로
+        cands = [fid for fid in known if fid.startswith(base + "-")]
+        if len(cands) == 1:
+            changes.append((base, cands[0]))
+            return cands[0]
+        return base
+    out = re.sub(r"\b(?:REQ|DOC|SES)-\d{8}-\d{3,}\b(?!-[0-9a-z])", repl_date,
+                 out)
     return out, changes
 
 
+def resolve_id(doc_id):
+    """id → 후보 uid 목록 (REQ-20260825-031, git 짧은 해시 원리).
+    정확 일치(레거시 포함)가 최우선 — 있으면 그 1건만. 아니면 짧은 지칭
+    (지문 없는 date형)을 uid prefix로 해석해 후보 전부를 돌려준다."""
+    rows = load_catalog()
+    exact = [r for r in rows if r["id"] == doc_id]
+    if exact:
+        return exact[:1]
+    return [r for r in rows if r["id"].startswith(doc_id + "-")]
+
+
 def locate(doc_id):
-    for row in load_catalog():
-        if row["id"] == doc_id:
-            p = os.path.join(ROOT, row["path"])
-            if os.path.exists(p):
-                return p
+    cands = resolve_id(doc_id)
+    if len(cands) == 1:
+        p = os.path.join(ROOT, cands[0]["path"])
+        if os.path.exists(p):
+            return p
+    if cands:
+        return None  # 모호(2건+) — 잘못 집지 않는다. find_path가 후보를 보여준다
     for p in walk_docs():  # catalog가 낡았을 때 fallback
-        if os.path.basename(p) == doc_id + ".md":
+        bn = os.path.basename(p)
+        if bn == doc_id + ".md" or bn.startswith(doc_id + "-"):
             return p
     return None
 
 
 def find_path(doc_id):
+    cands = resolve_id(doc_id)
+    if len(cands) > 1:
+        die(f"모호한 id: {doc_id} — 후보 {len(cands)}건: "
+            + ", ".join(f"{r['id']}({r.get('title', '')[:16]})" for r in cands)
+            + " — 지문 포함 전체 id로 다시 지정하라")
     p = locate(doc_id)
     if not p:
         die(f"document not found: {doc_id}")
     return p
 
 
+def machine_fp():
+    """머신 지문 4자(base36) — uid 접미 (REQ-20260825-031). 머신명+홈 경로에서
+    파생되어 머신마다 고정, 통신 없이 전역 유일 발번의 근거. 테스트·복구용
+    재정의: S9_ORIGIN."""
+    ov = os.environ.get("S9_ORIGIN", "").strip().lower()
+    if ov:
+        return re.sub(r"[^0-9a-z]", "", ov)[:4] or "0000"
+    import hashlib
+    h = int(hashlib.sha1((current_machine() + "|" + os.path.expanduser("~"))
+                         .encode("utf-8")).hexdigest(), 16)
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    out = ""
+    for _ in range(4):
+        out += digits[h % 36]
+        h //= 36
+    return out
+
+
 def next_id(prefix, subdir):
+    """uid 발번 (REQ-20260825-031 — D-정밀판): PREFIX-YYYYMMDD-NNN-<지문4>.
+    NNN은 이 머신(지문 일치 + 지문 없는 레거시)의 그날 순번 — 다른 머신과는
+    지문이 달라 대역·합의·통신 없이 uid가 전역 유일하다. 스캔은 os.walk라
+    .trash(tombstone)도 포함 — rm된 번호가 재발급되지 않는다."""
     ymd = datetime.date.today().strftime("%Y%m%d")
-    pat = re.compile(rf"{prefix}-{ymd}-(\d{{3}})\.md$")
+    fp = machine_fp()
+    pat = re.compile(rf"{prefix}-{ymd}-(\d{{3,}})(?:-([0-9a-z]{{4}}))?\.md$")
     seq = 0
     base = os.path.join(VAULT, subdir)
     for dirpath, _dirs, files in os.walk(base):
         for fn in files:
             m = pat.match(fn)
-            if m:
+            if m and (not m.group(2) or m.group(2) == fp):
                 seq = max(seq, int(m.group(1)))
-    return f"{prefix}-{ymd}-{seq + 1:03d}"
+    return f"{prefix}-{ymd}-{seq + 1:03d}-{fp}"
 
 
 # ----------------------------------------------------------------- rebuild
@@ -2317,11 +2374,16 @@ def cmd_resume(args):
 
 
 def cmd_rm(args):
-    """문서 제거 (오분류 정정용). S9_SESSION이 있으면 제거 사유를 SES에 남긴다."""
+    """문서 제거 (오분류 정정용) — tombstone (REQ-20260825-031/-006 승인):
+    파일을 소거하지 않고 같은 디렉토리의 .trash/로 옮긴다. 카탈로그·목록에서는
+    사라지지만 발번 스캔에는 남아, 삭제된 번호가 다른 문서로 재발급되던 사고
+    (오늘 006 재발번)가 구조적으로 막힌다. S9_SESSION이 있으면 사유를 SES에."""
     path = find_path(args.id)
     acquire_lock()
     try:
-        os.remove(path)
+        trash = os.path.join(os.path.dirname(path), ".trash")
+        os.makedirs(trash, exist_ok=True)
+        shutil.move(path, os.path.join(trash, os.path.basename(path)))
         rebuild_index(quiet=True)
     finally:
         release_lock()

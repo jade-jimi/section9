@@ -166,7 +166,8 @@ def pending_context(sid8):
                 f"사용자 메시지로 간주해 함께 처리하라. Monitor 미가동 상태다: "
                 f"`tail -c +{size + 1} -f {inbox}` 를 persistent로 다시 arm하라. "
                 f"줄에 req 필드가 있으면 이미 그 REQ로 기록돼 있다 — 새로 만들지 "
-                f"말고 그 id로 상태를 관리하라:\n" + "\n".join(shown) + "\n")
+                f"말고 그 id로 상태를 관리하되, 제목이 원문 그대로면 착수 시 "
+                f"20자 이내 명사구로 교체하라(s9 set):\n" + "\n".join(shown) + "\n")
     except Exception:
         return ""
 
@@ -275,7 +276,7 @@ def main():
     # (REQ-20260823-081 카드 방지 + REQ-20260824-004 클레임 결함).
     if os.environ.get("S9_AUTO_RESUME"):
         run(env, "log", f"auto-resume 재작업 턴: {first_line[:60]}")
-        m = re.search(r"\bREQ-\d{8}-\d{3}\b", prompt)
+        m = re.search(r"\bREQ-\d{8}-\d{3,}(?:-[0-9a-z]{4})?\b", prompt)
         target = m.group(0) if m else "<대상 REQ-id>"
         emit(
             f"[section9 audit] 자동 재작업 세션이다 — 이 세션의 식별자는 {session} 이다. "

@@ -103,7 +103,7 @@ def main():
         b = {}
     last = (b.get("last_req") or "").strip()
     active = [x for x in (b.get("active_reqs") or []) if x]
-    mentioned = re.findall(r"\bREQ-\d{8}-\d{3}\b", text)
+    mentioned = re.findall(r"\bREQ-\d{8}-\d{3,}(?:-[0-9a-z]{4})?\b", text)
     req = next((m for m in mentioned if m in active or m == last), None)
     if not req and mentioned:
         chk = run(env, "show", mentioned[0], "--meta")

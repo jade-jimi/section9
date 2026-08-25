@@ -70,10 +70,10 @@ class TestWhoami(unittest.TestCase):
         r = cli("new", "request", "--title", "px doc", "--summary", "px",
                 "--goal", "t", "--project", "px", "--user", "alice",
                 "--body", "tok-px")
-        cls.px_doc = re.search(r"REQ-\d{8}-\d{3}", r.stdout).group(0)
+        cls.px_doc = re.search(r"REQ-\d{8}-\d{3,}(?:-[0-9a-z]{4})?", r.stdout).group(0)
         r = cli("new", "request", "--title", "solo doc", "--summary", "solo",
                 "--goal", "t", "--user", "bob", "--body", "tok-solo")
-        cls.solo_doc = re.search(r"REQ-\d{8}-\d{3}", r.stdout).group(0)
+        cls.solo_doc = re.search(r"REQ-\d{8}-\d{3,}(?:-[0-9a-z]{4})?", r.stdout).group(0)
 
         # 서버 4대 — whoami는 서버 프로세스 S9_USER 로 통제한다
         cls.srv = {}
