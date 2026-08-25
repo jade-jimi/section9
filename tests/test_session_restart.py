@@ -171,6 +171,13 @@ class TestRestartUiContract(unittest.TestCase):
         self.assertIn("ultracode", self.html)
         self.assertIn("다중 에이전트", self.html)
 
+    # R12 (REQ-20260825-047): 재시작 진행 표시 — 스피너+경과초가 살아 있고
+    #      복귀 시 완료 줄로 교체된다("멈춘 듯" 보이던 정적 안내 대체)
+    def test_r12_restart_progress_indicator(self):
+        self.assertIn("termRestartDone", self.html)
+        self.assertIn("cc-restart", self.html)
+        self.assertIn("재시작 완료", self.html)
+
     # R10 (실사고): 모델 선택지에 fable 누락 → opus로 바꾼 뒤 되돌아갈 수 없었다.
     #      claude --help의 별칭(fable/opus/sonnet)이 모두 선택 가능해야 한다.
     def test_r10_model_choices_include_fable(self):

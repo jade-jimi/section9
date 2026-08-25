@@ -2535,6 +2535,16 @@ function termStatus(T, nt){
   }
   T.live = !!nt.live;
   T.profiles = nt.profiles || T.profiles || [];   // 계정 프로필 (패널용)
+  // 재시작 복귀 감지 (REQ-20260825-047): 모델이 바뀌었거나(요청대로) 수신
+  // 대기가 다시 살아나면 진행 줄을 완료로 마감한다
+  if (T.restart && nt.model){
+    const now = String(nt.model), want = T.restart.want;
+    const changed = now !== T.restart.from;
+    const matches = want && now.replace(/^claude-/, "").startsWith(want);
+    if (changed || matches || (nt.listening && Date.now() - T.restart.t0 > 8000))
+      termRestartDone(T, "ok", now);
+  }
+  T.model = nt.model || T.model || "";
   // listening = 세션이 수신함 tail(Monitor)을 실제로 돌리는 중.
   // live인데 미가동이면 idle — 메시지는 큐잉+REQ 기록만 되고 즉답이 없다
   // (REQ-20260825-001: 유휴 세션이 live로 보여 무응답이 침묵으로 빠지던 결함)
@@ -3297,10 +3307,42 @@ async function termModelApply(T, model, effort, account){
   const body = !d.ok
     ? `<span style="color:var(--cc-red)">✗ 재시작 거부 — ${esc(d.reason || "")}</span>`
     : d.mode === "wrapper"
-    ? `<span style="color:var(--cc-yellow)">↻ 세션 재시작 중 — 같은 대화가 새 설정으로 재개된다 (몇 초 내 자동 복귀)</span>`
+    ? `<span class="ccspin"></span><span style="color:var(--cc-yellow)"> 세션 재시작 중 — 같은 대화가 새 설정으로 재개된다<span class="ccrse"></span></span>`
     : `<span style="color:var(--cc-dim)">이 세션은 1회 수동 재시작 필요 — 세션 터미널에서 종료(Ctrl+C 2회) 후 실행하면 이후부터는 대시보드에서 자동 재시작된다:</span> <span class="cccode">${esc(d.cmd || "")}</span>`;
   w.insertAdjacentHTML("beforebegin", ccLine("↻", "var(--cc-dim)", body));
+  const ln = w.previousElementSibling;
+  if (d.ok && d.mode === "wrapper" && ln){
+    // 진행 감시 (REQ-20260825-047): 경과초를 돌려 "멈춘 듯" 보이지 않게 하고,
+    // 새 설정으로 복귀(모델 변경 또는 재수신 대기)하면 완료 줄로 교체한다.
+    ln.id = "cc-restart";
+    T.restart = {t0: Date.now(), from: T.model || "", want: model || "",
+                 el: ln, timer: setInterval(() => {
+      if (TERM !== T || !ln.isConnected){ termRestartDone(T); return; }
+      const el = ln.querySelector(".ccrse");
+      const secs = Math.round((Date.now() - T.restart.t0) / 1000);
+      if (el) el.textContent = ` (${secs}s)`;
+      if (secs > 90) termRestartDone(T, "timeout");
+    }, 1000)};
+    T.timers.push(T.restart.timer);
+  }
   out.scrollTop = out.scrollHeight;
+}
+
+/* 재시작 완료·실패 마감 (REQ-20260825-047) — 진행 줄을 결과로 교체 */
+function termRestartDone(T, kind, model){
+  const r = T && T.restart;
+  if (!r) return;
+  clearInterval(r.timer);
+  T.restart = null;
+  const secs = Math.round((Date.now() - r.t0) / 1000);
+  if (r.el && r.el.isConnected){
+    const b = r.el.querySelector(".b");
+    if (b) b.innerHTML = kind === "timeout"
+      ? `<span style="color:var(--cc-red)">✗ 재시작 확인 실패 (${secs}s) — 세션 터미널 상태를 확인하라</span>`
+      : `<span style="color:var(--cc-green)">✓ 재시작 완료 (${secs}s) — ${esc((model || "").replace(/^claude-/, "") || "새 설정")}으로 재개됨</span>`;
+    const g = r.el.querySelector(".g");
+    if (g) g.textContent = kind === "timeout" ? "✗" : "✓";
+  }
 }
 
 /* Esc 중단 (REQ-20260825-001): 대시보드는 CC 프로세스에 키를 보낼 수 없다 —
