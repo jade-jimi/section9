@@ -3365,13 +3365,20 @@ def cmd_search(args):
                 text = f.read().lower()
         except OSError:
             continue
-        if all(t in text for t in terms):
+        # 문서 본문 + 첨부 추출 본문 (REQ-20260826-020). 세그먼트마다 라인
+        # 번호가 따로 매겨지고, 첨부에서 나온 줄은 파일명을 함께 보여준다 —
+        # "이 문장이 어디 적혀 있나"에 답하지 못하면 검색 결과가 반쪽이다.
+        segs = [("", text)] + [(n, t.lower())
+                               for n, t in asset_texts(path, r["id"])]
+        if all(any(t in s for _n, s in segs) for t in terms):
             if r["id"] not in seen:
                 print_rows([r])
                 seen.add(r["id"])
-            for i, line in enumerate(text.splitlines(), 1):
-                if any(t in line for t in terms):
-                    print(f"    {r['id']}:{i}: {line.strip()[:120]}")
+            for name, s in segs:
+                where = f"{r['id']}:{name}" if name else r["id"]
+                for i, line in enumerate(s.splitlines(), 1):
+                    if any(t in line for t in terms):
+                        print(f"    {where}:{i}: {line.strip()[:120]}")
 
     # 프로젝트 에셋 공간의 CONTEXT.md (DOC-20260824-001 1단계) —
     # 질의가 slug/PRJ id/제목이어도 같은 진입점에 도달하도록 hay에 병행 포함
@@ -3511,6 +3518,11 @@ TYPE_GROUPS = {
     "audio": {".mp3", ".wav", ".m4a", ".flac", ".ogg"},
 }
 ATTACH_MAX_BYTES = 30 * 1024 * 1024      # 첨부 상한 (REQ-054: 10MB → 30MB)
+# 추출 본문 사이드카 (REQ-20260826-020). 태깅용 8000자와 달리 여기는 '보존'이
+# 목적이라 상한이 넉넉하다 — 200,000자면 산문 400쪽 남짓. 사이드카는 vault/ 안이라
+# git 대상이 아니고 카탈로그에도 싣지 않으므로 비용은 로컬 디스크뿐이다.
+ATTACH_TEXT_MAX = 200_000
+ATTACH_TEXT_DIR = ".text"                # assets/<문서ID>/.text/<파일명>.txt
 
 
 # ---- PDF 본문 추출 (REQ-20260826-001) --------------------------------------
@@ -4116,10 +4128,14 @@ def attach_text(path, limit=8000):
     return ""
 
 
-def attach_tags(paths):
+def attach_tags(paths, text_of=None):
     """첨부 태그 (REQ-054): attached(사실) + 확장자 + 타입군 + 본문·파일명 키워드.
     'assets'는 첨부 기능을 다루는 문서의 주제 태그이므로 첨부 보유 태깅에서는
-    제외한다 — attached와 혼용되던 것을 정리(사실 vs 주제)."""
+    제외한다 — attached와 혼용되던 것을 정리(사실 vs 주제).
+
+    text_of: {경로: 추출본문}. 주어지면 다시 추출하지 않는다 (REQ-20260826-020) —
+    사이드카 쓰기와 태깅이 각자 추출하면 30MB PDF를 두 번 파싱하고, 둘이 서로
+    다른 세대의 텍스트를 볼 수 있다. 추출은 한 번, 소비는 두 곳."""
     tags, exts, groups = ["attached"], [], []
     sample = " ".join(os.path.basename(p) for p in paths)
     for p in paths:
@@ -4129,7 +4145,10 @@ def attach_tags(paths):
         for g, exts_of in TYPE_GROUPS.items():
             if ext in exts_of and g not in groups:
                 groups.append(g)
-        sample += " " + attach_text(p)
+        t = text_of.get(p, "") if text_of is not None else attach_text(p)
+        # 태깅 표본은 예전과 같은 8000자로 자른다 — 사이드카 상한이 커졌다고
+        # 태그가 달라지면 안 된다 (이 함수의 계약은 REQ-054 그대로).
+        sample += " " + t[:8000]
     tags += exts[:3] + groups[:2]
     tags += [t for t in derive_tags(sample) if t != "assets"]
     seen, out = set(), []
@@ -4149,6 +4168,103 @@ def doc_asset_dir(doc_id, make=False):
     if make:
         os.makedirs(d, exist_ok=True)
     return d
+
+
+# ---- 첨부 본문 사이드카 (REQ-20260826-020) ---------------------------------
+# 추출한 첨부 본문은 문서가 아니라 파생물이다. 진실은 첨부 원본 하나뿐이고
+# 추출본은 assets/<문서ID>/.text/<파일명>.txt 에 캐시로만 남는다 —
+# `s9 assets reindex` 로 언제든 전량 재생성된다.
+#
+# 카탈로그에 싣지 않은 이유: index/catalog.jsonl 은 대시보드가 /api/catalog 로
+# 폴링마다 **전량**을 내려받는 인덱스다(366행 267KB, 행당 ~730B). 첨부 발췌
+# 2000자(한글이면 UTF-8 6KB)를 행마다 얹으면 상시 전송량이 첨부 수에 비례해
+# 늘고, 정작 2001자째 문구는 영원히 검색되지 않는다. 검색은 가끔이고 폴링은
+# 상시다 — 그래서 검색이 필요할 때 사이드카를 그 자리에서 읽는다.
+
+def asset_text_path(asset_dir, name):
+    return os.path.join(asset_dir, ATTACH_TEXT_DIR, safe_name(name) + ".txt")
+
+
+def store_asset_text(asset_dir, src):
+    """첨부 원본에서 본문을 추출해 사이드카에 캐시한다. 반환: 추출 본문.
+
+    - 0자 추출(이미지·스캔/암호화 PDF·미지원 포맷)은 파일을 만들지 않는다.
+      빈 사이드카는 '추출했으나 글자가 없다'와 '아직 추출 안 했다'를 구별
+      불가능하게 만들고, 디렉토리만 늘린다.
+    - 추출 실패는 삼키고 ""를 돌려준다 — 첨부 하나가 인제스트 전체(파일 이전·
+      태깅·문서 쓰기)를 세우면 안 된다. 실패한 첨부는 reindex 로 다시 시도된다.
+    - 쓰기는 tmp + os.replace — 검색이 읽는 중에 반쪽 파일을 보지 않게."""
+    try:
+        text = attach_text(src, ATTACH_TEXT_MAX)
+    except Exception:
+        text = ""
+    dst = asset_text_path(asset_dir, os.path.basename(src))
+    if not text.strip():
+        try:
+            os.remove(dst)         # 이전 세대 사이드카가 있으면 걷어낸다
+        except OSError:
+            pass
+        return ""
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    tmp = dst + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, dst)
+    return text
+
+
+def asset_texts(doc_path, doc_id):
+    """문서 첨부의 추출 본문 [(첨부 파일명, 본문)]. 사이드카가 없으면 [].
+
+    검색(CLI·대시보드 양쪽)이 이 한 곳으로만 읽는다 — 경로가 둘로 갈라지면
+    같은 질의가 화면과 터미널에서 다른 답을 준다."""
+    d = os.path.join(os.path.dirname(doc_path), "assets", doc_id,
+                     ATTACH_TEXT_DIR)
+    out = []
+    try:
+        names = sorted(os.listdir(d))
+    except OSError:
+        return out
+    for fn in names:
+        if not fn.endswith(".txt"):
+            continue
+        try:
+            with open(os.path.join(d, fn), encoding="utf-8") as f:
+                out.append((fn[:-4], f.read()))
+        except OSError:
+            continue
+    return out
+
+
+def reindex_asset_text(doc_id=None):
+    """사이드카 전량(또는 한 문서) 재생성. 반환 (문서 수, 파일 수).
+
+    원본에 대응하지 않는 사이드카는 지운다 — 파생물이 원본보다 오래 살면
+    검색이 이미 없는 첨부를 찾아준다."""
+    docs = files = 0
+    for p in walk_docs():
+        did = read_doc(p)[0].get("id", "")
+        if not did or (doc_id and did != doc_id):
+            continue
+        adir = os.path.join(os.path.dirname(p), "assets", did)
+        if not os.path.isdir(adir):
+            continue
+        srcs = [fn for fn in sorted(os.listdir(adir))
+                if os.path.isfile(os.path.join(adir, fn))]
+        n = sum(1 for fn in srcs
+                if store_asset_text(adir, os.path.join(adir, fn)))
+        keep = {safe_name(fn) + ".txt" for fn in srcs}
+        tdir = os.path.join(adir, ATTACH_TEXT_DIR)
+        for fn in (sorted(os.listdir(tdir)) if os.path.isdir(tdir) else []):
+            if fn not in keep:
+                try:
+                    os.remove(os.path.join(tdir, fn))
+                except OSError:
+                    pass
+        if n:
+            docs += 1
+            files += n
+    return docs, files
 
 
 def ingest_assets(doc_id):
@@ -4188,7 +4304,11 @@ def ingest_assets(doc_id):
         # 첨부 태깅 (REQ-20260825-053/-054): attached(사실) + 확장자 + 타입군
         # + 본문 키워드. PDF·docx·xlsx도 본문을 추출한다(stdlib).
         tags = list(meta.get("tags") or [])
-        for t in attach_tags(moved):
+        # 추출은 여기서 한 번 — 사이드카에 남기고(REQ-20260826-020) 그 텍스트로
+        # 태깅한다. 예전에는 attach_tags 가 뽑은 본문을 태그 3개만 남기고 버렸다.
+        adir = doc_asset_dir(doc_id, make=True)
+        texts = {m: store_asset_text(adir, m) for m in moved}
+        for t in attach_tags(moved, texts):
             if t not in tags:
                 tags.append(t)
         meta["tags"] = tags
@@ -4208,6 +4328,11 @@ def cmd_assets(args):
     if args.action == "ingest":
         args.id or die("usage: s9 assets ingest <doc-id>")
         print(f"{args.id}: {ingest_assets(args.id)}개 이전")
+    elif args.action == "reindex":
+        # 사이드카는 첨부 원본에서 언제든 다시 만들어진다 (REQ-20260826-020).
+        docs, files = reindex_asset_text(args.id)
+        scope = args.id or "전체"
+        print(f"본문 재추출({scope}): 문서 {docs}건 · 파일 {files}개")
     elif args.action == "migrate":
         total = docs = 0
         for p in walk_docs():
@@ -7634,15 +7759,24 @@ def cmd_serve(args):
                     text = f.read()
             except OSError:
                 continue
-            low = text.lower()
-            if not all(t in low for t in terms):
+            # 문서 본문 + 첨부 추출 본문 사이드카 — CLI `search --body` 와
+            # 같은 한 곳(asset_texts)에서 읽는다 (REQ-20260826-020).
+            segs = [("", text)] + asset_texts(
+                os.path.join(ROOT, row["path"]), row["id"])
+            if not all(any(t in s.lower() for _n, s in segs) for t in terms):
                 continue
             matches = []
-            for i, line in enumerate(text.splitlines(), 1):
-                if any(t in line.lower() for t in terms):
-                    matches.append({"n": i, "text": line.strip()[:160]})
-                    if len(matches) >= 8:
-                        break
+            for name, s in segs:
+                for i, line in enumerate(s.splitlines(), 1):
+                    if any(t in line.lower() for t in terms):
+                        m = {"n": i, "text": line.strip()[:160]}
+                        if name:
+                            m["file"] = name   # 첨부에서 나온 줄
+                        matches.append(m)
+                        if len(matches) >= 8:
+                            break
+                if len(matches) >= 8:
+                    break
             results.append({**row, "matches": matches})
         return {"results": results}
 
@@ -8850,7 +8984,7 @@ def main():
     tg.add_argument("action", choices=["backfill"])
     tg.set_defaults(fn=cmd_tag)
     ast = sub.add_parser("assets", help="첨부 이전/정리 (문서 옆 assets/)")
-    ast.add_argument("action", choices=["ingest", "migrate"])
+    ast.add_argument("action", choices=["ingest", "migrate", "reindex"])
     ast.add_argument("id", nargs="?")
     ast.set_defaults(fn=cmd_assets)
     ix.set_defaults(fn=cmd_index)
