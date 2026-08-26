@@ -171,16 +171,54 @@ def binding_path(machine, session):
     return os.path.join(STATE, f"{safe_name(machine)}__{safe_name(session)}.json")
 
 
+def _norm_binding(b):
+    """바인딩을 읽고 쓰는 **한 경계**에서 모양을 바로잡는다 (REQ-20260827-011).
+
+    `agent_transcript_path` 가 한때 문자열과 리스트 두 뜻으로 쓰였다. 읽는 자리
+    셋 중 둘은 `isinstance` 로 방어했지만 쓰는 자리 하나가 안 했고, 그 하나로
+    `list("/tmp/claude-…")` 이 새어 **경로가 글자 하나씩 쪼개진 채** 저장됐다:
+
+        ["/", "t", "m", "p", "/", "c", "l", "a", "u", "d", "e", …]
+
+    해가 없지 않다. 그중 `"/"` 는 실제로 존재하는 디렉토리라 활동 경로 판정에서
+    살아남아 **루트의 mtime 이 세션 활동 신선도로 계산된다.** 게다가 바인딩마다
+    가짜 경로 100여 개를 매번 `os.path.exists` 로 두드리는데, 그건 채팅 대상
+    고르기가 메시지마다 도는 경로다.
+
+    **방어를 읽는 쪽에 흩어 두지 않고 경계 한 곳에 둔다** — 흩어 두면 쓰는 쪽
+    하나만 새어도 데이터가 상하고, 그 데이터를 읽는 새 코드가 또 당한다.
+    """
+    if not isinstance(b, dict):
+        return b
+    atp = b.get("agent_transcript_path")
+    if isinstance(atp, str):
+        atp = [atp] if atp else []
+    elif isinstance(atp, list):
+        # 원소가 전부 한 글자면 경로 목록이 아니라 쪼개진 문자열이다.
+        if atp and all(isinstance(x, str) and len(x) <= 1 for x in atp):
+            joined = "".join(atp)
+            atp = [joined] if os.path.exists(joined) else []
+        else:
+            atp = [x for x in atp if isinstance(x, str) and len(x) > 1]
+    else:
+        atp = []
+    if atp != b.get("agent_transcript_path") and (
+            atp or "agent_transcript_path" in b):
+        b["agent_transcript_path"] = atp
+    return b
+
+
 def read_binding(machine, session):
     try:
         with open(binding_path(machine, session), encoding="utf-8") as f:
-            return json.load(f)
+            return _norm_binding(json.load(f))
     except (OSError, ValueError):
         return None
 
 
 def write_binding(binding):
     os.makedirs(STATE, exist_ok=True)
+    binding = _norm_binding(binding)
     path = binding_path(binding["machine"], binding["session"])
     with open(path, "w", encoding="utf-8") as f:
         json.dump(binding, f, ensure_ascii=False, indent=1)
@@ -1906,7 +1944,7 @@ def chat_target(sid8=None):
     for bp in _glob.glob(os.path.join(STATE, "*.json")):
         try:
             with open(bp, encoding="utf-8") as f:
-                b = json.load(f)
+                b = _norm_binding(json.load(f))
         except (OSError, ValueError):
             continue
         sid = b.get("session", "")
