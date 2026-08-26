@@ -74,6 +74,39 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
 .who.warn{color:var(--c-blocked);white-space:normal}
 .who.warn code{font-family:var(--mono);border:1px solid var(--hairline);padding:0 3px}
 .who .as{color:var(--c-review)}
+
+/* ── 서버 코드 낡음 알림 (REQ-20260826-011-62x6) ─────────────────────────────
+   구동 중인 serve 는 기동 시점의 bin/s9 를 물고 있고, 화면(web/index.html)은
+   디스크에서 매번 읽힌다 — 그래서 "UI 는 바뀌었는데 동작만 안 된다"가 된다.
+   낡았을 때만 나타나는 헤더 3행이다: stale=false 면 자리표시자도 남기지 않는다
+   (항상 보이는 경고는 정작 진짜일 때 안 읽힌다).
+   터미널 뷰의 "stale" 은 **세션 무응답**이라는 다른 사실이라, 여기서는 문구도
+   식별자도 oldcode 로 분리했다.
+   색면·세로 띠 없이 마크(▲)와 글자색만으로 신호를 준다. */
+.hrow3{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 11px;
+  padding:7px 22px;border-top:1px solid var(--hairline)}
+.hrow3[hidden]{display:none}
+.oc-mark{color:var(--c-inprogress);font-size:11px;line-height:1}
+.oc-t{font-size:12.5px;font-weight:600;color:var(--c-inprogress);letter-spacing:-.01em}
+.oc-d{font-size:12px;color:var(--muted)}
+.oc-d code{font-family:var(--mono);font-size:11px;color:var(--text)}
+.oc-act{margin-left:auto;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.oc-cmd{font-family:var(--mono);font-size:11px;letter-spacing:.02em;
+  border:1px solid var(--border);background:var(--panel);color:var(--text);
+  padding:4px 9px;cursor:pointer}
+.oc-cmd::before{content:"⧉ ";color:var(--faint)}
+.oc-cmd:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+.oc-cmd:hover::before{color:var(--bg)}
+/* 복사 피드백은 자리를 미리 잡아 둔다 — 글자가 늘며 줄이 밀리면 그 자체가 결함 */
+.oc-copied{display:inline-block;min-width:3.6em;font-family:var(--mono);font-size:10px;
+  letter-spacing:.04em;color:var(--c-done)}
+.oc-note{font-size:12px;color:var(--muted)}
+.oc-fold,.oc-open{border:0;background:none;cursor:pointer;font-family:var(--mono);
+  font-size:11px;letter-spacing:.04em;color:var(--muted);padding:3px 2px}
+.oc-fold:hover,.oc-open:hover{color:var(--text);text-decoration:underline}
+.oc-open{font-size:12px;letter-spacing:.01em}
+.oc-cmd:focus-visible,.oc-fold:focus-visible,.oc-open:focus-visible{
+  outline:2px solid var(--text);outline-offset:1px}
 .pdiv{width:1px;height:18px;background:var(--border);margin:0 4px}
 .gear{border:1px solid var(--border);background:var(--panel);color:var(--text);
   font-size:14px;line-height:1;padding:4px 9px;cursor:pointer}
@@ -719,6 +752,14 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="soft"] .fgroup,[data-skin="soft"] .pgroup{flex-direction:column;
   align-items:stretch;gap:7px}
 [data-skin="soft"] .pgroup{border-top:1px solid var(--hairline);padding-top:12px}
+/* 사이드바 셸에서는 알림이 필터 아래로 밀려 스크롤 밖에 숨는다 — 탭 바로
+   아래(필터 위)로 끌어올린다. 알림은 접히기 전까지 눈에 닿아야 한다. */
+[data-skin="soft"] .hrow1{order:0}
+[data-skin="soft"] .hrow3{order:1;flex-direction:column;align-items:flex-start;
+  gap:7px;padding:12px 14px}
+[data-skin="soft"] .hrow2{order:2}
+[data-skin="soft"] .oc-act{margin-left:0}
+[data-skin="soft"] .oc-copied{min-width:0}
 [data-skin="soft"] .pdiv{display:none}
 [data-skin="soft"] .pgroup{flex-direction:row;justify-content:space-between}
 [data-skin="soft"] .settings-panel{top:auto;bottom:14px;left:14px;right:auto;width:204px}
@@ -825,7 +866,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   padding:6px 14px;margin:0 0 8px}
 [data-skin="glass"] .tabs button:hover{background:color-mix(in srgb, var(--text) 6%, transparent)}
 [data-skin="glass"] .tabs button.active{background:var(--gl-tint);color:var(--text)}
-[data-skin="glass"] .hrow2{border-top-color:var(--gl-hairline)}
+[data-skin="glass"] .hrow2,[data-skin="glass"] .hrow3{border-top-color:var(--gl-hairline)}
 /* 패널 = 떠 있는 유리판: 반투명 + blur + 라운드 + 부드러운 그림자 */
 [data-skin="glass"] .stats,[data-skin="glass"] .board,[data-skin="glass"] .docs,
 [data-skin="glass"] .audit,[data-skin="glass"] .graphwrap,[data-skin="glass"] .depsum,[data-skin="glass"] .streamwrap,
@@ -931,6 +972,9 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   border-bottom:1px solid var(--fd-line)}
 [data-skin="field"] .hrow2 input[type="text"],[data-skin="field"] .hrow2 select{
   border-color:var(--fd-line)}
+/* 알림 줄도 hrow2와 같은 백색 판 위에 둔다 — 고채도 필드 위 앰버는 대비가 무너진다 */
+[data-skin="field"] .hrow3{background:var(--panel);border-top:1px solid var(--fd-line);
+  border-bottom:1px solid var(--fd-line)}
 [data-skin="field"] .chk{color:var(--muted)}
 [data-skin="field"] .pdiv{background:var(--fd-line)}
 [data-skin="field"] .stats,[data-skin="field"] .docs,[data-skin="field"] .audit,
@@ -978,6 +1022,19 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="cobalt"] .hrow2 .usagechip .warn{color:#ffd27a}
 [data-skin="cobalt"] .hrow2 .usagechip .crit{color:#ffb4b0}
 [data-skin="cobalt"] .hrow2 .pbadge,[data-skin="cobalt"] .hrow2 .reqhint{color:#ffd27a}
+[data-skin="cobalt"] .hrow3{background:var(--cb-band2);border-top:1px solid var(--cb-edge);
+  padding:7px 24px}
+[data-skin="cobalt"] .oc-mark,[data-skin="cobalt"] .oc-t{color:#ffd27a}
+[data-skin="cobalt"] .oc-d,[data-skin="cobalt"] .oc-note{color:var(--cb-ink-dim)}
+[data-skin="cobalt"] .oc-d code{color:var(--cb-ink)}
+[data-skin="cobalt"] .oc-cmd{background:transparent;border-color:var(--cb-edge);
+  color:var(--cb-ink);border-radius:7px}
+[data-skin="cobalt"] .oc-cmd::before{color:var(--cb-ink-dim)}
+[data-skin="cobalt"] .oc-cmd:hover{background:var(--cb-ink);color:var(--cb-band)}
+[data-skin="cobalt"] .oc-cmd:hover::before{color:var(--cb-band)}
+[data-skin="cobalt"] .oc-copied{color:#a7f3d0}
+[data-skin="cobalt"] .oc-fold,[data-skin="cobalt"] .oc-open{color:var(--cb-ink-dim)}
+[data-skin="cobalt"] .oc-fold:hover,[data-skin="cobalt"] .oc-open:hover{color:var(--cb-ink)}
 [data-skin="cobalt"] .pdiv{background:var(--cb-edge)}
 [data-skin="cobalt"] .gear{background:transparent;border-color:var(--cb-edge);
   color:var(--cb-ink);border-radius:7px}
@@ -1013,6 +1070,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="grid"] .brand{padding-bottom:9px}
 [data-skin="grid"] .tabs button{padding:3px 11px 9px}
 [data-skin="grid"] .hrow2{padding:6px 14px}
+[data-skin="grid"] .hrow3{padding:5px 14px}
 [data-skin="grid"] .stats,[data-skin="grid"] .board,[data-skin="grid"] .docs,
 [data-skin="grid"] .audit,[data-skin="grid"] .graphwrap,[data-skin="grid"] .depsum,[data-skin="grid"] .streamwrap{
   border-left:0;border-right:0;border-top:0}
@@ -1157,7 +1215,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   background:color-mix(in srgb, var(--panel) 55%, transparent);color:var(--text)}
 [data-skin="cork"] .tabs button.active{background:var(--panel);color:var(--text);
   box-shadow:var(--ck-shadow)}
-[data-skin="cork"] .hrow2{border-top-color:var(--ck-line)}
+[data-skin="cork"] .hrow2,[data-skin="cork"] .hrow3{border-top-color:var(--ck-line)}
 [data-skin="cork"] .hrow2 input[type="text"],[data-skin="cork"] .hrow2 select{
   border-radius:6px;border-color:var(--ck-line)}
 [data-skin="cork"] .gear,[data-skin="cork"] .gmode,[data-skin="cork"] .acts button,
@@ -1623,6 +1681,8 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
       <span id="whoami" class="who" title="서버가 파생한 신원 — 대시보드는 127.0.0.1 전용이라 브라우저 사용자 = 서버 기동 OS 계정. 다른 계정명으로 연결하려면 터미널에서 s9 user attach"></span>
     </div>
   </div>
+  <!-- 서버 코드 낡음 알림 — 낡았을 때만 채워진다 (renderOldCode). 기본은 hidden. -->
+  <div class="hrow3" id="oldcode" role="status" aria-live="polite" hidden></div>
 </header>
 <main>
   <p class="count" id="count"></p>
@@ -2032,6 +2092,99 @@ function renderWhoami(){
     + (asUser ? ` <span class="as">→ @${esc(asUser)} 시점</span>` : "");
 }
 
+/* ── 서버 코드 낡음 (REQ-20260826-011-62x6) ────────────────────────────────
+   구동 중인 serve 프로세스는 기동 시점의 bin/s9 를 그대로 물고 있다. 화면은
+   디스크에서 매번 읽히니 UI만 새로 보이고 서버 동작은 낡은 채 남는다 — 이
+   어긋남이 실제로 12시간 지속됐다(테스트는 디스크 코드를 직접 돌려 전부 통과).
+   **자동 재기동은 하지 않는다**: 재기동은 진행 중 요청과 SSE 를 끊는다. 화면은
+   사실과 명령까지만 주고 판단은 사람이 한다.
+   용어 주의: 터미널 뷰의 "stale" 은 **세션 무응답**을 뜻한다. 코드 낡음은 다른
+   사실이라 문구·식별자를 oldcode 로 갈랐다 — 두 경고가 같은 말을 쓰면 어느
+   쪽도 못 믿게 된다. */
+const OC_ACK = "s9oldcode_ack";   // 접어둔 서버 기동 시각 — 그 서버가 살아 있는 동안만 유효
+let ocInfo = null, ocSig = "", ocCopyT = null;
+
+const ocAck = () => { try{ return localStorage.getItem(OC_ACK); }catch(e){ return null; } };
+const ocSetAck = v => { try{
+  if (v) localStorage.setItem(OC_ACK, v); else localStorage.removeItem(OC_ACK);
+}catch(e){} };
+
+async function checkOldCode(){
+  let d = null;
+  try{
+    const r = await fetch("/api/serveinfo", {cache: "no-store"});
+    if (r.ok) d = await r.json();
+  }catch(e){}
+  // 무응답은 "코드 낡음"이 아니다 — 재기동 중일 수도 있다. 서버 단절 표시는
+  // 터미널 뷰가 따로 한다. 여기서는 직전 판정을 그대로 두고 다음 폴을 기다린다.
+  if (!d || typeof d.stale !== "boolean") return;
+  ocInfo = d;
+  renderOldCode();
+}
+
+function renderOldCode(){
+  const el = $("#oldcode");
+  if (!el) return;
+  const d = ocInfo;
+  // 낡지 않았으면 흔적을 남기지 않는다. 상시 자리표시자를 두면 곧 안 읽힌다.
+  if (!d || !d.stale){
+    ocSetAck(null);
+    if (ocSig !== "off"){ ocSig = "off"; el.hidden = true; el.innerHTML = ""; }
+    return;
+  }
+  const folded = ocAck() === d.started;
+  const sig = d.started + "|" + folded;
+  if (sig === ocSig) return;   // 같은 내용 재작성 금지 (aria-live 재낭독·복사 피드백 소실)
+  ocSig = sig;
+  el.hidden = false;
+  if (folded){
+    // 접어도 사실은 남는다 — 다만 한 줄로. 재기동하면 자동으로 사라진다.
+    el.innerHTML = `<button class="oc-open" id="oc-open"`
+      + ` title="구동 중인 서버가 기동 시점 코드로 돌고 있습니다 — 눌러서 자세히">`
+      + `<span class="oc-mark" aria-hidden="true">▲</span> 서버 재기동 필요 · 자세히</button>`;
+    $("#oc-open").addEventListener("click", () => { ocSetAck(null); renderOldCode(); });
+    return;
+  }
+  const at = String(d.started || "").slice(11, 16);
+  el.innerHTML = `<span class="oc-t"><span class="oc-mark" aria-hidden="true">▲</span>`
+    + ` 서버가 옛 코드로 돌고 있습니다</span>`
+    + `<span class="oc-d">${at ? esc(at) + " 기동 이후 " : ""}<code>bin/s9</code> 가 바뀌었습니다`
+    + ` — 서버 쪽 변경은 재기동해야 동작합니다.</span>`
+    + `<span class="oc-act">`
+    +   `<span class="oc-note">재기동은 진행 중 요청·실시간 연결을 끊습니다</span>`
+    +   `<button class="oc-cmd" id="oc-cmd" title="클릭하면 복사됩니다 — 터미널에 붙여넣어 실행하세요">`
+    +     `s9 serve --restart</button>`
+    +   `<span class="oc-copied" id="oc-copied" role="status"></span>`
+    +   `<button class="oc-fold" id="oc-fold" title="이 서버가 재기동될 때까지 한 줄로 접어 둡니다">접기</button>`
+    + `</span>`;
+  $("#oc-cmd").addEventListener("click", ocCopyCmd);
+  $("#oc-fold").addEventListener("click", () => {
+    ocSetAck((ocInfo || {}).started || "1");
+    renderOldCode();
+  });
+}
+
+// 명령은 대신 실행하지 않는다 — 복사까지가 화면의 몫이다.
+async function ocCopyCmd(){
+  const cmd = "s9 serve --restart", out = $("#oc-copied");
+  let ok = false;
+  try{ await navigator.clipboard.writeText(cmd); ok = true; }catch(e){}
+  if (!ok){        // 클립보드 API가 막힌 브라우저 — 선택 상태로라도 넘겨준다
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = cmd; ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta); ta.select();
+      ok = document.execCommand("copy");
+      ta.remove();
+    }catch(e){}
+  }
+  if (!out) return;
+  out.textContent = ok ? "복사됨" : "복사 실패";
+  out.style.color = ok ? "" : "var(--c-blocked)";
+  clearTimeout(ocCopyT);
+  ocCopyT = setTimeout(() => { out.textContent = ""; out.style.color = ""; }, 2000);
+}
+
 // admin 미리보기(as) 전환 — 서버 가시성 범위가 바뀐다: 캐시 무효화 후 전면 재조회
 function onViewerChanged(){
   renderWhoami();
@@ -2091,6 +2244,11 @@ async function boot(){
   render();
   window.addEventListener("focus", () => refreshCatalog(true));
   setInterval(() => refreshCatalog(true), 15000);
+  // 코드 낡음 감시: 20s 폴은 가시일 때만, 그리고 포커스 복귀 즉시 한 번 —
+  // 터미널에서 재기동하고 돌아온 순간 알림이 사라지는 것이 곧 성공 확인이다.
+  checkOldCode();
+  setInterval(() => { if (!document.hidden) checkOldCode(); }, 20000);
+  window.addEventListener("focus", checkOldCode);
   window.addEventListener("popstate", () => applyRoute(location.hash, true));
 }
 
