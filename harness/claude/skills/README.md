@@ -44,4 +44,5 @@ claude plugin install <plugin>@<marketplace>
 s9-protocol, eng-principles, tdd, review-discipline, security-practice,
 data-practice, ops-practice, product-discovery, writing-clarity, research-method,
 browser-verify, testing-discipline, s9-design.
+(s9-design은 2026-08-25 판정으로 ux-craft를 흡수했다 — 화면·문구 기준은 이 하나뿐이다.)
 (매핑은 `../agents/README.md`, 재생성은 `../gen_roster.py`)

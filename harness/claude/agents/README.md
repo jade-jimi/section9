@@ -20,7 +20,7 @@ section9 사용자 전원이 동일한 에이전트를 쓰며, git으로 동기�
 | | architect | s9-protocol + eng-principles |
 | | staff-engineer | s9-protocol + eng-principles + **tdd** + review-discipline |
 | **디자인·문서** | designer | s9-protocol + s9-design + **browser-verify** + writing-clarity |
-| | ux-writer | s9-protocol + writing-clarity |
+| | ux-writer | s9-protocol + writing-clarity + s9-design |
 | | document-writer | s9-protocol + writing-clarity |
 | | document-reader | s9-protocol + research-method |
 | **개발** | frontend-developer | s9-protocol + eng-principles + **tdd** + s9-design + browser-verify |
@@ -59,7 +59,7 @@ section9 사용자 전원이 동일한 에이전트를 쓰며, git으로 동기�
 | writing-clarity | 사용자 대상 글·문서 명료성 | 3 |
 | tdd | Test-Driven Development 필수 규율 (개발 직군) | 5 |
 | browser-verify | 실브라우저 UI 검증 (WSL→Windows 포함) | 4 |
-| s9-design | 대시보드 디자인 시스템 | 2 |
+| s9-design | 완성도 기준 + 대시보드 디자인 시스템 | 3 |
 | product-discovery | 문제 정의·우선순위·요구사항 | 2 |
 
 ## 확장

@@ -19,7 +19,7 @@ skills/agents symlink 규칙: 대상 경로가 이미 있으면 **section9 안�
 링크일 때만** 갱신하고, 사용자의 다른 스킬/에이전트는 건드리지 않는다.
 새로 링크된 스킬은 다음 Claude 세션부터 로드된다. 공용/커스텀 확장 원칙:
 전원이 쓰는 것은 `harness/claude/`, 개인 것은 `users/<name>/` — 저장 위치가 곧 스코프다.
-현재 공용 스킬: `s9-design` (대시보드 디자인 시스템).
+현재 공용 스킬: `s9-design` (완성도 기준 + 대시보드 디자인 시스템 — ux-craft 흡수).
 
 `~/.claude/settings.json` 은 section9 밖이지만, **원본은 항상 `harness/claude/hooks.json`** 이고
 로컬 파일은 installer가 만들어내는 파생물이다. installer는 command 경로에
