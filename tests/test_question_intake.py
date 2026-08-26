@@ -6,15 +6,17 @@
 - 프롬프트 훅(bin/s9-audit-prompt): 터미널로 들어온 질문 → QST 생성. 열려 있다
   (test_question_qst.py S7/S8 이 덮는다).
 - 대시보드 채팅(bin/s9 chat_audit): request 가 아니면 분류를 더 보지 않고
-  `s9 log "chat: …"` 만 남긴다 — 질문이든 파편이든 똑같이. **닫혀 있다.**
+  `s9 log "chat: …"` 만 남겼다 — 질문이든 파편이든 똑같이. **닫혀 있었다.**
 
 사용자는 주로 대시보드로 말한다. 그래서 화면에 질문이 한 장뿐이었다.
 
-I1 이 그 공백을 재현한다. bin/ 은 이 세션의 봉투 밖이라 고치지 않고 `expectedFailure`
-로 둔다 — 스위트를 빨갛게 만들지 않으면서 결함을 명시하고, 채팅 경로가 열리는 순간
-`unexpected success` 로 스스로 알린다. 그때 데코레이터를 떼면 그대로 회귀 테스트가 된다.
+REQ-20260826-033 에서 그 입구를 열었다: 채팅 경로도 훅과 **같은 판정자**
+(`is_durable_question`)를 쓰고, 남을 질문이면 QST 를 만들어 `last_qst` 로 묶는다.
+I1 은 그 입구가 다시 닫히는 것을, I5 는 답이 붙는 이음매가 끊기는 것을 막는다.
+(이 파일은 결함을 `expectedFailure` 로 명시해 두었다가 수리와 함께 회귀 테스트가
+됐다 — 한 번 `unexpected success` 를 낸 뒤 데코레이터를 뗐다.)
 
-I2·I3 은 그 수리가 **기존 동작을 건드리지 않아야 한다**는 경계다: 채팅 request 는
+I2·I3 은 그 수리가 **기존 동작을 건드리지 않는다**는 경계다: 채팅 request 는
 지금처럼 REQ 가 되고, 짧은 확인 발화는 아무 문서도 만들지 않는다. 질문 입구를 열다가
 이 둘이 흔들리면 채팅 카드가 잡음으로 뒤덮인다.
 
@@ -95,9 +97,9 @@ class ChatIntakeTest(unittest.TestCase):
 
     # ---------------------------------------------------------------- I1
     # 대시보드로 들어온 '남을 질문'이 문서가 되는가.
-    # 지금은 되지 않는다 — chat_audit 이 request 가 아니면 로그만 남긴다.
-    # 프롬프트 훅과 같은 판정(is_durable_question)을 채팅 경로도 써야 한다.
-    @unittest.expectedFailure
+    # 한때 되지 않았다 — chat_audit 이 request 가 아니면 로그만 남겼다.
+    # 이제 프롬프트 훅과 같은 판정(is_durable_question)을 채팅 경로도 쓴다
+    # (REQ-20260826-033). 이 테스트는 그 입구가 다시 닫히는 것을 막는다.
     def test_i1_durable_chat_question_becomes_doc(self):
         # 전제: 이 발화는 프롬프트 훅 기준으로 '남을 질문'이다.
         self.assertEqual(self.hook.classify(DURABLE_Q), "question")
@@ -135,6 +137,24 @@ class ChatIntakeTest(unittest.TestCase):
     # 두 입구가 같은 자를 써야 한다. 채팅 경로가 분류(classify)만 보고 문서화
     # 판정(is_durable_question)을 보지 않는 것이 이 결함의 형태다 — 수리는
     # 판정 함수를 공유하는 방향이어야 하고, 그 함수는 훅이 소유한다.
+    def test_i5_answer_seam_is_bound(self):
+        """I5. 질문 문서는 `last_qst` 로 묶인다 — 이 이음매가 없으면 답이
+        채팅에만 남고 문서는 영원히 미답으로 서 있다 (터미널 경로와 같은 방식).
+
+        '질문은 남았는데 답이 없다'는 이 타입이 없애려던 상태 그 자체다.
+        """
+        env = {**os.environ, "S9_SESSION": "seamsess"}
+        qst = self.s9._chat_question(S9, env, DURABLE_Q,
+                                     DURABLE_Q.splitlines()[0], "tester")
+        self.assertTrue(qst and qst.startswith("QST-"), f"{qst!r}")
+        # 읽기는 Stop 훅과 같은 방식으로 — 키를 주고 부르면 그 키를 **지운다**
+        # (`s9 bind <key>` 는 클리어다). 키 없이 부르면 전체를 JSON 으로 낸다.
+        b = subprocess.run([S9, "bind"], capture_output=True, text=True,
+                           timeout=20, env=env, stdin=subprocess.DEVNULL)
+        self.assertEqual(json.loads(b.stdout or "{}").get("last_qst"), qst,
+                      "생성한 질문이 last_qst 로 묶이지 않았다 — "
+                      "Stop 훅이 답을 붙일 대상을 못 찾는다")
+
     def test_i4_intake_judgement_is_shared(self):
         with open(S9, encoding="utf-8") as f:
             src = f.read()
