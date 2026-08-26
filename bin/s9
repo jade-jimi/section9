@@ -1597,6 +1597,50 @@ def _worker_alive(pid):
         return False
 
 
+AGENT_FRESH_SEC = 120     # 이 안에 기록이 갱신됐으면 '지금 일하는 중'
+
+
+def live_agents(fresh=AGENT_FRESH_SEC):
+    """지금 붙어 있는 **서브에이전트**들 (REQ-20260827-002).
+
+    무인 워커는 별도 프로세스라 pid 마커로 잡히는데(`live_workers`),
+    서브에이전트는 리드 세션 안에서 도는 자식이라 프로세스가 따로 없다. 그래서
+    커밋 게이트가 워커만 보고 **서브에이전트는 못 봤다** — 문 하나를 잠그고
+    옆문을 열어 둔 셈이었다. 실제로 오늘 파일을 동시에 만진 조합은 워커만이
+    아니었고(리드 ↔ designer), 그때는 사람이 diff 를 눈으로 읽어 막았다.
+    그건 규율이지 장치가 아니다.
+
+    신호는 바인딩의 `agent_transcript_path` 다 — 그 에이전트가 일하는 동안
+    mtime 이 초 단위로 갱신된다. 실측(01:09): 끝난 셋이 각각 4188s·3430s·480s
+    였고, 도는 동안에는 한 자릿수였다.
+
+    이 목록이 글자 단위로 쪼개져 있던 시절에는 `"/"` 가 섞여 들어와 **루트의
+    mtime 이 '에이전트가 살아 있다'로 읽혔을 것**이다 — 그래서 이 판정을 넓히기
+    전에 REQ-20260827-011 을 먼저 닫았다. 읽기 경계가 이제 정규화하므로 여기서
+    다시 방어하지 않는다.
+    """
+    import glob as _glob
+    import time as _t
+    now, rows = _t.time(), []
+    for bp in sorted(_glob.glob(os.path.join(STATE, "*.json"))):
+        try:
+            with open(bp, encoding="utf-8") as f:
+                b = _norm_binding(json.load(f))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(b, dict) or b.get("ended"):
+            continue
+        for tp in (b.get("agent_transcript_path") or []):
+            try:
+                age = now - os.path.getmtime(tp)
+            except OSError:
+                continue
+            if age < fresh:
+                rows.append({"session": b.get("session", ""),
+                             "path": tp, "age": int(age)})
+    return rows
+
+
 def live_workers():
     """지금 이 워크스페이스에서 **도는** 무인 워커들 (REQ-20260826-021).
 
@@ -1635,14 +1679,23 @@ def live_workers():
     return rows
 
 
+def _when(sec):
+    m = sec // 60
+    return f"{m}분째" if m else f"{sec}초째"
+
+
 def cmd_workers(args):
     rows = live_workers()
     for r in rows:
-        mins = r["age"] // 60
-        when = f"{mins}분째" if mins else f"{r['age']}초째"
-        print(f"- {r['id']} (무인 작업자 pid {r['pid']}, {when})")
-    if not rows and not args.quiet:
-        print("(도는 무인 작업자 없음)")
+        print(f"- {r['id']} (무인 작업자 pid {r['pid']}, {_when(r['age'])})")
+    # 서브에이전트도 같은 목록에 낸다 (REQ-20260827-002) — 리드가 "지금 누가
+    # 붙어 있나"를 물을 때 알고 싶은 것은 주체의 **종류**가 아니라 존재다.
+    agents = live_agents()
+    for a in agents:
+        print(f"- 서브에이전트 (세션 {a['session']}, {_when(a['age'])}) "
+              f"{os.path.basename(a['path'])}")
+    if not rows and not agents and not args.quiet:
+        print("(도는 작업자 없음)")
 
 
 def _worker_last_line(doc_id):

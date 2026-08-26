@@ -51,7 +51,13 @@ def role_of(user):
 
 
 def live_workers():
-    """도는 무인 워커 — s9 에게 묻는다(판정을 두 벌로 두지 않는다)."""
+    """지금 도는 작업 주체 — s9 에게 묻는다(판정을 두 벌로 두지 않는다).
+
+    무인 워커뿐 아니라 서브에이전트도 포함된다 (REQ-20260827-002). 판정을
+    여기 옮겨 오지 않고 `s9 workers` 에게 계속 묻는 덕에, 주체의 종류가
+    늘어도 이 훅은 고칠 것이 없었다 — 실제로 서브에이전트를 더할 때
+    이 함수는 한 줄도 안 바뀌었다.
+    """
     try:
         out = subprocess.run([os.path.join(ROOT, "bin", "s9"), "workers",
                               "--quiet"], capture_output=True, text=True,
@@ -80,9 +86,9 @@ def concurrent_gate(staged):
             continue
     if not fresh:
         return
-    print("s9-guard: 무인 작업자가 도는 중에 방금 바뀐 파일을 담으려 합니다.",
+    print("s9-guard: 다른 작업자가 붙어 있는 중에 방금 바뀐 파일을 담으려 합니다.",
           file=sys.stderr)
-    print("  도는 작업자:", file=sys.stderr)
+    print("  지금 도는 작업자:", file=sys.stderr)
     for w in workers[:5]:
         print(f"    {w}", file=sys.stderr)
     print("  방금 바뀐 스테이지 파일:", file=sys.stderr)

@@ -109,5 +109,71 @@ class BindingShape(unittest.TestCase):
                 json.load(f)["agent_transcript_path"], [self.real])
 
 
+class LiveAgents(unittest.TestCase):
+    """이 정규화가 무엇을 떠받치는가 (REQ-20260827-002).
+
+    커밋 게이트가 "지금 누가 붙어 있나"를 이 목록의 mtime 으로 판정한다.
+    쪼개진 데이터가 남아 있었다면 `"/"` 가 섞여 **루트 디렉토리의 mtime 이
+    '에이전트가 살아 있다'로 읽혔을 것**이다 — 게이트가 언제나 걸리고, 언제나
+    걸리는 게이트는 우회가 습관이 되어 없는 것과 같아진다.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="s9live-")
+        os.environ["S9_ROOT"] = cls.tmp
+        spec = importlib.util.spec_from_loader(
+            "s9live", importlib.machinery.SourceFileLoader("s9live", S9))
+        cls.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.m)
+        os.makedirs(cls.m.STATE, exist_ok=True)
+
+    def _bind(self, sid, atp, **kw):
+        b = {"machine": "testbox", "session": sid,
+             "agent_transcript_path": atp}
+        b.update(kw)
+        with open(os.path.join(self.m.STATE, f"testbox__{sid}.json"),
+                  "w", encoding="utf-8") as f:
+            json.dump(b, f)
+
+    def setUp(self):
+        for fn in os.listdir(self.m.STATE):
+            os.remove(os.path.join(self.m.STATE, fn))
+
+    def test_l1_fresh_transcript_is_a_live_agent(self):
+        """L1. 기록이 방금 갱신됐으면 그 에이전트는 일하는 중이다."""
+        p = os.path.join(self.tmp, "a.output")
+        open(p, "w").write("x")
+        self._bind("livesess", [p])
+        self.assertEqual([a["session"] for a in self.m.live_agents()],
+                         ["livesess"])
+
+    def test_l2_old_transcript_is_not(self):
+        """L2. 오래된 기록은 아니다 — 끝난 에이전트가 영원히 게이트를 잡으면
+        아무도 커밋을 못 한다."""
+        p = os.path.join(self.tmp, "b.output")
+        open(p, "w").write("x")
+        old = __import__("time").time() - 9999
+        os.utime(p, (old, old))
+        self._bind("oldsess", [p])
+        self.assertEqual(self.m.live_agents(), [])
+
+    def test_l3_split_garbage_does_not_fake_liveness(self):
+        """L3. 쪼개진 옛 데이터가 '살아 있음'을 지어내지 않는다.
+
+        `"/"` 는 실제로 존재하고 mtime 도 있다. 읽기 경계가 정규화하지 않으면
+        모든 세션이 영원히 '에이전트가 붙어 있음'으로 읽힌다.
+        """
+        self._bind("junksess", list("/tmp/사라진/것.output"))
+        self.assertEqual(self.m.live_agents(), [])
+
+    def test_l4_ended_session_is_skipped(self):
+        """L4. 끝난 세션은 세지 않는다."""
+        p = os.path.join(self.tmp, "c.output")
+        open(p, "w").write("x")
+        self._bind("endsess", [p], ended="1")
+        self.assertEqual(self.m.live_agents(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

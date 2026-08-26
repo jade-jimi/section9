@@ -114,6 +114,30 @@ class CommitGate(unittest.TestCase):
             self.m.staged_tests_gate(["bin/s9", "docs/x.md"])
         self.assertEqual(called, [])
 
+    def test_g8_subagents_count_too(self):
+        """G8. 서브에이전트도 '도는 작업자'다 (REQ-20260827-002).
+
+        무인 워커는 별도 프로세스라 pid 로 잡히는데 서브에이전트는 리드 세션
+        안에서 도는 자식이라 프로세스가 없다. 그래서 게이트가 문 하나를 잠그고
+        옆문을 열어 뒀었다 — 오늘 실제로 파일을 동시에 만진 조합은 워커만이
+        아니었고(리드 ↔ designer), 그때는 사람이 diff 를 눈으로 읽어 막았다.
+        그건 규율이지 장치가 아니다.
+
+        판정을 훅으로 옮겨 오지 않고 `s9 workers` 에게 계속 묻는 것이 요점이다
+        — 주체의 종류가 늘어도 훅은 고칠 것이 없다.
+        """
+        with open(os.path.join(self.m.ROOT, "bin", "s9"), encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("def live_agents(", src, "서브에이전트 판정이 없다")
+        self.assertIn("agents = live_agents()", src,
+                      "`s9 workers` 가 서브에이전트를 내지 않는다")
+        with open(os.path.join(self.m.ROOT, "bin", "s9-guard"),
+                  encoding="utf-8") as f:
+            hook = f.read()
+        self.assertIn('"workers"', hook, "훅이 s9 에게 묻지 않는다")
+        self.assertNotIn("무인 워커가 도는 중에", hook,
+                         "메시지가 아직 워커만 말한다")
+
     def test_g7_hook_is_actually_installed(self):
         """G7. pre-commit 이 s9-guard 를 부른다 — 안 걸려 있으면 위 여섯이
         전부 장식이다."""
