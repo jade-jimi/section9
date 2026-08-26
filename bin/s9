@@ -1422,6 +1422,54 @@ def _worker_alive(pid):
         return False
 
 
+def live_workers():
+    """지금 이 워크스페이스에서 **도는** 무인 워커들 (REQ-20260826-021).
+
+    스폰 사실은 `state/auto_resume/spawn.log` 에 늘 남아 있었다. 그런데 아무도
+    보지 않았다 — 2026-08-26 21:42 사고의 첫 고리가 "리드는 그 워커의 존재를
+    몰랐다"였다. 리드가 같은 파일을 고치다 워커의 진행 중 편집을 자기 커밋에
+    함께 담았고, 결과는 문법적으로 멀쩡해 커밋도 되고 서버도 뜨는 **반쪽
+    상태**였다. 조용한 성공이 충돌보다 나쁘다.
+
+    로그를 남기는 것과 보이게 하는 것은 다른 일이다. 보이지 않는 것은 없는 것과
+    같으므로 프롬프트 훅이 매 턴 이 목록을 리드 앞에 놓는다(`s9 workers`).
+
+    살아있음은 마커의 pid 로 본다 — 스폰 사실만으로 세면 즉사한 워커가 창이
+    닫힐 때까지 '작업 중'으로 남는다 (REQ-20260825-086 에서 배운 것).
+    """
+    import time as _t
+    rows = []
+    d = _auto_dir()
+    try:
+        names = sorted(os.listdir(d))
+    except OSError:
+        return rows
+    now = _t.time()
+    for fn in names:
+        if not fn.endswith(".json") or fn.startswith("_"):
+            continue
+        try:
+            with open(os.path.join(d, fn)) as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not _worker_alive(m.get("pid")):
+            continue
+        rows.append({"id": fn[:-len(".json")], "pid": m.get("pid"),
+                     "age": int(max(0, now - (m.get("last") or now)))})
+    return rows
+
+
+def cmd_workers(args):
+    rows = live_workers()
+    for r in rows:
+        mins = r["age"] // 60
+        when = f"{mins}분째" if mins else f"{r['age']}초째"
+        print(f"- {r['id']} (무인 작업자 pid {r['pid']}, {when})")
+    if not rows and not args.quiet:
+        print("(도는 무인 작업자 없음)")
+
+
 def _worker_last_line(doc_id):
     """워커 로그의 마지막 비어있지 않은 줄 — 실패 사유를 화면에 그대로 보인다."""
     try:
@@ -1717,7 +1765,7 @@ def chat_target(sid8=None):
     """채팅 대상 바인딩 선택 — sid 지정 시 그 세션, 아니면 살아있는
     세션(chat_live) 중 활동이 가장 최근인 세션. 없으면 None."""
     import glob as _glob
-    best, best_ts = None, (-1, -1, -1.0)
+    best, best_ts = None, (-1, -1, -1, -1.0)
     for bp in _glob.glob(os.path.join(STATE, "*.json")):
         try:
             with open(bp, encoding="utf-8") as f:
@@ -1739,7 +1787,14 @@ def chat_target(sid8=None):
         # 실시간 소화하는 리드가 워커 스폰·활동 신선도에 밀려 타깃을 뺏기지
         # 않는다 ② 정식 진입(entry=code) ③ 최근 활동. 실사고: 반려로 스폰된
         # 워커가 타깃을 가로채 사용자 메시지가 워커 수신함으로 감(REQ-010·012).
-        rank = (1 if _inbox_watch_alive(sid) else 0,
+        # 우선순위 0순위는 **사람과 대화할 수 있는가**다 (REQ-20260826-031).
+        # 무인 워커는 한 턴 돌고 끝나 수신함을 듣지 않고, SessionEnd 를 남기지
+        # 않아 바인딩이 오래 '살아있는 후보'로 남는다 — 실사고 22:27·22:36,
+        # 사용자의 말이 019 워커 세션(d3d60fdc)으로 갔고 아무도 답하지 않았다.
+        # 제외가 아니라 최하위로 둔다: 정말 다른 후보가 없을 때 메시지가 갈
+        # 곳까지 없애면 기록조차 못 남긴다.
+        rank = (0 if b.get("worker") else 1,
+                1 if _inbox_watch_alive(sid) else 0,
                 1 if b.get("entry") == "code" else 0, ts)
         if best is None or rank > best_ts:
             best, best_ts = b, rank
@@ -2285,11 +2340,19 @@ def chat_audit(text, sender, sid8):
             # 관계 자동 연결 (REQ-20260825-059): 이 메시지가 지목한 판정 대기
             # 문서 + 직전 선행 대화가 만든 REQ를 relates로 — 채팅 카드가
             # 맥락 없이 고립되던 공백("연관 요청이 분명히 있잖아")
-            rel = list(_review_refs(t))
-            for l in ctx:
-                if l.get("req") and l["req"] not in rel:
-                    rel.append(l["req"])
-            rel = [r for r in rel if r != doc_id][:5]
+            # 근접은 연관이 아니다 (REQ-20260826-040). 한때 직전 15분 안의
+            # 채팅이 만든 REQ 를 전부 relates 로 걸었는데, 사람은 그 시간
+            # 안에 서로 무관한 말을 여러 번 한다 — 23:18 "문서가 낡았다"와
+            # 23:23 "시각이 부정확하다"가 그렇게 묶였고, 사용자가 "전혀
+            # 관계없는 것 같은데"로 잡아냈다. 잘못 걸린 관계는 그래프를
+            # 거짓말로 만든다: 있는 관계를 못 보는 것보다 없는 관계를 보는
+            # 쪽이 나쁘다.
+            #
+            # 남은 근거는 둘뿐이고, 둘 다 **텍스트에 실제로 있다**:
+            #  ① 이 메시지가 이름으로 지목한 판정 대기 문서(_review_refs)
+            #  ② 아직 문서가 없어 이 body 에 통째로 접힌 선행 대화 — 그건
+            #     링크가 아니라 본문이라 따로 걸 것이 없다.
+            rel = [r for r in _review_refs(t) if r != doc_id][:5]
             if rel:
                 subprocess.run([me, "link", doc_id] +
                                [x for r in rel for x in ("--relates", r)],
@@ -3029,6 +3092,11 @@ def cmd_link(args):
     if args.derived_from:
         meta["derived_from"] = args.derived_from
     extend("relates", args.relates)
+    # 연관 해제 (REQ-20260826-040): 자동 연결이 틀리게 걸리는 일이 있는데
+    # 되돌릴 명령이 없어 md 를 손으로 고쳐야 했다. 관계를 자동으로 거는
+    # 시스템이라면 자동으로 잘못 건 것을 거두는 길도 같은 자리에 있어야 한다.
+    for u in (args.unrelate or []):
+        meta["relates"] = [x for x in (meta.get("relates") or []) if x != u]
     # 선행 의존 (REQ-20260825-097): 존재·자기참조·순환을 경계에서 막는다 —
     # 대기 순환은 그래프에 그려지는 순간 교착이라, 기록 자체를 거부한다.
     for b in (args.blocked_by or []):
@@ -3071,6 +3139,17 @@ def cmd_link(args):
                 rmeta["relates"] = rrel + [args.id]
                 rmeta["updated"] = ts
                 write_doc(rp, rmeta, rbody)
+        # 해제도 대칭이다 — 한쪽만 지우면 반대편 문서에서 유령 관계가 남는다.
+        for uid in (args.unrelate or []):
+            up = locate(uid)
+            if not up:
+                continue
+            umeta, ubody = read_doc(up)
+            urel = [x for x in (umeta.get("relates") or []) if x != args.id]
+            if urel != (umeta.get("relates") or []):
+                umeta["relates"] = urel
+                umeta["updated"] = ts
+                write_doc(up, umeta, ubody)
         rebuild_index(quiet=True)
     finally:
         release_lock()
@@ -8489,6 +8568,8 @@ def main():
     lk.add_argument("--parent")
     lk.add_argument("--derived-from")
     lk.add_argument("--relates", action="append")
+    lk.add_argument("--unrelate", action="append",
+                    help="잘못 걸린 연관을 거둔다 (양쪽에서 지운다)")
     lk.add_argument("--blocked-by", action="append",
                     help="이 문서가 기다리는 선행 문서 (방향 있음, REQ-097)")
     lk.add_argument("--unblocked-by", action="append",
@@ -8543,6 +8624,10 @@ def main():
     ro = sub.add_parser("reopened", help="대시보드 반려/재개 후 미착수 요청 목록")
     ro.add_argument("--quiet", action="store_true")
     ro.set_defaults(fn=cmd_reopened)
+
+    wk = sub.add_parser("workers", help="지금 도는 무인 작업자 목록")
+    wk.add_argument("--quiet", action="store_true")
+    wk.set_defaults(fn=cmd_workers)
 
     rv = sub.add_parser("review", help="확인 대기(review) 요청 목록")
     rv.add_argument("--quiet", action="store_true")

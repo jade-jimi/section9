@@ -261,6 +261,27 @@ def prefs_context(env, who):
     return (f" ◈ 이 사용자의 개인 설정(응답 말투·작업 방식에 반영하라): {body}. ")
 
 
+def workers_context(env):
+    """지금 도는 무인 작업자를 리드 앞에 놓는다 (REQ-20260826-021).
+
+    2026-08-26 21:42 사고: 리드가 web/index.html 을 커밋하면서 같은 파일을
+    고치던 워커의 진행 중 편집을 함께 담았다. 결과는 문법적으로 멀쩡해 커밋도
+    되고 서버도 뜨는 **반쪽 상태**였다 — 조용한 성공이 충돌보다 나쁘다.
+    첫 고리는 단순했다: **리드는 그 워커의 존재를 몰랐다.**
+
+    스폰 사실은 spawn.log 에 늘 있었다. 로그를 남기는 것과 보이게 하는 것은
+    다른 일이고, 보이지 않는 것은 없는 것과 같다. 그래서 매 턴 주입한다.
+    """
+    w = run(env, "workers", "--quiet")
+    if w.returncode != 0 or not w.stdout.strip():
+        return ""
+    return (f" ⚙ 지금 도는 무인 작업자:\n{w.stdout.strip()}\n"
+            f"이 요청들의 파일을 리드가 함께 고치지 마라. 같은 파일을 만져야 "
+            f"하면 커밋 전에 `git diff --cached` 로 **담기는 내용을 실제로 읽어라** "
+            f"— `git add <경로>` 는 '내 변경'이 아니라 '그 파일의 지금 상태'를 "
+            f"담는다. `git checkout`·`git stash`·`git reset` 은 쓰지 마라. ")
+
+
 def now_kst():
     """지금 시각 (KST 고정). 모델은 지금이 몇 시인지 모른다 — 매 턴 알려준다."""
     import datetime
@@ -335,6 +356,13 @@ def main():
     # (REQ-20260823-081 카드 방지 + REQ-20260824-004 클레임 결함).
     if os.environ.get("S9_AUTO_RESUME"):
         run(env, "log", f"auto-resume 재작업 턴: {first_line[:60]}")
+        # 이 세션은 무인 워커다 — 사람과 대화하지 않는다 (REQ-20260826-031).
+        # 워커는 `-p` 로 한 턴 돌고 끝나 수신함을 듣지 않고, SessionEnd 도
+        # 남기지 않아 바인딩이 '아직 안 끝난 세션'으로 남는다. 그래서 채팅
+        # 대상 고르기가 워커를 리드보다 앞세워 뽑았고, 사용자가 보낸 말이
+        # 영원히 답하지 않을 창구로 갔다 — 화면은 그걸 idle 이라고 정직하게
+        # 말했지만, 사용자가 물은 것은 "왜 하필 저 세션이냐"였다.
+        run(env, "bind", "worker", "1")
         m = re.search(r"\bREQ-\d{8}-\d{3,}(?:-[0-9a-z]{4})?\b", prompt)
         target = m.group(0) if m else "<대상 REQ-id>"
         emit(
@@ -405,6 +433,7 @@ def main():
                 f" ✎ 제목이 원문 그대로인 요청:\n{ut.stdout.strip()}\n"
                 f"지금 `s9 set <id> --title '20자 이내 명사구' --summary ...` 로 "
                 f"정리하라 — 착수 여부와 무관하게 접수 즉시 정리가 규약이다. ")
+        wkwarn = workers_context(env)
         rv = run(env, "review", "--quiet")
         rvwarn = ("" if rv.returncode != 0 or not rv.stdout.strip() else
                   f" ⏳ 확인 대기(review):\n{rv.stdout.strip()}\n"
@@ -425,7 +454,7 @@ def main():
             f"`S9_SESSION={session} s9 new question --title '질문 원문' --body '원문'` "
             f"으로 남기고 답을 `s9 note <QST> --label answer` 로 붙여라. ")
         emit(pend +
-            f"[section9 audit] {qmsg}현재 요청 주체: {who}.{pref}{untitled}{rewarn}{rvwarn} "
+            f"[section9 audit] {qmsg}현재 요청 주체: {who}.{pref}{untitled}{rewarn}{rvwarn}{wkwarn} "
             f"오분류라면 — 실제 작업 요청이면 — `S9_SESSION={session} s9 new request "
             f"--title '20자 이내 명사구' --summary '...' --size S|M|L --body '원문'` "
             f"으로 직접 등록하고 규약대로 상태를 관리하라. s9 = ~/section9/bin/s9")
@@ -482,6 +511,8 @@ def main():
               f"재작업 요청이면 **먼저 `s9 status <id> in-progress`로 전이한 뒤** 작업하라. "
               f"review 상태로 방치하거나 새 REQ로 우회해 상태를 흐리지 마라 (재작업은 원 REQ에서). ")
 
+    wkwarn = workers_context(env)
+
     warn = ""
     if "os-account" in who:  # 바인딩/env 없이 OS 계정 fallback으로 잡힌 경우
         name = who.split()[0]
@@ -495,7 +526,7 @@ def main():
     attnote = (f"첨부 {len(atts)}건이 body에 기록되었다. " if atts else "")
     emit(pend +
         f"[section9 audit] 이 프롬프트는 {doc_id} 로 자동 기록되었다 (Request 분류). {attnote}"
-        f"현재 요청 주체: {who}.{pref}{warn}{untitled}{approvals}{reopened}{blocked}{review} "
+        f"현재 요청 주체: {who}.{pref}{warn}{untitled}{approvals}{reopened}{blocked}{review}{wkwarn} "
         f"이 세션에서 s9 를 호출할 때는 반드시 `S9_SESSION={session}` 을 앞에 붙여라. 규약: "
         f"(1) 제목은 원문 복사가 아니라 20자 이내의 이해하기 쉬운 명사구로 교체하라 — "
         f"`s9 set {doc_id} --title '...' --summary '...' --size S|M|L "

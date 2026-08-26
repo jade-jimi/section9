@@ -16,14 +16,53 @@ Question/Nothing일 때 pause 하므로 엉뚱한 REQ에 붙지 않는다
 
 원칙: 실패 시 조용히 exit 0. 비활성화: S9_AUDIT=off
 """
+import datetime
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 
 S9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
 MAX_CHARS = 12000
+# 응답 머리의 시각 도장: `[YYYY-MM-DD HH:MM:SS KST - 이름]`
+STAMP_RE = re.compile(
+    r"\A`\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) KST - ([^\]\n]+)\]`")
+STAMP_DRIFT_SEC = 60      # 이보다 어긋나면 바로잡았다는 사실도 남긴다
+
+
+def now_kst():
+    kst = datetime.timezone(datetime.timedelta(hours=9))
+    return datetime.datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def correct_stamp(text, now_str):
+    """응답 머리의 시각을 **실제 시각**으로 바로잡는다 (REQ-20260826-038).
+
+    모델이 쓰는 시각은 언제나 프롬프트 훅이 주입한 값의 복사본이다 — 턴이
+    길면 그만큼 과거를 가리키고, 주입이 없으면 지어낼 수밖에 없다. 모델은
+    자기가 말을 마치는 시각을 알 수 없다. **그러니 정확성을 모델에게 맡기지
+    않는다**: 턴이 끝나는 지금이 그 응답의 실제 시각이고, 그것을 아는 것은
+    이 훅이다.
+
+    이름(역할)은 모델이 쓴 것을 그대로 둔다 — 그건 모델만 아는 사실이다.
+    도장이 아예 없으면 붙인다: 기록은 언제 한 말인지 말할 수 있어야 한다.
+
+    반환: (바로잡은 텍스트, 어긋난 초 또는 None)
+    """
+    m = STAMP_RE.match(text or "")
+    if not m:
+        return f"`[{now_str} KST - lead]`\n\n" + (text or ""), None
+    try:
+        fmt = "%Y-%m-%d %H:%M:%S"
+        drift = int(abs((datetime.datetime.strptime(now_str, fmt)
+                         - datetime.datetime.strptime(m.group(1), fmt))
+                        .total_seconds()))
+    except ValueError:
+        drift = None
+    fixed = f"`[{now_str} KST - {m.group(2)}]`" + text[m.end():]
+    return fixed, drift
 
 
 
@@ -118,6 +157,11 @@ def main():
         req, label = last_question(env), "answer"
         if not req:
             return  # Nothing/Fragment 턴 — 붙일 문서가 없다
+    # 시각은 모델이 아니라 훅이 책임진다 (REQ-20260826-038) — 자르기 전에
+    # 바로잡는다(도장은 머리에 있으니 잘림과 무관하지만 순서를 고정해 둔다).
+    text, drift = correct_stamp(text, now_kst())
+    if drift is not None and drift >= STAMP_DRIFT_SEC:
+        run(env, "log", f"stamp 보정: 응답 시각이 {drift}s 어긋나 실제 시각으로 고쳤다")
     if len(text) > MAX_CHARS:
         text = text[:MAX_CHARS] + "\n\n…(truncated)"
     # 리드 에이전트 귀속: 오케스트레이터(메인 세션)를 lead:<model> 로 기록
