@@ -42,6 +42,22 @@ QUESTION_TAIL = re.compile(
     r"(\?|까요?\s*$|니\s*$|냐\s*$|나요\s*$|가요\s*$|는가\s*$|은가\s*$|인가\s*$|"
     r"건가\s*$|일까\s*$|어때\s*$|는지\s*$|그래\s*$|거야\s*$|거지\s*$|다고\s*$)")
 QUESTION_HEAD = re.compile(r"^(왜|뭐|무엇|어떻게|어떤|어디|누가|누구|언제|몇|얼마)")
+# 첨부 참조 줄 (REQ-20260826-034): `[Image: /경로]` · `[Image #1]` 등.
+# 분류는 질문 표지를 **마지막 줄**에서 찾는데, 이미지를 붙이면 원문 마지막 줄이
+# 이것이라 물음표가 밀려난다. 실사고 둘 — "이 요청은 붉은색 점은 무슨 의미야?"
+# (REQ-20260826-032)와 "idle인 이유가 뭐라고?"(REQ-20260826-031). 둘 다 명백한
+# 질문인데 request 카드가 됐다. 사람은 화면을 캡처해 물으므로, **가장 물어보고
+# 싶을 때** 정확히 이 경로를 밟는다.
+ATTACH_LINE = re.compile(
+    r"^\s*\[(?:image|screenshot|attachment|파일|이미지|첨부)\s*[#:][^\]]*\]\s*$",
+    re.I)
+
+
+def strip_attachment_refs(text):
+    """첨부 참조 줄을 걷어낸 본문. 첨부뿐이면 원문 그대로(기존 동작 보존)."""
+    kept = [l for l in (text or "").splitlines() if not ATTACH_LINE.match(l)]
+    out = "\n".join(kept).strip()
+    return out or (text or "")
 ACK_TAIL = re.compile(r"(구나|군요|네요|되네|거네|겠다|알겠다|이해했다|확인했다)[.!~ ]*$")
 # 메타 지시: 기존 작업/시스템에 대한 명령 (새 산출물 요청이 아님). REQ화하지 않는다.
 META_VERB = re.compile(
@@ -190,6 +206,9 @@ def pending_context(sid8, env=None):
 def classify(text):
     """휴리스틱 1차 분류.
     우선순위: nothing > meta지시 > request(명령형) > question > fragment > request"""
+    # 첨부 줄은 분류의 재료가 아니다 (REQ-20260826-034) — 마지막 줄에서 질문
+    # 표지를 찾는 규칙이 첨부 한 줄에 무력해진다.
+    text = strip_attachment_refs(text)
     if len(text) <= 12 and ACK.match(text):
         return "nothing"
     # 메타 지시(기존 작업/시스템 명령)는 새 REQ가 아니다 → nothing(세션 로그만).
@@ -225,7 +244,9 @@ def is_durable_question(text):
     말한다. 두 축을 한 값에 섞으면 분류 taxonomy가 흔들려 기존 경로가 함께
     깨진다. 제외: 즉석 인터랙션(출력·표시·대기 — 응답으로 완결된다)과
     짧은 확인 발화."""
-    t = (text or "").strip()
+    # 길이 판정도 첨부 줄을 빼고 센다 (REQ-20260826-034) — 경로 한 줄이
+    # 짧은 확인 발화를 '남을 질문'으로 부풀린다.
+    t = strip_attachment_refs(text).strip()
     if len(t) <= 40 and INTERACTION.search(t) and not PRODUCE.search(t):
         return False
     return len(t) >= QUESTION_DOC_MIN
