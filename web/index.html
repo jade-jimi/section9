@@ -5457,9 +5457,11 @@ document.addEventListener("click", e => {
     render();
     return;
   }
-  const gt = e.target.closest("[data-goto]");
+  // 문서 본문의 전이 버튼 — 속성 이름이 data-goto 와 갈라져 있어야 한다.
+  // 같은 이름을 쓰면 위 탭 점프 분기가 먼저 집어삼킨다 (REQ-20260826-025).
+  const gt = e.target.closest("[data-trans]");
   if (gt){
-    const [id, to, from] = gt.dataset.goto.split("|");
+    const [id, to, from] = gt.dataset.trans.split("|");
     // review에서 되돌리는(반려성) 전이는 사유 필수 — Board와 일관성
     if (from === "review" && (to === "in-progress" || to === "blocked")){
       rejectWithReason(id); return;
