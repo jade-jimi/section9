@@ -27,7 +27,15 @@ from unittest import mock
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
 
-TMP = tempfile.mkdtemp(prefix="s9shot-")
+# 접두사를 "s9shot-" 으로 두면 안 된다 — 그건 이 테스트가 검증하는 회수 장치가
+# 지우는 표식이다. s9-doctor 의 sweep_stale_shots 는 TMPDIR 에서 SHOT_MARKERS
+# ("s9shot-"/"cdp-prof-") 로 시작하는 디렉터리를 rmtree 하고, 소유자 판정
+# 정규식이 s9shot-(\d+) 라 mkdtemp 의 랜덤 접미사가 숫자로 시작하면(예:
+# s9shot-9j2anjm6 → pid 9) 죽은 pid 로 읽혀 즉시 삭제 대상이 된다.
+# 캡처는 매번 sweep 을 선행하므로 스위트 실행 중 캡처가 한 번이라도 돌면
+# 이 테스트의 S9_ROOT 가 통째로 사라지고 FileNotFoundError 로 깨진다 —
+# 접미사 뽑기에 따라 되기도 안 되기도 하던 플레이크다.
+TMP = tempfile.mkdtemp(prefix="s9-shothyg-")
 _prev = {k: os.environ.get(k) for k in ("S9_ROOT", "S9_MACHINE")}
 os.environ["S9_ROOT"] = TMP
 os.environ["S9_MACHINE"] = "testbox"

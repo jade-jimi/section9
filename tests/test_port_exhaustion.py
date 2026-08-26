@@ -152,6 +152,21 @@ class Orphan(unittest.TestCase):
         self.assertEqual(out["alive"], 1)
         self.assertEqual(out["procs"], 0)
 
+    def test_marker_must_be_exactly_our_shape(self):
+        """`s9shot-<pid>` 정확히 그 형태만 소유자 표식이다.
+
+        끝을 막지 않으면 `s9shot-9j2anjm6`(랜덤 접미사가 숫자로 시작) 이
+        pid 9 로 읽혀 "죽은 주인"이 되고 남의 디렉터리가 즉시 삭제된다.
+        실제로 이 부분매치가 테스트의 임시 루트를 지워 플레이크를 만들었다.
+        모르는 형태는 소유자 없음으로 두는 편이 안전하다 — 나이 규칙으로 넘어간다.
+        """
+        self.assertEqual(doctor.OWNER_RE.search("C:\\Temp\\s9shot-1234").group(1),
+                         "1234")
+        self.assertEqual(doctor.OWNER_RE.search("s9shot-77 --headless").group(1),
+                         "77")
+        for wrong in ("s9shot-9j2anjm6", "s9shot-12ab", "s9shot-3_x", "s9shot-4-5"):
+            self.assertIsNone(doctor.OWNER_RE.search(wrong), wrong)
+
     def test_population_counts_captures_not_processes(self):
         """캡처 하나가 프로세스 11개를 띄운다(실측) — 프로세스로 세면 상한 8이
         첫 캡처에서 초과돼 상한 자체가 무의미해진다. 세는 단위는 캡처 건수다."""
