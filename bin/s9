@@ -1511,6 +1511,117 @@ def chat_inbox_path(sid8, make=False):
     return os.path.join(d, f"inbox-{safe_name(sid8)}.jsonl")
 
 
+INBOX_ADOPT_WINDOW_SEC = 12 * 3600   # 고아 인계 창 (REQ-20260826-023)
+INBOX_ADOPT_GRACE_SEC = 600          # 이 안의 줄은 대상 세션에 맡긴다
+
+
+def inbox_pending(path, advance=True):
+    """수신함의 미처리(seen 커서 이후) 줄과 현재 크기 (REQ-20260825-001).
+
+    seen 파일(<inbox>.seen)을 EOF로 전진시킨다 — 주입 = 소비. 파일 교체 등으로
+    seen > size 면 0으로 클램프해 전량을 미처리로 본다. 커서 규칙이 s9 와 훅
+    두 곳에 있으면 언젠가 갈리므로 여기 하나만 둔다 (REQ-20260826-023).
+    """
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return 0, []
+    seen_p = path + ".seen"
+    seen = 0
+    try:
+        with open(seen_p, encoding="utf-8") as f:
+            seen = int(f.read().strip() or 0)
+    except (OSError, ValueError):
+        pass
+    seen = max(0, min(seen, size))
+    lines = []
+    if size > seen:
+        try:
+            with open(path, "rb") as f:
+                f.seek(seen)
+                chunk = f.read(size - seen).decode("utf-8", "replace")
+            lines = [ln for ln in chunk.splitlines() if ln.strip()]
+        except OSError:
+            return size, []
+    if advance:
+        try:
+            with open(seen_p, "w", encoding="utf-8") as f:
+                f.write(str(size))
+        except OSError:
+            pass
+    return size, lines
+
+
+def inbox_orphans(self_sid, window=INBOX_ADOPT_WINDOW_SEC,
+                  grace=INBOX_ADOPT_GRACE_SEC, kinds=("chat",)):
+    """다른 세션 수신함에 갇힌 사용자 메시지를 거둔다 (REQ-20260826-023).
+
+    수신함은 세션별 파일인데 대시보드의 대상 선택(chat_target)은 수시로 옮겨
+    간다 — 수신 대기(tail) 중인 세션이 우선이므로, 유휴 세션 앞으로 큐잉된
+    줄은 대상이 옮겨간 순간 아무도 다시 보지 않는다. 그 세션이 **살아 있어도**
+    그렇다: SessionStart 주입은 이미 지났고, tail 은 없다.
+    실사고 2026-08-26 21:06:45 "011 진행이 왜 멈췄지?" — inbox-b38ebe69 에
+    남은 채 유실. 그 세션의 claude 는 그때도 지금도 살아 있다.
+
+    그래서 게이트는 생존이 아니라 **수신 대기**다:
+    - tail 가동 중인 세션은 건드리지 않는다. 그 줄은 곧 그 세션이 받는다.
+      여기를 잘못 잡으면 워커가 리드 메시지를 가로채던 REQ-010·012 사고를
+      반대 방향으로 재현한다.
+    - grace 안의 줄도 건드리지 않는다. 방금 도착한 줄은 대상 세션이 지금
+      깨어나는 중일 수 있다 — 유예를 줘야 이중 처리가 안 난다.
+    - kind=chat 만 거둔다. 낡은 전이 통지를 되살리면 끝난 판정을 다시 한다.
+    - window 밖 줄은 버린다. 이틀 전 메시지를 지금 발화로 되살리면 더 나쁘다.
+      버릴 때도 커서는 전진한다 — 다음 세션이 같은 줄을 또 집지 않게.
+    """
+    import glob as _glob
+    import time as _time
+    out = []
+    now = _time.time()
+    d = os.path.join(ROOT, "state", "terminal")
+    for path in sorted(_glob.glob(os.path.join(d, "inbox-*.jsonl"))):
+        sid = os.path.basename(path)[len("inbox-"):-len(".jsonl")]
+        if not sid or sid == self_sid:
+            continue
+        if _inbox_watch_alive(sid):
+            continue                       # 수신 대기 중 — 곧 그 세션이 받는다
+        size, _peek = inbox_pending(path, advance=False)
+        fresh = [ln for ln in _peek
+                 if now - iso_epoch(_line_ts(ln)) < grace]
+        if fresh:
+            continue                       # 유예 안 — 대상이 깨어나는 중일 수 있다
+        _, lines = inbox_pending(path)     # 창 밖이어도 커서는 전진시킨다
+        kept = []
+        for ln in lines:
+            try:
+                rec = json.loads(ln)
+            except ValueError:
+                continue
+            if str(rec.get("kind") or "chat") not in kinds:
+                continue
+            if now - iso_epoch(rec.get("ts")) > window:
+                continue
+            kept.append(rec)
+        if kept:
+            out.append({"sid": sid, "lines": kept})
+    return out
+
+
+def _line_ts(line):
+    try:
+        return json.loads(line).get("ts")
+    except ValueError:
+        return None
+
+
+def iso_epoch(ts):
+    """ISO8601 → epoch (파싱 실패 시 0.0 = '아주 오래된 것')."""
+    import datetime as _dt
+    try:
+        return _dt.datetime.fromisoformat(str(ts)).timestamp()
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _inbox_watch_alive(sid8):
     """세션의 수신함 tail(Monitor) 프로세스 존재 여부 (REQ-20260824-042).
     'inbox를 듣고 있는 세션 = 채팅 수신 가능한 세션' — 프롬프트·pid 기록과
@@ -1593,6 +1704,12 @@ def chat_send(text, sid8=None, sender="", kind="chat", req="",
     if not text:
         raise ValueError("빈 메시지")
     b = chat_target(sid8)
+    # 무덤에 새로 쓰지 않는다 (REQ-20260826-023): sid를 명시받아도 그 세션이
+    # 종료됐으면 거기 append 하는 건 유실을 만드는 짓이다 — 살아 있는 대상으로
+    # 돌린다. (chat_target 은 /api/chat/target 이 죽은 대상의 상태를 그대로
+    # 보고해야 하므로 생존을 거르지 않는다 — 거르는 자리는 여기다.)
+    if b and b.get("ended"):
+        b = chat_target(None)
     if not b:
         raise ValueError(
             f"라이브 클로드 세션이 없다 — 터미널에서 `cd {ROOT} && bin/s9 code`"
@@ -3980,6 +4097,24 @@ def cmd_normalize(args):
         rebuild_index(quiet=True)
     mode = "(dry-run, 미적용)" if args.dry else "적용됨"
     print(f"\n{touched}개 문서, {total_changes}건 {mode}")
+
+
+def cmd_inbox(args):
+    """`s9 inbox --sid <sid8>` — 내 수신함의 미처리 줄 + 죽은 세션의 고아 줄.
+
+    SessionStart 훅이 쓴다: size 로 tail arm 오프셋을 잡고, pending/orphans 를
+    컨텍스트로 주입한다. 커서(.seen) 전진 = 소비이므로 호출은 1회여야 한다.
+    """
+    sid = args.sid or os.environ.get("S9_SESSION") or ""
+    path = chat_inbox_path(sid, make=True) if sid else ""
+    if path:
+        open(path, "a").close()   # tail -f 가 붙을 수 있게 미리 만든다
+    size, pending = inbox_pending(path) if sid else (0, [])
+    print(json.dumps({
+        "sid": sid, "path": path, "size": size, "pending": pending,
+        "orphans": inbox_orphans(sid, window=args.window,
+                                 grace=args.grace),
+    }, ensure_ascii=False))
 
 
 def cmd_bind(args):
@@ -8252,6 +8387,14 @@ def main():
     av = sub.add_parser("approvals", help="미확인 승인 메모 목록 (--quiet=1회 소비)")
     av.add_argument("--quiet", action="store_true")
     av.set_defaults(fn=cmd_approvals)
+
+    ib = sub.add_parser("inbox", help="수신함 미처리 줄 + 죽은 세션 고아 줄 (JSON)")
+    ib.add_argument("--sid", help="내 세션 id8 (기본: S9_SESSION)")
+    ib.add_argument("--window", type=int, default=INBOX_ADOPT_WINDOW_SEC,
+                    help="고아 인계 창(초) — 이보다 오래된 줄은 버린다")
+    ib.add_argument("--grace", type=int, default=INBOX_ADOPT_GRACE_SEC,
+                    help="유예(초) — 이보다 최근 줄은 대상 세션에 맡긴다")
+    ib.set_defaults(fn=cmd_inbox)
 
     bd = sub.add_parser("bind", help="session binding key 조회/설정")
     bd.add_argument("key", nargs="?")

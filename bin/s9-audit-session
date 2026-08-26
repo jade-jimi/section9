@@ -56,33 +56,6 @@ def _detect_root(data):
         os.environ["S9_ROOT"] = cwd
 
 
-def _inbox_pending(inbox):
-    """수신함의 미처리(seen 오프셋 이후) 줄과 현재 크기 (REQ-20260825-001).
-    seen 파일(inbox+'.seen')을 EOF로 전진시킨다 — 주입 = 소비. 파일 교체 등으로
-    seen>size면 0으로 클램프해 전량을 미처리로 본다."""
-    size = os.path.getsize(inbox)
-    seen_p = inbox + ".seen"
-    seen = 0
-    try:
-        with open(seen_p, encoding="utf-8") as f:
-            seen = int(f.read().strip() or 0)
-    except (OSError, ValueError):
-        pass
-    seen = max(0, min(seen, size))
-    pending = []
-    if size > seen:
-        with open(inbox, "rb") as f:
-            f.seek(seen)
-            chunk = f.read(size - seen).decode("utf-8", "replace")
-        pending = [ln for ln in chunk.splitlines() if ln.strip()]
-    try:
-        with open(seen_p, "w", encoding="utf-8") as f:
-            f.write(str(size))
-    except OSError:
-        pass
-    return size, pending
-
-
 def _sweep_orphans(root):
     """세션 시작 시 고아 캡처·테스트 서버 회수 (REQ-20260825-099).
 
@@ -194,9 +167,15 @@ def main():
             os.path.dirname(os.path.realpath(__file__)))
             inbox = os.path.join(root, "state", "terminal",
                                  f"inbox-{session}.jsonl")
-            os.makedirs(os.path.dirname(inbox), exist_ok=True)
-            open(inbox, "a").close()
-            size, pending = _inbox_pending(inbox)
+            # 미처리 줄 + 다른 세션에 갇힌 고아 줄을 한 번에 (REQ-20260826-023).
+            # 커서(.seen) 전진 = 소비이므로 호출은 정확히 1회여야 한다.
+            ib = subprocess.run([S9, "inbox", "--sid", session],
+                                capture_output=True, text=True, env=env,
+                                timeout=15)
+            info = json.loads(ib.stdout or "{}")
+            size = int(info.get("size") or 0)
+            pending = list(info.get("pending") or [])
+            orphans = list(info.get("orphans") or [])
             chat_ctx = (
                 f"◈ 대시보드 채팅 수신함: {inbox}\n"
                 f"Monitor 도구가 있으면 지금 `tail -c +{size + 1} -f {inbox}` 를 "
@@ -247,6 +226,24 @@ def main():
                     f"{f' (최근 {len(shown)}건 표시)' if len(shown) < len(pending) else ''}"
                     f" — 지금 사용자 메시지로 간주해 처리하라:\n"
                     + "\n".join(shown))
+            if orphans:
+                # 다른 세션 수신함에 갇혀 있던 사용자 메시지 (REQ-20260826-023).
+                # 대시보드의 대상 선택이 옮겨가면 그 파일은 아무도 다시 보지
+                # 않는다 — 실사고: "011 진행이 왜 멈췄지?" 가 그렇게 유실됐다.
+                # **언제 어느 세션 것인지 함께 보여야 한다**: 리드가 지금 온
+                # 말로 착각하면 이미 지난 맥락에 엉뚱하게 답한다.
+                n = sum(len(g["lines"]) for g in orphans)
+                body = []
+                for g in orphans:
+                    for l in g["lines"]:
+                        body.append(f"  - [{l.get('ts', '?')} · 세션 "
+                                    f"{g['sid']}] {l.get('text', '')}")
+                chat_ctx += (
+                    f"\n◈ 다른 세션 수신함에 갇혀 있던 미전달 메시지 {n}건 — "
+                    f"대상 세션이 수신 대기를 돌리지 않아 소화되지 못했다. "
+                    f"**시각을 보고 아직 유효한 것만** 사용자 메시지로 처리하고, "
+                    f"이미 지난 것이면 그 사실을 한 줄로 알려라:\n"
+                    + "\n".join(body))
         except Exception:
             pass
         # 동일 세션 이중 접속 감지 (REQ-20260824-031): 같은 sid에 살아있는 기존

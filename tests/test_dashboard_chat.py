@@ -141,6 +141,22 @@ class TestDashboardChat(unittest.TestCase):
         self.assertEqual(code, 200, res)
         self.assertEqual(self.inbox("stalesess")[-1]["text"], "핑")
 
+    # C2d. 종료된 세션을 sid로 지목해도 그 무덤에 append 하지 않는다.
+    #      (REQ-20260826-023: 죽은 수신함에 넣고 ok를 돌려주면 메시지가
+    #      사용자 눈앞에서 조용히 사라진다 — 살아 있는 대상으로 돌린다)
+    def test_c2d_ended_target_rerouted(self):
+        env_g = {"S9_SESSION": "gonesess"}
+        self.cli("log", "session start", env_extra=env_g)
+        self.cli("bind", "attach_pid", "1", env_extra=env_g)
+        self.cli("bind", "ended", "1", env_extra=env_g)
+        code, res = self.api("/api/chat", {"text": "무덤에 넣지 마라",
+                                           "sid": "gonesess"})
+        self.assertEqual(code, 200, res)
+        self.assertNotEqual(res["sid"], "gonesess")
+        self.assertFalse(os.path.exists(
+            os.path.join(self.tmp, "state", "terminal",
+                         "inbox-gonesess.jsonl")))
+
     # C2c. entry=code 세션은 더 오래된 활동이라도 임시 세션(서브에이전트 등)보다
     #      자동 대상에서 우선한다
     def test_c2c_entry_code_priority(self):
