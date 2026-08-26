@@ -137,14 +137,27 @@ class Cli(unittest.TestCase):
                if ln.startswith("REQ-")]
         self.assertLess(ids.index(hi), ids.index(lo))
 
-    def test_p6_ls_shows_weight_only_when_notable(self):
-        """기본값까지 찍으면 목록이 시끄러워진다 — 다를 때만 보인다."""
-        plain = self.new("조용")
-        loud = self.new("시끄", "--priority", "urgent")
+    def test_p6_ls_always_shows_the_weight(self):
+        """기본값도 찍는다 — 처음엔 숨겼다가 반려됐다.
+
+        도입 직후엔 모든 문서가 기본값이라, 기본값을 숨기면 화면에서 아무것도
+        안 보인다. 사용자 반려 그대로다: "우선순위 값이 하나도 보이지 않는다.
+        숨겨져 있는 건가? 판단할 수 없다." 보이지 않는 축은 없는 축이고,
+        값을 매길 계기조차 생기지 않는다.
+        """
+        plain = self.new("보통")
+        loud = self.new("긴급", "--priority", "urgent")
         lines = {ln.split()[0]: ln for ln in self.s9run("ls").stdout.splitlines()
                  if ln.startswith("REQ-")}
-        self.assertNotIn("!", lines[plain])
+        self.assertIn(f"!{s9.PRIORITY_DEFAULT}", lines[plain])
         self.assertIn("!90", lines[loud])
+
+    def test_p7_digest_shows_the_weight(self):
+        """digest 는 세션이 무엇부터 집을지 정하는 자리다 — 거기 안 보이면
+        순서만 바뀌고 이유는 안 읽힌다."""
+        self.new("다이제스트", "--priority", "urgent")
+        out = self.s9run("digest").stdout
+        self.assertIn("!90", out)
 
 
 if __name__ == "__main__":

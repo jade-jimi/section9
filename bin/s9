@@ -767,15 +767,17 @@ def apply_filters(rows, a):
 
 def print_rows(rows):
     # 조회가 곧 작업 순서다 (REQ-20260826-005) — 높은 가중치가 위로,
-    # 같으면 오래 기다린 것이 위로. 가중치는 기본값과 다를 때만 찍는다:
-    # 전부 !50 이 붙으면 목록이 시끄러워지고 정작 다른 것이 안 보인다.
+    # 같으면 오래 기다린 것이 위로.
+    #
+    # 가중치는 **항상** 찍는다. 처음엔 기본값(50)을 숨겼는데, 도입 직후엔
+    # 모든 문서가 기본값이라 화면에서 아무것도 안 보였고 "숨겨져 있는 건가,
+    # 판단할 수 없다"로 반려됐다. 보이지 않는 축은 없는 축이다 — 값을 매길
+    # 계기조차 생기지 않는다. 시끄러움보다 부재가 나쁘다.
     for r in work_order(rows):
         proj = f" ({r['project']})" if r["project"] else ""
         tags = " " + " ".join("#" + t for t in r["tags"]) if r["tags"] else ""
-        p = doc_priority(r)
-        prio = f" !{p}" if p != PRIORITY_DEFAULT else ""
-        print(f"{r['id']}  [{r['status']}]{prio}  {r['user']}  "
-              f"{r['created'][:10]}  {r['title']}{proj}{tags}")
+        print(f"{r['id']}  !{doc_priority(r):<2}  [{r['status']}]  "
+              f"{r['user']}  {r['created'][:10]}  {r['title']}{proj}{tags}")
 
 
 # ---------------------------------------------------------------- commands
@@ -3662,9 +3664,9 @@ def cmd_digest(args):
             "s9 digest --budget N. 프롬프트는 훅이 자동 REQ화한다.")
 
     def line(r):
-        p = doc_priority(r)
-        prio = f" !{p}" if p != PRIORITY_DEFAULT else ""
-        return (f"- {r['id']} [{r['status']}]{prio} {r['title']} "
+        # 기본값도 찍는다 — 안 보이면 축이 있다는 사실 자체가 안 읽힌다
+        # (REQ-20260826-005 반려: "숨겨져 있는 건가, 판단할 수 없다").
+        return (f"- {r['id']} !{doc_priority(r)} [{r['status']}] {r['title']} "
                 f"({r['user']}, {r['updated'][:10]})")
 
     reopened = reopened_requests()
