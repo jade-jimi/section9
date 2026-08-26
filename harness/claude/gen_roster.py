@@ -449,12 +449,44 @@ A = {
  "실행 요약(통과/실패/스킵), 분류된 실패 목록(재현 명령), flaky 판정."),
 }
 
+# 손편집으로 흘러들었던 것들을 생성기로 되돌린다 (REQ-20260826-024 인접):
+# 생성기가 원본이 아니면 재생성이 남의 편집을 조용히 지운다. 실제로 한 번 지웠다.
+MODEL_ROLES = {"designer", "frontend-developer", "ux-writer"}   # model: opus 고정
+PRE_BULLETS = {
+"designer": [
+ "참조 계보를 의식적으로 쓴다: **Apple HIG**(명료함·존중·깊이, 직접 조작, 시스템 일관성)와\n"
+ "  **토스류 국내 제품**(한 화면 한 결정, 군더더기 제거, 실패까지 설계된 문구) — 두 계보의\n"
+ "  공통 규칙은 `s9-design` 스킬 앞부분(완성도 기준 1~8)에 실행 기준으로 정리돼 있다",
+ "제안은 항상 대안 2개 이상 + 선택 근거(결정 비용·되돌리기·접근성)로 제시한다"],
+"frontend-developer": [
+ "화면 구현은 `s9-design`의 완성도 기준을 만족해야 완료다: 상태 전부(빈/로딩/에러/극단), 모션은\n"
+ "  인과 설명용 120~240ms·reduced-motion 존중, 레이아웃 흔들림은 결함, 대비·키보드·타깃 크기",
+ "Apple HIG/토스류의 \"한 화면 한 결정\"을 구현 단계에서도 지킨다 — 컴포넌트가 결정을\n"
+ "  늘리면 그 자체가 설계 신호"],
+"ux-writer": [
+ "문구 계보: **Apple HIG의 명료함**(사용자 언어·군더더기 제거)과 **토스류 마이크로카피**\n"
+ "  (비난하지 않는 에러, 다음 행동을 주는 빈 상태, 숫자·시간의 사람 단위) — `s9-design` 6절 참조",
+ "버튼은 동사+목적, 에러는 원인·해결 각 한 문장, 모순·과장·겹말 금지"],
+}
+
 TPL = """---
-name: {name}
+{model}name: {name}
 description: {desc}. guru 수준의 {identity} 역할 에이전트 — 이 영역 작업은 이 에이전트에 위임하라.
 ---
 
 당신은 {identity}다 — 이 분야 guru 수준의 전문가로서, 아래 기준이 곧 당신의 작업 기준이다.
+
+## 응답 형식 (예외 없음)
+
+모든 응답은 **현재 시각과 네 이름** 헤딩 한 줄로 시작한다:
+
+```
+# [2026-08-26 21:49:47 KST] {name}
+```
+
+매 응답마다다 — 짧은 답도, 중간 보고도 생략하지 않는다. 이름은 `{name}` 으로 고정이다:
+누가 말하고 있는지가 보여야 위임된 작업의 보고를 리드의 말과 구분할 수 있다.
+**시각을 지어내지 마라** — 지금이 몇 시인지 모르면 `date '+%Y-%m-%d %H:%M:%S KST'` 로 얻어라.
 
 ## 필수 스킬 (로드하지 않고 산출물 금지)
 
@@ -502,10 +534,12 @@ WORKFLOW_BLOCK = """
   전달하지 말고 검증 후 결론을 낸다."""
 
 for name, (identity, desc, bullets, skills, deliverable) in A.items():
+    pre = PRE_BULLETS.get(name, [])
     body = TPL.format(
         name=name, identity=identity, desc=desc,
+        model=("model: opus\n" if name in MODEL_ROLES else ""),
         skills="\n".join(f"- **{s}**" for s in skills),
-        bullets="\n".join(f"- {b}" for b in bullets),
+        bullets="\n".join(f"- {b}" for b in [*pre, *bullets]),
         deliverable=deliverable,
         workflow=(WORKFLOW_BLOCK if name in WORKFLOW_ROLES else ""))
     with open(os.path.join(AG, f"{name}.md"), "w", encoding="utf-8") as f:

@@ -261,12 +261,30 @@ def prefs_context(env, who):
     return (f" ◈ 이 사용자의 개인 설정(응답 말투·작업 방식에 반영하라): {body}. ")
 
 
+def now_kst():
+    """지금 시각 (KST 고정). 모델은 지금이 몇 시인지 모른다 — 매 턴 알려준다."""
+    import datetime
+    kst = datetime.timezone(datetime.timedelta(hours=9))
+    return datetime.datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def stamp_context():
+    """응답 시각 헤딩 지시 (REQ-20260826-024). 규약은 PROTOCOL/에이전트 문서에
+    있지만, **시각 자체는 주입하지 않으면 지어낼 수밖에 없다** — 그래서 매 턴
+    실제 값을 함께 준다. 규칙과 재료를 한 자리에 두어야 지켜진다."""
+    t = now_kst()
+    return (f"◈ 현재 시각 {t} KST — 이 응답은 반드시 `# [{t} KST] lead` 헤딩 "
+            f"한 줄로 시작하라. 예외 없다(짧은 답·이어지는 답 포함). 이름은 "
+            f"리드가 직접 답할 때 `lead`, 위임된 에이전트는 자기 역할명이다 — "
+            f"누가 말하는지가 보여야 위임 보고를 리드의 말과 구분할 수 있다. ")
+
+
 def emit(context):
     print(json.dumps({
         "suppressOutput": True,
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": context,
+            "additionalContext": stamp_context() + context,
         },
     }, ensure_ascii=False))
 
@@ -277,12 +295,16 @@ def main():
     data = json.load(sys.stdin)
     _detect_root(data)
     prompt = (data.get("prompt") or "").strip()
+    # audit 대상이 아닌 턴(명령·시스템 통지)도 **응답은 한다** — 시각 헤딩 지시는
+    # 그래서 여기서도 나간다. 규칙에 예외를 만들면 규칙이 곧 죽는다 (REQ-024).
     if not prompt or prompt.startswith("!") or is_command(prompt):
+        emit("")
         return
     # 시스템 통지 턴(백그라운드 태스크 완료 등)은 사용자 요청이 아니다 — 카드 금지
     # (REQ-20260823-084: task-notification이 REQ로 오생성되던 결함)
     if prompt.startswith(("<task-notification>", "<system-reminder>",
                           "[SYSTEM NOTIFICATION")):
+        emit("")
         return
 
     session = (data.get("session_id") or "unknown")[:8]
