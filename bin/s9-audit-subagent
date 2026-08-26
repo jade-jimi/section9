@@ -22,6 +22,7 @@ last_req 가 없으면 조용히 넘어간다. Question/Nothing 턴의 pause는 
 원칙: 실패 시 조용히 exit 0. 비활성화: S9_AUDIT=off
 """
 import json
+import re
 import os
 import subprocess
 import sys
@@ -71,6 +72,23 @@ def last_assistant_text(transcript_path):
     return text
 
 
+OPEN_STATES = ("open", "in-progress", "review", "blocked")
+
+
+def _still_open(meta_text):
+    """언급된 문서가 아직 진행 중인가 (REQ-20260825-066 후속).
+    종결(done/cancelled)된 문서에는 언급을 근거로 보고를 붙이지 않는다 —
+    끝난 일이 갑자기 갱신되면 사용자가 진행 상황을 오독한다.
+
+    소유(승계) 판정은 여기서 하지 않는다 — s9의 _session_owns 한 곳에서만
+    내린다(`s9 last --owns`). 훅이 프론트매터를 따로 긁으면 판정이 두 벌로
+    갈라져 한쪽만 고쳐지는 사고가 난다."""
+    for line in (meta_text or "").splitlines():
+        if line.startswith("status:"):
+            return line.split(":", 1)[1].strip().strip('"\'') in OPEN_STATES
+    return True
+
+
 def main():
     if os.environ.get("S9_AUDIT", "").lower() == "off":
         return
@@ -104,28 +122,62 @@ def main():
     last = (b.get("last_req") or "").strip()
     active = [x for x in (b.get("active_reqs") or []) if x]
     mentioned = re.findall(r"\bREQ-\d{8}-\d{3,}(?:-[0-9a-z]{4})?\b", text)
-    req = next((m for m in mentioned if m in active or m == last), None)
+    # 1순위는 실행 등록(active_reqs/last_req)과 일치하는 언급이지만, 그 포인터
+    # 자체가 stale일 수 있으므로 어느 경로든 소유 확인을 통과해야 한다 —
+    # last_req가 남의 REQ를 가리키던 것이 이 사고의 출발점이었다.
+    uniq = list(dict.fromkeys(mentioned))
+    registered = [m for m in uniq if m in active or m == last]
+    req = next((m for m in registered
+                if run(env, "last", "--owns", m).stdout.strip() == m), None)
     if not req and mentioned:
-        chk = run(env, "show", mentioned[0], "--meta")
-        if chk.returncode == 0:
-            req = mentioned[0]
+        # 언급만으로 귀속하면 "읽은 문서"가 "작업한 문서"로 승격된다 —
+        # 2026-08-25 done 상태의 REQ-20260824-065에 서브에이전트 보고가 붙어
+        # 사용자가 "065 갑자기 왜 업데이트?"로 두 번 지적한 실사고 (REQ-066/-083).
+        # 등록에 없는 언급은 (1) 이 세션이 승계·클레임했고 (2) 아직 열려 있을 때만
+        # 받는다. 첫 언급 하나만 보지 않는다 — 남의 id를 먼저 말하고 자기 id를
+        # 뒤에 말하는 보고가 흔하다.
+        # 등록 밖 언급에는 '아직 열려 있을 것'을 더 요구한다. 등록된 REQ에는
+        # 걸지 않는다 — 자기 REQ의 완결 보고는 done 직후에도 붙어야 한다.
+        for cand in [m for m in uniq if m not in registered]:
+            if run(env, "last", "--owns", cand).stdout.strip() != cand:
+                continue
+            chk = run(env, "show", cand, "--meta")
+            if chk.returncode == 0 and _still_open(chk.stdout):
+                req = cand
+                break
+        if not req:
+            run(env, "log", "귀속 거부: " + ", ".join(dict.fromkeys(mentioned))
+                + " (언급만 — 이 세션이 클레임하지 않았거나 종결된 문서, "
+                  "REQ-20260825-066)")
 
     atype = data.get("agent_type") or "subagent"
+    # actor 규격 (REQ-20260825-088): 기동 시 PostToolUse 훅이 등록한
+    # sub:<타입>:<agentId8> 과 **같은 문자열**이어야 그 running 항목이 닫힌다.
+    aid = (data.get("agent_id") or "")[:8]
+    actor = f"sub:{atype}:{aid}" if aid else f"sub:{atype}"
     # 진행성 소음 필터: generic 타입 + REQ 무언급 보고는 문서에 붙이지 않는다(로그만) —
     # 장시간 위임 중 수십 건의 중간 보고가 무관 REQ를 오염시키던 문제
     if not req and atype == "subagent":
         run(env, "log", f"subagent 중간보고 생략 ({len(text)} chars)")
         return
-    if not req:
+    # 최종 폴백(last_req)도 소유 확인을 거친다 — 훅이 매 프롬프트 회전시키는
+    # 포인터가 stale이면 그 자체로 남의 문서를 가리킨다. --active가 아니라
+    # --owns를 쓰는 이유: 위임 보고 캡처는 pause(Question 턴)와 무관해야 한다
+    # (REQ-20260823-072).
+    if not req and last and run(env, "last", "--owns", last).stdout.strip() == last:
         req = last
     if not req:
         return  # 귀속처 없음 — 붙이지 않음
     if len(text) > MAX_CHARS:
         text = text[:MAX_CHARS] + "\n\n…(truncated)"
     # 위임 에이전트 귀속: 노트 헤더(agent: <type>)와 REQ 프론트매터 agents에 누적
-    out = run(env, "note", req, "--label", "subagent", "--agent", atype, inp=text)
+    out = run(env, "note", req, "--label", "subagent", "--agent", actor,
+              "--result", "done", *(["--transcript",
+                                     data["agent_transcript_path"]]
+                                    if data.get("agent_transcript_path") else []),
+              inp=text)
     if out.returncode == 0:
-        run(env, "log", f"subagent({atype}) → {req} ({len(text)} chars)")
+        run(env, "log", f"subagent({actor}) → {req} ({len(text)} chars)")
 
 
 if __name__ == "__main__":
