@@ -186,7 +186,11 @@ class GraphEmpty(unittest.TestCase):
 
     def test_legend_marks_the_type_to_click(self):
         """안내가 떠 있는 동안 눌러야 할 범례 항목을 화면이 지목한다."""
-        m = re.search(r'<span class="gtype\$\{[\s\S]{0,300}?data-gtype=', self.src)
+        # 항목이 무슨 태그인지는 이 계약의 관심사가 아니다 — 지목 표시가 붙느냐만
+        # 본다. (REQ-20260827-007 에서 span → button 으로 바뀌었다: 키보드로
+        # 닿게 하려면 진짜 버튼이어야 한다.)
+        m = re.search(r'<(?:span|button)[^>]*class="gtype\$\{[\s\S]{0,300}?data-gtype=',
+                      self.src)
         self.assertIsNotNone(m, "범례 항목 마크업을 찾지 못했다")
         self.assertIn("want", m.group(0),
                       "눌러야 할 항목에 지목 표시가 붙지 않는다")
