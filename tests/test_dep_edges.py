@@ -40,6 +40,11 @@ class TestDepEdges(unittest.TestCase):
         cls.env = {**os.environ, "S9_ROOT": TMP, "S9_MACHINE": "testbox",
                    "S9_USER": "tester"}
         cls.env.pop("S9_SESSION", None)
+        # 무인(auto-resume) 워커 세션에서 스위트를 돌리면 상속된 S9_AUTO_RESUME=1이
+        # `s9 status ... done` 의 trigger_dependents 호출을 통째로 건너뛴다 —
+        # D5/D6(선행 done → 후행 해제)이 코드와 무관하게 실패한다.
+        # 같은 누수를 test_audit_prompt·test_instance_init 이 이미 막고 있다.
+        cls.env.pop("S9_AUTO_RESUME", None)
         cls.cli("init")
         cls.cli("user", "add", "tester")
 
