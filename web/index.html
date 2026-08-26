@@ -443,7 +443,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    .term처럼 테마 무관 상시 다크 + CC 팔레트. 라운드/그림자 0 (터미널이므로 당연). ------- */
 .ccterm{--cc-bg:#1b1c1e;--cc-text:#e8e8e4;--cc-dim:#8a8f98;--cc-faint:#5c626c;
   --cc-green:#4ec97a;--cc-cyan:#56c8d8;--cc-yellow:#e5c07b;--cc-red:#e06c75;
-  --cc-border:#3a3d44;
+  --cc-border:#3a3d44;--cc-hair:rgba(255,255,255,.07);
   background:var(--cc-bg);color:var(--cc-text);border:1px solid var(--border);
   display:flex;flex-direction:column;height:calc(100vh - 168px);
   font-family:var(--mono),"Segoe UI Emoji","Noto Color Emoji";font-size:12.5px;
@@ -495,6 +495,34 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .ccterm .ccblk{display:block;background:rgba(255,255,255,.06);border-left:2px solid var(--cc-border);
   padding:6px 10px;margin:5px 0;white-space:pre-wrap;color:var(--cc-cyan)}
 .ccterm .ccval{color:var(--cc-cyan)}
+
+/* ------- 터미널 블록 마크다운 (REQ-20260826-029) — 표·헤딩.
+   ccterm 과 stream .term 둘 다 tone 무관 상시 다크라 팔레트는 --cc-* 하나로
+   충분하다. 다만 .term 에는 그 토큰이 정의돼 있지 않으므로 fallback 을 반드시
+   붙인다(안 붙이면 문서 안 스트림에서 선이 통째로 사라진다). 구분은 색면이
+   아니라 헤어라인·굵기·정렬로 — 얼룩말 배경 줄무늬 금지. ------- */
+.cctblw{display:block;max-width:100%;overflow-x:auto;margin:9px 0}
+.cctbl{border-collapse:collapse;white-space:normal;font-size:.96em;
+  font-variant-numeric:tabular-nums;
+  border-top:1px solid var(--cc-border,#3a4655);
+  border-bottom:1px solid var(--cc-border,#3a4655)}
+.cctbl th,.cctbl td{padding:4px 15px;vertical-align:top;text-align:left;
+  white-space:normal;word-break:break-word;
+  border-left:1px solid var(--cc-hair,rgba(255,255,255,.07))}
+.cctbl th:first-child,.cctbl td:first-child{padding-left:0;border-left:0}
+.cctbl th:last-child,.cctbl td:last-child{padding-right:0}
+.cctbl th{font-weight:600;color:var(--cc-text,#e8e8e4);
+  border-bottom:1px solid var(--cc-dim,#5c6878)}
+.cctbl td{color:var(--cc-text,#cfd8e3)}
+.cctbl tbody tr + tr td{border-top:1px solid var(--cc-hair,rgba(255,255,255,.07))}
+.cch{font-weight:700;color:var(--cc-text,#e8e8e4);white-space:normal;
+  margin:17px 0 7px;letter-spacing:-.004em}
+.cch1{font-size:1.2em}
+.cch2{font-size:1.1em}
+.cch3{font-size:1.02em}
+.cch4,.cch5,.cch6{font-size:1em;font-weight:600}
+.cch:first-child{margin-top:0}
+
 .ccterm details summary{cursor:pointer;list-style:none;display:inline}
 .ccterm details summary::-webkit-details-marker{display:none}
 .ccterm details summary::after{content:" [+]";color:var(--cc-faint)}
@@ -606,6 +634,29 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .gtype.off{opacity:.35;text-decoration:line-through}
 .gedge.none{opacity:.4}
 .gedge .gecount{font-family:var(--mono);color:var(--muted)}
+
+/* ------- 그래프 빈 화면 안내 (REQ-20260826-039) -------
+   캔버스가 비는 건 대개 렌더 실패가 아니라 조건의 교집합이 0인 것이다. 화면이
+   그걸 말하지 않으면 사용자는 위 필터와 범례 두 곳을 스스로 대조해야 한다.
+   판(배경 색면)을 깔지 않는다 — 빈 캔버스가 이미 여백이고, 여기에 색면을 얹으면
+   "또 하나의 창"이 된다. 위계는 크기·굵기·색 글자로만. 색은 꺼진 종류의 타입색을
+   글자에 입혀 위 범례 칩과 눈으로 이어 준다. */
+.gempty{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;padding:52px 24px 46px;
+  text-align:center;pointer-events:none}
+/* 한국어 문장에는 자간을 벌리지 않는다 — 모노·대문자·letter-spacing 은 id·시각·
+   카운트 같은 라틴/숫자 메타데이터의 어휘다. 문장에 쓰면 글자가 흩어져 보인다. */
+.gempty .gemsg{max-width:44ch;font-size:14px;line-height:1.75;color:var(--text);
+  word-break:keep-all;text-wrap:balance;margin:0}
+.gempty .gemsg b{font-weight:700}
+.gempty .genote{max-width:46ch;font-size:11.5px;line-height:1.65;color:var(--muted);
+  word-break:keep-all;text-wrap:balance;margin:0}
+.gempty .genote code{font-family:var(--mono);font-size:11px;color:var(--text)}
+.gefix{pointer-events:auto;background:none;border:1px solid var(--text);
+  color:var(--text);font:inherit;font-size:12px;padding:6px 16px;cursor:pointer;
+  border-radius:var(--r)}
+.gefix:hover,.gefix:focus-visible{background:var(--text);color:var(--bg)}
+
 
 /* ------- 선행 대기 현황판 (REQ-20260826-009) -------
    그래프는 구조를 보여주고, 현황판은 "지금 무엇이 무엇 때문에 멈췄나"를 답한다.
@@ -3422,6 +3473,79 @@ function ccStrip(raw){                           // 접힘 미리보기용 — A
   return String(raw ?? "").replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?/g, "")
     .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\x1b[=>]/g, "");
 }
+/* 블록 수준 마크다운 (REQ-20260826-029). ccText 의 근사는 줄 안쪽(코드/굵게/
+   경로/해시)만 다뤘다 — 표와 헤딩은 여러 줄이 모여야 뜻이 생기는 블록이라
+   규칙이 아예 없었고, 그래서 화면에 파이프와 해시가 원문 그대로 흘렀다.
+   실제 CC 터미널은 같은 텍스트를 표·제목으로 그린다. */
+const CCTBL_DELIM = /^\s*(?=.*\|)\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+const CCTBL_CELL = /(?<!\\)\|/;
+const CCHEAD = /^ {0,3}(#{1,6})[ \t]+(\S.*?)[ \t]*#*[ \t]*$/;
+/* 숫자만 든 열은 오른쪽 정렬 — 자릿수를 세로로 맞춰야 비교가 된다 */
+const CCNUM = /^[-+]?[\d,]+(?:\.\d+)?\s*(?:%|원|건|개|명|초|분|시간|ms|s|B|KB|MB|GB)?$/;
+
+function ccCells(line){                          // 표 한 줄 → 칸 배열
+  let t = line.trim();
+  if (t.startsWith("|")) t = t.slice(1);
+  if (/(?:^|[^\\])\|$/.test(t)) t = t.slice(0, -1);
+  return t.split(CCTBL_CELL).map(c => c.replace(/\\\|/g, "|").trim());
+}
+function ccCell(tag, html, al){
+  return `<${tag}${al ? ` style="text-align:${al}"` : ""}>${html}</${tag}>`;
+}
+
+/* 인라인 규칙이 끝난 HTML 을 받아 블록만 다시 짠다. placeholder 복원 전이므로
+   코드블록 안의 파이프는 이미 빠져 있고(오탐 없음), 셀 안의 코드/경로 강조는
+   그대로 살아 있다. */
+function ccBlocks(rendered){
+  if (!/\|/.test(rendered) && !/^ {0,3}#{1,6}[ \t]/m.test(rendered)) return rendered;
+  const lines = rendered.split("\n");
+  const out = [];                                // {b:블록인가, h:HTML}
+  for (let i = 0; i < lines.length; i++){
+    // 표 — 헤더행 + 구분행 + 본문행이 다 있고 칸 수가 맞을 때만.
+    // 파이프 하나 낀 평범한 문장을 표로 만들면 지금보다 나쁘다.
+    const dl = lines[i + 1], b0 = lines[i + 2];
+    if (dl !== undefined && b0 !== undefined && CCTBL_DELIM.test(dl) &&
+        lines[i].includes("|") && b0.includes("|")){
+      const head = ccCells(lines[i]), spec = ccCells(dl);
+      if (head.length !== spec.length) { /* 칸 수 불일치 = 표 아님 (GFM) */ }
+      else {
+        const al = spec.map(c => {
+          const L = c.startsWith(":"), R = c.endsWith(":");
+          return L && R ? "center" : R ? "right" : "";
+        });
+        const rows = [];
+        let j = i + 2;
+        for (; j < lines.length; j++){
+          if (!lines[j].includes("|") || CCTBL_DELIM.test(lines[j])) break;
+          const r = ccCells(lines[j]);
+          while (r.length < head.length) r.push("");
+          rows.push(r.slice(0, head.length));
+        }
+        for (let c = 0; c < al.length; c++){
+          if (al[c]) continue;
+          const vals = rows.map(r => r[c]).filter(v => v !== "");
+          if (vals.length && vals.every(v => CCNUM.test(v))) al[c] = "right";
+        }
+        out.push({b:true, h:'<div class="cctblw"><table class="cctbl"><thead><tr>' +
+          head.map((c, k) => ccCell("th", c, al[k])).join("") + "</tr></thead><tbody>" +
+          rows.map(r => "<tr>" + r.map((c, k) => ccCell("td", c, al[k])).join("") +
+            "</tr>").join("") + "</tbody></table></div>"});
+        i = j - 1;
+        continue;
+      }
+    }
+    // 헤딩 — 해시는 표시 문자가 아니라 위계 표시다. 크기·굵기로 갈음한다.
+    const h = CCHEAD.exec(lines[i]);
+    if (h){ out.push({b:true, h:`<div class="cch cch${h[1].length}">${h[2]}</div>`}); continue; }
+    out.push({b:false, h:lines[i]});
+  }
+  // 블록은 스스로 줄을 나눈다 — 앞뒤 빈 줄까지 살리면 간격이 두 번 벌어진다.
+  const keepers = out.filter((x, k) =>
+    x.b || x.h.trim() || !((out[k - 1] && out[k - 1].b) || (out[k + 1] && out[k + 1].b)));
+  return keepers.map((x, k) =>
+    (k && !x.b && !keepers[k - 1].b ? "\n" : "") + x.h).join("");
+}
+
 function ccText(raw){
   raw = String(raw ?? "")
     .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?/g, "")     // OSC 제거
@@ -3433,7 +3557,7 @@ function ccText(raw){
   const md = s => {
     const ph = [];
     const keep = h => { ph.push(h); return `\x00${ph.length - 1}\x00`; };
-    return esc(s)
+    const inline = esc(s)
       .replace(/```\w*\n?([\s\S]*?)```/g, (m0, c) =>
         keep(`<span class="ccblk">${c.replace(/\n$/, "")}</span>`))
       // 첨부 참조 강조 (REQ-20260825-012): CC처럼 시안 칩 — 경로는 파일명만 표시
@@ -3449,8 +3573,8 @@ function ccText(raw){
         (m0, a, p) => a + keep(`<span class="ccval">${p}</span>`))
       // 해시류(7~40자리 16진, 영문자 포함 필수 — 날짜 등 순수 숫자 제외)
       .replace(/\b(?=[0-9a-f]*[a-f])([0-9a-f]{7,40})\b/g,
-        (m0, h) => keep(`<span class="ccval">${h}</span>`))
-      .replace(/\x00(\d+)\x00/g, (m0, i) => ph[+i]);
+        (m0, h) => keep(`<span class="ccval">${h}</span>`));
+    return ccBlocks(inline).replace(/\x00(\d+)\x00/g, (m0, i) => ph[+i]);
   };
   let st = {fg:null, bg:null, b:false, d:false, i:false, u:false};
   const wrap = h => {
@@ -4773,6 +4897,44 @@ function stopGraph(){
   }
 }
 
+/* 빈 캔버스가 이유를 말한다 (REQ-20260826-039). 원인이 셋이라 답도 셋이다 —
+   기록 자체가 없음 / 위 검색·필터가 0건으로 좁힘 / 남은 문서의 종류를 범례에서
+   꺼 둠. 셋을 한 문장으로 뭉뚱그리면 사용자는 여전히 어디를 눌러야 할지 모른다.
+   문구는 화면에 그대로 나가므로 내부 이름을 쓰지 않는다. */
+const GKO = {request:"요청", knowledge:"지식", question:"질문",
+             session:"세션", project:"프로젝트"};
+function graphEmptyState(rows){
+  if (!catalog.length)
+    return {fix:null,
+      msg:"아직 기록된 문서가 없다. 요청을 하나 만들면 여기에 점으로 나타난다.",
+      note:"터미널에서 <code>s9 new request</code> 로 첫 요청을 만들 수 있다."};
+  if (!rows.length)
+    return {fix:{k:"filters", label:"검색·필터 지우기"},
+      msg:`위쪽 검색·필터가 문서를 전부 걸러냈다. 조건을 지우면 <b>${catalog.length}건</b>이 다시 보인다.`,
+      note:"새로고침해도 조건이 풀려 다시 보이지만, 이 버튼은 지금 바로 되돌린다."};
+  const hid = [...new Set(rows.map(r => r.type))]
+    .filter(t => GRAPH_TYPES.includes(t) && !gtypes.has(t));
+  if (hid.length){
+    const ko = hid.map(t => GKO[t] || t);
+    const name = hid.map(t => `<b style="color:${TCOLOR[t] || "var(--text)"}">${GKO[t] || t}</b>`).join("·");
+    return {fix:{k:"types", label:`${ko.join("·")} 다시 켜기`, types:hid},
+      msg:`조건에 맞는 문서 <b>${rows.length}건</b>은 전부 ${name}이다. 위쪽 범례에서 그 종류를 꺼 두어 화면이 비었다.`,
+      note:"범례 설정은 이 브라우저에 저장돼 새로고침해도 남는다 — 화면이 또 비면 여기를 보라."};
+  }
+  return {fix:{k:"filters", label:"검색·필터 지우기"},
+    msg:`조건에 맞는 <b>${rows.length}건</b>은 이 화면이 점으로 그리지 않는 종류다. 조건을 지우면 전체 관계도가 다시 보인다.`,
+    note:"요청·지식·질문·세션만 점으로 그린다."};
+}
+function graphEmptyHTML(st){
+  if (!st) return "";
+  const f = st.fix
+    ? `<button class="gefix" data-gfix="${st.fix.k}"${st.fix.types
+        ? ` data-gtypes="${esc(st.fix.types.join(","))}"` : ""}>${esc(st.fix.label)}</button>`
+    : "";
+  return `<div class="gempty" role="status">` +
+    `<p class="gemsg">${st.msg}</p>${f}<p class="genote">${st.note}</p></div>`;
+}
+
 async function renderGraph(rows){
   if (!graph) graph = await (await fetch("/api/graph?" + meQ())).json();
   // 타입 표시 토글 (REQ-20260824-026): 세션 노드는 로그성 소음이라 기본 숨김 —
@@ -4822,6 +4984,8 @@ async function renderGraph(rows){
 
   // 레일에 답할 것이 없으면(막힌 요청 0건) 그리드가 폭을 캔버스에 돌려준다
   const depEmpty = !depBoard(rows).groups.length;
+  // 그릴 노드가 하나라도 있으면 안내는 뜨지 않는다 — 그려진 그래프를 덮지 않는다
+  const gEmpty = nodes.length ? null : graphEmptyState(rows);
   $("#view").innerHTML = `<div class="gsplit${depEmpty ? " empty" : ""}"><div class="graphwrap">
     <div class="legend">
       <button class="gmode${graphLayout==="force"?" on":""}" data-glayout="force">force</button>
@@ -4831,7 +4995,7 @@ async function renderGraph(rows){
       <span class="gedge${depEdgeN ? "" : " none"}" title="blocked_by — 선행이 끝나야 후행이 풀린다. 화살촉이 가리키는 쪽이 막혀 있는 요청이다. 계보(parent 실선 · derived/relates 가는 점선)와 달리 잉크로 그리고, 여러 건을 붙잡은 선행일수록 진하고 굵다. 선행이 끝나면 이 화살표는 사라진다."><svg width="40" height="9" aria-hidden="true"><line x1="0" y1="4.5" x2="28" y2="4.5" stroke="currentColor" stroke-width="1.6" stroke-dasharray="9 5"/><polygon points="28,0.7 39,4.5 28,8.3" fill="currentColor"/></svg>선행 → 후행 대기 <b class="gecount">${depEdgeN}</b></span>
       <span style="margin-left:auto">앰버 호+숫자 = 미완료 파생 병목(1건=¼둘레, 4건+=만원) · 점멸 = in-progress · 실선 링 = blocked · 점선 링 = review</span>
     </div>
-    <canvas id="gcanvas"></canvas>
+    <canvas id="gcanvas"></canvas>${graphEmptyHTML(gEmpty)}
     <div class="ghint">${graphLayout==="dag" ? "dag: 위→아래 = parent→파생 · " : ""}드래그 = 이동/노드 끌기 · 휠 = 줌 · 클릭 = 문서 열기</div>
   </div>` + depSummaryHTML(rows) + `</div>`;
 
@@ -5546,6 +5710,29 @@ document.addEventListener("click", e => {
     gtypes.has(t) ? gtypes.delete(t) : gtypes.add(t);
     if (!gtypes.size) gtypes.add("request");  // 전부 끄면 무의미 — 최소 1종 유지
     try{ localStorage.setItem("s9gtypes", JSON.stringify([...gtypes])); }catch(e){}
+    render(); return;
+  }
+  // 빈 화면 안내의 되돌리기 (REQ-20260826-039) — 안내가 원인을 말했으면
+  // 되돌리는 손도 같은 자리에 있어야 한다. 말만 하고 손이 없으면 절반이다.
+  const gf = e.target.closest("[data-gfix]");
+  if (gf){
+    if (gf.dataset.gfix === "filters"){
+      const q = $("#q"); if (q) q.value = "";
+      const qb = $("#q-body"); if (qb) qb.checked = false;
+      ["#f-user", "#f-project", "#f-tag", "#f-type"].forEach(sel => {
+        const el = $(sel); if (el) el.value = "";
+      });
+      // '내 것만'도 필터다 — 안 풀면 이 버튼이 조용히 죽는다
+      const mi = $("#f-mine");
+      if (mi && mi.checked){
+        mi.checked = false;
+        try{ localStorage.setItem("s9mine", "0"); }catch(e2){}
+        fillProjects();
+      }
+    } else {
+      (gf.dataset.gtypes || "").split(",").filter(Boolean).forEach(t => gtypes.add(t));
+      try{ localStorage.setItem("s9gtypes", JSON.stringify([...gtypes])); }catch(e2){}
+    }
     render(); return;
   }
   const gl = e.target.closest("[data-glayout]");
