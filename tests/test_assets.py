@@ -22,12 +22,8 @@ S9 = os.path.join(HERE, "..", "bin", "s9")
 PNG = (b"\x89PNG\r\n\x1a\n" + b"\x00" * 40)   # 최소 더미 바이트
 
 
-def free_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+# 임시 포트를 뽑지 않는다 — 고정 풀에서 돌려쓴다 (REQ-20260825-100, portpool 참조)
+from portpool import free_port, wait_server  # noqa: E402
 
 
 class TestAssets(unittest.TestCase):
@@ -44,14 +40,7 @@ class TestAssets(unittest.TestCase):
             [S9, "serve", "--host", "127.0.0.1", "--port", str(cls.port)],
             env={**cls.env, "S9_REWORK_WATCH": "off"},
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(50):
-            try:
-                socket.create_connection(("127.0.0.1", cls.port), 0.2).close()
-                break
-            except OSError:
-                time.sleep(0.1)
-        else:
-            raise RuntimeError("server did not start")
+        wait_server(cls.port)   # WSL 포트 공개 지연 대비 (REQ-099) — 백오프 대기
 
     @classmethod
     def tearDownClass(cls):

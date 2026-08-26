@@ -13,6 +13,9 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
 
+# 임시 포트를 뽑지 않는다 — 고정 풀에서 돌려쓴다 (REQ-20260825-100, portpool 참조)
+from portpool import free_port, wait_server  # noqa: E402
+
 
 class TestProfileExt(unittest.TestCase):
     @classmethod
@@ -78,19 +81,13 @@ class TestProfileExt(unittest.TestCase):
     # E4. API: update 반영 + /api/users 노출
     def test_e4_api(self):
         import socket, time
-        s = socket.socket(); s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]; s.close()
+        port = free_port()
         srv = subprocess.Popen(
             [S9, "serve", "--host", "127.0.0.1", "--port", str(port)],
             env={**self.env, "S9_USER": "alice", "S9_REWORK_WATCH": "off"},
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
-            for _ in range(50):
-                try:
-                    socket.create_connection(("127.0.0.1", port), 0.2).close()
-                    break
-                except OSError:
-                    time.sleep(0.1)
+            wait_server(port)   # WSL 포트 공개 지연 대비 (REQ-099) — 백오프 대기
             req = urllib.request.Request(
                 f"http://127.0.0.1:{port}/api/user/update",
                 data=json.dumps({"name": "alice",

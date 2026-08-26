@@ -28,12 +28,8 @@ S9 = os.path.join(HERE, "..", "bin", "s9")
 MACHINE = "TESTMACH"
 
 
-def free_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+# 임시 포트를 뽑지 않는다 — 고정 풀에서 돌려쓴다 (REQ-20260825-100, portpool 참조)
+from portpool import free_port, wait_server  # noqa: E402
 
 
 class TestWhoami(unittest.TestCase):
@@ -89,14 +85,7 @@ class TestWhoami(unittest.TestCase):
             cls.srv[key] = p
             cls.port[key] = port
         for port in cls.port.values():
-            for _ in range(50):
-                try:
-                    socket.create_connection(("127.0.0.1", port), 0.2).close()
-                    break
-                except OSError:
-                    time.sleep(0.1)
-            else:
-                raise RuntimeError("server did not start")
+            wait_server(port)   # WSL 포트 공개 지연 대비 (REQ-099) — 백오프 대기
 
     @classmethod
     def tearDownClass(cls):

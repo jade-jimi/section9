@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>docs scroll probe</title>
+<style>body{font:13px ui-monospace,monospace;margin:0;padding:10px;background:#fff;color:#000}
+#f{width:1440px;height:900px;border:0;position:absolute;left:-9999px;top:0}
+pre{white-space:pre-wrap;margin:0;line-height:1.5}</style></head><body>
+<iframe id="f"></iframe><pre id="out">running…</pre>
+<script>
+const P = new URLSearchParams(location.search);
+const SKIN = P.get("skin")||"", TONE = P.get("tone")||"", W = +(P.get("w")||1440), H = +(P.get("h")||900);
+const out = document.getElementById("out"), fr = document.getElementById("f");
+fr.style.width = W+"px"; fr.style.height = H+"px";
+const L = [];
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+function geo(el, w){
+  if(!el) return "(없음)";
+  const cs = w.getComputedStyle(el), r = el.getBoundingClientRect();
+  return `client=${el.clientHeight} scroll=${el.scrollHeight} rect.h=${Math.round(r.height)} top=${Math.round(r.top)}`
+    + ` overflowY=${cs.overflowY} maxH=${cs.maxHeight} h=${cs.height} pos=${cs.position} disp=${cs.display}`
+    + ` align=${cs.alignItems||"-"} flex=${cs.flex}`;
+}
+(async ()=>{
+  await new Promise(res=>{ fr.onload=res; fr.src = `/?skin=${SKIN}&theme=${TONE}#docs`; });
+  const w = fr.contentWindow, d = fr.contentDocument;
+  await sleep(3500);
+  // docs 탭으로
+  const tab = [...d.querySelectorAll("[data-tab]")].find(t=>t.dataset.tab==="docs");
+  if(tab) tab.click();
+  await sleep(2500);
+  const dl = d.querySelector(".doclist"), docs = d.querySelector(".docs"),
+        main = d.querySelector("main"), tb = d.querySelector(".typebar"),
+        viewer = d.querySelector(".viewer");
+  L.push(`요청 skin=${SKIN||"-"} tone=${TONE||"-"} / 실제 data-skin=${d.documentElement.dataset.skin||"(ledger)"} data-theme=${d.documentElement.dataset.theme||"-"} viewport=${W}x${H}`);
+  if(dl) L.push(`.doclist 적용 규칙 overflow=${w.getComputedStyle(dl).overflow} width=${w.getComputedStyle(dl).width}`);
+  L.push(`행 개수 = ${d.querySelectorAll(".doclist .row").length}`);
+  L.push(`.doclist   ${geo(dl,w)}`);
+  L.push(`.typebar   ${geo(tb,w)}`);
+  L.push(`.docs      ${geo(docs,w)}`);
+  L.push(`main       ${geo(main,w)}`);
+  L.push(`.viewer    ${geo(viewer,w)}`);
+  L.push(`html       client=${d.documentElement.clientHeight} scroll=${d.documentElement.scrollHeight} overflowY=${w.getComputedStyle(d.documentElement).overflowY}`);
+  L.push(`body       client=${d.body.clientHeight} scroll=${d.body.scrollHeight} overflowY=${w.getComputedStyle(d.body).overflowY}`);
+  // 스크롤 시도
+  if(dl){
+    dl.scrollTop = 99999; await sleep(200);
+    L.push(`.doclist scrollTop=99999 시도 -> ${dl.scrollTop}  (스크롤 가능? ${dl.scrollTop>0?"예":"아니오"})`);
+    const lastRow = [...d.querySelectorAll(".doclist .row")].pop();
+    if(lastRow){
+      const rr = lastRow.getBoundingClientRect(), dr = dl.getBoundingClientRect();
+      L.push(`마지막 행 bottom=${Math.round(rr.bottom)} / doclist bottom=${Math.round(dr.bottom)} -> ${rr.bottom<=dr.bottom+1?"보임":"잘림(닿을 수 없음)"}`);
+    }
+    dl.scrollTop = 0;
+  }
+  // 문서 전체 스크롤 시도
+  w.scrollTo(0,99999); await sleep(200);
+  L.push(`window.scrollY 99999 시도 -> ${w.scrollY}`);
+  w.scrollTo(0,0);
+  // 폴링 후 스크롤 유지 확인 (renderDocs가 innerHTML 교체 시 scrollTop 리셋?)
+  if(dl && P.get("poll")==="1"){
+    dl.scrollTop = 400; await sleep(200);
+    const before = dl.scrollTop;
+    if(w.renderDocs) w.renderDocs(); else L.push("renderDocs 전역 없음 — 폴링 재현 생략");
+    await sleep(400);
+    L.push(`재렌더 전 scrollTop=${before} -> 재렌더 후 ${d.querySelector(".doclist").scrollTop}`);
+  }
+  if(P.get("show")){
+    fr.style.left="0"; fr.style.top="0"; out.style.display="none";
+    document.body.style.padding="0";
+    const st = P.get("show");
+    if(dl) dl.scrollTop = st==="end" ? 99999 : +st;
+    return;
+  }
+  out.textContent = L.join("\n");
+})().catch(e=>{ out.textContent = "ERR "+e.message+"\n"+L.join("\n"); });
+</script></body></html>

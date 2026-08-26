@@ -23,6 +23,9 @@ from unittest import mock
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
 
+# 임시 포트를 뽑지 않는다 — 고정 풀에서 돌려쓴다 (REQ-20260825-100, portpool 참조)
+from portpool import pool_socket  # noqa: E402
+
 
 class TestAutoUpdate(unittest.TestCase):
     """claude 자동 업그레이드 (REQ-20260825-025): 24h 스로틀·옵트아웃·실패 무해."""
@@ -85,9 +88,7 @@ class TestCodeArgs(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp(prefix="s9code-")
         # 더미 리스너: cmd_code의 포트 체크를 통과시켜 실서버 스폰 방지
-        cls.lsock = socket.socket()
-        cls.lsock.bind(("127.0.0.1", 0))
-        cls.lsock.listen(8)
+        cls.lsock = pool_socket()
         cls.port = cls.lsock.getsockname()[1]
         t = threading.Thread(target=cls._accept_loop, daemon=True)
         t.start()

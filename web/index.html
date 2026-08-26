@@ -207,31 +207,35 @@ main{padding:18px 22px}
 .card:hover{background:var(--accent-soft)}
 .card .id{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.02em}
 /* 우선순위 표기 (REQ-20260826-005 반려 재작업). 기본값 50도 반드시 그린다 —
-   보이지 않는 축은 없는 축이고, 축이 없으면 "무엇을 올릴지" 판단할 계기가 없다.
-   1차 시안은 값을 .id 줄 앞에 얹었다: 문서번호와 서체·크기·색이 같아 통째로
-   묻혔고 "하나도 보이지 않는다"로 반려됐다. 두 가지를 바꾼다.
-   (1) 자리 — 카드 메타 줄(.m)의 맨 앞. 카드마다 같은 x에서 시작하는 숫자 열이
-       생겨 컬럼을 세로로 훑으면 순위가 서로 비교된다(장부의 금액 열).
-   (2) 표기 — 등급을 색면이 아니라 세 채널이 동시에 말한다: 게이지 글리프
-       높이(▁▃▅▇) · 잉크색 · 글자 무게. 색을 못 봐도 글리프 높이로 갈리고,
-       숫자는 tabular-nums라 자릿수가 흔들리지 않는다.
-   배경 칠·세로 띠 없음. 10px 본문 안에 들어가 카드 높이는 그대로다. */
-.pri{display:inline-flex;align-items:baseline;gap:3px;white-space:nowrap;
-  font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:10px;
+   보이지 않는 축은 없는 축이다. 값이 기본과 다를 때만 찍었더니 전 문서가 50이라
+   화면 어디에도 아무 값이 없었고 "숨겨져 있는 건가"로 반려됐다. 시끄러움보다
+   부재가 나쁘다: 늘 그리되, 낮을수록 조용하고 높을수록 또렷하게 만든다.
+   (1) 자리 — 카드 메타 줄(.m)의 맨 앞(size보다 먼저). 카드마다 같은 x에서
+       시작하는 숫자 열이 생겨 컬럼을 세로로 훑으면 순위가 서로 비교된다
+       (장부의 금액 열). 크기(S/M/L)보다 먼저 읽혀야 할 축이다.
+   (2) 표기 — 등급을 색면이 아니라 세 채널이 동시에 말한다: 게이지 마크
+       높이(▁▃▅▇) · 잉크색 · 글자 무게. 색을 못 봐도 마크 높이와 굵기로
+       갈리고, 숫자는 tabular-nums라 자릿수가 흔들리지 않는다(등급 이름만
+       두지 않는 이유 — 이 축은 '가중치'라 값 자체가 정보다).
+   배경 칠·세로 띠·pill 없음. 크기는 부모(메타 줄 11px / Docs 행 10px)를
+   그대로 물려받아 어느 skin·density에서도 이웃 칩과 같은 리듬에 선다. */
+.prio{display:inline-flex;align-items:baseline;gap:3px;white-space:nowrap;
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
   font-weight:500;letter-spacing:.02em;color:var(--muted)}
-.pri .pmk{font-style:normal;font-size:12px;line-height:0;color:var(--text)}
-.pri .pnum{font-weight:inherit;min-width:2ch;text-align:right}
-/* 낮음은 흐리게 하지 않는다 — 10px에서 --faint는 대비 3:1을 못 넘긴다.
-   등급 차이는 글리프 높이와 잉크 농도(마크가 ink→muted)로 낸다. */
-.pri.low{font-weight:400}
-.pri.low .pmk{color:var(--muted)}
-.pri.high{color:var(--c-inprogress);font-weight:700}
-.pri.urgent{color:var(--c-blocked);font-weight:700;letter-spacing:.06em}
-.pri.high .pmk,.pri.urgent .pmk{color:inherit}
+.prio .pmark{font-style:normal;font-size:1.15em;line-height:0;color:var(--faint)}
+.prio .pnum{font-weight:inherit;min-width:2ch;text-align:right}
+/* 낮음도 흐림(--faint)으로 지우지 않는다 — 10~11px에서 대비 3:1을 못 넘긴다.
+   조용함은 색을 빼서가 아니라 무게(400)와 마크 높이(▁)로 만든다. */
+.prio[data-tier="low"]{font-weight:400}
+.prio[data-tier="normal"] .pmark{color:var(--muted)}
+/* 여기서부터가 이 기능의 전부 — 눈이 먼저 가야 하는 두 등급만 잉크색을 쓴다 */
+.prio[data-tier="high"]{color:var(--c-inprogress);font-weight:700}
+.prio[data-tier="urgent"]{color:var(--c-blocked);font-weight:700;letter-spacing:.07em}
+.prio[data-tier="high"] .pmark,.prio[data-tier="urgent"] .pmark{color:inherit}
 /* Docs 목록 행은 flex 컨테이너가 아닌 텍스트 줄 — 간격을 직접 준다 */
-.doclist .row .id .pri{margin-right:7px}
+.doclist .row .id .prio{margin-right:7px}
 /* 문서 뷰어 메타: 숫자 옆에 뜻을 적는다 — 목록과 달리 여기는 읽는 자리다 */
-.prin{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:7px}
+.prio-note{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:7px}
 .card .t{margin:3px 0 6px;font-weight:600;line-height:1.45;font-size:13.5px;letter-spacing:-.01em;
   padding-right:56px}
 .card .m{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);
@@ -544,6 +548,9 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   text-transform:uppercase;letter-spacing:.05em}
 .gmode.on{background:var(--text);color:var(--bg);border-color:var(--text)}
 .gtype{cursor:pointer;user-select:none}
+/* 선행 대기 엣지 범례 — 획 자체를 보여준다(색 칩이 아니라). 잉크색 = 캔버스의 획과 같은 색 */
+.gedge{display:inline-flex;align-items:center;gap:8px;color:var(--text)}
+.gedge svg{flex:none}
 .gtype.off{opacity:.35;text-decoration:line-through}
 
 /* ------- 상태 전이 액션 (판정 버튼 / 드래그) ------- */
@@ -574,6 +581,17 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .rvcap{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.09em;
   text-transform:uppercase;color:var(--c-review);font-weight:700;margin-bottom:3px}
 .card[data-status="blocked"] .rvcap{color:var(--c-blocked)}
+/* 선행 대기 한 줄 (REQ-20260826-009). 상태와 독립된 축이라 blocked 카드가 아닐
+   때도 뜬다 — 그래서 캡션을 blocked 잉크로 두어 "이건 상태가 아니라 제약"임을
+   말한다. 색은 글자에만, 면·띠 없음. 카드는 한 줄로 잘라 밀도를 지킨다. */
+.rvpt.dep{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rvpt.dep .rvcap{color:var(--c-blocked)}
+.depmore{color:var(--faint)}
+/* 문서 뷰: 카드가 자른 나머지를 전부 펴고, 각 선행으로 건너뛸 수 있게 한다 */
+.depcap{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--c-blocked);font-weight:700;margin-bottom:5px}
+.depitem{line-height:1.75}
+.depitem .cdot{display:inline-block;width:7px;height:7px;margin-right:7px}
 /* 담당자 이니셜 링(.av)은 calm 전용 마크다. @이름 표기를 쓰는 스킨에서는
    "@Ssjpark1"처럼 이름에 붙어 오타로 읽힌다 — 기본은 숨기고, 담당자 식별은
    그 스킨의 기존 수단(@마크·이름 pill)이 그대로 맡는다. */
@@ -1321,6 +1339,17 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   letter-spacing:.06em;border-radius:4px;padding:1px 5px;line-height:1.4;
   border:1px solid color-mix(in srgb,var(--text) 14%,transparent)}
 [data-skin="calm"] .card .tdd{border-radius:999px;padding:1px 7px;font-size:9.5px}
+/* 우선순위 = 잉크와 마크. calm도 색면·pill은 쓰지 않는다(위 .size 칩과 달리
+   윤곽조차 두지 않는다 — 카드 첫 칸이라 테두리를 주면 눈이 그 상자에 먼저
+   걸린다). low/normal은 참조 잉크(--calm-quiet: id·size와 같은 층)로 물러나고,
+   high/urgent만 상태 잉크로 나온다. 이니셜 링·태그 글자와 색이 겹치지 않게
+   카드 한 장에 뜨는 강조는 최대 하나로 유지된다. */
+[data-skin="calm"] .card .prio{font-size:11px;gap:4px;letter-spacing:.01em}
+[data-skin="calm"] .card .prio[data-tier="low"],
+[data-skin="calm"] .card .prio[data-tier="normal"],
+[data-skin="calm"] .card .prio[data-tier="low"] .pmark,
+[data-skin="calm"] .card .prio[data-tier="normal"] .pmark{color:var(--calm-quiet)}
+[data-skin="calm"] .card .prio[data-tier="urgent"]{letter-spacing:.05em}
 
 /* ---- 판정 블록: 캡션은 상태색 글자, 본문은 3줄로 접어 컬럼 리듬을 지킨다.
    접힌 내용은 카드 호버·키보드 포커스에서 전문으로 펼친다 (REQ-071 반려:
@@ -1520,32 +1549,35 @@ const GRP_LIMIT_SESSION = 5;                       // session은 기본 노출�
 
 // 우선순위 (REQ-20260826-005): 값이 없거나 범위 밖이면 기본 50으로 읽는다 —
 // s9의 work_order()와 같은 규칙이라 화면과 CLI의 순서 해석이 갈리지 않는다.
-// 정렬은 서버가 준 순서를 그대로 쓴다(화면에서 다시 정렬하지 않는다).
-const PRI_DEFAULT = 50;
-// 별칭 경계는 25/50/75/90의 중간값 — 55 같은 미세 조정값이 이름과 표기 위계에서
-// 따로 놀지 않도록 이름·클래스·마크를 같은 띠에서 뽑는다.
-// [하한, 한글 이름, 클래스, CLI 별칭, 게이지 글리프]. 글리프는 아래로 정렬된
-// 블록(U+2581·2583·2585·2587)이라 높이만으로 순위가 읽힌다 — 색을 못 보는
-// 조건에서도 등급이 갈린다(s9-design 접근성 기준 7).
-const PRI_BANDS = [
-  [83, "긴급", "urgent", "urgent", "▇"],
-  [63, "높음", "high",   "high",   "▅"],
-  [38, "보통", "normal", "normal", "▃"],
-  [ 1, "낮음", "low",    "low",    "▁"],
-];
-function priOf(r){
+// 정렬은 아래 workOrder() 한 곳에서만 건다.
+const PRIO_DEFAULT = 50;
+// 등급 경계는 척도 의미 그대로다: low 25 · normal 50 · high 75 · urgent 90.
+// 값에서 등급을 파생하는 함수는 하나(prioTier)뿐 — 카드·Docs 목록·문서 뷰어가
+// 같은 함수를 쓰므로 세 화면의 등급 판정이 갈릴 수 없다.
+// 이름/마크 표: [한글 이름, 게이지 마크]. 마크는 아래로 정렬된 블록 문자라
+// 높이만으로 순위가 읽힌다 — 색을 못 보는 조건에서도 등급이 갈린다
+// (s9-design 접근성 기준 7). ▁(1/8)은 10px에서 밑줄로 보여 ▂부터 쓴다.
+const PRIO_TIERS = {
+  urgent: ["긴급", "▇"],
+  high:   ["높음", "▅"],
+  normal: ["보통", "▃"],
+  low:    ["낮음", "▂"],
+};
+function prioOf(r){
   const n = Number(r && r.priority);
-  return Number.isFinite(n) && n >= 1 && n <= 99 ? Math.round(n) : PRI_DEFAULT;
+  return Number.isFinite(n) && n >= 1 && n <= 99 ? Math.round(n) : PRIO_DEFAULT;
 }
-function priBand(n){ return PRI_BANDS.find(b => n >= b[0]) || PRI_BANDS[3]; }
+function prioTier(p){ return p >= 90 ? "urgent" : p >= 75 ? "high" : p >= 50 ? "normal" : "low"; }
 // request에만 붙인다 — knowledge/session에는 이 축이 없다.
 // 마크와 숫자를 함께 낸다: 마크는 훑을 때(순위), 숫자는 볼 때(정확한 값).
-function priHTML(r){
+function prioHTML(r){
   if (!r || r.type !== "request") return "";
-  const n = priOf(r), b = priBand(n);
-  return `<span class="pri ${b[2]}" title="우선순위 ${n} · ${b[1]}(${b[3]}) —`
-    + ` 높을수록 먼저 진행한다 (기본 ${PRI_DEFAULT})"`
-    + `><i class="pmk" aria-hidden="true">${b[4]}</i><b class="pnum">${n}</b></span>`;
+  const p = prioOf(r), tier = prioTier(p), mark = PRIO_TIERS[tier][1];
+  // 툴팁은 한 문장만 — 척도 설명(1~99·기본 50·등급 이름)은 문서 뷰어 메타 행이
+  // 맡는다. 카드 위 툴팁에 설명서를 넣으면 아무도 끝까지 읽지 않는다.
+  return `<span class="prio" data-prio="${p}" data-tier="${tier}"`
+    + ` title="우선순위 ${p} (${tier}) — 높을수록 먼저 집는다"`
+    + `><i class="pmark" aria-hidden="true">${mark}</i><b class="pnum">${p}</b></span>`;
 }
 const TYPE_ORDER = ["request", "knowledge", "session", "project"];  // Docs 타입바 순서 = 사용 빈도
 
@@ -1559,8 +1591,15 @@ try{ const s = JSON.parse(localStorage.getItem("s9gtypes") || "null");
 let expanded = new Set();      // board 컬럼 / docs 그룹 펼침 상태
 let auditLimit = AUDIT_PAGE;
 
-// 최근 갱신 우선 정렬 — Board 컬럼/Docs 목록/검색 결과 공통
-const sortRecent = rows => [...rows].sort((a, b) =>
+// 작업 순서 — Board 컬럼/Docs 목록/검색 결과 공통. 진입점은 여기 하나다
+// (CLI의 work_order()와 같은 원리): 규칙이 흩어지면 탭마다 순서가 달라지고
+// 우선순위를 신뢰할 수 없게 된다.
+// 1차 키는 우선순위 내림차순 (REQ-20260826-005) — 표기만 하고 순서가 그대로면
+// 축이 화면을 바꾸지 않는다. 2차 키는 최근 갱신순으로 남긴다: CLI는 굶주림을
+// 막으려 생성 순(오래된 것 먼저)이지만, 보드는 대기열이 아니라 지금 상태를
+// 보는 화면이라 done 227건이 가장 오래된 것부터 쌓이면 쓸모가 없다.
+const workOrder = rows => [...rows].sort((a, b) =>
+  (prioOf(b) - prioOf(a)) ||
   (b.updated || b.created || "").localeCompare(a.updated || a.created || ""));
 
 const $ = s => document.querySelector(s);
@@ -1595,6 +1634,15 @@ function catFind(id){         // 정확 일치 우선, 아니면 유일 prefix (
   if (r) return r;
   const c = catalog.filter(x => x.id.startsWith(id + "-"));
   return c.length === 1 ? c[0] : null;
+}
+// 선행 의존은 수명이 있는 상태 축이다 (DOC-20260826-001 규칙 4): 선행이 끝나면
+// 엣지는 사라지고 근거는 History 에만 남는다. 서버(trigger_dependents·linkcheck)가
+// 청소하기 전 — 수동 편집, 아직 안 돈 카탈로그 — 에도 화면이 과거로 채워지지
+// 않도록 카드·문서·그래프가 같은 기준으로 한 번 더 거른다.
+const DEP_DEAD = new Set(["done", "cancelled"]);
+function liveBlockers(r){
+  if (!r || DEP_DEAD.has(r.status)) return [];   // 이미 끝난 문서는 기다릴 게 없다
+  return (r.blocked_by || []).map(catFind).filter(b => b && !DEP_DEAD.has(b.status));
 }
 const linkifyIds = escaped => escaped.replace(
   /(^|[^"\w-])((?:REQ|DOC|SES)-\d{8}-\d{3,}(?:-[0-9a-z]{4})?)/g,
@@ -2082,7 +2130,7 @@ function filtered(skipQ, skipType){
   const typeOff = skipType || tab === "board";
   // mine 가드(앞단): '내 것만' ON이면 내 active 프로젝트 문서만 — Board/Docs/Graph 공통
   const mine = mineActive() ? new Set(mineProjects().map(x => x.slug)) : null;
-  return sortRecent(catalog).filter(r => {
+  return workOrder(catalog).filter(r => {
     if (mine && !mine.has(r.project)) return false;
     if (u && r.user !== u) return false;
     if (p && r.project !== p) return false;
@@ -2146,9 +2194,21 @@ function render(){
 /* ---------------- board ---------------- */
 function cardHTML(r){
   const isReq = r.type === "request";
+  // "무엇을 기다리는가" 한 줄 (REQ-20260826-009). blocked 전용이 아니다 —
+  // open/in-progress 카드도 안 끝난 선행을 가질 수 있고, 사용자가 알고 싶었던
+  // 것이 바로 그 경우다. 카드에선 선행 1건 제목 + 외 N건까지만; 전부와 이동
+  // 경로는 문서 뷰가 맡는다.
+  const bl = isReq ? liveBlockers(r) : [];
+  const dep = bl.length
+    ? `<div class="rvpt dep" title="${esc(bl.map(b => shortId(b.id) + " " + b.title).join(" · "))}">`
+      + `<span class="rvcap">선행 대기</span>${esc(bl[0].title || shortId(bl[0].id))}`
+      + (bl.length > 1 ? `<span class="depmore"> 외 ${bl.length - 1}건</span>` : "") + `</div>`
+    : "";
   const acts = isReq && r.status === "review"
     ? `<div class="judge">${r.review_point ? `<div class="rvpt"><span class="rvcap">확인 요청</span>${esc(r.review_point)}</div>` : ""}<div class="acts"><button data-approve="${esc(r.id)}" title="done으로 전이">✓ 승인</button><button data-reject="${esc(r.id)}" title="in-progress로 반려">↺ 반려</button></div></div>`
-    : isReq && r.status === "blocked" && r.block_reason
+    // 선행이 잡히면 구조화된 대기 줄이 이긴다 — 같은 사실을 두 줄로 말하지 않는다.
+    // 관계가 없는 과거 문서만 note 본문의 대기 사유로 폴백 (DOC-20260826-001 규칙 7).
+    : isReq && r.status === "blocked" && r.block_reason && !bl.length
     ? `<div class="rvpt"><span class="rvcap">대기 사유</span>${esc(r.block_reason)}</div>`
     : "";
   const liveDot = r.status === "in-progress"
@@ -2167,12 +2227,12 @@ function cardHTML(r){
     <div class="id">${liveDot}${esc(shortId(r.id))}</div>
     <div class="t">${esc(r.title)}</div>
     <div class="m">
-      ${priHTML(r)}
+      ${prioHTML(r)}
       <span class="badge" style="--ah:${tagHue(r.user||"?")}"><i class="av">${esc((r.user||"?").slice(0,1).toUpperCase())}</i>${esc(r.user)}</span>
       ${r.size ? `<span class="size">${esc(r.size)}</span>` : ""}
       ${r.tdd ? `<span class="tdd${r.tdd.passed===r.tdd.total?" full":""}" title="TDD 시나리오 ${r.tdd.passed}/${r.tdd.total} 통과">TDD ${r.tdd.passed}/${r.tdd.total}</span>` : ""}
       ${(r.tags||[]).filter(t=>!SYS_TAGS.has(t)).slice(0,2).map(t=>`<span class="tag" style="--th:${tagHue(t)}">#${esc(t)}</span>`).join("")}
-    </div>${acts}
+    </div>${acts}${dep}
     ${r.status_since ? `<span class="elapsed" data-since="${esc(r.status_since)}" title="현재 상태(${esc(r.status)}) 시작 이후 경과">${fmtElapsed(r.status_since)}</span>` : ""}</div>`;
 }
 
@@ -2292,7 +2352,7 @@ async function renderDocs(rows){
         `<div class="snip">${m.n}: ${hl(m.text, q)}</div>`).join("") : "";
       return `<div class="row${r.id===selectedDoc?" sel":""}" data-doc="${esc(r.id)}" style="--sc:${SCOLOR[r.status]}">
         <span class="st">${esc(r.status)}</span>
-        <div class="id">${priHTML(r)}${esc(shortId(r.id))}</div><div>${esc(r.title)}</div>${snips}</div>`;
+        <div class="id">${prioHTML(r)}${esc(shortId(r.id))}</div><div>${esc(r.title)}</div>${snips}</div>`;
     }).join("");
     if (grp.length > shown.length)
       list += `<button class="more" data-expand="grp:${g}">${grp.length - shown.length}개 더 보기</button>`;
@@ -2386,18 +2446,31 @@ async function loadDoc(id, bg){
     ? v.map(x => /^(REQ|DOC|SES)-\d{8}-\d{3,}(-[0-9a-z]{4})?$/.test(x)
         ? `<a class="doclink" data-doc="${esc(x)}">${esc(shortId(x))}</a>` : esc(x)).join(", ") : null;
   const rel = v => v ? `<a class="doclink" data-doc="${esc(v)}">${esc(shortId(v))}</a>` : null;
+  // 선행 의존 (REQ-20260826-009): "무엇을 기다리는가"를 상태 바로 아래에서 읽고,
+  // 그 문서로 바로 건너뛴다. 끝난 선행은 이 줄에서 사라지고 근거는 아래 History
+  // 라인에 남는다 (DOC-20260826-001 규칙 4) — 그래서 목록이 과거로 안 늘어난다.
+  const blk = liveBlockers({status: m.status, blocked_by: m.blocked_by});
+  const depRow = blk.length
+    ? `<span class="depcap">${blk.length > 1 ? `이 ${blk.length}건이 모두` : "이 문서가"} 끝나야 풀린다</span>` + blk.map(b =>
+        `<div class="depitem"><span class="cdot" style="background:${SCOLOR[b.status] || "var(--muted)"}"></span>`
+        + `<a class="doclink" data-doc="${esc(b.id)}">${esc(shortId(b.id))}</a> ${esc(b.title)}`
+        + `<span class="path"> ${esc(b.status)}</span></div>`).join("")
+    : null;
   const fields = [
     ["status", m.status ? `<span style="color:${SCOLOR[m.status]}">●</span> ${esc(m.status)}` : null],
+    ["blocked_by", depRow],
     ["summary", esc(m.summary) || null], ["goal", esc(m.goal) || null],
     ["user / machine / session", esc([m.user, m.machine, m.session].filter(Boolean).join(" / "))],
-    ["project", esc(m.project) || null], ["size", esc(m.size) || null],
+    ["project", esc(m.project) || null],
     // 우선순위는 기본값(50)일 때도 적는다 — 값이 안 보여 "숨겨져 있는 건가"로
     // 반려된 축이다 (REQ-20260826-005). 여기가 그 물음에 답하는 자리이므로
     // 숫자만 두지 않고 등급 이름과 CLI 별칭까지 적는다 — 카드의 마크가 무슨
     // 뜻인지 배우는 곳이자, 값을 바꾸려면 어떤 단어를 쓰는지 아는 곳이다.
+    // 카드와 같은 순서로 size보다 앞에 둔다(우선순위 → 크기).
     ["priority", m.type === "request"
-      ? `${priHTML(m)}<span class="prin">${esc(priBand(priOf(m))[1])}(${esc(priBand(priOf(m))[3])})`
-        + ` · 높을수록 먼저 (1~99, 기본 ${PRI_DEFAULT})</span>` : null],
+      ? `${prioHTML(m)}<span class="prio-note">${esc(PRIO_TIERS[prioTier(prioOf(m))][0])}`
+        + `(${prioTier(prioOf(m))}) · 높을수록 먼저 집는다 (1~99, 기본 ${PRIO_DEFAULT})</span>` : null],
+    ["size", esc(m.size) || null],
     ["parent", rel(m.parent)], ["children", li(m.children)],
     ["derived_from", rel(m.derived_from)], ["relates", li(m.relates)],
     ["refs_docs", li(m.refs_docs)],
@@ -4169,7 +4242,15 @@ async function renderGraph(rows){
   // 범례 클릭으로 타입별 on/off (localStorage 유지)
   const visible = new Set(rows.filter(r => gtypes.has(r.type)).map(r => r.id));
   const nodes = graph.nodes.filter(n => visible.has(n.id)).map(n => ({...n}));
-  const edges = graph.edges.filter(e => visible.has(e.from) && visible.has(e.to));
+  // 선행 의존 엣지는 수명이 있다 (DOC-20260826-001 규칙 4) — 양끝 중 하나라도
+  // 끝났으면 그리지 않는다. 끝난 의존을 계속 그리면 그래프가 과거로 채워진다.
+  const stOf = Object.fromEntries(graph.nodes.map(n => [n.id, n.status]));
+  const edges = graph.edges.filter(e => visible.has(e.from) && visible.has(e.to)
+    && !(e.rel === "blocked_by" && (DEP_DEAD.has(stOf[e.to]) || DEP_DEAD.has(stOf[e.from]))));
+  // 병목 농도: 이 선행이 지금 몇 건을 붙잡고 있는가. 노드 후광이 아니라 엣지의
+  // 굵기·농도로 — 진한 화살표가 여럿 뻗은 노드가 곧 병목이다 (설계 문서 렌더 요구).
+  const blocking = {};
+  edges.forEach(e => { if (e.rel === "blocked_by") blocking[e.to] = (blocking[e.to] || 0) + 1; });
   const deg = {};
   edges.forEach(e => { deg[e.from]=(deg[e.from]||0)+1; deg[e.to]=(deg[e.to]||0)+1; });
   const adj = {};
@@ -4204,6 +4285,7 @@ async function renderGraph(rows){
       <button class="gmode${graphLayout==="dag"?" on":""}" data-glayout="dag">dag</button>
       ${["request","knowledge","session"].map(t => `<span class="gtype${gtypes.has(t) ? "" : " off"}" data-gtype="${t}"
         title="클릭 = ${t} 노드 표시 토글"><span class="dot" style="background:${TCOLOR[t]}"></span>${t}</span>`).join("")}
+      <span class="gedge" title="blocked_by — 선행이 끝나야 후행이 풀린다. 화살촉이 가리키는 쪽이 막혀 있는 요청이다. 계보(parent 실선 · derived/relates 가는 점선)와 달리 잉크로 그리고, 여러 건을 붙잡은 선행일수록 진하고 굵다. 선행이 끝나면 이 화살표는 사라진다."><svg width="40" height="9" aria-hidden="true"><line x1="0" y1="4.5" x2="28" y2="4.5" stroke="currentColor" stroke-width="1.6" stroke-dasharray="9 5"/><polygon points="28,0.7 39,4.5 28,8.3" fill="currentColor"/></svg>선행 → 후행 대기</span>
       <span style="margin-left:auto">앰버 호+숫자 = 미완료 파생 병목(1건=¼둘레, 4건+=만원) · 점멸 = in-progress · 실선 링 = blocked · 점선 링 = review</span>
     </div>
     <canvas id="gcanvas"></canvas>
@@ -4234,6 +4316,9 @@ async function renderGraph(rows){
     TC[k] = rootCS.getPropertyValue("--t-" + k).trim() || TCOLOR_RAW[k];
   const TCrgb = {};
   for (const k in TC) TCrgb[k] = parseCol(TC[k]);
+  // 선행 의존 획은 잉크(--text)다 — 계보 엣지의 저채도 회색과 대비되어 "계보가
+  // 아니라 지금 작동 중인 제약"으로 읽힌다. 토큰 파생이라 skin/tone을 따라간다.
+  const inkRGB = parseCol(rootCS.getPropertyValue("--text").trim() || (dark ? "#e8e8e4" : "#141518"));
   // 대기 원근(aerial perspective): 원경 노드 색을 배경 쪽으로 — 알파 단독보다 깊이가 뚜렷
   const mixToBg = (rgb, m) => rgb.map((c, i) => Math.round(c + (bgRGB[i] - c) * m));
   // 비네트: 가장자리를 bg 파생 셰이드로 살짝 가라앉혀 중앙 클러스터에 깊이 — 1회 생성
@@ -4348,6 +4433,23 @@ async function renderGraph(rows){
     st.alpha = Math.max(0.005, st.alpha * 0.985);
   }
 
+  // 화살촉: 선행(x0,y0) → 후행(x1,y1). 막힌 문서 원의 경계 바로 밖에 촉을 놓아
+  // 노드를 덮지 않게 한다. 크기는 화면 px 기준(√k)이라 줌아웃해도 방향이 남고,
+  // 채워진 삼각형이라 다크 톤에서도 획보다 먼저 보인다.
+  function depArrow(x0, y0, x1, y1, rTo, col, w){
+    const dx = x1 - x0, dy = y1 - y0, d = Math.hypot(dx, dy) || 1;
+    const ux = dx / d, uy = dy / d;
+    const L = Math.max(7, Math.min(14, (7.5 + 1.4 * w) * Math.sqrt(st.tf.k)));
+    const B = L * 0.44;
+    const tx = x1 - ux * (rTo + 2.5), ty = y1 - uy * (rTo + 2.5);
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx - ux * L - uy * B, ty - uy * L + ux * B);
+    ctx.lineTo(tx - ux * L + uy * B, ty - uy * L - ux * B);
+    ctx.closePath();
+    ctx.fillStyle = col; ctx.fill();
+  }
+
   function draw(){
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = bgColor;
@@ -4364,9 +4466,26 @@ async function renderGraph(rows){
     const hov = st.hover, nb = hov ? (adj[hov.id] || new Set()) : null;
     const dim = id => hov && id !== hov.id && !nb.has(id);
     for (const e of edges){
-      const p = nodes[idx[e.from]], q = nodes[idx[e.to]];
+      const p = nodes[idx[e.from]], q = nodes[idx[e.to]];   // p=막힌 문서(후행), q=선행
       const hot = hov && (e.from === hov.id || e.to === hov.id);
       ctx.beginPath(); ctx.moveTo(sxOf(p), syOf(p)); ctx.lineTo(sxOf(q), syOf(q));
+      if (e.rel === "blocked_by"){
+        // 세 번째 획: 잉크 + 긴 대시 리듬(9/5) + 화살촉. parent 실선·계보 점선(4/4)
+        // 어느 쪽과도 굵기·색·리듬이 다르다. 굵기와 농도는 이 선행이 붙잡은
+        // 건수에 비례 — 병목이 그림에서 바로 읽힌다.
+        const w = Math.min(4, blocking[e.to] || 1);
+        const dz = 0.68 + 0.32 * Math.max(depthOf01(p), depthOf01(q));  // 원근은 절제 — 제약은 흐려지면 안 된다
+        const base = hov ? 0.16 : ((dark ? 0.66 : 0.60) + 0.07 * w) * dz;  // hover 시 나머지는 물러난다
+        const col = hot ? (dark ? "#8b9cf5" : "#6474e0")
+          : `rgba(${inkRGB.join(",")},${Math.min(0.92, base).toFixed(3)})`;
+        ctx.setLineDash([9, 5]);
+        ctx.lineWidth = (hot ? 2.1 : 1.0 + 0.42 * w) * dz;
+        ctx.strokeStyle = col;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        depArrow(sxOf(q), syOf(q), sxOf(p), syOf(p), p.r * scOf(p), col, w);
+        continue;
+      }
       ctx.setLineDash(e.rel === "parent" ? [] : [4, 4]);
       if (hot){
         ctx.lineWidth = 1.8;

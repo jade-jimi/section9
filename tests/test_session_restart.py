@@ -142,6 +142,138 @@ class TestRestartGuards(unittest.TestCase):
         self.assertFalse(r["ok"])
 
 
+class TestWorkerModel(unittest.TestCase):
+    """무인 워커 모델 고정 (REQ-20260825-080, Fable 한도 소진 실사고).
+
+    워커를 모델 지정 없이 띄우면 계정 기본 모델을 쓴다 — 그 모델 한도가 소진되면
+    스폰된 워커가 전부 즉시 죽고, 대시보드 대상 세션까지 죽은 워커로 잡혀
+    모델 변경조차 불가능해진다. auto_resume_model 설정이 그 경로를 막는다."""
+
+    # R13. 설정이 있으면 --model 인자가 붙고, 없으면 붙지 않는다
+    def test_r13_model_args(self):
+        with mock.patch.object(mod, "user_config",
+                               lambda n: {"auto_resume_model": "opus"}):
+            self.assertEqual(mod._spawn_model_args("sjpark1"),
+                             ["--model", "opus"])
+        with mock.patch.object(mod, "user_config", lambda n: {}):
+            self.assertEqual(mod._spawn_model_args("sjpark1"), [])
+        # 설정 읽기 실패가 스폰을 막아선 안 된다
+        with mock.patch.object(mod, "user_config",
+                               mock.Mock(side_effect=OSError)):
+            self.assertEqual(mod._spawn_model_args("sjpark1"), [])
+
+    # R14. 모든 워커 스폰 경로가 이 인자를 통과한다 (한 군데라도 빠지면 재발)
+    def test_r14_all_spawn_sites_covered(self):
+        with open(S9, encoding="utf-8") as f:
+            src = f.read()
+        # 스폰 argv 조립 지점 — Popen 호출 형태가 아니라 argv 형태로 센다
+        # (스폰 경로가 _spawn_worker 하나로 합쳐져도 계속 잡힌다)
+        bare = src.count('["claude", "-p", prompt')
+        covered = src.count("*_spawn_model_args(owner)")
+        # 0 == 0 으로 조용히 통과하면 감시가 눈을 잃는다 — 하한을 못 박는다
+        self.assertGreaterEqual(bare, 1, "워커 스폰 argv 조립 지점을 못 찾았다 "
+                                         "— 패턴이 바뀌었으면 이 감시를 고쳐라")
+        self.assertEqual(bare, covered, "모델 인자 없는 워커 스폰 경로가 남았다")
+
+    # R15. <synthetic> 등 합성 모델 표기는 상태줄에 흘리지 않는다
+    def test_r15_synthetic_model_ignored(self):
+        tp = write_jsonl([asst("end_turn", "claude-opus-5"),
+                          asst("end_turn", "<synthetic>")], "syn-full.jsonl")
+        self.assertEqual(mod.session_model({"transcript_path": tp}),
+                         "claude-opus-5")
+
+
+class TestModelPersistence(unittest.TestCase):
+    """모델 선택 지속 (REQ-20260825-080).
+
+    대시보드 모델 변경은 재시작 마커의 --model 뿐이라 그 재개 1회에만 붙었다.
+    세션이 새로 뜨거나(s9 code) 무인 워커가 스폰되면 계정 기본값으로 돌아가
+    사용자가 고른 모델이 '제멋대로 되돌아가는' 것처럼 보였다."""
+
+    def _idle_binding(self, sid, user="tester"):
+        tp = write_jsonl([asst("end_turn")], f"{sid}-full-session-id.jsonl")
+        make_binding(sid, attach_pid=str(os.getpid()), transcript_path=tp,
+                     user=user)
+        return tp
+
+    # M2. --model 만 교체하고 나머지 인자는 보존 — 중복 누적 금지
+    def test_m2_args_set_model(self):
+        f = mod._args_set_model
+        self.assertEqual(f("--permission-mode auto", "opus"),
+                         "--permission-mode auto --model opus")
+        self.assertEqual(f("--permission-mode auto --model fable", "opus"),
+                         "--permission-mode auto --model opus")
+        self.assertEqual(f("--model=fable --verbose", "opus"),
+                         "--verbose --model opus")
+        self.assertEqual(f("", "opus"), "--model opus")
+        # 값이 빠진 꼬리 --model 도 삼킨다 (인자 밀림 방지)
+        self.assertEqual(f("--verbose --model", "opus"), "--verbose --model opus")
+        self.assertEqual(f("--model opus", ""), "")
+
+    # M5. 재시작 루프가 --model 을 두 번 넘기지 않는다 — 마커가 이긴다
+    def test_m5_restart_cmd_no_duplicate_model(self):
+        base = ["claude", "--permission-mode", "auto", "--model", "fable"]
+        cmd = mod._restart_cmd(base, {"resume": "S1", "model": "opus",
+                                      "effort": "high"})
+        self.assertEqual(cmd.count("--model"), 1, cmd)
+        self.assertEqual(cmd[cmd.index("--model") + 1], "opus", cmd)
+        self.assertIn("--permission-mode", cmd)
+        self.assertEqual(cmd[cmd.index("--resume") + 1], "S1")
+        self.assertIn("--effort", cmd)
+        # 마커에 모델이 없으면 base 의 모델을 그대로 둔다 (기존 동작 보존)
+        cmd2 = mod._restart_cmd(base, {"resume": "S1", "effort": "high"})
+        self.assertEqual(cmd2[:5], base)
+
+    # M1+M6. 대시보드 변경이 두 저장처를 같은 값으로 맞춘다
+    def test_m1_persist_both_places(self):
+        cfg = {"s9code_args": "--permission-mode auto --model fable"}
+        writes = {}
+
+        def fake_set(name, key, value, actor=""):
+            writes[key] = value
+            cfg[key] = value
+        with mock.patch.object(mod, "user_config", lambda n: dict(cfg)), \
+                mock.patch.object(mod, "do_user_config_set", fake_set):
+            done = mod._persist_model_choice("tester", "claude-opus-5[1m]")
+        self.assertEqual(writes.get("auto_resume_model"), "claude-opus-5[1m]")
+        self.assertEqual(writes.get("s9code_args"),
+                         "--permission-mode auto --model claude-opus-5[1m]")
+        self.assertEqual(sorted(done), ["auto_resume_model", "s9code_args"])
+
+    # M3. 모델 없이 effort/account 만 바꾸면 config 를 건드리지 않는다
+    def test_m3_no_model_no_write(self):
+        called = []
+        with mock.patch.object(mod, "do_user_config_set",
+                               lambda *a, **k: called.append(a)):
+            self.assertEqual(mod._persist_model_choice("tester", ""), [])
+            self.assertEqual(mod._persist_model_choice("", "opus"), [])
+        self.assertEqual(called, [])
+
+    # M4. config 쓰기 실패가 재시작을 깨뜨리지 않는다 (best-effort)
+    def test_m4_write_failure_isolated(self):
+        self._idle_binding("persistfail")
+        with mock.patch.object(mod, "_pid_is_claude", lambda p: True), \
+                mock.patch.object(mod, "do_user_config_set",
+                                  mock.Mock(side_effect=OSError("read-only"))):
+            r = mod.restart_session("persistfail", model="opus")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r.get("saved"), [])
+
+    # M1(경로). restart_session 성공이 실제로 저장을 호출한다
+    def test_m1b_restart_persists(self):
+        self._idle_binding("persistok")
+        writes = {}
+        with mock.patch.object(mod, "_pid_is_claude", lambda p: True), \
+                mock.patch.object(mod, "user_config", lambda n: {}), \
+                mock.patch.object(
+                    mod, "do_user_config_set",
+                    lambda n, k, v, actor="": writes.__setitem__(k, v)):
+            r = mod.restart_session("persistok", model="claude-opus-5[1m]")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(writes.get("auto_resume_model"), "claude-opus-5[1m]")
+        self.assertEqual(writes.get("s9code_args"), "--model claude-opus-5[1m]")
+
+
 class TestRestartUiContract(unittest.TestCase):
     """대시보드 마크업 계약 (반려 재작업): 모델 라벨은 미상이어도 항상 보이고,
     구버전 serve(404)는 정확한 사유로 안내하며, 진단 플래그로 자가 검증 가능."""

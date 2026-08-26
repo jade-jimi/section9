@@ -20,6 +20,9 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
 
+# 임시 포트를 뽑지 않는다 — 고정 풀에서 돌려쓴다 (REQ-20260825-100, portpool 참조)
+from portpool import free_port, wait_server  # noqa: E402
+
 
 class TestTerminalApi(unittest.TestCase):
     @classmethod
@@ -37,21 +40,11 @@ class TestTerminalApi(unittest.TestCase):
         cls.stream = os.path.join(cls.tmp, "streams",
                                   "ssetest1-0000-0000.jsonl")
         cls.write_event("첫 이벤트")
-        s = socket.socket()
-        s.bind(("127.0.0.1", 0))
-        cls.port = s.getsockname()[1]
-        s.close()
+        cls.port = free_port()
         cls.srv = subprocess.Popen(
             [S9, "serve", "--host", "127.0.0.1", "--port", str(cls.port)],
             env=cls.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(50):
-            try:
-                socket.create_connection(("127.0.0.1", cls.port), 0.2).close()
-                break
-            except OSError:
-                time.sleep(0.1)
-        else:
-            raise RuntimeError("server did not start")
+        wait_server(cls.port)   # WSL 포트 공개 지연 대비 (REQ-099) — 백오프 대기
 
     @classmethod
     def write_event(cls, text):

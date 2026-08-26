@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>contrast audit</title>
+<style>body{font:12px ui-monospace,monospace;margin:0;padding:8px;background:#fff;color:#000}
+#f{width:1400px;height:900px;border:0;position:absolute;left:-9999px;top:0}
+pre{white-space:pre-wrap;margin:0}</style></head><body>
+<iframe id="f"></iframe><pre id="out">running…</pre>
+<script>
+const COMBOS = JSON.parse(new URLSearchParams(location.search).get("combos") || "[]");
+const VIEW = new URLSearchParams(location.search).get("view") || "board";
+const out = document.getElementById("out"), fr = document.getElementById("f");
+const lines = [];
+
+function parseC(s){
+  if(!s) return null;
+  let m = s.match(/rgba?\(([^)]+)\)/); if(!m) return null;
+  const p = m[1].split(/[,\s/]+/).filter(Boolean).map(Number);
+  return {r:p[0],g:p[1],b:p[2],a:p.length>3?p[3]:1};
+}
+function over(fg,bg){ // fg over bg
+  const a=fg.a; return {r:fg.r*a+bg.r*(1-a), g:fg.g*a+bg.g*(1-a), b:fg.b*a+bg.b*(1-a), a:1};
+}
+function lum(c){
+  const f=v=>{v/=255; return v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4)};
+  return 0.2126*f(c.r)+0.7152*f(c.g)+0.0722*f(c.b);
+}
+function ratio(a,b){const l1=lum(a),l2=lum(b);const hi=Math.max(l1,l2),lo=Math.min(l1,l2);return (hi+0.05)/(lo+0.05)}
+
+// 배경 합성: 조상 체인을 따라 올라가며 불투명 배경을 만날 때까지 알파 합성
+function effBg(el,win){
+  let stack=[], n=el, grad=false;
+  while(n && n.nodeType===1){
+    const cs=win.getComputedStyle(n);
+    const bi=cs.backgroundImage;
+    if(bi && bi!=="none") grad=true;
+    const c=parseC(cs.backgroundColor);
+    if(c && c.a>0){ stack.push(c); if(c.a>=0.999) break; }
+    n=n.parentElement;
+  }
+  let base={r:255,g:255,b:255,a:1};
+  const last=stack[stack.length-1];
+  if(!last || last.a<0.999){ // 루트까지 투명 → html/body 배경, 없으면 흰색
+    const rc=parseC(win.getComputedStyle(win.document.documentElement).backgroundColor);
+    if(rc&&rc.a>=0.999) base=rc;
+  }
+  let acc=base;
+  for(let i=stack.length-1;i>=0;i--) acc=over(stack[i],acc);
+  return {bg:acc, grad};
+}
+
+function auditDoc(win, tag){
+  const doc=win.document, res=[];
+  const els=doc.querySelectorAll("body *");
+  for(const el of els){
+    // 직접 텍스트 노드를 가진 요소만 (컨테이너 중복 방지)
+    let txt="";
+    for(const n of el.childNodes) if(n.nodeType===3) txt+=n.nodeValue;
+    txt=txt.trim();
+    const cs=win.getComputedStyle(el);
+    // ::before/::after 로만 그려지는 캡션도 포함
+    const pb=win.getComputedStyle(el,"::before").content;
+    if(!txt && (!pb||pb==="none"||pb==='""')) continue;
+    if(cs.visibility==="hidden"||cs.display==="none"||parseFloat(cs.opacity)===0) continue;
+    const r=el.getBoundingClientRect();
+    if(r.width<1||r.height<1) continue;
+    if(r.top>win.innerHeight*3) continue; // 화면 밖 아주 먼 것은 생략
+    const fg0=parseC(cs.color); if(!fg0) continue;
+    const {bg,grad}=effBg(el,win);
+    const fg=fg0.a<1?over(fg0,bg):fg0;
+    const fs=parseFloat(cs.fontSize), fw=parseInt(cs.fontWeight)||400;
+    const large=(fs>=24)||(fs>=18.66&&fw>=700);
+    const need=large?3:4.5;
+    const cr=ratio(fg,bg);
+    if(cr<need){
+      res.push({sel:sig(el), cr:+cr.toFixed(2), need, fs:+fs.toFixed(1), grad,
+                fg:`${Math.round(fg.r)},${Math.round(fg.g)},${Math.round(fg.b)}`,
+                bg:`${Math.round(bg.r)},${Math.round(bg.g)},${Math.round(bg.b)}`,
+                txt:txt.slice(0,24)});
+    }
+  }
+  return res;
+}
+function sig(el){
+  let s=el.tagName.toLowerCase();
+  if(el.className && typeof el.className==="string") s+="."+el.className.trim().split(/\s+/).slice(0,3).join(".");
+  const p=el.parentElement;
+  if(p&&p.className&&typeof p.className==="string") s=p.className.trim().split(/\s+/)[0]+" > "+s;
+  return s;
+}
+
+// 레이아웃 파손: 가로 넘침 / 겹침 / 0폭 컬럼
+function auditLayout(win){
+  const doc=win.document, out=[];
+  const de=doc.documentElement;
+  if(de.scrollWidth>de.clientWidth+2) out.push(`page hscroll ${de.scrollWidth}>${de.clientWidth}`);
+  for(const el of doc.querySelectorAll(".col,.card,.stat,.stats,.board,.tabs button,.acts button,.hrow2")){
+    const cs=win.getComputedStyle(el), r=el.getBoundingClientRect();
+    if(r.width<1&&el.offsetParent!==null) out.push(`zero-width ${sig(el)}`);
+    // 자식이 부모 밖으로 삐져나옴 (overflow visible인 경우만 실제 잘림/겹침)
+    if(cs.overflow==="visible"&&cs.overflowX==="visible"){
+      for(const c of el.children){
+        const cr=c.getBoundingClientRect();
+        if(cr.width>0&&cr.right>r.right+2) out.push(`overflow-x ${sig(el)} < ${sig(c)} (+${Math.round(cr.right-r.right)}px)`);
+      }
+    }
+  }
+  return out;
+}
+
+function waitFor(win,fn,ms){
+  return new Promise(res=>{
+    const t0=Date.now();
+    (function tick(){
+      let ok=false; try{ok=fn(win)}catch(e){}
+      if(ok||Date.now()-t0>ms) return res(ok);
+      setTimeout(tick,120);
+    })();
+  });
+}
+
+(async function(){
+  for(const [skin,tone] of COMBOS){
+    fr.src=`/?skin=${skin}&theme=${tone}#${VIEW}`;
+    await new Promise(r=>fr.onload=r);
+    const win=fr.contentWindow;
+    await waitFor(win,w=>w.document.querySelector(".card,.doclist .row,.ccterm"),8000);
+    await new Promise(r=>setTimeout(r,600));
+    const c=auditDoc(win), l=auditLayout(win);
+    lines.push(`### ${skin} / ${tone}`);
+    if(l.length) lines.push("  LAYOUT: "+l.slice(0,8).join(" | "));
+    // 같은 시그니처는 최악 1건만
+    const seen=new Map();
+    for(const x of c){ const k=x.sel+"|"+x.fg; if(!seen.has(k)||seen.get(k).cr>x.cr) seen.set(k,x); }
+    const arr=[...seen.values()].sort((a,b)=>a.cr-b.cr);
+    if(!arr.length) lines.push("  contrast OK");
+    for(const x of arr.slice(0,14))
+      lines.push(`  ${x.cr}/${x.need} ${x.fs}px ${x.grad?"~":" "} ${x.sel}  fg(${x.fg}) bg(${x.bg})  "${x.txt}"`);
+    out.textContent=lines.join("\n");
+  }
+  lines.push("=== DONE ===");
+  out.textContent=lines.join("\n");
+  document.title="audit-done";
+})();
+</script></body></html>
