@@ -308,6 +308,11 @@ main{padding:18px 22px}
 .typebar .tb b{margin-left:4px;color:var(--faint);font-weight:600;
   font-variant-numeric:tabular-nums}
 .typebar .tb.on b{color:var(--text)}
+/* 질문만 두 번째 숫자를 갖는다 — 답 없이 남은 장수(REQ-20260826-019). 총량은
+   회색으로 물러나 있는데 이 숫자는 타입색 잉크로 서서, 훑는 눈에 걸린다.
+   면(배경)이 아니라 글자색과 무게로만 세운다. */
+.typebar .tb .unans{margin-left:5px;font-style:normal;font-weight:700;
+  color:var(--t-question);font-variant-numeric:tabular-nums}
 /* 그룹 헤더는 타입바 아래에 붙는다 — 두 sticky가 겹치지 않게 타입바 실측 높이만큼
    내린다(--tbh는 renderDocs가 렌더 직후 설정. 줄이 접히면 높이가 달라진다). */
 .doclist .grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
@@ -853,7 +858,11 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   color:var(--bg) !important}
 [data-skin="terminal"] .typebar .tb.on{background:var(--text);color:var(--bg);
   border-bottom-color:transparent}
-[data-skin="terminal"] .typebar .tb.on b{color:var(--bg)}
+/* 선택 상태는 배경이 잉크로 반전된다 — 그 위에서 타입색 잉크는 대비를 잃는다.
+   미답은 색을 잃어도 '미답'이라는 글자가 뜻을 그대로 나른다(색 없이도 구분되는
+   것이 원칙이다) — 가독성을 택한다. 색 강조는 비선택 상태에서 일한다. */
+[data-skin="terminal"] .typebar .tb.on b,
+[data-skin="terminal"] .typebar .tb.on .unans{color:var(--bg)}
 [data-skin="terminal"] .doclist .row.sel{background:var(--text);box-shadow:none}
 [data-skin="terminal"] .doclist .row.sel *{color:var(--bg) !important}
 [data-skin="terminal"] .stat.on{background:var(--text);color:var(--bg);box-shadow:none}
@@ -1636,7 +1645,8 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="calm"] .typebar .tb{border-bottom:0;border-radius:999px;padding:5px 8px;
   margin:0;letter-spacing:.03em}
 [data-skin="calm"] .typebar .tb.on{background:var(--text);color:var(--bg)}
-[data-skin="calm"] .typebar .tb.on b{color:var(--bg)}
+[data-skin="calm"] .typebar .tb.on b,
+[data-skin="calm"] .typebar .tb.on .unans{color:var(--bg)}
 [data-skin="calm"] .doclist .row{border-bottom:1px solid var(--hairline);padding:11px 16px}
 [data-skin="calm"] .doclist .row:last-child{border-bottom:0}
 [data-skin="calm"] .doclist .row:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
@@ -1799,9 +1809,13 @@ const ANSWER_NOTE_RE = /^### \S+ (?:answer|response)\b/im;
 // 3상이다: true(답함) · false(미답) · null(모른다). 파생 필드가 아직 카탈로그에
 // 없을 때 모르는 것을 '미답'이라 단정하면 같은 문서를 두고 목록과 뷰어가 서로
 // 다른 말을 한다 — 그건 이 타입이 없애려던 바로 그 상태다.
+// 질문이 아닌 문서에는 이 축이 없다 — 반드시 null 이다. 카탈로그는 비질문 행에도
+// answered 키를 빈 문자열로 실어 보내므로, 타입을 안 보면 `!!""` 가 그대로 '미답'이
+// 되어 요청 수백 건이 미답으로 세어진다 (REQ-20260826-019 구현 중 실제로 그랬다).
 function isAnswered(r, body){
+  if (!r || r.type !== "question") return null;
   if (typeof body === "string") return ANSWER_NOTE_RE.test(body);
-  return r && r.answered !== undefined ? !!r.answered : null;
+  return r.answered !== undefined ? !!r.answered : null;
 }
 function statusLabel(r, body){
   if (!r) return "";
@@ -2812,9 +2826,17 @@ async function renderDocs(rows){
   if (matchMap) pool = pool.filter(r => matchMap[r.id]);
   const tcount = {};
   pool.forEach(r => tcount[r.type] = (tcount[r.type]||0)+1);
-  const bar = TYPE_ORDER.filter(t => tcount[t] || t === curType).map(t =>
-    `<button class="tb${curType===t?" on":""}" data-typef="${t}"
-      title="${t} 문서만 보기 (다시 누르면 전체)">${t}<b>${tcount[t]||0}</b></button>`).join("");
+  // 답 없이 남은 질문 수 — 이 타입을 만든 이유가 여기 있다. "질문이 몇 장인가"와
+  // "그중 몇 장이 답이 없나"는 다른 질문이고, 총량만 보이면 뒤엣것을 아무도 묻지
+  // 않는다 (REQ-20260826-019). 판정은 목록 행과 같은 함수를 쓴다.
+  const qUnanswered = pool.filter(r => isAnswered(r) === false).length;
+  const bar = TYPE_ORDER.filter(t => tcount[t] || t === curType).map(t => {
+    // 0이면 붙이지 않는다 — 없는 신호를 자리만 채워 두면 있는 신호가 안 읽힌다.
+    const un = t === "question" ? qUnanswered : 0;
+    return `<button class="tb${curType===t?" on":""}" data-typef="${t}"
+      title="${t} 문서만 보기 (다시 누르면 전체)${un ? ` · 답 없는 질문 ${un}장` : ""}"
+      >${t}<b>${tcount[t]||0}</b>${un ? `<i class="unans">미답 ${un}</i>` : ""}</button>`;
+  }).join("");
   let list = `<div class="typebar">${bar}</div>`;
   for (const [g, grp] of Object.entries(groups)){
     if (!grp.length) continue;
@@ -5175,6 +5197,10 @@ async function renderGraph(rows){
       selectedDoc = id; tab = "docs";
       document.querySelectorAll("[data-tab]").forEach(b =>
         b.classList.toggle("active", b.dataset.tab === "docs"));
+      // 이 이동도 history에 쌓는다 (REQ-20260826-026): 빠뜨리면 스택 꼭대기가
+      // 아직 #graph 라, 뒤로가기가 그래프가 아니라 **그 이전 탭**(대개 board)
+      // 으로 튄다 — 화면은 문서로 넘어가 있는데 이력만 안 따라온 상태다.
+      pushRoute();
       stopGraph(); render(); return;
     }
     st.drag = null; st.pan = null;

@@ -217,6 +217,45 @@ class TestQuestionOnScreen(unittest.TestCase):
         self.assertIn("--t-question", sc.group(1))
         self.assertIn("isAnswered(r)", sc.group(1))
 
+    # V11. 답 없는 질문 수가 타입바에 선다 (REQ-20260826-019 반려 대응).
+    #      "질문이 몇 장인가"만 보이면 "그중 몇 장이 답이 없나"를 아무도 묻지 않는다.
+    def test_v11_typebar_shows_unanswered_count(self):
+        m = re.search(r"const qUnanswered = ([^\n;]+);", self.web)
+        self.assertIsNotNone(m, "타입바가 미답 건수를 세지 않는다")
+        self.assertIn("isAnswered(r) === false", m.group(1),
+                      "미답 판정이 목록·뷰어와 다른 규칙을 쓴다")
+        # question 에만 붙고, 0이면 붙지 않는다
+        bar = re.search(r'const un = t === "question" \? qUnanswered : 0;',
+                        self.web)
+        self.assertIsNotNone(bar, "미답 숫자가 question 외 타입에도 붙는다")
+        self.assertIn('un ? `<i class="unans">', self.web,
+                      "미답 0건일 때도 빈 신호를 그린다")
+        # 색은 면이 아니라 글자다 (s9-design: 색면 하이라이트 금지)
+        css = re.search(r"\.typebar \.tb \.unans\{([^}]+)\}", self.web)
+        self.assertIsNotNone(css, "미답 숫자의 스타일이 없다")
+        self.assertIn("color:var(--t-question)", css.group(1))
+        self.assertNotIn("background", css.group(1))
+        # 선택 상태에서 판을 잉크로 반전하는 스킨은 그 위의 타입색이 대비를 잃는다 —
+        # 총량(b)을 반전시킨 스킨은 미답도 함께 반전시켜야 글자가 배경에 묻히지 않는다.
+        for skin in ("terminal", "calm"):
+            inv = re.search(r'\[data-skin="%s"\] \.typebar \.tb\.on b,\s*\n?\s*'
+                            r'\[data-skin="%s"\] \.typebar \.tb\.on \.unans\{'
+                            % (skin, skin), self.web)
+            self.assertIsNotNone(
+                inv, f"{skin} 스킨 선택 상태에서 미답 숫자가 배경에 묻힌다")
+
+    # V12. 질문이 아닌 문서는 이 축 자체가 없다. 카탈로그가 비질문 행에도
+    #      answered 키를 빈 문자열로 실어 보내므로 타입을 안 보면 `!!""` 가
+    #      '미답'이 되어 요청 수백 건이 미답으로 세어진다.
+    def test_v12_non_question_has_no_answer_axis(self):
+        m = re.search(r"function isAnswered\(r, body\)\{(.+?)\n\}",
+                      self.web, re.S)
+        self.assertIsNotNone(m)
+        first = m.group(1).strip().splitlines()[0]
+        self.assertIn('r.type !== "question"', first,
+                      "isAnswered 가 타입을 먼저 보지 않는다")
+        self.assertIn("return null", first)
+
     # V9. 파생 필드가 아직 없을 때는 판정하지 않는다(3상). 모르는 것을 '미답'이라
     #     단정하면 답이 붙은 문서를 목록은 미답, 뷰어는 답함으로 읽는다.
     def test_v9_unknown_is_not_unanswered(self):
