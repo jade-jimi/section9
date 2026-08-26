@@ -1242,6 +1242,143 @@ def _auto_dir():
     return d
 
 
+# ---- 미커밋 변경 스냅샷 (REQ-20260826-021) --------------------------------
+# 오늘 같은 뿌리의 사고가 넷 났다. 마지막 하나는 리드 자신이 냈다 — 이미 있는
+# 테스트 파일을 새로 써서 128줄을 덮었다(커밋돼 있어 살았다). 그 앞의 것은
+# 커밋 전이라 디스크에서 완전히 사라졌다.
+#
+# 워커 봉투에는 "덮어쓰지 마라·checkout 쓰지 마라"가 이미 적혀 있었다. 그런데도
+# 났다. **규율은 지켜지지 않을 때를 대비하지 못한다.** 그래서 이것 하나는 아무의
+# 협조도 요구하지 않는다: 워처가 30초마다 미커밋 파일을 떠 둔다. 누가 무엇으로
+# 덮든 원본은 이미 딴 데 있다.
+SNAP_MAX_BYTES = 2 * 1024 * 1024   # 이보다 큰 것은 소스가 아니다
+SNAP_KEEP = 40                     # 경로당 보관 벌수
+
+
+def _snap_dir():
+    d = os.path.join(ROOT, "state", "snapshots")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _dirty_paths():
+    """미커밋(수정·미추적) 파일들의 repo 상대경로. git 이 없으면 빈 목록."""
+    import subprocess as _sp
+    try:
+        out = _sp.run(["git", "-C", ROOT, "status", "--porcelain",
+                       "--untracked-files=all"],
+                      capture_output=True, text=True, timeout=20).stdout
+    except Exception:
+        return []
+    paths = []
+    for line in out.splitlines():
+        if len(line) < 4:
+            continue
+        code, rel = line[:2], line[3:].strip()
+        if code[0] == "D" or code[1] == "D":
+            continue           # 지운 것은 뜰 것이 없다
+        if " -> " in rel:      # 이름 변경 — 도착지만 본다
+            rel = rel.split(" -> ", 1)[1]
+        rel = rel.strip('"')
+        if rel.startswith("state/") or rel.startswith(".git/"):
+            continue           # 스냅샷이 자기 자신을 뜨는 것을 막는다
+        paths.append(rel)
+    return paths
+
+
+def snapshot_dirty(quiet=True):
+    """미커밋 변경을 내용 주소로 떠 둔다. 반환: 새로 뜬 경로 수.
+
+    같은 내용을 두 번 뜨지 않는다 — 30초마다 도는 루프라 그러지 않으면
+    디스크가 같은 파일로 찬다.
+    """
+    import hashlib
+    import shutil as _sh
+    n = 0
+    for rel in _dirty_paths():
+        src = os.path.join(ROOT, rel)
+        try:
+            if not os.path.isfile(src) or os.path.getsize(src) > SNAP_MAX_BYTES:
+                continue
+            with open(src, "rb") as f:
+                blob = f.read()
+        except OSError:
+            continue
+        digest = hashlib.sha256(blob).hexdigest()[:12]
+        d = os.path.join(_snap_dir(), safe_name(rel))
+        os.makedirs(d, exist_ok=True)
+        try:
+            have = sorted(os.listdir(d))
+        except OSError:
+            have = []
+        if have and have[-1].endswith(f"-{digest}.snap"):
+            continue           # 마지막으로 뜬 것과 같은 내용
+        stamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+        try:
+            with open(os.path.join(d, f"{stamp}-{digest}.snap"), "wb") as f:
+                f.write(blob)
+            n += 1
+        except OSError:
+            continue
+        for old in have[:-SNAP_KEEP] if len(have) > SNAP_KEEP else []:
+            try:
+                os.remove(os.path.join(d, old))
+            except OSError:
+                pass
+    if n and not quiet:
+        print(f"스냅샷 {n}건")
+    return n
+
+
+def cmd_snapshot(args):
+    import shutil as _sh
+    root = _snap_dir()
+    if args.restore:
+        d = os.path.join(root, safe_name(args.restore))
+        try:
+            have = sorted(os.listdir(d))
+        except OSError:
+            die(f"뜬 것이 없다: {args.restore}")
+        if args.at:
+            have = [h for h in have if h.startswith(args.at)]
+            if not have:
+                die(f"그 시각의 스냅샷이 없다: {args.at}")
+        pick = os.path.join(d, have[-1])
+        dst = os.path.join(ROOT, args.restore)
+        # 되살리기가 또 하나의 덮어쓰기가 되면 안 된다 — 지금 것부터 뜬다.
+        snapshot_dirty()
+        os.makedirs(os.path.dirname(dst) or ROOT, exist_ok=True)
+        _sh.copyfile(pick, dst)
+        print(f"복구: {args.restore} ← {have[-1]} (지금 것도 먼저 떠 뒀다)")
+        return
+    if args.path:
+        d = os.path.join(root, safe_name(args.path))
+        try:
+            for h in sorted(os.listdir(d)):
+                sz = os.path.getsize(os.path.join(d, h))
+                print(f"- {h}  ({sz:,} bytes)")
+        except OSError:
+            print(f"(뜬 것이 없다: {args.path})")
+        return
+    if args.now:
+        print(f"스냅샷 {snapshot_dirty()}건")
+        return
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        names = []
+    if not names:
+        print("(스냅샷 없음)")
+        return
+    for nm in names:
+        try:
+            have = sorted(os.listdir(os.path.join(root, nm)))
+        except OSError:
+            continue
+        if have:
+            print(f"- {nm}  {len(have)}벌  최신 {have[-1].split('-')[0]}")
+
+
 def _auto_log(msg):
     try:
         with open(os.path.join(_auto_dir(), "spawn.log"), "a", encoding="utf-8") as f:
@@ -4229,7 +4366,92 @@ def link_audit(fix=False):
     return issues, fixed
 
 
+PROX_WINDOW_SEC = 900     # 자동 연결이 보던 '직전 대화' 창과 같은 폭
+
+
+def _mentions(body, other):
+    """이 본문이 저 문서를 실제로 부르는가 — 전문/축약 id 또는 순번."""
+    base = other.rsplit("-", 1)[0] \
+        if re.search(r"-[0-9a-z]{4}$", other) else other
+    if other in body or base in body:
+        return True
+    m = re.match(r"^[A-Z]+-\d{8}-(\d{3,})", other)
+    return bool(m and re.search(rf"(?<!\d){m.group(1)}(?!\d)", body))
+
+
+def proximity_relates(fix=False):
+    """근접만으로 걸린 연관을 찾아낸다 (REQ-20260826-040 백필).
+
+    자동 연결이 남긴 자국은 좁고 분명하다: **양쪽 다 채팅 audit 이 만든 문서**
+    (tag auto-audit)이고, **생성 시각이 그 창(15분) 안**이며, **어느 쪽 본문도
+    상대를 부르지 않는다.** 셋을 다 만족하는 간선만 걷는다.
+
+    사람이 손으로 건 연관은 태그·시간 조건에서 걸러진다 — 되돌리기 어려운
+    작업이므로 넓게 잡아 지우는 쪽보다 좁게 잡아 남기는 쪽을 택했다.
+    반환: [(a, b, 초 차이), …]
+    """
+    docs = {}
+    for r in load_catalog():
+        p = locate(r["id"])
+        if p:
+            try:
+                docs[r["id"]] = read_doc(p)
+            except OSError:
+                continue
+
+    def when(meta):
+        try:
+            return datetime.datetime.fromisoformat(
+                meta.get("created", "")).timestamp()
+        except (ValueError, TypeError):
+            return None
+
+    edges = set()
+    for did, (meta, _) in docs.items():
+        for o in (meta.get("relates") or []):
+            edges.add(tuple(sorted((did, o))))
+    hits = []
+    for a, b in sorted(edges):
+        if a not in docs or b not in docs:
+            continue
+        ma, mb = docs[a], docs[b]
+        if "auto-audit" not in (ma[0].get("tags") or []):
+            continue
+        if "auto-audit" not in (mb[0].get("tags") or []):
+            continue
+        ta, tb = when(ma[0]), when(mb[0])
+        if ta is None or tb is None or abs(ta - tb) > PROX_WINDOW_SEC:
+            continue
+        if _mentions(ma[1], b) or _mentions(mb[1], a):
+            continue
+        hits.append((a, b, int(abs(ta - tb))))
+    if fix and hits:
+        acquire_lock()
+        try:
+            for a, b, _ in hits:
+                for x, y in ((a, b), (b, a)):
+                    meta, body = docs[x]
+                    meta["relates"] = [r for r in (meta.get("relates") or [])
+                                       if r != y]
+                    meta["updated"] = now_iso()
+                    write_doc(locate(x), meta, body)
+            rebuild_index(quiet=True)
+        finally:
+            release_lock()
+    return hits
+
+
 def cmd_linkcheck(args):
+    if getattr(args, "prune_proximity", False):
+        hits = proximity_relates(fix=args.fix)
+        for a, b, d in hits:
+            print(f"  {a} ✕ {b}  ({d // 60}분 차)")
+        verb = "거둠" if args.fix else "발견"
+        print(f"근접 자동연결 {len(hits)}건 {verb}"
+              + ("" if args.fix else " — 거두려면: s9 linkcheck "
+                                     "--prune-proximity --fix"))
+        return 0
+
     issues, fixed = link_audit(fix=args.fix)
     for i in issues[:80]:
         print(f"  {i}")
@@ -4988,6 +5210,8 @@ def cmd_note(args):
     """문서의 ## Notes 섹션 끝에 타임스탬프 붙은 내용 append (작업 기록용)."""
     path = find_path(args.id)
     text = args.text
+    if isinstance(text, list):
+        text = " ".join(text) if text else None
     if not text and args.file:
         with open(args.file, encoding="utf-8") as f:
             text = f.read()
@@ -5411,7 +5635,10 @@ def cmd_log(args):
     빠져 있어 복구)."""
     session = args.session or os.environ.get("S9_SESSION") or die(
         "session id 필요: S9_SESSION 환경변수 또는 --session")
-    ses_id = session_log_append(session, args.text, getattr(args, "user", None))
+    txt = args.text
+    if isinstance(txt, list):
+        txt = " ".join(txt)
+    ses_id = session_log_append(session, txt, getattr(args, "user", None))
     print(f"{ses_id}: logged")
 
 
@@ -8469,6 +8696,13 @@ def cmd_serve(args):
                     rework_watch_tick()
                 except Exception:
                     pass
+                # 같은 틱에 미커밋 변경을 떠 둔다 (REQ-20260826-021). 규율에
+                # 기대지 않는 유일한 장치 — 누가 무엇으로 덮든 원본은 이미
+                # 딴 데 있다. 실패해도 워처는 계속 돈다.
+                try:
+                    snapshot_dirty()
+                except Exception:
+                    pass
                 # 같은 30초 주기에 헬스 판정도 얹는다 (REQ-20260825-089) —
                 # 스레드를 하나 더 만들 값어치가 없고, 둘 다 문서 쓰기라
                 # 한 스레드로 직렬화하면 lock 경합도 줄어든다.
@@ -8608,6 +8842,9 @@ def main():
     ut.set_defaults(fn=cmd_untitled)
     lc = sub.add_parser("linkcheck", help="문서 관계 전수 검사/복구")
     lc.add_argument("--fix", action="store_true")
+    lc.add_argument("--prune-proximity", action="store_true",
+                    dest="prune_proximity",
+                    help="근접만으로 걸린 연관을 찾는다 (--fix 로 거둔다)")
     lc.set_defaults(fn=cmd_linkcheck)
     tg = sub.add_parser("tag", help="태그 유지보수 (통제 어휘 백필)")
     tg.add_argument("action", choices=["backfill"])
@@ -8624,6 +8861,14 @@ def main():
     ro = sub.add_parser("reopened", help="대시보드 반려/재개 후 미착수 요청 목록")
     ro.add_argument("--quiet", action="store_true")
     ro.set_defaults(fn=cmd_reopened)
+
+    sn = sub.add_parser("snapshot",
+                        help="미커밋 변경 스냅샷 — 목록·복구 (덮어써도 잃지 않는다)")
+    sn.add_argument("path", nargs="?", help="이 경로의 스냅샷 목록")
+    sn.add_argument("--restore", help="이 경로를 스냅샷에서 되살린다")
+    sn.add_argument("--at", help="복구할 스냅샷 시각 접두 (기본: 가장 최근)")
+    sn.add_argument("--now", action="store_true", help="지금 한 번 뜬다")
+    sn.set_defaults(fn=cmd_snapshot)
 
     wk = sub.add_parser("workers", help="지금 도는 무인 작업자 목록")
     wk.add_argument("--quiet", action="store_true")
@@ -8666,7 +8911,13 @@ def main():
 
     nt = sub.add_parser("note", help="append work note to a document's Notes")
     nt.add_argument("id")
-    nt.add_argument("text", nargs="?")
+    # nargs="*" 인 이유 (REQ-20260826-041): "?" 였을 때
+    # `s9 note <id> --label response "본문"` 이 **조용히 실패**했다 —
+    # argparse 가 옵션 뒤의 위치 인자를 못 붙이고 "unrecognized arguments: <본문>"
+    # 을 내는데, 그 메시지가 **입력 원문을 그대로 되비춘다.** 파이프로 마지막
+    # 줄만 보면 성공한 것과 구분이 안 된다. 실제로 하루치 작업 노트가 그렇게
+    # 사라졌다(문서에는 안 남고 터미널에는 성공처럼 보인 채로).
+    nt.add_argument("text", nargs="*")
     nt.add_argument("--file")
     nt.add_argument("--label", help="예: 'response', 'decision'")
     nt.add_argument("--user")
@@ -8744,7 +8995,7 @@ def main():
     rs.set_defaults(fn=cmd_resume)
 
     lg = sub.add_parser("log", help="append an event to this session's SES doc")
-    lg.add_argument("text")
+    lg.add_argument("text", nargs="+")   # note 와 같은 함정 (REQ-20260826-041)
     lg.add_argument("--session")
     lg.add_argument("--user")
     lg.set_defaults(fn=cmd_log)
@@ -8843,6 +9094,33 @@ def main():
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=None)
     sv.set_defaults(fn=cmd_serve)
+
+    # note/log 는 위치 인자(본문)가 옵션 뒤에 와도 받는다 (REQ-20260826-041).
+    # argparse 는 위치 인자를 **첫 연속 구간**에만 붙이므로
+    # `s9 note <id> --label response "본문"` 이 "unrecognized arguments: 본문"
+    # 으로 죽었다. 그 메시지가 입력 원문을 그대로 되비추기 때문에, 파이프로
+    # 마지막 줄만 보면 성공과 구분되지 않는다 — 하루치 작업 노트가 그렇게
+    # 문서에 안 남고 사라졌다. 사람도 에이전트도 옵션을 먼저 쓰는 습관이 있으니
+    # 습관을 고치라 하지 말고 명령이 받아들이게 한다.
+    _VALUED = {
+        "note": {"--file", "--label", "--user", "--agent", "--item",
+                 "--result", "--transcript"},
+        "log": {"--session", "--user"},
+    }
+    if len(sys.argv) > 2 and sys.argv[1] in _VALUED:
+        rest, free, flags = sys.argv[2:], [], []
+        valued, i = _VALUED[sys.argv[1]], 0
+        while i < len(rest):
+            a = rest[i]
+            if a.startswith("--"):
+                flags.append(a)
+                if "=" not in a and a in valued and i + 1 < len(rest):
+                    i += 1
+                    flags.append(rest[i])
+            else:
+                free.append(a)
+            i += 1
+        sys.argv = [sys.argv[0], sys.argv[1], *free, *flags]
 
     # code 명령은 argparse를 우회해 잔여 인자를 순서 그대로 claude에 넘긴다
     # (REQ-20260824-036). REMAINDER/parse_known_args는 옵션-위치 인자 순서를

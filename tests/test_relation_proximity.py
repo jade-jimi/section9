@@ -130,5 +130,42 @@ class RelationProximity(unittest.TestCase):
         self.assertNotIn(x, self.relates(y), "반대편에 유령 관계가 남았다")
 
 
+    def test_p4_backfill_prunes_only_proximity_edges(self):
+        """P4. 이미 걸려 있던 근접 연관을 뒤늦게 거둔다 (사용자 지시: "백필 할 수
+        있으면 해").
+
+        자국은 좁고 분명하다 — 양쪽 다 채팅 audit 이 만든 문서이고, 생성 시각이
+        그 창 안이고, 어느 쪽 본문도 상대를 부르지 않는다. 셋을 다 만족하는
+        간선만 걷는다. 되돌리기 어려운 작업이므로 **넓게 잡아 지우는 쪽보다
+        좁게 잡아 남기는 쪽**을 택했다 — 사람이 손으로 건 연관까지 지우면
+        고침이 새 손실이 된다.
+        """
+        a = self.s9.chat_audit(
+            "보드 카드의 글자 크기가 너무 작아서 훑기가 어렵다. 한 단계 키우고 "
+            "줄간격도 함께 손봐 달라.", "tester", "backfillsess")
+        b = self.s9.chat_audit(
+            "검색창에 한글을 넣으면 첫 글자가 씹힌다. 입력 조합 중에 필터가 "
+            "도는 것 같으니 확인해서 고쳐 달라.", "tester", "backfillsess")
+        self.assertTrue(a and b and a != b, (a, b))
+        # 자동 연결이 걸던 그 간선을 손으로 재현한다 (지금 코드는 안 건다)
+        self.cli("link", a, "--relates", b)
+        self.assertIn(b, self.relates(a))
+
+        # 손으로 건 연관(본문이 서로를 부르는 쪽)은 살아남아야 한다
+        keep = self.cli("new", "request", "--title", "언급되는쪽", "--summary",
+                        "t", "--goal", "t", "--size", "S", "--user", "tester",
+                        "--body", "x").stdout.split()[0]
+        self.cli("link", a, "--relates", keep)
+
+        hits = self.s9.proximity_relates(fix=True)
+        pairs = {tuple(sorted((x, y))) for x, y, _ in hits}
+        self.assertIn(tuple(sorted((a, b))), pairs,
+                      f"근접 간선을 못 찾았다: {hits}")
+        self.assertNotIn(b, self.relates(a), "거두고도 남아 있다")
+        self.assertNotIn(a, self.relates(b), "반대편에 유령 관계가 남았다")
+        self.assertIn(keep, self.relates(a),
+                      "손으로 건 연관까지 지웠다 — 고침이 새 손실이 된다")
+
+
 if __name__ == "__main__":
     unittest.main()
