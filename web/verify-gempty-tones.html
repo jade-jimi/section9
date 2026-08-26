@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- REQ-20260826-039 재작업 — tone 6종 확인 하니스 (same-origin 보조 페이지):
+     빈 그래프 안내(인정 줄 · 원인 문장 · 되돌리기 버튼 · 범례 지목)가 6개 tone
+     전부에서 성립하는지 실제 대시보드로 확인한다. 합성 페이지가 아니라 진짜
+     CSS·진짜 문구 생성 경로를 그대로 쓴다. ?tones=a,b,c 로 나눠 찍는다. -->
+<html><head><meta charset="utf-8"><title>verify gempty tones</title>
+<style>
+ html,body{margin:0;background:#000;color:#eee;font:12px/1.5 ui-monospace,monospace}
+ .cell{margin:0 0 2px}
+ .cap{padding:4px 10px;background:#000;color:#d9b13b;letter-spacing:.08em}
+ iframe{border:0;width:1280px;height:560px;display:block;background:#000}
+</style>
+</head><body>
+<div id="host"></div>
+<script>
+const TONES = (new URLSearchParams(location.search).get("tones")
+              || "system,paper,mist").split(",");
+// 반려 캡처와 같은 조합에서 KNOWLEDGE 를 눌러 본 직후 상태를 만든다 —
+// 인정 줄까지 포함해 tone 별로 대비를 본다.
+try{ localStorage.setItem("s9gtypes", JSON.stringify(["request"])); }catch(e){}
+try{ localStorage.setItem("s9mine", "0"); }catch(e){}
+const host = document.getElementById("host");
+const wait = (doc, fn, ms=15000) => new Promise((res, rej) => {
+  const t0 = Date.now();
+  const t = setInterval(() => {
+    let v = null; try{ v = fn(doc); }catch(e){}
+    if (v){ clearInterval(t); res(v); }
+    else if (Date.now() - t0 > ms){ clearInterval(t); rej(new Error("timeout")); }
+  }, 200);
+});
+(async () => {
+  for (const tone of TONES){
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.innerHTML = `<div class="cap">tone: ${tone}</div>`;
+    const fr = document.createElement("iframe");
+    fr.src = `/?theme=${encodeURIComponent(tone)}#graph`;
+    cell.appendChild(fr);
+    host.appendChild(cell);
+    await new Promise(r => fr.addEventListener("load", r, {once: true}));
+    const doc = fr.contentDocument, win = fr.contentWindow;
+    try{
+      await wait(doc, d => d.querySelector('.legend [data-gtype="question"]'));
+      const ft = doc.querySelector("#f-type");
+      ft.value = "question";
+      ft.dispatchEvent(new win.Event("input", {bubbles: true}));
+      await wait(doc, d => d.querySelector(".gempty"));
+      // 헛클릭(KNOWLEDGE)까지 재현해 인정 줄을 띄운다. catalog 폴링발 재렌더가
+      // 요소를 떼어 가면 클릭이 document 까지 못 올라가므로 매번 다시 찾아 누른다.
+      await wait(doc, d => {
+        if (d.querySelector(".geack")) return true;
+        const k = d.querySelector('.legend [data-gtype="knowledge"]');
+        if (k) k.click();
+        return false;
+      }, 8000);
+      // 헤더는 잘라내고 안내가 뜬 캔버스 자리만 보이게 스크롤
+      doc.querySelector(".graphwrap").scrollIntoView({block: "start"});
+    }catch(e){
+      cell.querySelector(".cap").textContent += "  — 실패: " + e.message;
+    }
+  }
+  document.title = "done";
+})();
+</script>
+</body></html>

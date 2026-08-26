@@ -137,7 +137,10 @@ class TerminalBlocks(unittest.TestCase):
     def test_table_markup_is_a_real_table(self):
         """`<table>` 로 그린다 — 파이프를 흉내 낸 span 배열이 아니라."""
         blk = self._table_block()
-        self.assertIn('<table class="cctbl">', blk)
+        # 마크업은 공용 파서가 짓고 스타일 계열만 인자로 갈린다 — 터미널은 cctbl
+        self.assertIn('<table class="${cls}">', blk)
+        self.assertRegex(blk, r'mdTable\(lines, i, "cctbl"\)',
+                         "터미널이 자기 스타일 계열로 공용 파서를 부르지 않는다")
         self.assertIn("<thead>", blk)
         self.assertIn("<tbody>", blk)
 
@@ -176,11 +179,18 @@ class TerminalBlocks(unittest.TestCase):
     # ---------- helpers ----------
 
     def _table_block(self):
-        m = re.search(r"function ccBlocks\(re[\s\S]*?\n\}", self.src)
-        if m is None:
-            m = re.search(r"function ccBlocks\([\s\S]*?\n\}\n", self.src)
-        self.assertIsNotNone(m, "ccBlocks() 를 찾지 못했다")
-        return m.group(0)
+        """터미널의 블록 렌더링 소스.
+
+        2026-08-27(REQ-20260827-008): 표를 읽는 규칙이 ccBlocks 안에 있었는데,
+        문서 뷰어가 같은 규칙을 필요로 하면서 공용 파서 mdTable 로 옮겼다 —
+        두 벌로 두면 한쪽만 고쳐지기 때문이다(실제로 그렇게 됐었다). 아래
+        계약의 뜻은 그대로고, 규칙이 사는 자리만 따라간다."""
+        out = []
+        for name in ("ccBlocks", "mdTable"):
+            m = re.search(r"function %s\([\s\S]*?\n\}" % name, self.src)
+            self.assertIsNotNone(m, "%s() 를 찾지 못했다" % name)
+            out.append(m.group(0))
+        return "\n".join(out)
 
     def _table_css(self):
         m = re.search(r"/\* -+ 터미널 블록 마크다운[\s\S]*?\*/([\s\S]*?)\n\n", self.src)

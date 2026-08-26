@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- REQ-20260827-008 확인 하니스 (same-origin 보조 페이지):
+     "문서를 열었을 때 사용자가 실제로 무엇을 보는가"를 본다. 단위 테스트는
+     마크업의 존재만 보므로 표가 떠도 셀이 죽었거나 파이프 줄이 남아 있는
+     것을 못 잡는다. 여기서는 실제로 문서를 열어 ① 표가 <table> 로 떴는가
+     ② 본문에 파이프 줄이 남아 있지 않은가 ③ 셀 안의 코드·문서 링크가
+     살아 있는가 를 함께 센다. ?docs=ID1,ID2 로 문서를 고른다. -->
+<html><head><meta charset="utf-8"><title>verify doc table</title>
+<style>
+ html,body{margin:0;background:#0b0b0b;color:#eee;font:13px/1.6 ui-monospace,monospace}
+ #out{padding:8px 14px;white-space:pre-wrap;font-size:14px}
+ .ok{color:#55c07a} .bad{color:#e06c5d} .hi{color:#d9b13b}
+ iframe{border:0;width:1480px;height:620px;display:block;background:#fff}
+</style>
+</head><body>
+<div id="out">확인 중…</div>
+<div id="host"></div>
+<script>
+const P = new URLSearchParams(location.search);
+const DOCS = (P.get("docs") || "REQ-20260826-032-62x6").split(",").filter(Boolean);
+const SHOW = P.get("show") || DOCS[0];   // 화면으로 볼 문서 하나
+const out = document.getElementById("out"), host = document.getElementById("host");
+const lines = [];
+const say = (s, c) => { lines.push(c ? `<span class="${c}">${s}</span>` : s);
+                        out.innerHTML = lines.join("\n"); };
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const wait = (doc, fn, ms=15000) => new Promise((res, rej) => {
+  const t0 = Date.now();
+  const t = setInterval(() => {
+    let v = null; try{ v = fn(doc); }catch(e){}
+    if (v){ clearInterval(t); res(v); }
+    else if (Date.now() - t0 > ms){ clearInterval(t); rej(new Error("timeout")); }
+  }, 200);
+});
+// 본문에 남은 표 원문 — 파이프로 둘러싸인 줄이 문단에 떨어져 있으면 결함이다
+const PIPE_ROW = /(^|\n)\s*\|[^\n|]*\|[^\n]*(\n|$)/;
+
+(async () => {
+  let bad = 0;
+  for (const id of DOCS){
+    const fr = document.createElement("iframe");
+    const th = P.get("theme");
+    fr.src = `/${th ? "?theme=" + encodeURIComponent(th) : ""}#docs/${encodeURIComponent(id)}`;
+    if (id !== SHOW){ fr.style.height = "1px"; fr.style.opacity = "0"; }
+    host.appendChild(fr);
+    await new Promise(r => fr.addEventListener("load", r, {once: true}));
+    const doc = fr.contentDocument;
+    try{
+      await wait(doc, d => d.querySelector("#viewer .mdtbl, #viewer h1"));
+      await new Promise(r => setTimeout(r, 600));
+      const v = doc.querySelector("#viewer");
+      const tbls = v.querySelectorAll("table.mdtbl");
+      // 문단·목록에 남은 파이프 줄 (표가 아니라 원문 그대로 흘렀다는 뜻)
+      const raw = [...v.querySelectorAll("p, li")]
+        .map(e => e.textContent).filter(t => PIPE_ROW.test("\n" + t));
+      const cells = v.querySelectorAll("table.mdtbl td");
+      const rich = v.querySelectorAll("table.mdtbl td code, table.mdtbl td a.doclink,"
+                                    + " table.mdtbl td strong");
+      const okRaw = raw.length === 0;
+      const okTbl = tbls.length > 0;
+      say(`\n${esc(id)}`, "hi");
+      say(`  표 ${tbls.length}개 · 칸 ${cells.length}개 · 칸 안 강조(코드/링크/굵게) ${rich.length}개`,
+          okTbl ? "ok" : "bad");
+      say(`  본문에 남은 파이프 줄 ${raw.length}개`
+          + (raw.length ? " — " + esc(raw[0].slice(0, 90)) : ""), okRaw ? "ok" : "bad");
+      if (!okTbl || !okRaw) bad++;
+    }catch(e){ say(`\n${esc(id)} — 실패: ${esc(e.message)}`, "bad"); bad++; }
+  }
+  say(`\n>>> 결함 문서 ${bad}건`, bad ? "bad" : "ok");
+  // 화면으로 볼 문서는 표가 보이도록 스크롤
+  try{
+    const f0 = host.querySelector("iframe");
+    const t0 = f0.contentDocument.querySelector("#viewer .mdtblw");
+    if (t0) t0.scrollIntoView({block: "start"});
+  }catch(e){}
+  document.title = "done";
+})();
+</script>
+</body></html>

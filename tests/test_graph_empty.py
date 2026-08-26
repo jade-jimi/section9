@@ -148,6 +148,106 @@ class GraphEmpty(unittest.TestCase):
         self.assertIsNotNone(m)
         self.assertIn('role="status"', m.group(0))
 
+
+    # ---------- ⑤ 되돌리는 손이 어디 있는지 화면이 짚는다 ----------
+    #
+    # 2026-08-27 반려: "범례를 선택했는데도 화면이 바뀌지 않는다."
+    # 실브라우저로 재현해 보니 클릭은 멀쩡히 닿고(hit-test 통과) 핸들러도 돌고
+    # 저장까지 된다. 문제는 **범례에서 취소선이 그어진 항목이 셋인데 안내는
+    # 어느 것인지 짚어 주지 않는다**는 것이었다. 사용자는 한글 "질문"을 영문
+    # 대문자 QUESTION 으로 스스로 옮겨야 했고, 그중 아닌 것(KNOWLEDGE·SESSION)
+    # 을 누르면 그릴 것이 여전히 0건이라 안내가 같은 문장을 다시 그렸다 —
+    # 글자도 그림도 그대로. 사용자에게는 죽은 컨트롤로 보인다.
+    #
+    # 기존 12개 계약은 마크업과 핸들러의 **존재**만 봤기 때문에 이걸 통과시켰다
+    # (REQ-20260826-025 와 같은 계열의 구멍). 그래서 여기서는 "눌렀을 때 화면이
+    # 사용자에게 무엇을 돌려주는가"를 계약으로 박는다.
+
+    def test_msg_does_not_send_the_user_upward(self):
+        """주 문장이 '위쪽'을 가리키면 사용자는 바로 아래 버튼을 건너뛴다.
+
+        반려의 실제 경로가 이것이었다 — 안내가 "위쪽 범례에서…"라고 시선을
+        위로 보냈고, 사용자는 버튼 대신 범례로 가서 엉뚱한 항목을 눌렀다."""
+        blk = self._state_fn()
+        for raw in re.findall(r'msg:\s*`([^`]+)`', blk):
+            line = re.sub(r"<[^>]*>", "", re.sub(r"\$\{[^}]*\}", "", raw))
+            for w in ("위쪽", "아래", "위의", "여기를"):
+                self.assertNotIn(w, line,
+                    "주 문장은 위치를 가리키지 않는다(행동은 버튼이 맡는다): %s" % line)
+
+    def test_notice_names_the_legend_label_verbatim(self):
+        """범례에 실제로 찍힌 글자(QUESTION)를 그대로 준다.
+
+        한국어 이름(질문)만 주면 사용자가 영문 대문자 라벨로 옮겨 찾아야 한다 —
+        취소선이 그어진 항목이 여럿일 때 그 번역이 곧 오클릭이 된다."""
+        blk = self._state_fn()
+        self.assertIn("toUpperCase()", blk,
+                      "범례 라벨(대문자 타입명)을 문구에 그대로 넣어야 한다")
+
+    def test_legend_marks_the_type_to_click(self):
+        """안내가 떠 있는 동안 눌러야 할 범례 항목을 화면이 지목한다."""
+        m = re.search(r'<span class="gtype\$\{[\s\S]{0,300}?data-gtype=', self.src)
+        self.assertIsNotNone(m, "범례 항목 마크업을 찾지 못했다")
+        self.assertIn("want", m.group(0),
+                      "눌러야 할 항목에 지목 표시가 붙지 않는다")
+
+    def test_mark_and_button_read_the_same_source(self):
+        """지목 표시와 버튼이 **같은 출처**에서 켤 종류를 읽는다.
+
+        마크업과 핸들러가 서로 다른 이름을 보다가 조용히 갈라지는 것이
+        REQ-20260826-025 의 결함이었다. 여기서는 st.fix.types 하나만 본다."""
+        m = re.search(r"const gWant = [^;]+;", self.src)
+        self.assertIsNotNone(m, "지목 대상 집합을 renderGraph 에서 찾지 못했다")
+        self.assertIn("fix", m.group(0),
+                      "버튼과 같은 st.fix.types 를 써야 갈라지지 않는다")
+        self.assertIn("types", m.group(0))
+
+    def test_want_mark_keeps_the_off_signal_and_paints_no_fill(self):
+        """지목은 '꺼져 있다'는 사실을 지우지 않고, 색면이 아니라 잉크 점선이다."""
+        m = re.search(r"\.gtype\.want\{([^}]*)\}", self.src)
+        self.assertIsNotNone(m, ".gtype.want 스타일이 없다")
+        css = m.group(1)
+        self.assertIn("dashed", css, "지목은 점선 아웃라인으로 — 색면 금지")
+        self.assertNotIn("background", css, "색면 하이라이트 금지")
+        self.assertNotIn("text-decoration:none", css.replace(" ", ""),
+                         "취소선을 지우면 '꺼져 있다'는 사실이 사라진다")
+        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
+
+    def test_toggle_handler_records_what_was_turned_on(self):
+        """켠 종류를 기록한다 — 끈 것은 기록하지 않는다(의도적 축소다)."""
+        m = re.search(r'const gt2 = e\.target\.closest\("\[data-gtype\]"\);'
+                      r'[\s\S]*?\n  \}', self.src)
+        self.assertIsNotNone(m, "범례 토글 핸들러가 없다")
+        h = m.group(0)
+        self.assertRegex(h, r"gLastOn\s*=",
+                         "방금 켠 종류를 기록해야 헛클릭을 인정할 수 있다")
+        self.assertIn("gtypes.has(t)", h, "켠 경우와 끈 경우를 갈라야 한다")
+
+    def test_ineffective_toggle_is_acknowledged(self):
+        """켰는데도 화면이 그대로면 화면이 그 사실을 말한다.
+
+        같은 문장을 말없이 다시 그리는 것이 반려의 직접 원인이었다."""
+        blk = self._state_fn()
+        self.assertIn("gLastOn", blk, "방금 켠 종류를 안내가 참조하지 않는다")
+        self.assertRegex(blk, r"\back\s*:", "헛클릭을 인정하는 자리가 없다")
+        acks = [t for t in re.findall(r"`([^`]*)`", blk) if "켰지만" in t]
+        self.assertTrue(acks, "헛클릭을 인정하는 문장이 없다")
+        self.assertTrue(any("그대로" in a for a in acks),
+                        "무엇이 안 바뀌었는지 사용자 말로 말해야 한다")
+        self.assertIn('class="geack"', self.src, "인정 줄을 그리는 자리가 없다")
+
+    def test_ack_does_not_outlive_the_click(self):
+        """되돌리기가 성공했거나 조건이 바뀌면 인정 줄은 남지 않는다."""
+        m = re.search(r'const gf = e\.target\.closest\("\[data-gfix\]"\);'
+                      r'[\s\S]*?\n  \}', self.src)
+        self.assertIsNotNone(m)
+        self.assertRegex(m.group(0), r"gLastOn\s*=\s*null",
+                         "버튼으로 되돌린 뒤에도 인정 줄이 남으면 거짓말이 된다")
+        m2 = re.search(r'\["#q","#q-body"[\s\S]{0,400}?\}\)\);', self.src)
+        self.assertIsNotNone(m2, "필터 변경 리스너를 찾지 못했다")
+        self.assertRegex(m2.group(0), r"gLastOn\s*=\s*null",
+                         "조건이 바뀌면 직전 클릭에 대한 인정은 무효다")
+
     # ---------- helpers ----------
 
     def _state_fn(self):

@@ -107,6 +107,63 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
 .oc-open{font-size:12px;letter-spacing:.01em}
 .oc-cmd:focus-visible,.oc-fold:focus-visible,.oc-open:focus-visible{
   outline:2px solid var(--text);outline-offset:1px}
+
+/* ── 서버 자동 복구 기록 (REQ-20260826-018-62x6) ───────────────────────────
+   감시자는 죽은 서버를 되살릴 때마다 사유·직전 출력·연속 실패 횟수·되살리기까지의
+   대기를 남기는데, 지금까지 그걸 보려면 파일을 열어야 했다. 대시보드가 왜 죽었나는
+   대시보드 안에서 답해야 하는 질문이다.
+   자리는 코드 낡음 알림과 같은 헤더 3행이다 — 둘 다 이 서버 자신에 대한 사실이고,
+   한 자리에 모아야 사용자가 볼 곳을 하나만 기억한다. 어휘는 갈랐다: 사람이 하는
+   일은 재기동(위 알림), 감시자가 하는 일은 자동 복구(여기).
+   평소엔 흔적을 남기지 않고 사건이 잠잠해지면 스스로 걷힌다. 색면도 띠도 없이
+   마크(↻/▲)와 글자색만으로 신호를 준다. */
+.gw-mark{font-size:11px;line-height:1}
+.gw-t{font-size:12.5px;font-weight:600;letter-spacing:-.01em}
+.gw-d{font-size:12px;color:var(--muted)}
+.gw-d code,.gw-det code{font-family:var(--mono);font-size:11px;
+  letter-spacing:.04em;color:var(--text)}
+.gw-act{margin-left:auto;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+/* 한국어가 들어가는 컨트롤에는 자간을 벌리지 않는다 — 모노·자간은 시각·포트
+   번호 같은 라틴/숫자 메타데이터의 어휘다. 문장에 쓰면 글자가 흩어져 보인다. */
+.gw-link,.gw-open{border:0;background:none;cursor:pointer;font:inherit;
+  font-size:11.5px;color:var(--muted);padding:3px 2px}
+.gw-link:hover,.gw-open:hover{color:var(--text);text-decoration:underline}
+.gw-open{font-size:12px}
+.gw-cmd{font-family:var(--mono);font-size:11px;letter-spacing:.02em;
+  border:1px solid var(--border);background:var(--panel);color:var(--text);
+  padding:4px 9px;cursor:pointer}
+.gw-cmd::before{content:"⧉ ";color:var(--faint)}
+.gw-cmd:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+.gw-cmd:hover::before{color:var(--bg)}
+/* 복사 피드백은 자리를 미리 잡아 둔다 — 글자가 늘며 줄이 밀리면 그 자체가 결함 */
+.gw-copied{display:inline-block;min-width:3.6em;font-family:var(--mono);
+  font-size:10px;letter-spacing:.04em;color:var(--c-done)}
+.gw-cmd:focus-visible,.gw-link:focus-visible,.gw-open:focus-visible{
+  outline:2px solid var(--text);outline-offset:1px}
+/* 기록은 헤더 안에서 열린다 — 다른 자리로 보내면 방금 읽은 알림과의 연결이
+   끊긴다. 대신 높이를 묶어 화면을 삼키지 않게 하고 자체 스크롤을 준다. */
+.gwlog{border-top:1px solid var(--hairline);padding:9px 22px 12px;
+  max-height:min(44vh,320px);overflow:auto}
+.gwlog[hidden]{display:none}
+.gw-h{display:flex;align-items:baseline;gap:8px;font-size:11.5px;
+  color:var(--faint);padding-bottom:6px;border-bottom:1px solid var(--hairline)}
+.gw-h b{font-family:var(--mono);font-size:10px;letter-spacing:.06em;font-weight:400}
+.gw-h .gw-link{margin-left:auto}
+.gw-row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding:6px 0;
+  border-bottom:1px solid var(--hairline);font-size:12px}
+.gw-ts{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;
+  color:var(--faint);flex:none}
+.gw-ev{font-weight:600;min-width:5.2em;flex:none}
+.gw-ev.bad{color:var(--c-blocked)}
+.gw-ev.ok{color:var(--c-done)}
+.gw-ev.on{color:var(--c-open)}
+.gw-det{color:var(--muted)}
+.gw-row .gw-link{margin-left:auto}
+.gw-out{margin:0 0 8px;padding:7px 10px;border:1px solid var(--hairline);
+  font-family:var(--mono);font-size:10.5px;line-height:1.55;color:var(--muted);
+  white-space:pre-wrap;word-break:break-all}
+.gw-none{padding:10px 0;font-size:12px;color:var(--muted)}
+
 .pdiv{width:1px;height:18px;background:var(--border);margin:0 4px}
 .gear{border:1px solid var(--border);background:var(--panel);color:var(--text);
   font-size:14px;line-height:1;padding:4px 9px;cursor:pointer}
@@ -359,6 +416,27 @@ main{padding:18px 22px}
 .gate-h[open] summary::before{content:"▾ "}
 .gate-r{margin:7px 0 0;font-size:12px;line-height:1.5}
 .gate-r .path{display:block;margin-bottom:2px}
+/* ── 문서 본문 표 (REQ-20260827-008) ───────────────────────────────────────
+   표를 읽는 규칙은 터미널 뷰와 같은 함수(mdTable) 하나에 있지만, **스타일은
+   나눠야 한다**: 터미널은 테마와 무관하게 늘 어두운 자체 팔레트(--cc-*)로
+   그리고, 문서 본문은 tone 을 따라가는 문서 토큰으로 그린다. 문서 뷰어에서
+   --cc-* 를 빌려 쓰면 그 토큰이 없어 어두운 fallback 으로 떨어지고, 밝은
+   tone 에서 글자가 배경에 묻힌다.
+   계기판 언어 그대로: 얼룩말 색면 없이 헤어라인으로만 나누고, 숫자는 자릿수를
+   세로로 맞춘다. 넓은 표는 본문을 밀지 않고 자기 안에서 가로로 스크롤한다. */
+.mdtblw{display:block;max-width:100%;overflow-x:auto;margin:12px 0}
+.mdtbl{border-collapse:collapse;font-size:12.5px;line-height:1.6;
+  font-variant-numeric:tabular-nums;
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.mdtbl th,.mdtbl td{padding:5px 16px;vertical-align:top;text-align:left;
+  word-break:break-word;border-left:1px solid var(--hairline)}
+.mdtbl th:first-child,.mdtbl td:first-child{padding-left:0;border-left:0}
+.mdtbl th:last-child,.mdtbl td:last-child{padding-right:0}
+.mdtbl th{font-weight:600;color:var(--text);border-bottom:1px solid var(--border)}
+.mdtbl td{color:var(--text)}
+.mdtbl tbody tr + tr td{border-top:1px solid var(--hairline)}
+.mdtbl code{font-family:var(--mono);font-size:11.5px}
+
 /* 문서 뷰 첨부 (REQ-20260825-023) — 계기판 언어: 라운드 0, 1px 보더 */
 .attimg{max-width:min(100%,760px);display:block;margin:8px 0;border:1px solid var(--border)}
 .attlink{display:inline-block;text-decoration:none}
@@ -632,6 +710,12 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .gedge{display:inline-flex;align-items:center;gap:8px;color:var(--text)}
 .gedge svg{flex:none}
 .gtype.off{opacity:.35;text-decoration:line-through}
+/* 빈 화면 안내가 "이걸 켜라"고 지목한 항목 (REQ-20260826-039 재작업).
+   취소선과 흐림은 그대로 둔다 — 꺼져 있다는 사실을 지우면 안 된다. 그 위에
+   잉크 점선 아웃라인만 얹어 "여기"를 짚는다. 색면이 아니라 점선인 것은 드래그
+   허용 컬럼(.col.dropok)과 같은 어휘라서다. 취소선 그어진 항목이 여럿일 때
+   어느 것인지 짚지 않아 사용자가 엉뚱한 것을 누른 것이 반려 사유였다. */
+.gtype.want{opacity:.9;outline:1px dashed var(--text);outline-offset:4px}
 .gedge.none{opacity:.4}
 .gedge .gecount{font-family:var(--mono);color:var(--muted)}
 
@@ -649,9 +733,10 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .gempty .gemsg{max-width:44ch;font-size:14px;line-height:1.75;color:var(--text);
   word-break:keep-all;text-wrap:balance;margin:0}
 .gempty .gemsg b{font-weight:700}
-.gempty .genote{max-width:46ch;font-size:11.5px;line-height:1.65;color:var(--muted);
-  word-break:keep-all;text-wrap:balance;margin:0}
-.gempty .genote code{font-family:var(--mono);font-size:11px;color:var(--text)}
+.gempty .geack,.gempty .genote{max-width:46ch;font-size:11.5px;line-height:1.65;
+  color:var(--muted);word-break:keep-all;text-wrap:balance;margin:0}
+.gempty .geack code,.gempty .genote code{font-family:var(--mono);font-size:11px;
+  letter-spacing:.04em;color:var(--text)}
 .gefix{pointer-events:auto;background:none;border:1px solid var(--text);
   color:var(--text);font:inherit;font-size:12px;padding:6px 16px;cursor:pointer;
   border-radius:var(--r)}
@@ -1778,6 +1863,11 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   </div>
   <!-- 서버 코드 낡음 알림 — 낡았을 때만 채워진다 (renderOldCode). 기본은 hidden. -->
   <div class="hrow3" id="oldcode" role="status" aria-live="polite" hidden></div>
+  <!-- 서버 자동 복구 알림 — 사건이 있었을 때만 채워진다 (renderGuard). 기본은 hidden.
+       코드 낡음 알림 아래에 둔다: 그쪽은 지금 이 순간 잘못 돌고 있다는 사실이라
+       사람의 손을 먼저 요구하고, 이쪽은 이미 지나간 일(또는 다음에 벌어질 일)이다. -->
+  <div class="hrow3" id="guard" role="status" aria-live="polite" hidden></div>
+  <div class="gwlog" id="guard-log" hidden></div>
 </header>
 <main>
   <p class="count" id="count"></p>
@@ -1882,6 +1972,10 @@ let streamTimer = null, reqStreamTimer = null;  // live follow 폴링 (화면 �
 let gtypes = new Set(["request", "knowledge", "question"]);
 try{ const s = JSON.parse(localStorage.getItem("s9gtypes") || "null");
      if (Array.isArray(s) && s.length) gtypes = new Set(s); }catch(e){}
+// 방금 범례에서 켠 종류. 켰는데도 화면이 그대로면 빈 화면 안내가 그 사실을
+// 인정한다 (REQ-20260826-039 재작업) — 같은 문장을 말없이 다시 그리면 사용자는
+// 컨트롤이 죽은 줄 안다. 조건이 바뀌거나 되돌리기가 성공하면 무효가 된다.
+let gLastOn = null;
 let expanded = new Set();      // board 컬럼 / docs 그룹 펼침 상태
 let auditLimit = AUDIT_PAGE;
 
@@ -2317,6 +2411,238 @@ async function ocCopyCmd(){
   ocCopyT = setTimeout(() => { out.textContent = ""; out.style.color = ""; }, 2000);
 }
 
+/* ── 서버 자동 복구 (REQ-20260826-018-62x6) ────────────────────────────────
+   감시자(REQ-20260825-096)는 죽은 서버를 되살릴 때마다 사유·직전 출력·연속
+   실패 횟수·되살리기까지의 대기를 기록으로 남긴다. 그런데 그걸 보려면 파일을
+   열어야 했다 — 대시보드가 왜 죽었나는 대시보드 안에서 답해야 하는 질문이다.
+
+   설계 판단 셋:
+   ① 상시 표시하지 않는다. 평소엔 아무 일도 없고, 늘 떠 있는 줄은 곧 배경이
+      되어 진짜 사고 때도 안 읽힌다. 사건이 있을 때만 나타나고 잠잠해지면
+      스스로 걷힌다(GW_FRESH_*). 걷히는 것까지가 설계다.
+   ② 신선도는 서버 시각으로 잰다. 기록의 시각은 전부 서버 것이므로 기준도
+      서버가 준 now 여야 한다 — 브라우저 시계가 틀어진 기기에서 6시간 전
+      사고가 방금이 되면 안 된다.
+   ③ 무응답을 사건 없음으로 읽지 않는다. 서버가 죽어 있는 동안 이 폴은
+      실패하는데, 그 순간이야말로 이 알림이 존재하는 이유다. 실패하면 직전
+      판정을 그대로 두고 다음 폴을 기다린다.
+
+   어휘: 위 코드 낡음 알림은 사람이 하는 재기동을 말한다. 여기는 감시자가 하는
+   자동 복구다. 터미널 뷰의 stale 은 세션 무응답이라는 또 다른 사실이라 그
+   단어도 쓰지 않는다 — 셋이 같은 말을 쓰면 어느 것도 못 믿게 된다. */
+const GW_ACK = "s9guard_ack";        // 접어 둔 사건 — 새 사건이 나면 다시 펼쳐진다
+const GW_FRESH_OK = 6 * 3600 * 1000;    // 되살아난 사건을 말해 주는 기간
+const GW_FRESH_BAD = 24 * 3600 * 1000;  // 자동 복구가 멈춘 사실을 말해 주는 기간
+const GW_ROWS = 8;                   // 기록 표시 제한 (무한 목록 금지)
+// 기록의 종류를 사용자 말로 옮긴다 — 원래 값을 그대로 보여주면 기록이 아니라 암호다
+const GW_EV = {start:"감시 시작", died:"멈춤", "clean-exit":"정상 종료",
+               "gave-up":"감시 포기", "spawn-error":"기동 실패",
+               "guard-error":"감시자 오류", stop:"감시 중지", end:"감시 종료"};
+const GW_SEV = {died:"bad", "gave-up":"bad", "spawn-error":"bad",
+                "guard-error":"bad", start:"on", "clean-exit":"ok"};
+// ?guard=recovered|attention|none: 진단·헤드리스 캡처용 상태 고정. 이 알림은
+// 사고가 나야만 보이는데 사고는 캡처로 재현할 수 없다 (?nosse·?mpanel·?conn 선례)
+const GW_FORCE =
+  (location.search.match(/[?&]guard=(recovered|attention|none)/) || [])[1] || null;
+
+let gwInfo = null, gwSig = "", gwOpen = false, gwAll = false, gwCopyT = null;
+let gwOut = new Set();               // 펼쳐 둔 직전 출력
+
+const gwAck = () => { try{ return localStorage.getItem(GW_ACK); }catch(e){ return null; } };
+const gwSetAck = v => { try{
+  if (v) localStorage.setItem(GW_ACK, v); else localStorage.removeItem(GW_ACK);
+}catch(e){} };
+
+async function checkGuard(){
+  let d = null;
+  try{
+    const r = await fetch("/api/serveguard", {cache: "no-store"});
+    if (r.ok) d = await r.json();
+  }catch(e){}
+  if (GW_FORCE) d = gwDemo(GW_FORCE);
+  // 서버가 죽어 있는 동안 이 폴은 실패한다 — 그 실패를 사건 없음으로 읽으면
+  // 알림은 정확히 필요한 순간에 침묵한다. 직전 판정을 두고 다음 폴을 기다린다.
+  if (!d || typeof d.now !== "string") return;
+  gwInfo = d;
+  renderGuard();
+}
+
+// 사건이 얼마나 지났는지는 서버 시각으로 잰다 (설계 판단 ②).
+function gwState(d){
+  if (!d || !d.last_death || !d.last_death.ts) return null;
+  const age = Date.parse(d.now) - Date.parse(d.last_death.ts);
+  if (!(age >= 0)) return null;
+  // 감시자가 물러났으면 다음 사망은 아무도 되살리지 않는다 — 사람의 손이 필요하다.
+  if (d.guard !== "watching") return age < GW_FRESH_BAD ? "attention" : null;
+  return age < GW_FRESH_OK ? "recovered" : null;
+}
+
+function renderGuard(){
+  const el = $("#guard"), log = $("#guard-log");
+  if (!el || !log) return;
+  const d = gwInfo, st = gwState(d);
+  // 말할 것이 없으면 흔적을 남기지 않는다 (설계 판단 ①).
+  if (!st){
+    gwSetAck(null);
+    if (gwSig !== "off"){
+      gwSig = "off"; gwOpen = false; gwAll = false; gwOut.clear();
+      el.hidden = true; el.innerHTML = "";
+      log.hidden = true; log.innerHTML = "";
+    }
+    return;
+  }
+  const ev = d.last_death, folded = gwAck() === ev.ts;
+  const sig = [st, ev.ts, folded, gwOpen, gwAll, [...gwOut].join()].join("|");
+  if (sig === gwSig) return;   // 같은 내용 재작성 금지 (aria-live 재낭독·복사 피드백 소실)
+  gwSig = sig;
+  el.hidden = false;
+  const mark = st === "attention" ? "▲" : "↻";
+  if (folded){
+    // 접어도 사실은 남는다 — 다만 한 줄로. 잠잠해지면 저절로 사라진다.
+    el.innerHTML = `<button class="gw-open" id="gw-open"`
+      + ` title="서버가 죽었던 기록이 있습니다 — 눌러서 자세히">`
+      + `<span class="gw-mark" aria-hidden="true">${mark}</span> `
+      + (st === "attention" ? "자동 복구 멈춤"
+                            : `서버 자동 복구 ${Math.max(1, d.restarts || 1)}회`)
+      + ` · 자세히</button>`;
+    $("#gw-open").addEventListener("click", () => { gwSetAck(null); renderGuard(); });
+    log.hidden = true; log.innerHTML = "";
+    return;
+  }
+  const at = String(ev.ts || "").slice(11, 16);
+  // 사유는 괄호로 붙인다. 값이 signal SIGTERM 이기도 exit 1 이기도 해서 뒤에
+  // 조사를 붙이면(로/으로) 어느 한쪽이 반드시 어긋난다.
+  const why = ev.reason ? ` (<code>${esc(ev.reason)}</code>)` : "";
+  const tone = st === "attention" ? "var(--c-blocked)" : "var(--c-done)";
+  let title, detail, cmd = "";
+  if (st === "attention"){
+    title = "자동 복구가 멈췄습니다";
+    detail = (d.guard === "gave-up")
+      ? `서버가 ${ev.fails || "여러"}번 잇따라 자리잡지 못해 감시자가 물러났습니다${why}.`
+      : `${at} 에 멈춘 뒤로 서버를 지켜보는 것이 없습니다${why}.`;
+    detail += " 지금 서버가 죽으면 다시 뜨지 않습니다.";
+    cmd = "s9 serve --supervise";
+  } else {
+    title = "서버가 스스로 복구했습니다";
+    detail = `${at} 에 멈췄다가 `
+      + (ev.retry_in ? `${ev.retry_in}초 뒤 ` : "곧 ") + `다시 떴습니다${why}.`
+      + (d.restarts > 1 ? ` 지금까지 ${d.restarts}번 되살렸습니다.` : "");
+  }
+  el.innerHTML = `<span class="gw-t" style="color:${tone}">`
+    +   `<span class="gw-mark" aria-hidden="true">${mark}</span> ${esc(title)}</span>`
+    + `<span class="gw-d">${detail}</span>`
+    + `<span class="gw-act">`
+    +   (cmd ? `<button class="gw-cmd" id="gw-cmd"`
+              + ` title="클릭하면 복사됩니다 — 터미널에 붙여넣어 실행하세요">${esc(cmd)}</button>`
+              + `<span class="gw-copied" id="gw-copied" role="status"></span>` : "")
+    +   `<button class="gw-link" id="gw-log">${gwOpen ? "기록 닫기" : "기록 보기"}</button>`
+    +   `<button class="gw-link" id="gw-fold"`
+    +     ` title="다음 사건이 날 때까지 한 줄로 접어 둡니다">접기</button>`
+    + `</span>`;
+  if (cmd) $("#gw-cmd").addEventListener("click", gwCopyCmd);
+  $("#gw-log").addEventListener("click", () => { gwOpen = !gwOpen; renderGuard(); });
+  $("#gw-fold").addEventListener("click", () => {
+    gwSetAck(((gwInfo || {}).last_death || {}).ts || "1");
+    renderGuard();
+  });
+  log.hidden = !gwOpen;
+  log.innerHTML = gwOpen ? gwLogHTML(d) : "";
+  if (gwOpen) gwLogWire();
+}
+
+function gwLogHTML(d){
+  const evs = d.events || [];
+  const head = `<div class="gw-h">서버 감시 기록`
+    + (d.port ? ` <b>· 포트 ${esc(String(d.port))}</b>` : "")
+    + `<button class="gw-link" id="gw-close">닫기</button></div>`;
+  if (!evs.length) return head + `<p class="gw-none">아직 남은 기록이 없습니다.</p>`;
+  const shown = gwAll ? evs : evs.slice(0, GW_ROWS);
+  const rows = shown.map((e, i) => {
+    const bits = [];
+    if (e.reason) bits.push(`<code>${esc(e.reason)}</code>`);
+    if (e.ran_sec != null) bits.push(`${Math.round(e.ran_sec)}초 살아 있었음`);
+    if (e.fails > 1) bits.push(`잇따라 ${e.fails}번째`);
+    if (e.retry_in) bits.push(`${e.retry_in}초 뒤 되살림`);
+    const out = (e.tail || []).filter(Boolean);
+    const key = e.ts + "#" + i;
+    const open = gwOut.has(key);
+    return `<div class="gw-row">`
+      +   `<span class="gw-ts">${esc(String(e.ts || "").slice(11, 19))}</span>`
+      +   `<span class="gw-ev ${GW_SEV[e.event] || ""}">${esc(GW_EV[e.event] || e.event || "")}</span>`
+      +   `<span class="gw-det">${bits.join(" · ") || esc(e.msg || "")}</span>`
+      +   (out.length ? `<button class="gw-link" data-gwout="${esc(key)}">`
+            + (open ? "직전 출력 접기" : `직전 출력 ${out.length}줄`) + `</button>` : "")
+      + `</div>`
+      + (out.length && open ? `<pre class="gw-out">${esc(out.join("\n"))}</pre>` : "");
+  }).join("");
+  const more = (!gwAll && evs.length > GW_ROWS)
+    ? `<button class="gw-link" id="gw-more">+ ${evs.length - GW_ROWS}개 더 보기</button>` : "";
+  return head + rows + more;
+}
+
+function gwLogWire(){
+  const log = $("#guard-log");
+  if (!log) return;
+  const close = $("#gw-close");
+  if (close) close.addEventListener("click", () => { gwOpen = false; renderGuard(); });
+  const more = $("#gw-more");
+  if (more) more.addEventListener("click", () => { gwAll = true; renderGuard(); });
+  log.querySelectorAll("[data-gwout]").forEach(b => b.addEventListener("click", () => {
+    const k = b.dataset.gwout;
+    gwOut.has(k) ? gwOut.delete(k) : gwOut.add(k);
+    renderGuard();
+  }));
+}
+
+// 명령은 대신 실행하지 않는다 — 감시자를 다시 세울지는 사람의 판단이다.
+async function gwCopyCmd(){
+  const cmd = "s9 serve --supervise", outEl = $("#gw-copied");
+  let ok = false;
+  try{ await navigator.clipboard.writeText(cmd); ok = true; }catch(e){}
+  if (!ok){        // 클립보드 API가 막힌 브라우저 — 선택 상태로라도 넘겨준다
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = cmd; ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta); ta.select();
+      ok = document.execCommand("copy");
+      ta.remove();
+    }catch(e){}
+  }
+  if (!outEl) return;
+  outEl.textContent = ok ? "복사됨" : "복사 실패";
+  outEl.style.color = ok ? "" : "var(--c-blocked)";
+  clearTimeout(gwCopyT);
+  gwCopyT = setTimeout(() => { outEl.textContent = ""; outEl.style.color = ""; }, 2000);
+}
+
+// 상태 고정용 표본 (GW_FORCE). 실제 사망은 헤드리스 캡처로 재현할 수 없다.
+let gwDemoCache = null;
+function gwDemo(kind){
+  if (gwDemoCache && gwDemoCache.kind === kind) return gwDemoCache.d;
+  const t = Date.now(), iso = ms => new Date(t - ms).toISOString();
+  const base = {port: 9909, now: iso(0), guard: "watching",
+                guard_since: iso(7.2e6), restarts: 0, last_death: null, events: []};
+  if (kind === "none") return (gwDemoCache = {kind, d: base}).d;
+  const out = ["Traceback (most recent call last):",
+               "  File bin/s9, line 8241, in do_GET",
+               "    self._json(catalog_with_live())",
+               "MemoryError"];
+  const died = n => ({ts: iso(3e5 + n * 9e5), event: "died", rc: -15,
+                      reason: "signal SIGTERM", ran_sec: 47.2, fails: 1,
+                      retry_in: 12, tail: out, msg: "서버가 멈춰 되살렸다"});
+  const hist = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(died)
+    .concat([{ts: iso(7.2e6), event: "start", msg: "9909 감시 시작 (pid 545741)"}]);
+  const keep = d => (gwDemoCache = {kind, d}).d;
+  if (kind === "attention")
+    return keep({...base, guard: "gave-up", restarts: 9,
+            last_death: {...died(0), event: "gave-up", rc: 1, reason: "exit 1",
+                         fails: 10, retry_in: 0},
+            events: [{...died(0), event: "gave-up", rc: 1, reason: "exit 1",
+                      fails: 10, retry_in: 0}].concat(hist)});
+  return keep({...base, restarts: 9, last_death: died(0), events: hist});
+}
+// ── 자동 복구 끝
+
 // admin 미리보기(as) 전환 — 서버 가시성 범위가 바뀐다: 캐시 무효화 후 전면 재조회
 function onViewerChanged(){
   renderWhoami();
@@ -2381,6 +2707,11 @@ async function boot(){
   checkOldCode();
   setInterval(() => { if (!document.hidden) checkOldCode(); }, 20000);
   window.addEventListener("focus", checkOldCode);
+  // 자동 복구 기록 (REQ-20260826-018). focus 확인이 특히 중요하다 — 서버가 죽어
+  // 있는 동안 폴은 실패하고, 사람이 화면으로 돌아오는 순간이 대개 복구 직후다.
+  checkGuard();
+  setInterval(() => { if (!document.hidden) checkGuard(); }, 20000);
+  window.addEventListener("focus", checkGuard);
   window.addEventListener("popstate", () => applyRoute(location.hash, true));
 }
 
@@ -3247,10 +3578,16 @@ function md2html(src){
       .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>'))
       .replace(/\u0000(\d+)\u0000/g, (mm, i) => held[+i]);
   };
-  for (const raw of lines){
+  for (let li = 0; li < lines.length; li++){
+    const raw = lines[li];
     if (raw.startsWith("```")){ flushPara(); flushList();
       out.push(inCode ? "</code></pre>" : "<pre><code>"); inCode = !inCode; continue; }
     if (inCode){ out.push(raw); continue; }
+    // 표 — 여러 줄이 모여야 뜻이 생기는 블록이라 문단으로 뭉치기 전에 가른다.
+    // 규칙은 터미널 뷰와 **같은 mdTable 한 곳**에 있고, 여기 칸은 원문이라
+    // inline 을 걸어 셀 안의 코드·문서 id·첨부 강조를 살린다 (REQ-20260827-008).
+    const tb = mdTable(lines, li, "mdtbl", inline);
+    if (tb){ flushPara(); flushList(); out.push(tb.html); li = tb.next - 1; continue; }
     const h = raw.match(/^(#{1,6})\s+(.*)/);
     if (h){ flushPara(); flushList(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
     if (/^\s*[-*]\s+/.test(raw)){ flushPara();
@@ -3493,6 +3830,52 @@ function ccCell(tag, html, al){
   return `<${tag}${al ? ` style="text-align:${al}"` : ""}>${html}</${tag}>`;
 }
 
+/* 마크다운 표 파서 — **터미널 뷰와 문서 뷰어가 이 함수 하나를 부른다.**
+   두 벌로 두면 한쪽만 고쳐진다: 이 결함이 정확히 그렇게 생겼다. 029 에서
+   터미널 쪽 구멍을 막았는데 문서 뷰어는 별개 렌더러라 파이프가 그대로
+   화면에 남아 있었다 (REQ-20260827-008).
+
+   lines[i] 부터 표를 읽어 {html, next} 를 주고, 표가 아니면 null.
+   cls  — 스타일 계열 이름(cctbl=터미널 팔레트 / mdtbl=문서 뷰어 토큰).
+          두 화면은 색 토큰이 달라서 같은 클래스를 쓸 수 없다.
+   cell — 칸 하나를 HTML 로 만드는 함수. 터미널은 인라인 규칙이 이미 끝난
+          문자열을 넘기므로 그대로 두고, 문서 뷰어는 원문이라 inline 을 건다. */
+function mdTable(lines, i, cls, cell){
+  const dl = lines[i + 1], b0 = lines[i + 2];
+  // 헤더행 + 구분행 + 본문행이 다 있을 때만. 파이프 하나 낀 평범한 문장을
+  // 표로 만들면 지금보다 나쁘다.
+  if (dl === undefined || b0 === undefined) return null;
+  if (!CCTBL_DELIM.test(dl) || !lines[i].includes("|") || !b0.includes("|")) return null;
+  const head = ccCells(lines[i]), spec = ccCells(dl);
+  if (head.length !== spec.length) return null;   // 칸 수 불일치 = 표 아님 (GFM)
+  const al = spec.map(c => {
+    const L = c.startsWith(":"), R = c.endsWith(":");
+    return L && R ? "center" : R ? "right" : "";
+  });
+  const rows = [];
+  let j = i + 2;
+  for (; j < lines.length; j++){
+    if (!lines[j].includes("|") || CCTBL_DELIM.test(lines[j])) break;
+    const r = ccCells(lines[j]);
+    while (r.length < head.length) r.push("");
+    rows.push(r.slice(0, head.length));
+  }
+  // 숫자만 든 열은 오른쪽 정렬 — 자릿수를 세로로 맞춰야 비교가 된다
+  for (let c = 0; c < al.length; c++){
+    if (al[c]) continue;
+    const vals = rows.map(r => r[c]).filter(v => v !== "");
+    if (vals.length && vals.every(v => CCNUM.test(v))) al[c] = "right";
+  }
+  const f = cell || (x => x);
+  return {next: j,
+    html: `<div class="${cls}w"><table class="${cls}"><thead><tr>`
+      + head.map((c, k) => ccCell("th", f(c), al[k])).join("")
+      + "</tr></thead><tbody>"
+      + rows.map(r => "<tr>" + r.map((c, k) => ccCell("td", f(c), al[k])).join("")
+          + "</tr>").join("")
+      + "</tbody></table></div>"};
+}
+
 /* 인라인 규칙이 끝난 HTML 을 받아 블록만 다시 짠다. placeholder 복원 전이므로
    코드블록 안의 파이프는 이미 빠져 있고(오탐 없음), 셀 안의 코드/경로 강조는
    그대로 살아 있다. */
@@ -3501,39 +3884,10 @@ function ccBlocks(rendered){
   const lines = rendered.split("\n");
   const out = [];                                // {b:블록인가, h:HTML}
   for (let i = 0; i < lines.length; i++){
-    // 표 — 헤더행 + 구분행 + 본문행이 다 있고 칸 수가 맞을 때만.
-    // 파이프 하나 낀 평범한 문장을 표로 만들면 지금보다 나쁘다.
-    const dl = lines[i + 1], b0 = lines[i + 2];
-    if (dl !== undefined && b0 !== undefined && CCTBL_DELIM.test(dl) &&
-        lines[i].includes("|") && b0.includes("|")){
-      const head = ccCells(lines[i]), spec = ccCells(dl);
-      if (head.length !== spec.length) { /* 칸 수 불일치 = 표 아님 (GFM) */ }
-      else {
-        const al = spec.map(c => {
-          const L = c.startsWith(":"), R = c.endsWith(":");
-          return L && R ? "center" : R ? "right" : "";
-        });
-        const rows = [];
-        let j = i + 2;
-        for (; j < lines.length; j++){
-          if (!lines[j].includes("|") || CCTBL_DELIM.test(lines[j])) break;
-          const r = ccCells(lines[j]);
-          while (r.length < head.length) r.push("");
-          rows.push(r.slice(0, head.length));
-        }
-        for (let c = 0; c < al.length; c++){
-          if (al[c]) continue;
-          const vals = rows.map(r => r[c]).filter(v => v !== "");
-          if (vals.length && vals.every(v => CCNUM.test(v))) al[c] = "right";
-        }
-        out.push({b:true, h:'<div class="cctblw"><table class="cctbl"><thead><tr>' +
-          head.map((c, k) => ccCell("th", c, al[k])).join("") + "</tr></thead><tbody>" +
-          rows.map(r => "<tr>" + r.map((c, k) => ccCell("td", c, al[k])).join("") +
-            "</tr>").join("") + "</tbody></table></div>"});
-        i = j - 1;
-        continue;
-      }
-    }
+    // 표 — 규칙은 mdTable 한 곳에만 있다. 여기 칸은 인라인 규칙이 이미 끝난
+    // HTML 이라 셀 렌더러를 넘기지 않는다.
+    const t = mdTable(lines, i, "cctbl");
+    if (t){ out.push({b:true, h:t.html}); i = t.next - 1; continue; }
     // 헤딩 — 해시는 표시 문자가 아니라 위계 표시다. 크기·굵기로 갈음한다.
     const h = CCHEAD.exec(lines[i]);
     if (h){ out.push({b:true, h:`<div class="cch cch${h[1].length}">${h[2]}</div>`}); continue; }
@@ -4908,18 +5262,29 @@ function graphEmptyState(rows){
     return {fix:null,
       msg:"아직 기록된 문서가 없다. 요청을 하나 만들면 여기에 점으로 나타난다.",
       note:"터미널에서 <code>s9 new request</code> 로 첫 요청을 만들 수 있다."};
+  // 켰는데도 화면이 그대로면 화면이 그렇게 말한다 (2026-08-27 반려 재작업).
+  // 같은 문장을 말없이 다시 그리는 것이 반려의 직접 원인이었다 — 사용자는
+  // 컨트롤이 죽은 줄 안다. 켠 것만 인정한다(끄는 건 의도적 축소다).
+  const lit = gLastOn ? `<code>${gLastOn.toUpperCase()}</code>` : "";
   if (!rows.length)
     return {fix:{k:"filters", label:"검색·필터 지우기"},
-      msg:`위쪽 검색·필터가 문서를 전부 걸러냈다. 조건을 지우면 <b>${catalog.length}건</b>이 다시 보인다.`,
+      ack: gLastOn ? `${lit} 를 켰지만 화면은 그대로다 — 검색·필터가 문서를 먼저 전부 걸러냈다.` : "",
+      msg:`검색·필터가 문서를 전부 걸러냈다. 조건을 지우면 <b>${catalog.length}건</b>이 다시 보인다.`,
       note:"새로고침해도 조건이 풀려 다시 보이지만, 이 버튼은 지금 바로 되돌린다."};
   const hid = [...new Set(rows.map(r => r.type))]
     .filter(t => GRAPH_TYPES.includes(t) && !gtypes.has(t));
   if (hid.length){
     const ko = hid.map(t => GKO[t] || t);
     const name = hid.map(t => `<b style="color:${TCOLOR[t] || "var(--text)"}">${GKO[t] || t}</b>`).join("·");
+    // 범례에 실제로 찍힌 글자를 그대로 준다. 한국어 이름만 주면 사용자가 영문
+    // 대문자 라벨로 스스로 옮겨 찾아야 하고, 취소선 그어진 항목이 여럿이면
+    // 그 번역이 곧 오클릭이 된다 — 반려가 그 경로였다.
+    const tag = hid.map(t => `<code>${t.toUpperCase()}</code>`).join(" · ");
     return {fix:{k:"types", label:`${ko.join("·")} 다시 켜기`, types:hid},
-      msg:`조건에 맞는 문서 <b>${rows.length}건</b>은 전부 ${name}이다. 위쪽 범례에서 그 종류를 꺼 두어 화면이 비었다.`,
-      note:"범례 설정은 이 브라우저에 저장돼 새로고침해도 남는다 — 화면이 또 비면 여기를 보라."};
+      ack: (gLastOn && !hid.includes(gLastOn))
+        ? `${lit} 를 켰지만 화면은 그대로다 — 지금 조건에 ${GKO[gLastOn] || gLastOn}은 없다.` : "",
+      msg:`조건에 맞는 문서 <b>${rows.length}건</b>이 전부 ${name}인데, 그 종류를 지금 꺼 두었다.`,
+      note:`범례의 ${tag} 을 직접 눌러도 된다 — 그 설정은 이 브라우저에 저장돼 새로고침해도 남는다.`};
   }
   return {fix:{k:"filters", label:"검색·필터 지우기"},
     msg:`조건에 맞는 <b>${rows.length}건</b>은 이 화면이 점으로 그리지 않는 종류다. 조건을 지우면 전체 관계도가 다시 보인다.`,
@@ -4931,7 +5296,10 @@ function graphEmptyHTML(st){
     ? `<button class="gefix" data-gfix="${st.fix.k}"${st.fix.types
         ? ` data-gtypes="${esc(st.fix.types.join(","))}"` : ""}>${esc(st.fix.label)}</button>`
     : "";
+  // 순서 = 방금 누른 것에 대한 응답 → 원인 → 지금 할 일(버튼) → 부연.
+  // 인정 줄은 role="status" 안이라 스크린리더에도 "눌린 건 맞다"가 전달된다.
   return `<div class="gempty" role="status">` +
+    (st.ack ? `<p class="geack">${st.ack}</p>` : "") +
     `<p class="gemsg">${st.msg}</p>${f}<p class="genote">${st.note}</p></div>`;
 }
 
@@ -4986,12 +5354,16 @@ async function renderGraph(rows){
   const depEmpty = !depBoard(rows).groups.length;
   // 그릴 노드가 하나라도 있으면 안내는 뜨지 않는다 — 그려진 그래프를 덮지 않는다
   const gEmpty = nodes.length ? null : graphEmptyState(rows);
+  // 안내가 "이걸 켜라"고 지목한 종류 — 버튼(data-gtypes)과 **같은 출처**를 읽는다.
+  // 마크업과 핸들러가 서로 다른 이름을 보다 조용히 갈라지는 것이 REQ-20260826-025
+  // 의 결함이었다. 여기서는 st.fix.types 하나만 본다.
+  const gWant = new Set((gEmpty && gEmpty.fix && gEmpty.fix.types) || []);
   $("#view").innerHTML = `<div class="gsplit${depEmpty ? " empty" : ""}"><div class="graphwrap">
     <div class="legend">
       <button class="gmode${graphLayout==="force"?" on":""}" data-glayout="force">force</button>
       <button class="gmode${graphLayout==="dag"?" on":""}" data-glayout="dag">dag</button>
-      ${GRAPH_TYPES.map(t => `<span class="gtype${gtypes.has(t) ? "" : " off"}" data-gtype="${t}"
-        title="클릭 = ${t} 노드 표시 토글"><span class="dot" style="background:${TCOLOR[t]}"></span>${t}</span>`).join("")}
+      ${GRAPH_TYPES.map(t => `<span class="gtype${gtypes.has(t) ? "" : " off"}${gWant.has(t) ? " want" : ""}" data-gtype="${t}"
+        title="${gWant.has(t) ? "이걸 켜면 지금 조건의 문서가 보인다 — " : ""}클릭 = ${t} 노드 표시 토글"><span class="dot" style="background:${TCOLOR[t]}"></span>${t}</span>`).join("")}
       <span class="gedge${depEdgeN ? "" : " none"}" title="blocked_by — 선행이 끝나야 후행이 풀린다. 화살촉이 가리키는 쪽이 막혀 있는 요청이다. 계보(parent 실선 · derived/relates 가는 점선)와 달리 잉크로 그리고, 여러 건을 붙잡은 선행일수록 진하고 굵다. 선행이 끝나면 이 화살표는 사라진다."><svg width="40" height="9" aria-hidden="true"><line x1="0" y1="4.5" x2="28" y2="4.5" stroke="currentColor" stroke-width="1.6" stroke-dasharray="9 5"/><polygon points="28,0.7 39,4.5 28,8.3" fill="currentColor"/></svg>선행 → 후행 대기 <b class="gecount">${depEdgeN}</b></span>
       <span style="margin-left:auto">앰버 호+숫자 = 미완료 파생 병목(1건=¼둘레, 4건+=만원) · 점멸 = in-progress · 실선 링 = blocked · 점선 링 = review</span>
     </div>
@@ -5709,6 +6081,8 @@ document.addEventListener("click", e => {
     const t = gt2.dataset.gtype;
     gtypes.has(t) ? gtypes.delete(t) : gtypes.add(t);
     if (!gtypes.size) gtypes.add("request");  // 전부 끄면 무의미 — 최소 1종 유지
+    // 켠 것만 기억한다 — 끄는 건 의도적 축소라 인정할 것이 없다.
+    gLastOn = gtypes.has(t) ? t : null;
     try{ localStorage.setItem("s9gtypes", JSON.stringify([...gtypes])); }catch(e){}
     render(); return;
   }
@@ -5733,6 +6107,7 @@ document.addEventListener("click", e => {
       (gf.dataset.gtypes || "").split(",").filter(Boolean).forEach(t => gtypes.add(t));
       try{ localStorage.setItem("s9gtypes", JSON.stringify([...gtypes])); }catch(e2){}
     }
+    gLastOn = null;   // 되돌렸으니 직전 헛클릭에 대한 인정은 더 이상 사실이 아니다
     render(); return;
   }
   const gl = e.target.closest("[data-glayout]");
@@ -5827,13 +6202,18 @@ document.addEventListener("click", e => {
   }
 });
 ["#q","#q-body","#f-user","#f-project","#f-tag","#f-type"].forEach(s =>
-  $(s).addEventListener("input", () => { auditLimit = AUDIT_PAGE; render(); }));
+  $(s).addEventListener("input", () => {
+    auditLimit = AUDIT_PAGE;
+    gLastOn = null;   // 조건이 바뀌면 직전 클릭에 대한 인정은 무효다
+    render();
+  }));
 // '내 것만' 토글 — 필터 변경으로 취급: 저장(s9mine) + 드롭다운 재스코핑 + 목록 제한 리셋.
 // URL 해시에는 넣지 않는다(기기 로컬 정체성 — DOC-20260823-006 명시적 결정).
 $("#f-mine").addEventListener("change", e => {
   try{ localStorage.setItem("s9mine", e.target.checked ? "1" : "0"); }catch(e2){}
   expanded.delete("mystrip");
   auditLimit = AUDIT_PAGE;
+  gLastOn = null;   // '내 것만'도 조건이다 — 바뀌면 직전 클릭에 대한 인정은 무효
   fillProjects();   // 옵션 스코핑 + 범위 밖 선택은 all로 리셋
   render();
 });

@@ -1,0 +1,80 @@
+<!doctype html>
+<!-- REQ-20260826-018 확인 하니스 (same-origin 보조 페이지):
+     서버 자동 복구 알림은 **사고가 나야만** 보인다. 사고는 헤드리스 캡처로
+     재현할 수 없으므로 대시보드의 상태 고정 훅(?guard=recovered|attention|none)
+     으로 각 상태를 띄우고, 기록 패널은 실제 클릭으로 연다.
+     ?theme= 로 tone 을 바꿔 대비를 확인한다. -->
+<html><head><meta charset="utf-8"><title>verify guard notice</title>
+<style>
+ html,body{margin:0;background:#000;color:#eee;font:12px/1.5 ui-monospace,monospace}
+ .cap{padding:4px 10px;color:#d9b13b;letter-spacing:.06em}
+ iframe{border:0;width:1340px;display:block;background:#000}
+</style>
+</head><body>
+<div id="host"></div>
+<script>
+const P = new URLSearchParams(location.search);
+const TONE = P.get("theme") || "system";
+// tones=a,b,c 를 주면 tone 별로 같은 상태를 한 장에 늘어놓는다 (대비 확인용)
+const TONES = (P.get("tones") || "").split(",").filter(Boolean);
+// [상태, 기록 패널을 열까, 높이]
+const CASES = (P.get("cases") || "recovered:0:260,attention:0:260,recovered:1:560")
+  .split(",").map(s => s.split(":"));
+const host = document.getElementById("host");
+const wait = (doc, fn, ms=12000) => new Promise((res, rej) => {
+  const t0 = Date.now();
+  const t = setInterval(() => {
+    let v = null; try{ v = fn(doc); }catch(e){}
+    if (v){ clearInterval(t); res(v); }
+    else if (Date.now() - t0 > ms){ clearInterval(t); rej(new Error("timeout")); }
+  }, 150);
+});
+(async () => {
+  const PLAN = TONES.length
+    ? TONES.map(t => [P.get("kind") || "recovered", "0", P.get("h") || "250", t])
+    : CASES.map(c => [c[0], c[1], c[2], TONE]);
+  for (const [kind, open, h, tone] of PLAN){
+    // 접어 둔 기록이 남아 있으면 한 줄로만 떠서 확인이 안 된다 — 매번 편다
+    try{ localStorage.removeItem("s9guard_ack"); }catch(e){}
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = `?guard=${kind}${open === "1" ? " · 기록 패널 열기" : ""} · tone: ${tone}`;
+    host.appendChild(cap);
+    const fr = document.createElement("iframe");
+    fr.style.height = h + "px";
+    fr.src = `/?guard=${kind}&theme=${encodeURIComponent(tone)}#board`;
+    host.appendChild(fr);
+    await new Promise(r => fr.addEventListener("load", r, {once: true}));
+    const doc = fr.contentDocument;
+    try{
+      if (kind === "none"){
+        // 사건이 없으면 흔적도 없어야 한다 — 여기서 기다릴 것이 없는 것이 정답이다
+        await new Promise(r => setTimeout(r, 2500));
+        const shown = !doc.querySelector("#guard").hidden;
+        cap.textContent += shown ? "  — 결함: 사건이 없는데 줄이 떴다"
+                                 : "  — 기대대로 아무 흔적 없음";
+        continue;
+      }
+      await wait(doc, d => d.querySelector("#guard .gw-t"));
+      if (open === "1"){
+        // 재렌더가 버튼을 떼어 갈 수 있으니 결과가 나올 때까지 다시 찾아 누른다
+        await wait(doc, d => {
+          if (!d.querySelector("#guard-log").hidden) return true;
+          const b = d.querySelector("#gw-log");
+          if (b) b.click();
+          return false;
+        }, 8000);
+        // 직전 출력도 펼쳐 본다 — 왜 죽었나의 본문이 여기 있다
+        await wait(doc, d => {
+          if (d.querySelector(".gw-out")) return true;
+          const b = d.querySelector("[data-gwout]");
+          if (b) b.click();
+          return false;
+        }, 8000);
+      }
+    }catch(e){ cap.textContent += "  — 실패: " + e.message; }
+  }
+  document.title = "done";
+})();
+</script>
+</body></html>

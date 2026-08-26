@@ -7139,6 +7139,119 @@ def port_guard_tick():
     return verdict
 
 
+# 캡처가 조용히 거짓을 돌려주지 않게 (REQ-20260827-001).
+# 화면 검증은 이 저장소의 규율인데(REQ-20260825-065), 그 규율을 지키는 도구가
+# 백지를 성공으로 반환하면 규율 자체가 무의미해진다. 실제로 21:56 에 빈 그래프
+# 캡처를 진짜 결함으로 한 번 오인했다.
+SHOT_BLANK_ROWS = 0.75     # 균일한 가로줄 비율이 이보다 높으면 '덜 그려졌다'
+SHOT_MAX_WAIT = 15000      # 재시도 상한 (ms)
+# 화면마다 필요한 조건이 다르다 — 사람이 매번 기억할 일이 아니라 도구가 안다.
+SHOT_TUNE = {
+    # SSE 상시 연결은 virtual-time 을 소진시키지 않아 캡처가 끝나지 않는다.
+    "terminal": {"query": "nosse"},
+    # 물리 레이아웃이 자리를 잡기 전에는 점이 안 그려진다.
+    "graph": {"min_wait": 6000},
+}
+
+
+def _png_blank_rows(path):
+    """PNG 에서 '한 색으로만 채워진 가로줄'의 비율. 못 읽으면 None.
+
+    백지 판정에 **파일 크기를 쓰지 않는다** — 어두운 테마의 정상 캡처가 작게
+    압축돼 백지와 구분되지 않는다(실측 바이트 균일도: 정상 0.983 vs 백지
+    0.996). 갈리는 것은 줄 단위였다(정상 0.11~0.65 vs 백지 0.82).
+
+    필터를 **실제로 되돌린 뒤** 픽셀을 본다. 되돌리지 않고 인코딩된 바이트만
+    보면 판정이 인코더의 필터 선택에 딸린다 — 같은 그림도 인코더가 바뀌면
+    다르게 읽힌다. 검증이 거짓말하지 않게 만드는 도구가 그런 것에 딸리면 안 된다.
+
+    8비트 회색/RGB/RGBA 만 본다(Chrome 캡처는 RGB). 그 밖은 None —
+    판정하지 못하면 막지 않는다. 도구가 길을 막으면 사람이 도구를 끄고,
+    그 순간 규율도 함께 꺼진다.
+    """
+    import struct
+    import zlib
+    try:
+        d = open(path, "rb").read()
+        if d[:8] != b"\x89PNG\r\n\x1a\n":
+            return None
+        i, w, h, bd, ct, idat = 8, None, None, None, None, b""
+        while i < len(d):
+            ln = struct.unpack(">I", d[i:i + 4])[0]
+            typ, data = d[i + 4:i + 8], d[i + 8:i + 8 + ln]
+            if typ == b"IHDR":
+                w, h, bd, ct = struct.unpack(">IIBB", data[:10])
+                if data[10:13] != b"\x00\x00\x00":     # 압축·필터·인터레이스
+                    return None
+            elif typ == b"IDAT":
+                idat += data
+            elif typ == b"IEND":
+                break
+            i += 12 + ln
+        ch = {0: 1, 2: 3, 4: 2, 6: 4}.get(ct)
+        if not (w and h and idat) or ch is None or bd != 8:
+            return None
+        raw = zlib.decompress(idat)
+        stride = w * ch
+        if len(raw) < h * (stride + 1):
+            return None
+        prev, flat, pos = bytearray(stride), 0, 0
+        for _ in range(h):
+            ft = raw[pos]
+            line = bytearray(raw[pos + 1:pos + 1 + stride])
+            pos += 1 + stride
+            if ft == 1:                                   # Sub
+                for x in range(ch, stride):
+                    line[x] = (line[x] + line[x - ch]) & 0xFF
+            elif ft == 2:                                 # Up
+                for x in range(stride):
+                    line[x] = (line[x] + prev[x]) & 0xFF
+            elif ft == 3:                                 # Average
+                for x in range(stride):
+                    a = line[x - ch] if x >= ch else 0
+                    line[x] = (line[x] + ((a + prev[x]) >> 1)) & 0xFF
+            elif ft == 4:                                 # Paeth
+                for x in range(stride):
+                    a = line[x - ch] if x >= ch else 0
+                    b = prev[x]
+                    c = prev[x - ch] if x >= ch else 0
+                    pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                    pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                    line[x] = (line[x] + pr) & 0xFF
+            elif ft != 0:
+                return None
+            px = bytes(line[:ch])
+            if bytes(line) == px * w:
+                flat += 1
+            prev = line
+        return flat / h
+    except Exception:
+        return None
+
+
+def _shot_tune(url, wait):
+    """대상 화면을 보고 캡처 조건을 맞춘다. 반환: (url, wait, 바뀐 이유)."""
+    try:
+        wait = int(wait)          # 파서가 문자열로 준다 — 여기서 한 번 맞춘다
+    except (TypeError, ValueError):
+        wait = 3000
+    frag = url.split("#", 1)[1].split("/")[0] if "#" in url else ""
+    t = SHOT_TUNE.get(frag)
+    if not t:
+        return url, wait, ""
+    why = []
+    q = t.get("query")
+    if q and q not in url:
+        head, _, frag_all = url.partition("#")
+        head += ("&" if "?" in head else "?") + q
+        url = head + ("#" + frag_all if frag_all else "")
+        why.append(f"?{q}")
+    if t.get("min_wait") and wait < t["min_wait"]:
+        wait = t["min_wait"]
+        why.append(f"{wait}ms 대기")
+    return url, wait, (f"({frag} 화면: " + " · ".join(why) + ")" if why else "")
+
+
 def cmd_shot(args):
     """UI 검증용 스크린샷 — WSL이면 Windows Chrome을 headless로 구동해 PNG 생성.
 
@@ -7146,7 +7259,9 @@ def cmd_shot(args):
     함께 비-0 종료해 '미검증'을 명시하게 한다.
     """
     import subprocess
-    url = args.url
+    url, args.wait, why = _shot_tune(args.url, args.wait)
+    if why:
+        print(f"s9 shot: 조건을 맞췄다 {why}", file=sys.stderr)
     out = args.out or os.path.join(
         os.environ.get("TMPDIR", "/tmp"), "s9-shot.png")
 
@@ -7233,6 +7348,24 @@ def cmd_shot(args):
             print(mid)
             return
     if os.path.exists(out):
+        # 백지를 성공으로 돌려주지 않는다 (REQ-20260827-001). 먼저 더 기다려
+        # 본다 — 원인은 대개 '덜 그려짐'이고, 사람을 부르기 전에 도구가 한 번
+        # 더 해 보는 것이 맞다. 그래도 비어 있으면 **실패로 끝낸다.**
+        blank = _png_blank_rows(out)
+        if blank is not None and blank >= SHOT_BLANK_ROWS:
+            if not getattr(args, "_shot_retried", False) \
+                    and args.wait < SHOT_MAX_WAIT:
+                args._shot_retried = True
+                args.wait = min(SHOT_MAX_WAIT, max(args.wait * 3, 6000))
+                print(f"s9 shot: 화면이 거의 비어 있다(균일한 가로줄 "
+                      f"{blank:.0%}) — 덜 그려진 것으로 보고 {args.wait}ms 로 "
+                      f"다시 찍는다", file=sys.stderr)
+                return cmd_shot(args)
+            print(f"s9 shot: 화면이 거의 비어 있다(균일한 가로줄 {blank:.0%}) "
+                  f"— {args.wait}ms 를 기다려도 그려지지 않았다. 이 캡처를 "
+                  f"'확인했다'의 근거로 쓰지 마라. 서버가 떠 있는지, 그 화면이 "
+                  f"실제로 무언가를 그리는지 먼저 보라: {out}", file=sys.stderr)
+            sys.exit(5)
         print(out)
     else:
         print(f"s9 shot: 스크린샷 생성 실패 ({candidates[0]}). "
@@ -7363,6 +7496,54 @@ def _log_tail(path, offset, lines=GUARD_TAIL_LINES):
     except OSError:
         return []
     return [ln.rstrip() for ln in chunk.splitlines() if ln.strip()][-lines:]
+
+
+def guard_report(port, limit=30):
+    """감시 기록을 화면이 읽을 모양으로 (REQ-20260826-018).
+
+    로그가 없으면 빈 보고를 낸다 — 오류가 아니라 **사건이 없는 것**이고,
+    화면은 그때 아무것도 그리지 않는다. 깨진 줄은 조용히 건너뛴다: 한 줄이
+    상해도 나머지 기록은 살아야 한다.
+    """
+    p = _guard_paths(port)
+    events = []
+    try:
+        with open(p["log"], encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except ValueError:
+                    continue          # 깨진 한 줄이 나머지를 죽이지 않는다
+    except OSError:
+        events = []
+    events = [e for e in events if isinstance(e, dict)]
+    held = _guard_alive(port)
+    # 마지막 감시 시작 이후만 센다 — 어제 죽은 횟수를 오늘 감시자의 성적으로
+    # 보고하면 숫자가 거짓말을 한다.
+    starts = [i for i, e in enumerate(events) if e.get("event") == "start"]
+    since_i = starts[-1] if starts else 0
+    recent = events[since_i:]
+    if held is not None and held != -1:
+        guard = "watching"
+    elif any(e.get("event") == "gave-up" for e in recent):
+        guard = "gave-up"
+    else:
+        guard = "none"
+    deaths = [e for e in recent
+              if e.get("event") in ("died", "gave-up", "spawn-error")]
+    return {
+        "port": port,
+        "now": now_iso(),
+        "guard": guard,
+        "guard_pid": held if guard == "watching" else None,
+        "guard_since": events[since_i].get("ts") if starts else None,
+        "restarts": sum(1 for e in recent if e.get("event") == "died"),
+        "last_death": deaths[-1] if deaths else None,
+        "events": list(reversed(events[-limit:])),
+    }
 
 
 def _guard_record(port, event, human, detail=None, root=None):
@@ -8339,6 +8520,18 @@ def cmd_serve(args):
                             "code_stamp": SERVE_CODE_STAMP,
                             "disk_stamp": cur,
                             "stale": code_is_stale(SERVE_CODE_STAMP, cur)})
+            elif parsed.path == "/api/serveguard":
+                # 대시보드가 왜 죽었는지를 대시보드 안에서 답한다
+                # (REQ-20260826-018). 명세는 그 문서의 decision 노트 —
+                # designer 가 정하고 리드가 서버측을 넣었다.
+                #
+                # 원칙 둘을 그대로 지킨다.
+                #  ① 서버는 **사실만**, 화면이 정책을. "이 사건을 사람에게
+                #     보여줄 만큼 최근인가"는 표시 정책이라 여기서 판정하지
+                #     않는다(`recovered` 같은 필드를 주지 않는다).
+                #  ② 응답에 **서버 시각**을 담는다. 신선도 기준이 브라우저
+                #     시계면 시계가 틀어진 기기에서 "6시간 전"이 "방금"이 된다.
+                self._json(guard_report(s9_port()))
             elif parsed.path == "/api/catalog":
                 me = viewer_of(qs)
                 self._json([r for r in catalog_with_live()
