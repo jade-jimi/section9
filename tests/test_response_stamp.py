@@ -26,7 +26,8 @@ PHOOK = os.path.join(ROOT, "bin", "s9-audit-prompt")
 PROTOCOL = os.path.join(ROOT, "harness", "common", "PROTOCOL.md")
 AGENTS = os.path.join(ROOT, "harness", "claude", "agents")
 
-STAMP_RE = r"# \[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) KST\] ([\w-]+)"
+# 백틱까지 계약이다 — 해시 강조에 색 강조를 겹치는 것이 이 표기의 목적이다
+STAMP_RE = (r"# `\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) KST - ([\w-]+)\]`")
 
 
 # 훅은 세션 로그를 남긴다 — 실 vault 를 더럽히지 않게 임시 루트로 격리한다.
@@ -91,6 +92,7 @@ class ResponseStamp(unittest.TestCase):
         self.assertIn("date '+%Y-%m-%d %H:%M:%S KST'", src,
                       "주입이 없는 환경에서 시각을 얻을 방법을 알려줘야 한다")
         self.assertIn("lead", src, "응답 주체 이름 규칙이 공통 규약에 없다")
+        self.assertIn("KST - lead]`", src, "표기 형태가 규약과 어긋난다")
 
     def test_every_role_agent_carries_the_rule(self):
         """서브에이전트에는 UserPromptSubmit 훅이 없다 — 각자 문서에 있어야 한다."""
@@ -104,7 +106,7 @@ class ResponseStamp(unittest.TestCase):
             if "KST" not in txt:
                 missing.append(n)
             # 각자 자기 이름을 쓰도록 박혀 있어야 한다 — 일반 안내로는 안 지켜진다
-            elif f"KST] {n[:-3]}" not in txt:
+            elif f"KST - {n[:-3]}]`" not in txt:
                 unnamed.append(n)
         self.assertEqual(missing, [], f"시각 규칙이 빠진 에이전트: {missing}")
         self.assertEqual(unnamed, [], f"자기 이름이 박히지 않은 에이전트: {unnamed}")
