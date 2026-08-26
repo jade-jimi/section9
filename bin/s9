@@ -8902,6 +8902,38 @@ def cmd_serve(args):
                             ok = True
                 if not ok:
                     self._send(404, "text/plain", b"not found")
+            elif parsed.path == "/api/asset-text":
+                # 첨부에서 뽑은 본문 (REQ-20260827-005). 검색은 이미 이 글자를
+                # 찾는데(REQ-20260826-020) 화면에서는 읽을 수가 없었다.
+                #
+                # **게이트는 `/api/asset` 과 글자 그대로 같아야 한다.** 다르면
+                # PDF 원본은 못 보는 사람이 그 안의 글자는 다 읽는다 — 접근
+                # 제어에 구멍을 내는 종류라, 라우트를 먼저 만들고 게이트를
+                # 나중에 붙이는 순서를 쓰지 않았다. backend 가 020 을 끝내며
+                # 남긴 경고 그대로다.
+                doc_id = qs.get("doc", [""])[0]
+                fn = safe_name(os.path.basename(qs.get("f", [""])[0]))
+                me = viewer_of(qs)
+                body_t, ok = "", False
+                dp = locate(doc_id)
+                if dp and fn:
+                    meta_a = read_doc(dp)[0]
+                    if doc_visible(meta_a, me):
+                        tp = asset_text_path(doc_asset_dir(doc_id), fn)
+                        try:
+                            with open(tp, encoding="utf-8",
+                                      errors="replace") as f:
+                                body_t = f.read()
+                            ok = True
+                        except OSError:
+                            ok = False
+                if not ok:
+                    # 사이드카가 없는 것과 볼 수 없는 것을 **같은 404 로** 낸다.
+                    # 갈라 놓으면 응답 차이가 "그 문서는 있다"를 흘린다.
+                    self._send(404, "text/plain", b"not found")
+                else:
+                    self._json({"doc": doc_id, "file": fn,
+                                "chars": len(body_t), "text": body_t})
             elif parsed.path == "/api/doc":
                 doc_id = qs.get("id", [""])[0]
                 path = locate(doc_id)
