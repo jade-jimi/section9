@@ -3421,6 +3421,7 @@ async function termTargetLoop(T){
     T.srvAgents = d.agents || [];
     termAgentsRender(T);
   };
+  T.agTick = agTick;          // 탭 복귀 즉시 맞추기 위해 노출 (REQ-20260826-016)
   agTick();
   T.timers.push(setInterval(agTick, 10000));
 }
@@ -4091,7 +4092,14 @@ document.addEventListener("visibilitychange", () => {
   const T = TERM;
   if (!T || tab !== "terminal" || !T.sid) return;
   if (document.hidden) termCloseSSE(T);
-  else if (!T.es && !T.poll){ T.esFails = 0; termConnectSSE(T); }
+  else {
+    if (!T.es && !T.poll){ T.esFails = 0; termConnectSSE(T); }
+    // 에이전트 스트립은 터미널 탭이 보일 때만 폴링한다 — 떠나 있는 동안
+    // 목록이 마지막 상태로 얼어붙어, 보드는 "진행 중 없음"인데 스트립에는
+    // 끝난 에이전트가 남아 있는 어긋남이 생겼다 (REQ-20260826-016).
+    // 돌아온 즉시 한 번 맞춘다. 10초를 기다리게 두면 그 사이 화면이 거짓말을 한다.
+    if (T.agTick) T.agTick();
+  }
 });
 
 /* ---- / 팔레트 (L4): /api/chat/commands(스킬·커맨드) + CC 빌트인(CLI 전용 dim).
@@ -5201,6 +5209,9 @@ document.addEventListener("click", e => {
     pushRoute();
     render();
     refreshCatalog(true);
+    // 탭 전환은 visibilitychange 를 일으키지 않는다 — 터미널로 돌아온 순간
+    // 스트립을 서버 목록으로 맞춘다 (REQ-20260826-016).
+    if (tab === "terminal" && TERM && TERM.agTick) TERM.agTick();
     return;
   }
   const gt2 = e.target.closest("[data-gtype]");

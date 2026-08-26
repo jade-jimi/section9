@@ -3830,6 +3830,24 @@ HEALTH_FAIL_RE = re.compile(
     re.I)
 
 
+def actor_alive(actor, age=None, pid_alive=None, log_line="", recorded=""):
+    """"지금 살아 있는가" 한 줄 판정 — 화면·워처·통지가 **이것만** 쓴다
+    (REQ-20260826-016).
+
+    규칙을 여기서 다시 쓰지 않는다. judge_health 를 감싸기만 한다 — 같은
+    질문을 두 곳에서 계산하면 언젠가 답이 갈라지고, 그때 화면은 "돌고 있다"는데
+    워처는 "아무도 안 한다"로 움직인다. 오늘 중복 스폰(REQ-20260826-013)과
+    반려 통지 오배달(REQ-20260826-015)이 그 어긋남에서 났다.
+
+    어떤 입력에도 예외를 올리지 않는다(judge_health 의 계약을 그대로 잇는다).
+    """
+    try:
+        return judge_health(actor, age=age, pid_alive=pid_alive,
+                            log_line=log_line, recorded=recorded)[0] == "alive"
+    except Exception:
+        return False
+
+
 def judge_health(actor, age=None, pid_alive=None, log_line="", recorded=""):
     """actor 한 건의 생존 판정 → (state, reason).
 
@@ -6735,12 +6753,17 @@ def cmd_serve(args):
                             _dt.timezone.utc).timestamp() - t0.timestamp())
                     except (ValueError, AttributeError):
                         pass
+                    # 생존 판정은 actor_alive 한 곳에서만 온다 —
+                    # 스트립이 자기 숫자(180)를 들고 있으면 헬스체크와 언제든
+                    # 갈라진다 (REQ-20260826-016).
                     out.append({"id": aid, "type": meta.get("type", ""),
                                 "desc": meta.get("desc", ""),
                                 "label": st["label"],
                                 "tokens": st["tokens"],
                                 "elapsed": max(elapsed, 0),
-                                "active": time.time() - st["mtime"] < 180})
+                                "active": actor_alive(
+                                    f"sub:{meta.get('type', '') or 'subagent'}",
+                                    age=time.time() - st["mtime"])})
                 self._json({"session": sid, "agents": out})
             elif parsed.path == "/api/agentstream":
                 # 에이전트 transcript 열람 (REQ-044): ←/클릭으로 터미널에서 조회
