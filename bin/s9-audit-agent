@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""section9 delegation audit hook (Claude Code PostToolUse, matcher=Agent).
+
+리드가 Agent 툴로 위임한 순간, 그 위임을 **사람의 기억이 아니라 구조로** 등록한다
+(REQ-20260825-088, 설계 DOC-20260825-003):
+
+  1. active_reqs 클레임        — 병렬 위임이 대시보드에서 보이게
+  2. agent_transcript_path 누적 — 그 에이전트의 활동이 live 신선도의 근거가 되게
+  3. contributions 에 running   — "어느 항목을 누가 지금 하고 있는가"를 문서에
+
+배경: 2026-08-25 위임 에이전트 2개가 병렬로 돌았는데 리드가 `s9 last --add` 와
+transcript 등록을 잊어 화면에 아무것도 안 보였다. 수동 규약은 남기되 기본을
+자동으로 바꾼다 — 잊을 수 있는 경로는 언젠가 반드시 잊힌다.
+
+PostToolUse 시점을 고르는 이유: PreToolUse 에는 agentId·output_file 이 아직 없다.
+이 하네스의 Agent 툴은 백그라운드 스폰이라 tool_response 가 **시작 시점에**
+agentId/output_file 을 돌려준다 — 즉 이 훅은 종료가 아니라 기동 시점에 돈다.
+종료 시점의 마감(result=done)은 SubagentStop 훅(s9-audit-subagent)이 맡는다.
+
+원칙: 실패 시 조용히 exit 0. 문서를 건드릴 근거가 없으면 아무것도 하지 않는다.
+비활성화: S9_AUDIT=off
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+
+S9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
+
+AID_RE = re.compile(r"agentId[\"'\s:=]+([0-9a-zA-Z_-]+)")
+OUT_RE = re.compile(r"output_file[\"'\s:=]+(\S+?)[\"',\s]*$", re.M)
+
+
+def _detect_root(data):
+    """세션 cwd가 s9 인스턴스면 그 루트를 S9_ROOT로 승격 (REQ-20260824-053)."""
+    if os.environ.get("S9_ROOT"):
+        return
+    cwd = (data.get("cwd") or "").strip()
+    if cwd and os.path.exists(os.path.join(cwd, "bin", "s9")) \
+            and os.path.isdir(os.path.join(cwd, "vault")):
+        os.environ["S9_ROOT"] = cwd
+
+
+def run(env, *argv):
+    return subprocess.run([S9, *argv], capture_output=True, text=True,
+                          env=env, timeout=15)
+
+
+def parse_agent_result(resp):
+    """Agent 툴 응답 → (agentId, output_file). 못 읽으면 ('', '').
+
+    하네스가 dict 를 주기도 하고 사람이 읽는 텍스트를 주기도 한다 — 둘 다 받는다.
+    파싱 실패를 예외로 올리지 않는 이유: 이 훅의 실패는 감사 공백일 뿐이고,
+    툴 사용 자체를 막아선 안 된다."""
+    if isinstance(resp, dict):
+        aid = str(resp.get("agentId") or resp.get("agent_id") or "")
+        out = str(resp.get("output_file") or resp.get("outputFile") or "")
+        if aid and out:
+            return aid, out
+        resp = json.dumps(resp, ensure_ascii=False)
+    if isinstance(resp, list):
+        resp = "\n".join(
+            x.get("text", "") if isinstance(x, dict) else str(x) for x in resp)
+    if not isinstance(resp, str):
+        return "", ""
+    m1, m2 = AID_RE.search(resp), OUT_RE.search(resp)
+    if not (m1 and m2):
+        return "", ""
+    return m1.group(1), m2.group(1).strip("\"',")
+
+
+def actor_for(agent_type, agent_id):
+    """위임 에이전트의 actor 규격 문자열 — sub:<타입>:<agentId8>."""
+    t = (agent_type or "subagent").strip() or "subagent"
+    return "sub:%s:%s" % (t, (agent_id or "")[:8]) if agent_id else "sub:%s" % t
+
+
+def target_req(env):
+    """이 위임을 귀속할 REQ — 세션이 실행 등록한 것 중 소유 확인을 통과한 것.
+
+    언급 기반 추측은 하지 않는다: 위임 시점엔 아직 보고 본문이 없고, 추측으로
+    남의 문서에 running 을 심으면 그 문서가 영원히 '진행 중'으로 보인다."""
+    try:
+        b = json.loads(run(env, "bind").stdout or "{}")
+    except ValueError:
+        return ""
+    cands = [x for x in [(b.get("last_req") or "").strip(),
+                         *(b.get("active_reqs") or [])] if x]
+    for rid in dict.fromkeys(cands):
+        if run(env, "last", "--owns", rid).stdout.strip() == rid:
+            return rid
+    return ""
+
+
+def main():
+    if os.environ.get("S9_AUDIT", "").lower() == "off":
+        return
+    data = json.load(sys.stdin)
+    if (data.get("tool_name") or "") != "Agent":
+        return
+    _detect_root(data)
+    aid, out = parse_agent_result(data.get("tool_response"))
+    if not (aid and out):
+        return
+
+    env = dict(os.environ)
+    env["S9_SESSION"] = (data.get("session_id") or "unknown")[:8]
+    req = target_req(env)
+    if not req:
+        run(env, "log", f"위임 등록 보류: 클레임된 REQ 없음 (agent {aid[:8]})")
+        return
+
+    inp = data.get("tool_input") or {}
+    run(env, "claim", req, "--agent-transcript", out)
+    run(env, "contrib", req,
+        "--actor", actor_for(inp.get("subagent_type"), aid),
+        "--item", (inp.get("description") or "")[:120],
+        "--result", "running", "--transcript", out)
+    run(env, "log", f"위임 등록: {req} ← {actor_for(inp.get('subagent_type'), aid)}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        sys.exit(0)

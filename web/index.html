@@ -552,6 +552,50 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .gedge{display:inline-flex;align-items:center;gap:8px;color:var(--text)}
 .gedge svg{flex:none}
 .gtype.off{opacity:.35;text-decoration:line-through}
+.gedge.none{opacity:.4}
+.gedge .gecount{font-family:var(--mono);color:var(--muted)}
+
+/* ------- 선행 대기 현황판 (REQ-20260826-009) -------
+   그래프는 구조를 보여주고, 표는 현황을 답한다. 300개 노드에서 엣지 하나를 눈으로
+   찾는 건 현실적이지 않다 — 같은 사실을 캔버스 바로 아래 줄글·표로 한 번 더 말한다. */
+.depsum{border:1px solid var(--border);background:var(--panel);padding:13px 16px 12px;margin-top:14px}
+.dshead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+.dscount{color:var(--text);font-weight:600}
+.dsscope{color:var(--faint)}
+.dslead{font-size:12px;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:auto;
+  font-family:"Noto Sans KR",system-ui,sans-serif}
+.dslead b{color:var(--c-blocked);font-weight:600}
+.dstwrap{overflow-x:auto}
+.dstable{width:100%;min-width:620px;border-collapse:collapse;margin-top:9px;font-size:12px}
+.dstable th{text-align:left;font-family:var(--mono);font-size:10px;font-weight:500;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+  padding:0 14px 6px 0;border-bottom:1px solid var(--border);white-space:nowrap}
+.dstable td{padding:7px 14px 7px 0;border-bottom:1px solid var(--hairline);vertical-align:baseline;
+  color:var(--text)}
+.dstable tbody tr:hover td{background:var(--accent-soft)}
+.dstable .ti{color:var(--muted);margin-left:7px}
+.dstable .st{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
+  white-space:nowrap}
+.dstable .num{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.dstable td.cont{color:var(--faint);font-family:var(--mono);font-size:11px}
+.dshold{font-family:var(--mono);font-size:10px;color:var(--c-blocked);letter-spacing:.04em;
+  margin-left:7px;white-space:nowrap}
+.dsempty{margin:9px 0 2px;font-size:12.5px;color:var(--muted);line-height:1.7}
+.dsempty code{font-family:var(--mono);font-size:11px;color:var(--text);
+  border:1px solid var(--hairline);padding:1px 6px}
+.dsnote{margin-top:10px;font-size:11.5px;color:var(--muted);line-height:1.6}
+.depsum .more{margin-top:9px}
+
+/* Board 상단 병목 한 줄 — 카드가 말할 수 없는 것(한 선행이 여럿을 붙잡음)만 말한다 */
+.bneck{margin:-8px 0 18px;font-size:12.5px;color:var(--muted);line-height:1.9}
+.bneck .bcap{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--c-blocked)}
+.bneck b{color:var(--text);font-weight:600}
+.bgo{border:0;background:none;color:var(--muted);font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.05em;cursor:pointer;padding:0;margin-left:12px;text-decoration:underline;
+  text-underline-offset:3px;text-decoration-style:dotted}
+.bgo:hover{color:var(--text)}
 
 /* ------- 상태 전이 액션 (판정 버튼 / 드래그) ------- */
 .tdd{font-family:var(--mono);font-size:10px;color:var(--c-inprogress);border:1px solid currentColor;
@@ -658,7 +702,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="soft"] .ccterm{border-radius:10px}
 [data-skin="soft"] .badge{background:var(--accent-soft);border-radius:5px;padding:1px 7px}
 [data-skin="soft"] .badge::before{content:""}
-[data-skin="soft"] .docs,[data-skin="soft"] .audit,[data-skin="soft"] .graphwrap,
+[data-skin="soft"] .docs,[data-skin="soft"] .audit,[data-skin="soft"] .graphwrap,[data-skin="soft"] .depsum,
 [data-skin="soft"] .streamwrap{border-radius:12px;overflow:hidden}
 [data-skin="soft"] .term{border-radius:10px}
 [data-skin="soft"] .hovercard{border-radius:10px;border-color:var(--border);
@@ -731,13 +775,13 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="glass"] .hrow2{border-top-color:var(--gl-hairline)}
 /* 패널 = 떠 있는 유리판: 반투명 + blur + 라운드 + 부드러운 그림자 */
 [data-skin="glass"] .stats,[data-skin="glass"] .board,[data-skin="glass"] .docs,
-[data-skin="glass"] .audit,[data-skin="glass"] .graphwrap,[data-skin="glass"] .streamwrap,
+[data-skin="glass"] .audit,[data-skin="glass"] .graphwrap,[data-skin="glass"] .depsum,[data-skin="glass"] .streamwrap,
 [data-skin="glass"] .proj-info,[data-skin="glass"] .mystrip{
   background:var(--gl-panel);
   -webkit-backdrop-filter:blur(18px) saturate(1.25);
   backdrop-filter:blur(18px) saturate(1.25);
   border:1px solid var(--gl-line);border-radius:14px;box-shadow:var(--gl-shadow)}
-[data-skin="glass"] .docs,[data-skin="glass"] .audit,[data-skin="glass"] .graphwrap,
+[data-skin="glass"] .docs,[data-skin="glass"] .audit,[data-skin="glass"] .graphwrap,[data-skin="glass"] .depsum,
 [data-skin="glass"] .streamwrap{overflow:hidden}
 [data-skin="glass"] .stats{overflow:hidden}
 [data-skin="glass"] .stat{border-right-color:var(--gl-hairline)}
@@ -837,7 +881,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="field"] .chk{color:var(--muted)}
 [data-skin="field"] .pdiv{background:var(--fd-line)}
 [data-skin="field"] .stats,[data-skin="field"] .docs,[data-skin="field"] .audit,
-[data-skin="field"] .graphwrap,[data-skin="field"] .streamwrap,
+[data-skin="field"] .graphwrap,[data-skin="field"] .depsum,[data-skin="field"] .streamwrap,
 [data-skin="field"] .proj-info,[data-skin="field"] .mystrip{border-color:var(--fd-line)}
 /* Board: 패널 상자를 버리고 컬럼 자체가 지면 위 백색 판 — 판 사이로 필드가 흐른다 */
 [data-skin="field"] .board{background:transparent;border:0;gap:16px;padding-bottom:4px}
@@ -888,9 +932,9 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="cobalt"] .settings-panel{top:118px;border-radius:12px}
 /* 콘텐츠: 라운드 카드 그리드 — 밴드 아래는 밝고 정돈된 작업면 */
 [data-skin="cobalt"] .stats,[data-skin="cobalt"] .docs,[data-skin="cobalt"] .audit,
-[data-skin="cobalt"] .graphwrap,[data-skin="cobalt"] .streamwrap,
+[data-skin="cobalt"] .graphwrap,[data-skin="cobalt"] .depsum,[data-skin="cobalt"] .streamwrap,
 [data-skin="cobalt"] .proj-info,[data-skin="cobalt"] .mystrip{border-radius:12px}
-[data-skin="cobalt"] .docs,[data-skin="cobalt"] .audit,[data-skin="cobalt"] .graphwrap,
+[data-skin="cobalt"] .docs,[data-skin="cobalt"] .audit,[data-skin="cobalt"] .graphwrap,[data-skin="cobalt"] .depsum,
 [data-skin="cobalt"] .streamwrap,[data-skin="cobalt"] .stats{overflow:hidden}
 [data-skin="cobalt"] .board{background:transparent;border:0;gap:12px}
 [data-skin="cobalt"] .col,[data-skin="cobalt"] .col:last-child{background:var(--panel);
@@ -917,7 +961,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="grid"] .tabs button{padding:3px 11px 9px}
 [data-skin="grid"] .hrow2{padding:6px 14px}
 [data-skin="grid"] .stats,[data-skin="grid"] .board,[data-skin="grid"] .docs,
-[data-skin="grid"] .audit,[data-skin="grid"] .graphwrap,[data-skin="grid"] .streamwrap{
+[data-skin="grid"] .audit,[data-skin="grid"] .graphwrap,[data-skin="grid"] .depsum,[data-skin="grid"] .streamwrap{
   border-left:0;border-right:0;border-top:0}
 [data-skin="grid"] .stats{margin:0}
 [data-skin="grid"] .stat{flex:1 1 auto}
@@ -999,10 +1043,10 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   border-color:var(--sl-blue)}
 /* 패널 = 화이트 카드: 라운드 8px + 미세 그림자 */
 [data-skin="slate"] .stats,[data-skin="slate"] .docs,[data-skin="slate"] .audit,
-[data-skin="slate"] .graphwrap,[data-skin="slate"] .streamwrap,
+[data-skin="slate"] .graphwrap,[data-skin="slate"] .depsum,[data-skin="slate"] .streamwrap,
 [data-skin="slate"] .proj-info,[data-skin="slate"] .mystrip{
   border-radius:8px;border-color:var(--sl-line);box-shadow:var(--sl-shadow)}
-[data-skin="slate"] .docs,[data-skin="slate"] .audit,[data-skin="slate"] .graphwrap,
+[data-skin="slate"] .docs,[data-skin="slate"] .audit,[data-skin="slate"] .graphwrap,[data-skin="slate"] .depsum,
 [data-skin="slate"] .streamwrap,[data-skin="slate"] .stats{overflow:hidden}
 /* Board: 컬럼이 각각 화이트 카드로 분리 — 캔버스가 사이로 보인다 */
 [data-skin="slate"] .board{background:transparent;border:0;gap:10px}
@@ -1082,10 +1126,10 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   background:color-mix(in srgb, var(--text) 12%, var(--ck-well))}
 /* 다른 탭들도 같은 문법: 캔버스 위 라운드 화이트 판 */
 [data-skin="cork"] .stats,[data-skin="cork"] .docs,[data-skin="cork"] .audit,
-[data-skin="cork"] .graphwrap,[data-skin="cork"] .streamwrap,
+[data-skin="cork"] .graphwrap,[data-skin="cork"] .depsum,[data-skin="cork"] .streamwrap,
 [data-skin="cork"] .proj-info,[data-skin="cork"] .mystrip{
   border:0;border-radius:12px;box-shadow:var(--ck-shadow)}
-[data-skin="cork"] .docs,[data-skin="cork"] .audit,[data-skin="cork"] .graphwrap,
+[data-skin="cork"] .docs,[data-skin="cork"] .audit,[data-skin="cork"] .graphwrap,[data-skin="cork"] .depsum,
 [data-skin="cork"] .streamwrap,[data-skin="cork"] .stats{overflow:hidden}
 [data-skin="cork"] .settings-panel,[data-skin="cork"] .hovercard{border-radius:10px;
   border-color:var(--ck-line);box-shadow:var(--ck-lift)}
@@ -1463,7 +1507,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="calm"] .settings-h{letter-spacing:0;text-transform:none;font-size:12px}
 [data-skin="calm"] .tblwrap{border-radius:var(--calm-r);overflow:hidden;
   background:var(--panel);box-shadow:var(--calm-shadow)}
-[data-skin="calm"] .graphwrap{border:0;border-radius:var(--calm-r);overflow:hidden;
+[data-skin="calm"] .graphwrap,[data-skin="calm"] .depsum{border:0;border-radius:var(--calm-r);overflow:hidden;
   box-shadow:var(--calm-shadow)}
 /* 어두운 톤에서는 그림자가 보이지 않는다 — 깊이를 얇은 링 + 면 밝기로 준다
    (같은 요소를 톤에 따라 다른 수단으로 띄운다) */
@@ -1643,6 +1687,95 @@ const DEP_DEAD = new Set(["done", "cancelled"]);
 function liveBlockers(r){
   if (!r || DEP_DEAD.has(r.status)) return [];   // 이미 끝난 문서는 기다릴 게 없다
   return (r.blocked_by || []).map(catFind).filter(b => b && !DEP_DEAD.has(b.status));
+}
+
+// 선행 대기 현황 (REQ-20260826-009 2차): 그래프는 구조를 보여주지만 "지금 무엇 때문에
+// 무엇이 막혀 있나"에는 답하지 못한다 — 300개 노드에서 화살표 하나를 눈으로 찾는 일은
+// 현실적이지 않다. 같은 데이터를 (막힌 요청 × 선행) 짝의 표로 편다.
+// dead: 양끝 중 하나가 끝나 화면에서 지운 의존 수 — 표가 비었을 때 "왜 아무것도
+// 없나"에 답하는 근거다(수명 규칙 DOC-20260826-001 규칙 4).
+function depBoard(rows){
+  const groups = [], hold = {};
+  let dead = 0;
+  for (const r of rows){
+    if (r.type !== "request") continue;
+    const raw = r.blocked_by || [];
+    if (!raw.length) continue;
+    const rDead = DEP_DEAD.has(r.status);
+    const live = [];
+    for (const id of raw){
+      const b = catFind(id);
+      if (!b) continue;                                  // 카탈로그에 없는 id — 판단 불가, 세지 않는다
+      if (rDead || DEP_DEAD.has(b.status)) { dead++; continue; }
+      live.push(b);
+    }
+    if (!live.length) continue;
+    live.forEach(b => { hold[b.id] = (hold[b.id] || 0) + 1; });
+    groups.push({r, blockers: live});
+  }
+  // 정렬: ① 그 선행이 붙잡은 건수 ② 막힌 요청이 그 상태로 머문 시간(오래된 것 먼저).
+  // 같은 요청의 선행 여러 건은 반드시 붙어 있어야 한다 — 표에서 '〃'가 제 줄을 찾는다.
+  const keyT = x => Date.parse(x.status_since || x.updated || "") || Date.now();
+  groups.forEach(g => {
+    g.blockers.sort((a, b) => hold[b.id] - hold[a.id] || a.id.localeCompare(b.id));
+    g.hold = hold[g.blockers[0].id];
+  });
+  groups.sort((a, b) => b.hold - a.hold || keyT(a.r) - keyT(b.r) || a.r.id.localeCompare(b.r.id));
+  const top = Object.entries(hold).sort((a, b) => b[1] - a[1])[0] || null;
+  const rowN = groups.reduce((n, g) => n + g.blockers.length, 0);
+  return {groups, hold, dead, rowN, top};
+}
+
+const DEP_ROWS = 8;   // 표 기본 표시 제한 (무한 목록 금지) — 나머지는 "더 보기"
+function depSummaryHTML(rows){
+  const d = depBoard(rows);
+  // 필터가 걸려 있으면 표도 그 범위다 — 위 캔버스와 같은 것을 보고 있다고 말해준다
+  const scope = rows.length !== catalog.length ? ` <span class="dsscope">현재 필터 기준</span>` : "";
+  const note = d.dead
+    ? `<div class="dsnote">양끝 중 하나가 이미 끝난 의존 ${d.dead}건은 세지 않았다 — 끝난 의존은 그래프에도 이 표에도 남지 않고, 근거는 각 문서 History 에 남는다.</div>`
+    : "";
+  if (!d.groups.length){
+    return `<section class="depsum" id="depsum">
+      <div class="dshead"><span>선행 대기 현황</span><span class="dscount">없음</span>${scope}</div>
+      <p class="dsempty">지금 다른 요청 때문에 멈춘 요청이 없다. 진행이 막힌 요청에 선행을 걸면
+        여기에 줄이 쌓이고 위 그래프에 화살표가 그려진다.<br>
+        <code>s9 link &lt;막힌 요청&gt; --blocked-by &lt;선행&gt;</code></p>
+      ${note}</section>`;
+  }
+  // ?depall: 진단·헤드리스 캡처용 — 표 전체 펼침 (클릭 불가 환경 검증, ?mpanel 과 동형)
+  const open = expanded.has("depsum") || /[?&]depall/.test(location.search);
+  const shown = open ? d.groups : d.groups.slice(0, DEP_ROWS);
+  const hidden = d.groups.length - shown.length;
+  const lead = d.top && d.top[1] > 1
+    ? (() => { const b = catFind(d.top[0]); return b
+        ? `<span class="dslead"><b>${esc(shortId(b.id))} ${esc(b.title)}</b> 이(가) ${d.top[1]}건을 붙잡고 있다</span>` : ""; })()
+    : "";
+  const dot = st => `<span class="cdot" style="background:${SCOLOR[st] || "var(--muted)"}"></span>`;
+  const seen = new Set();   // '3건 붙잡음' 표시는 그 선행이 처음 나온 줄에만 — 반복하면 신호가 죽는다
+  const body = shown.map(g => g.blockers.map((b, i) => {
+    const held = d.hold[b.id], mark = held > 1 && !seen.has(b.id);
+    seen.add(b.id);
+    return `<tr>
+      <td>${i === 0
+        ? dot(g.r.status) + `<a class="doclink" data-doc="${esc(g.r.id)}">${esc(shortId(g.r.id))}</a><span class="ti">${esc(g.r.title)}</span>`
+        : `<span class="cont" title="윗줄과 같은 요청 — 이 선행도 함께 끝나야 풀린다">〃</span>`}</td>
+      <td>${dot(b.status)}<a class="doclink" data-doc="${esc(b.id)}">${esc(shortId(b.id))}</a><span class="ti">${esc(b.title)}</span>${
+        mark ? `<span class="dshold" title="이 선행이 지금 붙잡고 있는 요청 수">${held}건 붙잡음</span>` : ""}</td>
+      <td class="st" style="color:${SCOLOR[b.status] || "var(--muted)"}">${esc(b.status)}</td>
+      <td class="num" title="선행이 현재 상태로 머문 시간">${esc(fmtElapsed(b.status_since) || "-")}</td>
+    </tr>`;
+  }).join("")).join("");
+  return `<section class="depsum" id="depsum">
+    <div class="dshead"><span>선행 대기 현황</span>
+      <span class="dscount">${d.groups.length}건이 막혀 있다</span>${scope}${lead}</div>
+    <div class="dstwrap"><table class="dstable">
+      <thead><tr><th>막힌 요청</th><th>기다리는 선행</th><th>선행 상태</th>
+        <th title="선행이 현재 상태로 머문 시간">멈춘 지</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>
+    ${hidden > 0 ? `<button class="more" data-depmore>${hidden}개 더 보기</button>`
+      : (open && d.groups.length > DEP_ROWS ? `<button class="more" data-depmore>접기</button>` : "")}
+    ${note}</section>`;
 }
 const linkifyIds = escaped => escaped.replace(
   /(^|[^"\w-])((?:REQ|DOC|SES)-\d{8}-\d{3,}(?:-[0-9a-z]{4})?)/g,
@@ -2294,6 +2427,18 @@ function renderBoard(rows){
     STATUSES.filter(s => counts[s]).map(s =>
       `<span class="stat${cur===s?" on":""}" data-statf="${s}" style="--sc:${SCOLOR[s]}">
         <span class="cdot"></span>${s} <b>${counts[s]}</b></span>`).join("") + `</div>`;
+  // 병목 한 줄 (REQ-20260826-009 2차): 카드마다 "선행 대기" 줄은 이미 있다 —
+  // 카드가 말할 수 없는 것, 즉 "한 선행이 여러 건을 붙잡고 있다"일 때만 띄운다.
+  // 그 외에는 같은 사실을 두 번 말하는 것이라 보드를 그대로 둔다.
+  const dbk = depBoard(reqs);
+  if (dbk.top && dbk.top[1] > 1){
+    const b = catFind(dbk.top[0]);
+    if (b) html += `<div class="bneck"><span class="bcap">병목</span> `
+      + `<a class="doclink" data-doc="${esc(b.id)}">${esc(shortId(b.id))}</a> `
+      + `<b>${esc(b.title)}</b> 이(가) ${dbk.top[1]}건을 붙잡고 있다 · `
+      + `전체 ${dbk.groups.length}건이 선행을 기다린다`
+      + `<button class="bgo" data-goto="graph">선행 대기 현황 →</button></div>`;
+  }
   html += `<div class="board">`;
   for (const st of STATUSES){
     const grp = shown.filter(r => r.status === st);
@@ -4251,6 +4396,10 @@ async function renderGraph(rows){
   // 굵기·농도로 — 진한 화살표가 여럿 뻗은 노드가 곧 병목이다 (설계 문서 렌더 요구).
   const blocking = {};
   edges.forEach(e => { if (e.rel === "blocked_by") blocking[e.to] = (blocking[e.to] || 0) + 1; });
+  // 범례가 없는 것을 약속하지 않게 — 살아 있는 의존 획 수를 범례에 적고, 0이면 흐려진다.
+  const depEdgeN = edges.filter(e => e.rel === "blocked_by").length;
+  const edgeOrder = edges.filter(e => e.rel !== "blocked_by")
+    .concat(edges.filter(e => e.rel === "blocked_by"));
   const deg = {};
   edges.forEach(e => { deg[e.from]=(deg[e.from]||0)+1; deg[e.to]=(deg[e.to]||0)+1; });
   const adj = {};
@@ -4285,18 +4434,20 @@ async function renderGraph(rows){
       <button class="gmode${graphLayout==="dag"?" on":""}" data-glayout="dag">dag</button>
       ${["request","knowledge","session"].map(t => `<span class="gtype${gtypes.has(t) ? "" : " off"}" data-gtype="${t}"
         title="클릭 = ${t} 노드 표시 토글"><span class="dot" style="background:${TCOLOR[t]}"></span>${t}</span>`).join("")}
-      <span class="gedge" title="blocked_by — 선행이 끝나야 후행이 풀린다. 화살촉이 가리키는 쪽이 막혀 있는 요청이다. 계보(parent 실선 · derived/relates 가는 점선)와 달리 잉크로 그리고, 여러 건을 붙잡은 선행일수록 진하고 굵다. 선행이 끝나면 이 화살표는 사라진다."><svg width="40" height="9" aria-hidden="true"><line x1="0" y1="4.5" x2="28" y2="4.5" stroke="currentColor" stroke-width="1.6" stroke-dasharray="9 5"/><polygon points="28,0.7 39,4.5 28,8.3" fill="currentColor"/></svg>선행 → 후행 대기</span>
+      <span class="gedge${depEdgeN ? "" : " none"}" title="blocked_by — 선행이 끝나야 후행이 풀린다. 화살촉이 가리키는 쪽이 막혀 있는 요청이다. 계보(parent 실선 · derived/relates 가는 점선)와 달리 잉크로 그리고, 여러 건을 붙잡은 선행일수록 진하고 굵다. 선행이 끝나면 이 화살표는 사라진다."><svg width="40" height="9" aria-hidden="true"><line x1="0" y1="4.5" x2="28" y2="4.5" stroke="currentColor" stroke-width="1.6" stroke-dasharray="9 5"/><polygon points="28,0.7 39,4.5 28,8.3" fill="currentColor"/></svg>선행 → 후행 대기 <b class="gecount">${depEdgeN}</b></span>
       <span style="margin-left:auto">앰버 호+숫자 = 미완료 파생 병목(1건=¼둘레, 4건+=만원) · 점멸 = in-progress · 실선 링 = blocked · 점선 링 = review</span>
     </div>
     <canvas id="gcanvas"></canvas>
     <div class="ghint">${graphLayout==="dag" ? "dag: 위→아래 = parent→파생 · " : ""}드래그 = 이동/노드 끌기 · 휠 = 줌 · 클릭 = 문서 열기</div>
-  </div>`;
+  </div>` + depSummaryHTML(rows);
 
   const canvas = $("#gcanvas");
   const dark = isDarkTheme();
   const bgColor = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || (dark ? "#111214" : "#fafaf8");
   const wrap = canvas.parentElement;
-  const W = wrap.clientWidth || 1200, H = Math.max(420, innerHeight - 210);
+  // 표가 캔버스를 밀어내지 않게 그만큼 높이를 양보한다 — 두 표현이 한 화면에 같이 선다
+  const depH = (($("#depsum") || {}).offsetHeight || 0) + 14;   // +14 = 패널 사이 여백
+  const W = wrap.clientWidth || 1200, H = Math.max(340, innerHeight - 210 - depH);
   const dpr = devicePixelRatio || 1;
   canvas.width = W * dpr; canvas.height = H * dpr;
   canvas.style.height = H + "px";
@@ -4434,20 +4585,39 @@ async function renderGraph(rows){
   }
 
   // 화살촉: 선행(x0,y0) → 후행(x1,y1). 막힌 문서 원의 경계 바로 밖에 촉을 놓아
-  // 노드를 덮지 않게 한다. 크기는 화면 px 기준(√k)이라 줌아웃해도 방향이 남고,
-  // 채워진 삼각형이라 다크 톤에서도 획보다 먼저 보인다.
-  function depArrow(x0, y0, x1, y1, rTo, col, w){
+  // 노드를 덮지 않게 한다. 크기는 화면 px 기준(√k)이라 줌아웃해도 방향이 남는다.
+  //
+  // 1차 반려("촉이 보이지 않는다")의 기하 원인 4가지를 여기서 함께 고쳤다:
+  //  ① 획이 촉을 관통했다 — 중심→중심으로 긋고 그 위에 삼각형을 얹으니 실루엣이
+  //     "끝이 좀 두꺼운 선"으로만 읽혔다. 이제 획은 촉의 밑변에서 끊는다(depGeom.bx/by).
+  //  ② 촉이 획과 같은 알파였다 — 촉은 불투명(hover 감쇠 중에도 획보다 한 단계 진하게).
+  //  ③ 분리선이 없었다 — 배경색 1.4px 테두리를 둘러 노드 링·교차 계보선과 겹쳐도
+  //     윤곽이 남는다.
+  //  ④ 밑변이 좁았다(L*0.44) — 가는 다트라 9/5 대시 한 칸과 구별되지 않았다. L 하한을
+  //     11px로 올리고 밑변을 L*0.52로 넓혔다.
+  function depGeom(x0, y0, x1, y1, rTo, rFrom, w){
     const dx = x1 - x0, dy = y1 - y0, d = Math.hypot(dx, dy) || 1;
     const ux = dx / d, uy = dy / d;
-    const L = Math.max(7, Math.min(14, (7.5 + 1.4 * w) * Math.sqrt(st.tf.k)));
-    const B = L * 0.44;
-    const tx = x1 - ux * (rTo + 2.5), ty = y1 - uy * (rTo + 2.5);
+    // 촉이 들어갈 자리: 두 원 사이의 빈 구간. 이웃한 두 허브가 붙어 있으면 이
+    // 구간이 촉보다 짧다 — 그때만 촉을 줄이되 7px 밑으로는 내리지 않는다.
+    const gap = d - rTo - rFrom - 3;
+    let L = Math.min(17, Math.max(11, (8.5 + 1.6 * w) * Math.sqrt(st.tf.k)));
+    if (gap < L) L = Math.max(7, gap);
+    const B = L * 0.52;
+    const off = Math.min(rTo + 2.5, Math.max(0, d - L - 1));   // 촉 끝은 항상 선 위에 남는다
+    const tx = x1 - ux * off, ty = y1 - uy * off;
+    return {ux, uy, L, B, tx, ty, bx: tx - ux * L, by: ty - uy * L};
+  }
+  function depArrow(g, col){
+    const {ux, uy, L, B, tx, ty} = g;
     ctx.beginPath();
     ctx.moveTo(tx, ty);
     ctx.lineTo(tx - ux * L - uy * B, ty - uy * L + ux * B);
     ctx.lineTo(tx - ux * L + uy * B, ty - uy * L - ux * B);
     ctx.closePath();
     ctx.fillStyle = col; ctx.fill();
+    ctx.lineJoin = "round"; ctx.lineWidth = 1.4; ctx.strokeStyle = bgColor; ctx.stroke();
+    ctx.lineJoin = "miter";
   }
 
   function draw(){
@@ -4465,27 +4635,35 @@ async function renderGraph(rows){
     ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
     const hov = st.hover, nb = hov ? (adj[hov.id] || new Set()) : null;
     const dim = id => hov && id !== hov.id && !nb.has(id);
-    for (const e of edges){
+    // 의존 획은 계보 획 다음에 — 노드 300개의 회색 선 다발에 파묻히지 않게 위로 올린다
+    for (const e of edgeOrder){
       const p = nodes[idx[e.from]], q = nodes[idx[e.to]];   // p=막힌 문서(후행), q=선행
       const hot = hov && (e.from === hov.id || e.to === hov.id);
-      ctx.beginPath(); ctx.moveTo(sxOf(p), syOf(p)); ctx.lineTo(sxOf(q), syOf(q));
       if (e.rel === "blocked_by"){
         // 세 번째 획: 잉크 + 긴 대시 리듬(9/5) + 화살촉. parent 실선·계보 점선(4/4)
         // 어느 쪽과도 굵기·색·리듬이 다르다. 굵기와 농도는 이 선행이 붙잡은
         // 건수에 비례 — 병목이 그림에서 바로 읽힌다.
         const w = Math.min(4, blocking[e.to] || 1);
         const dz = 0.68 + 0.32 * Math.max(depthOf01(p), depthOf01(q));  // 원근은 절제 — 제약은 흐려지면 안 된다
-        const base = hov ? 0.16 : ((dark ? 0.66 : 0.60) + 0.07 * w) * dz;  // hover 시 나머지는 물러난다
-        const col = hot ? (dark ? "#8b9cf5" : "#6474e0")
-          : `rgba(${inkRGB.join(",")},${Math.min(0.92, base).toFixed(3)})`;
+        const a = Math.min(0.92, hov ? 0.16 : ((dark ? 0.66 : 0.60) + 0.07 * w) * dz);  // hover 시 나머지는 물러난다
+        const HOT = dark ? "#8b9cf5" : "#6474e0";
+        const col = hot ? HOT : `rgba(${inkRGB.join(",")},${a.toFixed(3)})`;
+        // 촉은 획보다 한 단계 진하게 — 평시엔 불투명, hover 감쇠 중에도 획 위로 뜬다
+        const headCol = hot ? HOT
+          : `rgba(${inkRGB.join(",")},${(hov ? Math.min(1, a + 0.30) : 1).toFixed(3)})`;
+        const g = depGeom(sxOf(q), syOf(q), sxOf(p), syOf(p),
+                          p.r * scOf(p), q.r * scOf(q), w);
+        // 획은 촉의 밑변에서 끊는다 — 관통하면 실루엣이 "끝이 두꺼운 선"이 된다
+        ctx.beginPath(); ctx.moveTo(sxOf(q), syOf(q)); ctx.lineTo(g.bx, g.by);
         ctx.setLineDash([9, 5]);
         ctx.lineWidth = (hot ? 2.1 : 1.0 + 0.42 * w) * dz;
         ctx.strokeStyle = col;
         ctx.stroke();
         ctx.setLineDash([]);
-        depArrow(sxOf(q), syOf(q), sxOf(p), syOf(p), p.r * scOf(p), col, w);
+        depArrow(g, headCol);
         continue;
       }
+      ctx.beginPath(); ctx.moveTo(sxOf(p), syOf(p)); ctx.lineTo(sxOf(q), syOf(q));
       ctx.setLineDash(e.rel === "parent" ? [] : [4, 4]);
       if (hot){
         ctx.lineWidth = 1.8;
@@ -4936,6 +5114,15 @@ document.addEventListener("drop", e => {
 
 /* ---------------- events ---------------- */
 document.addEventListener("click", e => {
+  // 본문 안에서 탭으로 건너뛰는 링크 — 헤더 탭 버튼의 active 표시를 빼앗지 않도록
+  // data-tab 이 아니라 data-goto 로 둔다(그 핸들러는 클릭된 요소를 active로 만든다).
+  const go = e.target.closest("[data-goto]");
+  if (go){
+    const t = go.dataset.goto;
+    const hdr = document.querySelector(`header [data-tab="${t}"]`);
+    if (hdr) hdr.click();
+    return;
+  }
   const tabBtn = e.target.closest("[data-tab]");
   if (tabBtn){
     tab = tabBtn.dataset.tab;
@@ -5011,6 +5198,13 @@ document.addEventListener("click", e => {
     const k = ex.dataset.expand;
     expanded.has(k) ? expanded.delete(k) : expanded.add(k);
     render(); return;
+  }
+  if (e.target.closest("[data-depmore]")){
+    // 전체 render()는 그래프 물리·카메라를 리셋한다 — 표만 제자리에서 갈아끼운다
+    expanded.has("depsum") ? expanded.delete("depsum") : expanded.add("depsum");
+    const ds = $("#depsum");
+    if (ds) ds.outerHTML = depSummaryHTML(filtered());
+    return;
   }
   if (e.target.closest("[data-audit-more]")){
     auditLimit += AUDIT_PAGE; render(); return;

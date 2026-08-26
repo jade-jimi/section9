@@ -25,6 +25,19 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{ROOT}/bin/s9-audit-agent 2>/dev/null || true",
+            "timeout": 20,
+            "statusMessage": "section9 delegation audit"
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "hooks": [
