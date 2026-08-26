@@ -53,8 +53,14 @@ class CommitGate(unittest.TestCase):
         import time
         rel = "tests/test_commit_gate.py"          # 방금 쓴 이 파일
         os.utime(os.path.join(self.m.ROOT, rel), None)
-        with mock.patch.object(self.m, "live_workers",
+        # 우회 환경변수를 **명시적으로 끈다**. 이 테스트가 그것에 오염된 적이
+        # 있다 — 리드가 `S9_ALLOW_CONCURRENT=1` 로 커밋하자 훅이 그 환경을
+        # 물려받은 채 테스트를 돌렸고, 게이트가 통과하는 바람에 "막힌다"는
+        # 이 계약이 무너졌다. 주변 환경에 기대는 테스트는 조용히 거짓이 된다.
+        with mock.patch.dict(os.environ, {}, clear=False), \
+             mock.patch.object(self.m, "live_workers",
                                return_value=["- REQ-x (무인 작업자 pid 1, 1분째)"]):
+            os.environ.pop(self.m.OVERRIDE, None)
             with self.assertRaises(SystemExit) as cm:
                 self.m.concurrent_gate([rel])
         self.assertEqual(cm.exception.code, 1)
@@ -65,6 +71,35 @@ class CommitGate(unittest.TestCase):
         rel = "tests/test_commit_gate.py"
         with mock.patch.object(self.m, "live_workers", return_value=[]):
             self.m.concurrent_gate([rel])          # 예외 없이 통과
+
+    def test_g9_window_matches_how_agents_work(self):
+        """G9. 창이 **에이전트가 일하는 모습**에 맞다 (REQ-20260827-012).
+
+        처음엔 90초였다 — "방금 저장한 파일"을 잡으려는 값이다. 그런데
+        에이전트는 덩어리로 일한다: 몇 분 생각하고 한 번 쓰고, 또 몇 분
+        생각한다. **쓰는 순간은 드물고 잡고 있는 시간은 길다.**
+
+        실측으로 잡았다(08:29): designer 가 4초 전까지 활동 중이었는데 그가
+        잡은 파일의 마지막 저장은 209초 전이라 게이트가 조용히 통과시켰다.
+        21:42 사고에서 이 게이트가 통했던 것은 마지막 저장과 `git add` 사이가
+        90초 안이었던 **운**이었다.
+        """
+        self.assertGreaterEqual(
+            self.m.FRESH_SEC, 300,
+            "창이 좁아 에이전트가 생각하는 동안의 커밋을 놓친다")
+
+    def test_g10_message_says_when_it_changed(self):
+        """G10. 걸린 이유를 또렷하게 말한다 — 어느 파일이 **언제** 바뀌었는지.
+
+        넓힌 창은 더 자주 걸린다. 자주 걸리는데 이유가 흐리면 우회가 습관이
+        되고, 습관이 되면 게이트가 없는 것과 같다.
+        """
+        with open(os.path.join(self.m.ROOT, "bin", "s9-guard"),
+                  encoding="utf-8") as f:
+            hook = f.read()
+        self.assertIn("바뀜)", hook, "언제 바뀌었는지 말하지 않는다")
+        self.assertNotIn("방금 바뀐 파일을 담으려", hook,
+                         "머리말이 아직 '방금'이라 목록과 어긋난다")
 
     def test_g3_stale_file_is_not_in_flight(self):
         """G3. 워커가 돌아도 오래된 파일은 진행 중이 아니다.
@@ -78,8 +113,10 @@ class CommitGate(unittest.TestCase):
         old = time.time() - (self.m.FRESH_SEC + 120)
         os.utime(p, (old, old))
         try:
-            with mock.patch.object(self.m, "live_workers",
+            with mock.patch.dict(os.environ, {}, clear=False), \
+                 mock.patch.object(self.m, "live_workers",
                                    return_value=["- REQ-x (pid 1)"]):
+                os.environ.pop(self.m.OVERRIDE, None)
                 self.m.concurrent_gate([rel])
         finally:
             os.utime(p, None)

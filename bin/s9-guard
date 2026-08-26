@@ -26,7 +26,17 @@ PROTECTED = ("bin/", "web/", "harness/", ".github/", ".gitignore")
 # 그래서 게이트 둘: ① 무인 워커가 도는데 방금 만져진 파일을 담으려 하면 막는다
 # ② 커밋에 테스트 파일이 있으면 그것만이라도 돌린다(전체 스위트는 2분이라 매
 # 커밋에 물릴 수 없다 — 그 무게가 규율을 죽인다).
-FRESH_SEC = 90                      # 이 안에 바뀐 파일은 '진행 중'으로 본다
+# 창의 폭은 **에이전트가 일하는 모습**에 맞춘다 (REQ-20260827-012).
+# 처음엔 90초였다 — "방금 저장한 파일"을 잡으려는 값이다. 그런데 에이전트는
+# 덩어리로 일한다: 몇 분 생각하고 한 번 쓰고, 또 몇 분 생각한다. **쓰는 순간은
+# 드물고 잡고 있는 시간은 길다.** 실측(08:29): designer 가 4초 전까지 활동
+# 중이었는데 그가 잡은 파일의 마지막 저장은 209초 전이라 게이트가 조용히
+# 통과시켰다.
+#
+# 21:42 사고를 다시 보면 더 분명하다 — 워커의 마지막 저장과 리드의 `git add`
+# 사이가 90초 안이었던 것은 **운**이었고, 몇 분만 어긋났어도 이 게이트는 그
+# 사고를 못 막는다.
+FRESH_SEC = 900                     # 15분: 에이전트가 파일을 잡고 있는 폭
 OVERRIDE = "S9_ALLOW_CONCURRENT"    # 사람이 확인했으면 이걸로 지나간다
 
 
@@ -80,20 +90,23 @@ def concurrent_gate(staged):
     for f in staged:
         p = os.path.join(ROOT, f)
         try:
-            if now - os.path.getmtime(p) < FRESH_SEC:
-                fresh.append(f)
+            age = now - os.path.getmtime(p)
         except OSError:
             continue
+        if age < FRESH_SEC:
+            fresh.append((f, int(age)))
     if not fresh:
         return
-    print("s9-guard: 다른 작업자가 붙어 있는 중에 방금 바뀐 파일을 담으려 합니다.",
-          file=sys.stderr)
+    print("s9-guard: 다른 작업자가 붙어 있는 중에, 그 사이 바뀐 파일을 "
+          "담으려 합니다.", file=sys.stderr)
     print("  지금 도는 작업자:", file=sys.stderr)
     for w in workers[:5]:
         print(f"    {w}", file=sys.stderr)
-    print("  방금 바뀐 스테이지 파일:", file=sys.stderr)
-    for f in fresh[:10]:
-        print(f"    - {f}", file=sys.stderr)
+    print("  최근에 바뀐 스테이지 파일:", file=sys.stderr)
+    for f, age in fresh[:10]:
+        m, sec = age // 60, age
+        when = f"{m}분 전" if m else f"{sec}초 전"
+        print(f"    - {f}  ({when} 바뀜)", file=sys.stderr)
     print("`git add <경로>` 는 '내 변경'이 아니라 '그 파일의 지금 상태'를 담습니다 —",
           file=sys.stderr)
     print("남이 쓰는 중이면 남의 미완성이 이 커밋의 일부가 됩니다(2026-08-26 21:42 실사고).",
