@@ -474,6 +474,32 @@ def scratch_bytes():
     return total
 
 
+SHOT_KEEP_SEC = 3 * 86400      # 캡처 산출물 보관 기간 (사흘)
+
+
+def prune_shot_files(max_age=SHOT_KEEP_SEC):
+    """오래된 캡처 산출물 정리 — 프로세스만 회수하고 파일을 남기면 디스크가
+    조용히 찬다(REQ-20260825-099: "임시파일로 만들거나 프로세스를 제대로 닫으라").
+
+    검증 근거로 남겨야 하는 최근 캡처는 건드리지 않는다 — 사흘이 지난 것만."""
+    freed, n = 0, 0
+    base = os.path.join(ROOT, "state", "shots")
+    now = time.time()
+    for dirpath, _d, files in os.walk(base):
+        for fn in files:
+            p = os.path.join(dirpath, fn)
+            try:
+                st = os.stat(p)
+                if now - st.st_mtime <= max_age:
+                    continue
+                os.remove(p)
+                freed += st.st_size
+                n += 1
+            except OSError:
+                pass
+    return n, freed
+
+
 def human(n):
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024:
@@ -647,6 +673,9 @@ def main():
         d["fixed"] = [{"kind": k, "pid": p, "age": a}
                       for k, p, a in fix(orphans, chromes)]
         d["swept"] = sweep_stale_shots()
+        pruned_n, pruned_b = prune_shot_files()
+        d["pruned_shots"] = {"files": pruned_n, "bytes": pruned_b}
+        d["shots_bytes"] = scratch_bytes()
         time.sleep(0.5)
         d["probe_after_fix"] = probe_new_port()
         d["degraded"] = not d["probe_after_fix"]["ok"]
@@ -688,6 +717,9 @@ def main():
     if sw and (sw["procs"] or sw["profiles"]):
         print(f"  회수: 고아 캡처 브라우저 {sw['procs']}개 · "
               f"프로필 {sw['profiles']}개")
+    pr = d.get("pruned_shots")
+    if pr and pr["files"]:
+        print(f"  정리: 오래된 캡처 산출물 {pr['files']}개 ({human(pr['bytes'])})")
     if "probe_after_fix" in d:
         print("회수 후 프로브: "
               + ("✓ 정상" if d["probe_after_fix"]["ok"] else "✗ 여전히 degraded"))
