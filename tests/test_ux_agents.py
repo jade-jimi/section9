@@ -205,9 +205,42 @@ class TestBoardScope(unittest.TestCase):
     # B3. 타입바 카운트는 타입 조건을 뺀 필터로 센다 — 지금 knowledge를 보는
     #     중에도 session이 몇 건인지 보여야 진입점 구실을 한다.
     def test_b3_type_counts_ignore_type_filter(self):
-        self.assertIn("function filtered(skipQ, skipType)", self.html)
-        self.assertIn("if (!skipType && ty && r.type !== ty) return false;", self.html)
+        # 조건식을 글자 그대로 박지 않는다(b5와 같은 이유). 고정할 성질은
+        # "타입바의 타입별 건수는 타입 필터에 영향받지 않는다" 하나이지,
+        # 그 게이트가 어떤 이름으로 어떻게 조립되는지가 아니다 —
+        # 실제로 REQ-20260826-006이 게이트를 넓히자 이 줄이 깨졌다.
+        import re
+        m = re.search(r"function filtered\(skipQ, skipType\)(.*?)\n}", self.html, re.S)
+        self.assertTrue(m, "filtered()가 타입 조건 제외 인자를 받지 않는다")
+        body = m.group(1)
+        # (1) 타입 조건은 해제 가능한 게이트를 통과해야 한다
+        ty = re.search(r"if \(!(\w+) && ty && r\.type !== ty\) return false;", body)
+        self.assertTrue(ty, "타입 조건이 해제 가능한 게이트 없이 걸린다")
+        gate = ty.group(1)
+        # (2) 그 게이트는 skipType으로 열린다 (게이트 자신이거나 그것에서 파생)
+        self.assertTrue(
+            gate == "skipType"
+            or re.search(r"(?:const|let|var) " + gate + r"\s*=[^\n;]*skipType", body),
+            "타입 조건 게이트(%s)가 skipType과 무관하다" % gate)
+        # (3) 타입바 건수는 그 게이트를 연 채 센다
         self.assertIn("filtered(!!matchMap, true)", self.html)
+
+    # B3b. Board에는 타입 축이 없다 (REQ-20260826-006 회귀 방지):
+    #      Docs에서 knowledge를 고른 채 Board로 넘어오면 전 컬럼이 0건이 됐다.
+    def test_b3b_type_filter_absent_on_board(self):
+        import re
+        m = re.search(r"function filtered\(skipQ, skipType\)(.*?)\n}", self.html, re.S)
+        body = m.group(1)
+        ty = re.search(r"if \(!(\w+) && ty && r\.type !== ty\) return false;", body)
+        gate = ty.group(1)
+        # 게이트가 board 탭에서도 열려야 한다 — 보드는 request 전용이라
+        # 타입 조건이 걸리면 결과가 통째로 0건이 된다.
+        self.assertTrue(
+            re.search(r"(?:const|let|var) " + gate + r'\s*=[^\n;]*tab === "board"', body),
+            "Board에서 타입 필터가 결과를 0건으로 만들 수 있다")
+        # 화면에서도 사라져야 한다 — 적용되지 않는 컨트롤을 남기지 않는다.
+        self.assertRegex(self.html, r'#f-type"\);\s*\n?\s*if \(el\) el\.hidden = \(tab === "board"\)')
+        self.assertIn(".hrow2 select[hidden]{display:none}", self.html)
 
     # B4. session은 숨기지 않되 기본 노출을 낮춘다 (사용성 판단)
     def test_b4_session_lower_priority(self):
