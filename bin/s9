@@ -15,8 +15,10 @@ import os
 import re
 import shutil
 import socket
+import struct
 import sys
 import time
+import zlib
 
 # ROOT 기본값 = 이 스크립트가 속한 리포 (REQ-20260824-052: 클론 위치가
 # ~/section9 가 아니어도 자기 리포를 다룬다). S9_ROOT 로 재지정 가능.
@@ -36,6 +38,11 @@ TYPES = {
     "knowledge": ("DOC", "knowledge", "published"),
     "session":   ("SES", "sessions", "published"),
     "project":   ("PRJ", "projects", "active"),
+    # 질문(QST, REQ-20260826-017 / DOC-20260826-011): 사건의 기록 — 그때 무엇을
+    # 묻고 무엇이라 답했나. knowledge(규칙, 개정된다)와 달리 시점에 고정되고
+    # 개정하지 않는다. 상태는 published 고정 — 미답 여부는 status가 아니라
+    # answer 노트 유무에서 파생한다(진실을 둘로 만들지 않는다).
+    "question":  ("QST", "questions", "published"),
 }
 
 PROJECTS = os.path.join(VAULT, "projects")  # 프로젝트 문서 (slug 파일명, 평면 배치)
@@ -356,7 +363,8 @@ def normalize_ids(text, known=None):
     # 접미 3자리 → 후보 full id들 (같은 prefix). uid(지문 접미)도 수용 (REQ-031)
     by_suffix = {}
     for fid in known:
-        m = re.match(r"^(REQ|DOC|SES)-\d{8}-(\d{3,})(?:-[0-9a-z]{4})?$", fid)
+        m = re.match(r"^(REQ|DOC|SES|QST)-\d{8}-(\d{3,})(?:-[0-9a-z]{4})?$",
+                     fid)
         if m:
             by_suffix.setdefault((m.group(1), m.group(2)[-3:].zfill(3)),
                                  []).append(fid)
@@ -370,7 +378,7 @@ def normalize_ids(text, known=None):
             changes.append((mo.group(0), cands[0]))
             return cands[0]
         return mo.group(0)  # 0개·2개+ = 애매 → 유지
-    out = re.sub(r"\b(REQ|DOC|SES)-(\d{1,3})(?![\d-])", repl, text)
+    out = re.sub(r"\b(REQ|DOC|SES|QST)-(\d{1,3})(?![\d-])", repl, text)
     # 지문 없는 date형(레거시 표기·짧은 지칭)이 유일한 uid를 가리키면 전문으로
     def repl_date(mo):
         base = mo.group(0)
@@ -381,8 +389,8 @@ def normalize_ids(text, known=None):
             changes.append((base, cands[0]))
             return cands[0]
         return base
-    out = re.sub(r"\b(?:REQ|DOC|SES)-\d{8}-\d{3,}\b(?!-[0-9a-z])", repl_date,
-                 out)
+    out = re.sub(r"\b(?:REQ|DOC|SES|QST)-\d{8}-\d{3,}\b(?!-[0-9a-z])",
+                 repl_date, out)
     return out, changes
 
 
@@ -410,7 +418,8 @@ def id_alias(rows=None):
     ids = {r["id"] for r in rows}
     alias = {}
     for r in rows:
-        m = re.match(r"^((?:REQ|DOC|SES)-\d{8}-\d{3,})-[0-9a-z]{4}$", r["id"])
+        m = re.match(r"^((?:REQ|DOC|SES|QST)-\d{8}-\d{3,})-[0-9a-z]{4}$",
+                     r["id"])
         if not m or m.group(1) in ids:   # 레거시 문서가 그 짧은 형태를 이미 점유
             continue
         base = m.group(1)
@@ -605,6 +614,8 @@ def catalog_row(meta, path, body=""):
         "review_point": _review_point(body) if meta.get("status") == "review" else "",
         "block_reason": _block_reason(body) if meta.get("status") == "blocked" else "",
         "tdd": _tdd_progress(body),
+        # 질문 문서의 미답 여부 (REQ-20260826-017) — 본문 파생. 다른 타입은 빈 값.
+        "answered": (_answered(body) if meta.get("type") == "question" else ""),
         # 처리 주체 상태 요약 (REQ-20260825-089): 카드 점등이 문서를 다시 열지
         # 않고 "이 요청을 붙잡은 주체가 멈췄는가"를 읽을 수 있게 인덱스에 올린다.
         "agent_state": _contrib_state(meta),
@@ -649,6 +660,18 @@ def _tdd_progress(body):
     if not seen:
         return None
     return {"passed": sum(1 for v in seen.values() if v), "total": len(seen)}
+
+
+def _answered(body):
+    """질문 문서에 답이 붙었는가 — `answer`(또는 `response`) 라벨 노트 유무.
+
+    미답을 별도 status로 두지 않은 이유 (DOC-20260826-011): status와 노트가
+    어긋나면 '답했는데 미답'이라는 두 번째 진실이 생기고, 전이라는 새 규율을
+    사람에게 요구하게 된다 — 그 규율 의존이 애초에 답을 잃어버린 경로다.
+    진실은 노트 하나뿐이고 이 값은 언제든 본문에서 재생성된다(TDD 진행률과 같은 패턴).
+    `response`도 답으로 세는 것은 Stop 훅 폴백·수동 기록 등 다른 라벨로 들어온
+    답까지 '미답'으로 오표시하지 않기 위해서다."""
+    return bool(re.search(r"(?m)^### \S+ (?:answer|response)\b", body or ""))
 
 
 def _review_point(body):
@@ -739,6 +762,9 @@ def add_filter_args(p):
     p.add_argument("--since", metavar="YYYY-MM-DD")
     p.add_argument("--until", metavar="YYYY-MM-DD")
     p.add_argument("--limit", type=int, default=0)
+    p.add_argument("--unanswered", action="store_true",
+                   help="답이 아직 없는 질문(question)만 — 미답이 드러나는 것이 "
+                        "이 타입의 값어치다")
 
 
 def apply_filters(rows, a):
@@ -752,6 +778,9 @@ def apply_filters(rows, a):
         if a.tag and a.tag not in r["tags"]:
             return False
         if a.dtype and r["type"] != a.dtype:
+            return False
+        if getattr(a, "unanswered", False) and (
+                r.get("type") != "question" or r.get("answered")):
             return False
         if a.since and r["created"][:10] < a.since:
             return False
@@ -842,7 +871,7 @@ def cmd_new(args):
             die(f"권한 없음: '{user}'({project_role(slug, user) or '미참여'})는 "
                 f"프로젝트 '{slug}'에 문서를 생성할 수 없다 (contributor 이상 필요)")
         proj = slug
-    elif args.doc_type == "request":
+    elif args.doc_type in ("request", "question"):
         mine = user_projects(user)
         if len(mine) == 1 and project_can(mine[0]["slug"], user, "contribute"):
             proj = mine[0]["slug"]
@@ -2162,6 +2191,49 @@ def claude_usage(ttl=60):
     return out
 
 
+UNACKED = os.path.join(ROOT, "state", "unacked-transitions.jsonl")
+
+
+def _unacked_record(doc_id, kind_txt, msg):
+    """아무 세션에도 닿지 못한 전이 통지를 남긴다 (REQ-20260826-015).
+
+    통지를 못 보낸 것 자체는 정상일 수 있다(아무도 안 켜져 있으면). 문제는
+    **그 사실이 어디에도 안 남는 것**이다. 2026-08-26 반려 하나가 그렇게
+    38분간 유실됐고, 사용자가 "왜 아직 in-progress냐"고 물어서야 드러났다.
+    여기 남으면 다음 digest 가 첫 줄로 올린다."""
+    try:
+        os.makedirs(os.path.dirname(UNACKED), exist_ok=True)
+        with open(UNACKED, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"ts": now_iso(), "id": doc_id,
+                                "kind": kind_txt, "text": msg},
+                               ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def unacked_transitions(consume=False):
+    """받지 못한 전이 통지 목록. consume=True 면 읽고 비운다."""
+    rows = []
+    try:
+        with open(UNACKED, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        return []
+    if consume and rows:
+        try:
+            os.remove(UNACKED)
+        except OSError:
+            pass
+    return rows
+
+
 def chat_notify_transition(doc_id, old, new, note, actor):
     """대시보드 전이 즉시 통지 (REQ-032 C4): 해당 REQ를 클레임한 라이브 세션
     수신함에 이벤트를 append — 리드가 워처 유예를 기다리지 않고 즉시 반응한다.
@@ -2208,7 +2280,8 @@ def chat_notify_transition(doc_id, old, new, note, actor):
         pass
     now = _time.time()
     alias = id_alias()
-    for bp in _glob.glob(os.path.join(STATE, "*.json")):
+    sent = []
+    for bp in sorted(_glob.glob(os.path.join(STATE, "*.json"))):
         try:
             with open(bp, encoding="utf-8") as f:
                 b = json.load(f)
@@ -2220,12 +2293,22 @@ def chat_notify_transition(doc_id, old, new, note, actor):
         fresh = any(now - os.path.getmtime(p) < 3600
                     for p in _binding_activity_paths(b))
         if chat_live(b) or fresh:
+            # **첫 후보에서 멈추지 않는다** (REQ-20260826-015). 종전엔 glob
+            # 순서로 걸린 하나에게만 보내고 반환했다. 2026-08-26 13:47 반려가
+            # 그렇게 이미 물러난 무인 워커 수신함으로 가서 38분간 아무에게도
+            # 닿지 않았다. 중복 수신은 싸고, 유실은 비싸다.
             try:
-                return chat_send(msg, sid8=b.get("session"),
-                                 sender="dashboard", kind="event")
+                sid = chat_send(msg, sid8=b.get("session"),
+                                sender="dashboard", kind="event")
+                if sid and sid not in sent:
+                    sent.append(sid)
             except ValueError:
-                return None
-    return None
+                continue
+    if not sent:
+        # 아무도 받지 못했다는 사실 자체를 남긴다 — 조용한 유실이 최악이다.
+        _unacked_record(doc_id, kind_txt, msg)
+        return None
+    return sent[0]
 
 
 def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False):
@@ -2416,7 +2499,8 @@ def rework_watch_tick(grace=None, now=None):
 # 사라지는 상태 축이라 계보에 섞지 않는다. 진실은 막힌 문서의 blocked_by 한
 # 곳뿐이고 역방향(blocks)은 저장하지 않는다: 카탈로그 한 번 훑으면 재계산되는
 # 파생물이라, 대칭 보수 부담(relates가 겪는 것)을 애초에 만들지 않는다.
-DOC_ID_RE = re.compile(r"\b((?:REQ|DOC|SES|PRJ)-\d{8}-\d{1,}(?:-[0-9a-z]{2,})?)\b")
+DOC_ID_RE = re.compile(
+    r"\b((?:REQ|DOC|SES|PRJ|QST)-\d{8}-\d{1,}(?:-[0-9a-z]{2,})?)\b")
 
 
 def dep_edges(rows=None):
@@ -2972,32 +3056,505 @@ TYPE_GROUPS = {
 ATTACH_MAX_BYTES = 30 * 1024 * 1024      # 첨부 상한 (REQ-054: 10MB → 30MB)
 
 
-def _pdf_text(path, limit=8000):
-    """PDF 본문 최선 추출 — 스트림을 zlib로 풀고 텍스트 연산자의 문자열을 모은다.
-    CID 인코딩(한글 서브셋 폰트) 등은 완전하지 않을 수 있으나, 키워드 추출 목적엔
-    충분하다. 외부 라이브러리 없이 stdlib만 사용."""
-    import zlib
-    out, total = [], 0
-    try:
-        with open(path, "rb") as f:
-            raw = f.read(8 * 1024 * 1024)
-    except OSError:
-        return ""
-    for m in re.finditer(rb"stream\r?\n(.*?)endstream", raw, re.S):
-        chunk = m.group(1)
-        try:
-            chunk = zlib.decompress(chunk)
-        except Exception:
-            pass                                  # 비압축 스트림 — 그대로 시도
-        for t in re.findall(rb"\((?:\\.|[^\\()])*\)", chunk):
-            piece = re.sub(rb"\\([()\\])", rb"\1", t[1:-1])
-            if not piece.strip():
+# ---- PDF 본문 추출 (REQ-20260826-001) --------------------------------------
+# 실물 한글 PDF는 예외 없이 Identity-H CID 폰트 + hex 문자열이고, 1.5+ 는 폰트·
+# 페이지 딕셔너리를 압축 객체스트림(ObjStm)에 숨긴다. 그래서 "스트림을 전부 풀고
+# (...) 만 긁는" 방식은 한글에서 원리적으로 0바이트가 나온다. 여기서는 객체를
+# 실제로 훑어 페이지 -> 리소스 -> 폰트 -> ToUnicode 를 잇는다. 외부 의존 없음.
+_PDF_OBJ_RE = re.compile(rb"(\d{1,8})[ \t\r\n]+(\d{1,5})[ \t\r\n]+obj\b")
+_PDF_ENDSTREAM_RE = re.compile(rb"endstream")
+_PDF_TJ_SPACE = -150     # TJ 커닝 조정값이 이보다 작으면 단어 사이 간격으로 본다
+
+
+def _pdf_int(head, key, objs=None):
+    """딕셔너리에서 정수 값 — 간접 참조(`/Length 12 0 R`)도 따라간다."""
+    m = re.search(re.escape(key) + rb"[ \t\r\n]*(\d+)[ \t\r\n]+(\d+)[ \t\r\n]+R",
+                  head)
+    if m:
+        if objs is None:
+            return None
+        o = objs.get(int(m.group(1)))
+        mm = re.search(rb"-?\d+", o[0]) if o else None
+        return int(mm.group(0)) if mm else None
+    m = re.search(re.escape(key) + rb"[ \t\r\n]*(-?\d+)", head)
+    return int(m.group(1)) if m else None
+
+
+def _pdf_refs(head, key):
+    """`/Key 3 0 R` 또는 `/Key [3 0 R 4 0 R]` -> [3, 4]"""
+    m = re.search(re.escape(key)
+                  + rb"[ \t\r\n]*(\[[^\]]*\]|\d+[ \t\r\n]+\d+[ \t\r\n]+R)", head)
+    if not m:
+        return []
+    return [int(x) for x in
+            re.findall(rb"(\d+)[ \t\r\n]+\d+[ \t\r\n]+R", m.group(1))]
+
+
+def _pdf_subdict(head, key):
+    """`/Key << ... >>` 를 꺾쇠 균형으로 잘라낸다 (중첩 딕셔너리 대응)."""
+    m = re.search(re.escape(key) + rb"[ \t\r\n]*<<", head)
+    if not m:
+        return b""
+    i, depth = m.end(), 1
+    while i < len(head) and depth:
+        if head[i:i+2] == b"<<":
+            depth += 1
+            i += 2
+        elif head[i:i+2] == b">>":
+            depth -= 1
+            i += 2
+        else:
+            i += 1
+    return head[m.end():i-2]
+
+
+def _pdf_scan(raw):
+    """`N 0 obj` 를 훑어 객체 표를 만든다 — xref 를 신뢰하지 않는 복구 방식.
+    (1.5+ 의 XRef 스트림은 PNG predictor 역필터가 필요해 파싱 비용이 크고,
+    부분 손상 PDF에서도 스캔 쪽이 더 많이 건진다.)"""
+    objs = {}
+    for m in _PDF_OBJ_RE.finditer(raw):
+        if m.start() and raw[m.start()-1:m.start()] not in b"\r\n \t>]":
+            continue
+        p = m.end()
+        s, e = raw.find(b"stream", p), raw.find(b"endobj", p)
+        if s != -1 and (e == -1 or s < e):
+            at = s + 6
+            at += 2 if raw[at:at+2] == b"\r\n" else \
+                (1 if raw[at:at+1] in b"\r\n" else 0)
+            objs[int(m.group(1))] = (raw[p:s], at)
+        else:
+            objs[int(m.group(1))] = (raw[p:e if e != -1 else p], None)
+    return objs
+
+
+def _pdf_stream(doc, num):
+    """객체의 스트림 바이트 — `/Length` 우선, 못 믿으면 endstream 후보를 검증한다.
+    (바이너리 안에 endstream 바이트열이 들어 있으면 비탐욕 매칭이 본문을 통째로
+    잘라먹는다 — REQ-20260826-001 결함 3.)"""
+    cache = doc["sc"]
+    if num in cache:
+        return cache[num]
+    cache[num] = b""                       # 재진입/순환 방어
+    o = doc["objs"].get(num)
+    if not o or o[1] is None:
+        return b""
+    head, at, raw = o[0], o[1], doc["raw"]
+    data, flate = None, b"FlateDecode" in head
+    ln = _pdf_int(head, b"/Length", doc["objs"])
+    if ln and at + ln <= len(raw) and \
+            raw[at+ln:at+ln+16].lstrip(b"\r\n \t").startswith(b"endstream"):
+        data = raw[at:at+ln]
+    if data is None:
+        # raw[at:] 로 자르면 30MB 사본이 객체마다 생긴다 — pos 인자로 훑는다.
+        tried = 0
+        for m in _PDF_ENDSTREAM_RE.finditer(raw, at):
+            cand = raw[at:m.start()].rstrip(b"\r\n")
+            if not flate:
+                data = cand
+                break
+            try:
+                zlib.decompressobj().decompress(cand)
+            except Exception:
+                tried += 1
+                if tried > 50:         # 후보 탐색 비용 상한
+                    break
                 continue
-            out.append(piece.decode("utf-8", "replace"))
-            total += len(piece)
+            data = cand
+            break
+        if data is None:
+            return b""
+    if flate:
+        try:
+            data = zlib.decompressobj().decompress(data)
+        except Exception:
+            try:
+                data = zlib.decompressobj(-15).decompress(data)   # 헤더 없는 raw
+            except Exception:
+                return b""
+    elif b"ASCIIHexDecode" in head:
+        h = re.sub(rb"[^0-9A-Fa-f]", b"", data.split(b">")[0])
+        data = bytes.fromhex((h + b"0" if len(h) % 2 else h).decode())
+    cache[num] = data
+    return data
+
+
+def _pdf_expand_objstm(doc):
+    """PDF 1.5+ 는 폰트·페이지 딕셔너리를 압축 객체스트림에 담는다 — 펼치지 않으면
+    ToUnicode 로 가는 길 자체가 없다."""
+    for num, (head, at) in list(doc["objs"].items()):
+        if at is None or b"/ObjStm" not in head:
+            continue
+        data = _pdf_stream(doc, num)
+        n = _pdf_int(head, b"/N", doc["objs"])
+        first = _pdf_int(head, b"/First", doc["objs"])
+        if not data or not n or first is None:
+            continue
+        try:
+            nums = [int(x) for x in data[:first].split()]
+        except ValueError:
+            continue
+        pairs = list(zip(nums[0::2], nums[1::2]))[:n]
+        for i, (onum, off) in enumerate(pairs):
+            end = first + pairs[i+1][1] if i + 1 < len(pairs) else len(data)
+            doc["objs"].setdefault(onum, (data[first+off:end], None))
+
+
+def _pdf_tounicode(data):
+    """ToUnicode CMap — bfchar / bfrange(구간형·배열형) / surrogate pair."""
+    out = {}
+    if not data:
+        return out
+
+    def dec(h):
+        try:
+            return bytes.fromhex(h.decode()).decode("utf-16-be", "ignore")
+        except Exception:
+            return ""
+
+    for blk in re.findall(rb"beginbfchar(.*?)endbfchar", data, re.S):
+        for src, dst in re.findall(
+                rb"<([0-9A-Fa-f]+)>[ \t\r\n]*<([0-9A-Fa-f]*)>", blk):
+            out[int(src, 16)] = dec(dst)
+    for blk in re.findall(rb"beginbfrange(.*?)endbfrange", data, re.S):
+        for m in re.finditer(rb"<([0-9A-Fa-f]+)>[ \t\r\n]*"
+                             rb"<([0-9A-Fa-f]+)>[ \t\r\n]*"
+                             rb"(?:<([0-9A-Fa-f]*)>|\[([^\]]*)\])", blk):
+            lo, hi = int(m.group(1), 16), int(m.group(2), 16)
+            if not 0 <= hi - lo <= 65535:
+                continue
+            if m.group(3) is not None:
+                base = m.group(3)
+                for i in range(hi - lo + 1):
+                    out[lo+i] = dec(base[:-4] + b"%04X" % (int(base[-4:], 16) + i)
+                                    if len(base) >= 4 else base)
+            else:
+                for i, h in enumerate(re.findall(rb"<([0-9A-Fa-f]*)>", m.group(4))):
+                    out[lo+i] = dec(h)
+    return out
+
+
+def _pdf_ttf_reverse(fb, cap=40000):
+    """임베드 TrueType 의 cmap(4/12) 을 glyph -> unicode 로 뒤집는다.
+    ToUnicode 가 없는 PDF(우리 자체 생성기 산출물 포함)의 유일한 복원 경로."""
+    out = {}
+    try:
+        cnt = struct.unpack(">H", fb[4:6])[0]
+        tabs = {}
+        for i in range(cnt):
+            o = 12 + i * 16
+            tabs[fb[o:o+4]] = struct.unpack(">I", fb[o+8:o+12])[0]
+        co = tabs.get(b"cmap")
+        if co is None:
+            return out
+        subs = []
+        for i in range(struct.unpack(">H", fb[co+2:co+4])[0]):
+            pid, eid, so = struct.unpack(">HHI", fb[co+4+i*8:co+12+i*8])
+            if (pid, eid) in ((3, 1), (3, 10), (0, 3), (0, 4)):
+                subs.append(co + so)
+        for sub in subs:
+            fmt = struct.unpack(">H", fb[sub:sub+2])[0]
+            if fmt == 4:
+                segx2 = struct.unpack(">H", fb[sub+6:sub+8])[0]
+                seg, p = segx2 // 2, sub + 14
+                end = struct.unpack(">%dH" % seg, fb[p:p+segx2])
+                p += segx2 + 2
+                sta = struct.unpack(">%dH" % seg, fb[p:p+segx2])
+                p += segx2
+                dlt = struct.unpack(">%dh" % seg, fb[p:p+segx2])
+                p += segx2
+                ro_at = p
+                ro = struct.unpack(">%dH" % seg, fb[p:p+segx2])
+                for i in range(seg):
+                    for c in range(sta[i], min(end[i], 0xFFFF) + 1):
+                        if ro[i] == 0:
+                            g = (c + dlt[i]) & 0xFFFF
+                        else:
+                            gi = ro_at + i*2 + ro[i] + (c - sta[i]) * 2
+                            if gi + 2 > len(fb):
+                                continue
+                            g = struct.unpack(">H", fb[gi:gi+2])[0]
+                            if g:
+                                g = (g + dlt[i]) & 0xFFFF
+                        if g and g not in out:
+                            out[g] = chr(c)
+                        if len(out) > cap:
+                            return out
+            elif fmt == 12:
+                ng = struct.unpack(">I", fb[sub+12:sub+16])[0]
+                for i in range(min(ng, 10000)):
+                    s, e, gs = struct.unpack(">III", fb[sub+16+i*12:sub+28+i*12])
+                    for c in range(s, min(e, s + 1000) + 1):
+                        out.setdefault(gs + (c - s), chr(c))
+                    if len(out) > cap:
+                        return out
+    except Exception:
+        pass
+    return out
+
+
+def _pdf_font(doc, num):
+    """폰트 객체 -> (코드 바이트 수, {코드: 문자}) — ToUnicode 우선, 없으면 임베드
+    폰트 cmap 역매핑, 그것도 없으면 빈 맵(=쓰레기 대신 침묵)."""
+    head = doc["objs"].get(num, (b"", None))[0]
+    two = b"/Type0" in head
+    enc = re.search(rb"/Encoding[ \t\r\n]*/([A-Za-z0-9\-]+)", head)
+    enc = enc.group(1) if enc else b""
+    cmap = {}
+    for tu in _pdf_refs(head, b"/ToUnicode"):
+        cmap.update(_pdf_tounicode(_pdf_stream(doc, tu)))
+    if not cmap and two:
+        if b"UCS2" in enc or b"UTF16" in enc:      # 예정 CMap = 코드가 곧 UCS-2
+            return (2, "utf16")
+        for d in _pdf_refs(head, b"/DescendantFonts"):
+            dh = doc["objs"].get(d, (b"", None))[0]
+            for fd in _pdf_refs(dh, b"/FontDescriptor"):
+                fdh = doc["objs"].get(fd, (b"", None))[0]
+                for ff in _pdf_refs(fdh, b"/FontFile2"):
+                    cmap.update(_pdf_ttf_reverse(_pdf_stream(doc, ff)))
+    return (2 if two else 1, cmap)
+
+
+def _pdf_tokens(buf):
+    """컨텐츠 스트림 토크나이저 — 문자열(리터럴/hex)·이름·수·연산자.
+    hex 문자열 `<...>` 을 dict 시작 `<<` 과 구분하는 것이 결함 1의 핵심."""
+    esc = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f"}
+    i, n = 0, len(buf)
+    while i < n:
+        c = buf[i:i+1]
+        if c in b" \t\r\n\f\x00":
+            i += 1
+        elif c == b"%":
+            j = buf.find(b"\n", i)
+            i = n if j < 0 else j + 1
+        elif c == b"(":
+            i += 1
+            depth, out = 1, bytearray()
+            while i < n and depth:
+                ch = buf[i:i+1]
+                if ch == b"\\":
+                    nx = buf[i+1:i+2]
+                    if nx in esc:
+                        out += esc[nx]
+                        i += 2
+                    elif nx.isdigit():
+                        o, k = buf[i+1:i+4], 0
+                        while k < 3 and o[k:k+1].isdigit() and o[k:k+1] < b"8":
+                            k += 1
+                        out.append(int(o[:k], 8) & 0xFF)
+                        i += 1 + k
+                    elif nx in b"\r\n":
+                        i += 3 if buf[i+1:i+3] == b"\r\n" else 2
+                    else:
+                        out += nx
+                        i += 2
+                elif ch == b"(":
+                    depth += 1
+                    out += ch
+                    i += 1
+                elif ch == b")":
+                    depth -= 1
+                    i += 1
+                    if depth:
+                        out += ch
+                else:
+                    out += ch
+                    i += 1
+            yield ("s", bytes(out))
+        elif c == b"<":
+            if buf[i:i+2] == b"<<":
+                yield ("o", b"<<")
+                i += 2
+            else:
+                j = buf.find(b">", i)
+                if j < 0:
+                    return
+                h = re.sub(rb"[^0-9A-Fa-f]", b"", buf[i+1:j])
+                h = h + b"0" if len(h) % 2 else h
+                yield ("s", bytes.fromhex(h.decode()))
+                i = j + 1
+        elif c == b">":
+            yield ("o", b">>")
+            i += 2 if buf[i:i+2] == b">>" else 1
+        elif c == b"/":
+            j = i + 1
+            while j < n and buf[j:j+1] not in b" \t\r\n\f/[]<>()%":
+                j += 1
+            yield ("n", buf[i+1:j])
+            i = j
+        elif c in b"[]":
+            yield ("o", c)
+            i += 1
+        elif c in b"+-.0123456789":
+            j = i
+            while j < n and buf[j:j+1] in b"+-.0123456789eE":
+                j += 1
+            try:
+                yield ("d", float(buf[i:j]))
+            except ValueError:
+                pass
+            i = j
+        else:
+            j = i
+            while j < n and buf[j:j+1] not in b" \t\r\n\f/[]<>()%":
+                j += 1
+            yield ("o", buf[i:j] or c)
+            i = max(j, i + 1)
+
+
+def _pdf_decode(b, font):
+    """문자열 바이트 -> 텍스트. CID(2바이트)는 매핑이 없으면 **버린다** — 임베드
+    폰트 바이너리나 glyph id 를 본문으로 흘려보내면 태그가 오염된다(결함 부수)."""
+    width, cmap = font if font else (1, {})
+    if cmap == "utf16":
+        return b.decode("utf-16-be", "ignore")
+    if width == 2:
+        return "".join(cmap.get((b[i] << 8) | b[i+1], "")
+                       for i in range(0, len(b) - 1, 2))
+    return "".join(cmap.get(ch) or chr(ch) for ch in b)
+
+
+def _pdf_page_text(content, fonts, sink, budget):
+    """페이지 컨텐츠 -> sink(list) 에 텍스트 조각 append, 추가한 글자 수 반환.
+    줄바꿈은 y 좌표가 실제로 바뀔 때만 — Td/Tm 마다 끊으면 단어가 쪼개진다."""
+    stack, font, arr = [], None, None
+    y, ylast, added = None, None, 0
+    for kind, val in _pdf_tokens(content):
+        if kind == "o" and val == b"[":
+            arr = []
+            continue
+        if kind == "o" and val == b"]":
+            stack.append(("a", arr))
+            arr = None
+            continue
+        if kind != "o":
+            (arr if arr is not None else stack).append((kind, val))
+            continue
+        op = val
+        if op in (b"Tj", b"TJ", b"'", b'"'):
+            if ylast is not None and y != ylast:
+                sink.append("\n")
+                added += 1
+            ylast = y
+        if op == b"Tf" and len(stack) >= 2 and stack[-2][0] == "n":
+            font = fonts.get(stack[-2][1])
+        elif op in (b"Tj", b"'", b'"'):
+            for k, v in reversed(stack):
+                if k == "s":
+                    piece = _pdf_decode(v, font)
+                    sink.append(piece)
+                    added += len(piece)
+                    break
+        elif op == b"TJ":
+            for k, v in reversed(stack):
+                if k == "a":
+                    for ek, ev in v:
+                        if ek == "s":
+                            piece = _pdf_decode(ev, font)
+                            sink.append(piece)
+                            added += len(piece)
+                        elif ek == "d" and ev <= _PDF_TJ_SPACE:
+                            sink.append(" ")
+                            added += 1
+                    break
+        elif op in (b"Td", b"TD"):
+            if len(stack) >= 2 and stack[-1][0] == "d" and stack[-2][0] == "d":
+                y = (y or 0) + stack[-1][1]
+        elif op == b"Tm" and len(stack) >= 6 and stack[-1][0] == "d":
+            y = stack[-1][1]
+        elif op == b"T*":
+            y = (y or 0) - 1
+        elif op in (b"BT", b"ET"):
+            y = ylast = None      # 텍스트 객체 경계 = 표 셀 경계. 공백으로 끊는다
+            sink.append(" ")
+            added += 1
+        stack = []
+        if added > budget:
+            break
+    return added
+
+
+def _pdf_loose_text(doc, limit):
+    """페이지 트리를 못 찾은 파일의 최후 수단 — 스트림을 풀어 텍스트 연산자만
+    긁는다. 폰트·이미지 스트림은 건너뛴다(본문 오염 방지). 정상 PDF에서는
+    호출되지 않는다 — 구조가 있으면 구조를 따르는 것이 유일한 쓰기 경로다."""
+    sink, total, seen = [], 0, False
+    for num, (head, at) in sorted(doc["objs"].items()):
+        if at is None or re.search(rb"/FontFile|/Subtype[ \t\r\n]*/Image", head):
+            continue
+        data = _pdf_stream(doc, num)
+        if not data:
+            continue
+        seen = True
+        total += _pdf_page_text(data, {}, sink, limit - total)
         if total > limit:
             break
-    return " ".join(out)[:limit]
+    if not seen:                      # 객체 경계조차 없는 파일
+        for m in re.finditer(rb"stream\r?\n(.*?)endstream", doc["raw"], re.S):
+            chunk = m.group(1)
+            try:
+                chunk = zlib.decompress(chunk)
+            except Exception:
+                pass
+            total += _pdf_page_text(chunk, {}, sink, limit - total)
+            if total > limit:
+                break
+    return sink
+
+
+def _pdf_text(path, limit=8000):
+    """PDF 본문 추출 — 페이지 -> 리소스 -> 폰트 -> ToUnicode 를 따라간다.
+    stdlib 만 사용. 실패는 부분 결과 또는 빈 문자열이며 예외를 올리지 않는다.
+    한계: 스캔 PDF(OCR 비지원)·암호화 PDF 는 본문이 나오지 않는다
+    (DOC-20260826-003 C등급)."""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read(ATTACH_MAX_BYTES)
+    except OSError:
+        return ""
+    sink, total = [], 0
+    try:
+        doc = {"raw": raw, "objs": _pdf_scan(raw), "sc": {}}
+        _pdf_expand_objstm(doc)
+        pages = sorted(n for n, (h, _) in doc["objs"].items()
+                       if re.search(rb"/Type[ \t\r\n]*/Page[ \t\r\n/>\]]",
+                                    h + b" "))
+        fontcache = {}
+        for pnum in pages:
+            head = doc["objs"][pnum][0]
+            res = _pdf_subdict(head, b"/Resources")
+            for r in (_pdf_refs(head, b"/Resources") if not res else []):
+                res = doc["objs"].get(r, (b"", None))[0]
+            fdict = _pdf_subdict(res, b"/Font")
+            for r in (_pdf_refs(res, b"/Font") if not fdict else []):
+                fdict = doc["objs"].get(r, (b"", None))[0]
+            fonts = {}
+            for nm, onum in re.findall(
+                    rb"/([^\s/<>\[\]]+)[ \t\r\n]*(\d+)[ \t\r\n]+\d+"
+                    rb"[ \t\r\n]+R", fdict):
+                onum = int(onum)
+                if onum not in fontcache:
+                    try:
+                        fontcache[onum] = _pdf_font(doc, onum)
+                    except Exception:
+                        fontcache[onum] = (1, {})
+                fonts[nm] = fontcache[onum]
+            content = b"".join(_pdf_stream(doc, c)
+                               for c in _pdf_refs(head, b"/Contents"))
+            if not content:
+                continue
+            try:
+                total += _pdf_page_text(content, fonts, sink, limit - total)
+            except Exception:
+                pass                       # 페이지 한 장이 깨져도 나머지는 건진다
+            if total > limit:
+                break
+        if not pages:
+            sink = _pdf_loose_text(doc, limit)
+    except Exception:
+        pass
+    txt = re.sub(r"[ \t]+", " ", "".join(sink))
+    return re.sub(r"\s*\n\s*", "\n", txt).strip()[:limit]
 
 
 def _zipped_text(path, limit=8000):
@@ -3676,7 +4233,14 @@ def cmd_digest(args):
             for p in user_projects(user)
             if os.path.exists(context_path(p["slug"]))]
     # 우선순위 낮은 섹션부터 잘려나가도록 뒤에서부터 배치
+    # 아무에게도 닿지 못한 전이 통지 (REQ-20260826-015). 첫 줄에 올린다 —
+    # 통지가 유실됐다는 것은 그 작업을 지금 아무도 모른다는 뜻이라, 다른 어떤
+    # 항목보다 먼저 읽혀야 한다. 읽는 순간 비운다(다음 digest 를 오염시키지 않는다).
+    unacked = unacked_transitions(consume=True)
     sections = [
+        ("## ‼ 받지 못한 전이 통지 — 이 지시는 아무 세션에도 닿지 않았다. 지금 확인하라",
+         [f"- {u.get('ts', '')[11:16]} {u.get('id', '')} {u.get('kind', '')} — "
+          f"{(u.get('text') or '')[:120]}" for u in unacked]),
         ("## ⚠ 반려/재개 — 사용자가 대시보드에서 되돌림. 최우선으로 이어서 작업하라",
          [f"- {r['id']} {r['title']}" + (f" — 사유: {r['reason']}" if r['reason'] else "")
           for r in reopened]),
@@ -3828,6 +4392,35 @@ HEALTH_FAIL_RE = re.compile(
     r"usage limit|rate.?limit|quota|한도|초과|not available|no such model|"
     r"invalid model|permission denied|authentication|traceback|fatal",
     re.I)
+
+
+SERVE_CODE_STAMP = {}   # serve 기동 시점의 bin/s9 지문
+SERVE_STARTED = ""      # serve 기동 시각
+
+
+def code_stamp(path=None):
+    """실행 중인 코드 파일의 지문 (REQ-20260826-011).
+
+    서버는 기동 시점 코드를 메모리에 들고 돈다. 그래서 파일을 고쳐도 돌고
+    있는 서버는 옛 코드다 — 정적 파일(web/)은 즉시 바뀌니 "화면은 바뀌었는데
+    동작만 안 된다"가 되고, 테스트는 디스크 코드를 직접 실행하니 전부 통과한다.
+    아무 신호가 없으면 그 어긋남이 며칠도 간다. 실제로 12시간 갔다."""
+    try:
+        st = os.stat(path or os.path.abspath(__file__))
+        return {"mtime": round(st.st_mtime, 3), "size": st.st_size}
+    except OSError:
+        return {}
+
+
+def code_is_stale(started, current):
+    """기동 시점 지문과 지금 디스크가 다른가.
+
+    읽을 수 없으면(빈 지문) **낡았다고 단정하지 않는다** — 근거 없는 경고는
+    곧 무시되고, 한 번 무시되기 시작하면 진짜일 때도 안 읽힌다."""
+    if not started or not current:
+        return False
+    return (started.get("mtime"), started.get("size")) != \
+           (current.get("mtime"), current.get("size"))
 
 
 def actor_alive(actor, age=None, pid_alive=None, log_line="", recorded=""):
@@ -5584,9 +6177,15 @@ def cmd_code(args):
         socket.create_connection(("127.0.0.1", port), 0.5).close()
         print(f"대시보드 실행 중: http://127.0.0.1:{port}/")
     except OSError:
+        # 서버를 직접 띄우지 않고 **감시자**를 띄운다 (REQ-20260825-096) —
+        # 감시자가 서버를 올리고, 죽으면 사유를 남기고 되살린다. 여기서
+        # os.fork 로 직접 갈라지지 않는 이유는 argv 다: fork 는 argv 를 물려받아
+        # ps 에 "s9 code" 로 보이고, 그러면 사람도 s9-doctor 도 감시자를
+        # 알아보지 못한다. 이미 감시 중이면 그 프로세스가 곧바로 물러난다.
         os.makedirs(os.path.join(ROOT, "state"), exist_ok=True)
         lf = open(os.path.join(ROOT, "state", "serve.log"), "a")
-        subprocess.Popen([os.path.abspath(__file__), "serve", "--port", str(port)],
+        subprocess.Popen([os.path.abspath(__file__), "serve", "--supervise",
+                          "--port", str(port)],
                          stdin=subprocess.DEVNULL, stdout=lf, stderr=lf,
                          start_new_session=True)
         print(f"대시보드 기동: http://127.0.0.1:{port}/")
@@ -5979,9 +6578,350 @@ def _wait_port_free(host, port, tries=20):
     return not _port_busy(host, port)
 
 
+# ------------------------------------------------------------- serve 감시자
+# REQ-20260825-096: serve 가 죽었을 때 (1) 사유를 사후에 알 수 없었고
+# (2) 아무도 되살리지 않았다. 외부 스케줄러(systemd/cron)는 사용자가 명시적으로
+# 배제했으므로 자기 감시로 푼다 — serve 를 띄우는 쪽이 감시자를 분리 기동하고
+# (setsid + double fork), 감시자가 자식의 사망 사유를 남긴 뒤 백오프를 두고
+# 되살린다.
+#
+# 지키는 원칙 하나: **살아 있는 서버는 무슨 이유로도 건드리지 않는다.**
+#  - 재기동은 자식이 이미 죽은 뒤에만 일어난다 → 진행 중 SSE 를 감시자가 끊지 않는다.
+#  - 소스가 바뀌었다는 이유로 재기동하지 않는다 → 코드 갱신 반영은 별도 판단이다
+#    (REQ-20260826-011). 감시자를 그 수단으로 쓰면 사용자의 SSE 가 말없이 끊긴다.
+#  - 포트를 남이 쥐고 있으면 죽이지 않고 지켜보기만 한다.
+GUARD_BACKOFF = (1, 2, 5, 15, 30, 60, 120, 300)  # 연속 실패 n회째 대기(초)
+GUARD_HEALTHY_SEC = 60     # 이만큼 살았으면 건강한 실행 — 실패 카운터 리셋
+GUARD_POLL_SEC = 5         # 남의 서버가 포트를 쥐고 있을 때 다시 재는 주기
+GUARD_TERM_MIN_SEC = 5     # 의도적 SIGTERM 뒤 최소 대기 (재기동 경합 회피)
+GUARD_TAIL_LINES = 20      # 사망 기록에 담을 직전 출력 줄 수
+GUARD_GIVEUP_FAILS = 10    # 이만큼 연속 실패하면 포기한다 (백오프 합계 ~19분)
+EXIT_PORT_BUSY = 3         # 감시 하 자식이 "포트는 남의 것" 이라고 알리는 코드
+
+
+def _guard_paths(port, root=None):
+    st = os.path.join(root or ROOT, "state")
+    return {"state": st,
+            "lock": os.path.join(st, f"serve-guard.{port}.lock"),
+            "stop": os.path.join(st, f"serve-guard.{port}.stop"),
+            "log": os.path.join(st, "serve-guard.log"),
+            "serve_log": os.path.join(st, "serve.log")}
+
+
+def _guard_backoff(fails):
+    """연속 실패 fails 회째의 재기동 대기(초). 단조 증가, 상한에서 멈춘다.
+    즉시 재기동을 무한 반복하면 포트 경합·자원 소모로 사고가 커진다
+    (2026-08-25 동적 포트 고갈이 그 교훈)."""
+    i = min(max(int(fails), 1), len(GUARD_BACKOFF)) - 1
+    return GUARD_BACKOFF[i]
+
+
+def _exit_reason(rc):
+    """종료 코드를 사람이 읽는 사유로. 음수는 시그널(POSIX 관례)."""
+    if rc is None:
+        return "실행 중"
+    if rc < 0:
+        import signal as _sig
+        try:
+            return f"signal {_sig.Signals(-rc).name}"
+        except ValueError:
+            return f"signal {-rc}"
+    return f"exit {rc}"
+
+
+def _log_tail(path, offset, lines=GUARD_TAIL_LINES):
+    """offset 이후(=이번 자식이 쓴 구간)의 마지막 줄들. 죽은 사유의 본문이다."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            f.seek(offset)
+            chunk = f.read(64 * 1024)
+    except OSError:
+        return []
+    return [ln.rstrip() for ln in chunk.splitlines() if ln.strip()][-lines:]
+
+
+def _guard_record(port, event, human, detail=None, root=None):
+    """사망/기동 기록을 두 곳에 남긴다 —
+    state/serve-guard.log(JSONL, 기계용) + state/serve.log(한 줄, 사람용).
+    사람은 serve.log 를 보러 가는데 거기 크래시 흔적이 없던 것이 이 문서의 결함이다."""
+    p = _guard_paths(port, root)
+    rec = {"ts": now_iso(), "port": port, "event": event, "msg": human}
+    rec.update(detail or {})
+    try:
+        os.makedirs(p["state"], exist_ok=True)
+        with open(p["log"], "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+    try:
+        with open(p["serve_log"], "a", encoding="utf-8") as f:
+            f.write(f"{rec['ts']} [serve-guard] {human}\n")
+    except OSError:
+        pass
+    return rec
+
+
+def _guard_spawn_child(port, host, root=None):
+    """감시 대상 자식 = 평범한 `s9 serve`. 출력은 serve.log 로 그대로 흘린다
+    (파이프를 쓰지 않는다 — 감시자가 죽었을 때 자식이 파이프에 갇히지 않도록)."""
+    import subprocess
+    p = _guard_paths(port, root)
+    os.makedirs(p["state"], exist_ok=True)
+    env = dict(os.environ, S9_SERVE_SUPERVISED="1")
+    # 감시자는 세션보다 오래 산다 — 자식에게 죽은 세션의 S9_SESSION 을 물려주면
+    # 대시보드가 만드는 문서·전이가 그 세션에 귀속된다(update_active_reqs 는
+    # "대시보드/외부"를 세션 없음으로 보는 것이 전제다).
+    env.pop("S9_SESSION", None)
+    if root:
+        env["S9_ROOT"] = root
+    lf = open(p["serve_log"], "a")
+    try:
+        return subprocess.Popen(
+            [os.path.abspath(__file__), "serve", "--host", host,
+             "--port", str(port)],
+            stdin=subprocess.DEVNULL, stdout=lf, stderr=lf, env=env)
+    finally:
+        lf.close()
+
+
+def serve_guard_loop(port, host="127.0.0.1", root=None, spawn=None,
+                     sleep=None, clock=None, max_rounds=None):
+    """감시 루프. 반환값은 종료 사유 문자열.
+
+    spawn/sleep/clock 은 테스트 주입점이다 — 실제 시간을 쓰지 않고 백오프·
+    사망 기록·정상 종료 판정을 고정할 수 있어야 한다."""
+    import time as _t
+    sleep = sleep or _t.sleep
+    clock = clock or _t.monotonic
+    spawn = spawn or (lambda: _guard_spawn_child(port, host, root))
+    p = _guard_paths(port, root)
+    fails = 0
+    rounds = 0
+    while max_rounds is None or rounds < max_rounds:
+        rounds += 1
+        if os.path.exists(p["stop"]):
+            try:
+                os.remove(p["stop"])
+            except OSError:
+                pass
+            _guard_record(port, "stop", f"{port} 감시 중지 요청 — 서버는 그대로 두고 물러난다",
+                          root=root)
+            return "stopped"
+        if _port_busy(host, port):
+            # 살아 있는 서버가 있다. 그게 내 자식이 아니어도 죽이지 않는다 —
+            # 중복 기동도, 개입도 하지 않고 죽을 때까지 지켜본다.
+            sleep(GUARD_POLL_SEC)
+            continue
+        try:
+            off = os.path.getsize(p["serve_log"])
+        except OSError:
+            off = 0
+        started = clock()
+        try:
+            proc = spawn()
+            rc = proc.wait()
+        except OSError as e:
+            # 기동 자체가 실패했다(fork/exec 고갈, 실행 권한…). 감시자가 여기서
+            # 죽으면 아무도 되살리지 못한다 — 실패로 세고 백오프를 두고 다시 시도.
+            proc, rc = None, 1
+            _guard_record(port, "spawn-error",
+                          f"{port} 서버를 띄우지 못했다: {e!r}", root=root)
+        ran = max(0.0, clock() - started)
+        if rc == 0:
+            _guard_record(port, "clean-exit",
+                          f"{port} 서버가 정상 종료(exit 0, {ran:.0f}s 생존) — "
+                          f"사용자 의도로 보고 되살리지 않는다",
+                          {"rc": 0, "ran_sec": round(ran, 1)}, root)
+            return "clean-exit"
+        if rc == EXIT_PORT_BUSY:
+            # 자식이 "포트는 이미 남의 것"이라고 알려왔다 — 실패로 세지 않는다.
+            sleep(GUARD_POLL_SEC)
+            continue
+        fails = 1 if ran >= GUARD_HEALTHY_SEC else fails + 1
+        delay = _guard_backoff(fails)
+        if fails >= GUARD_GIVEUP_FAILS:
+            # 한 번도 자리를 잡지 못한 채 이만큼 실패했다면 되살리기로 풀리는
+            # 문제가 아니다(포트 권한·설정 오류 등). 영원히 도는 감시자를
+            # 남기지 않고 사유를 남긴 뒤 물러난다 — 다음 세션 시작 훅이
+            # 다시 세우므로 복구 경로가 끊기지는 않는다.
+            _guard_record(port, "gave-up",
+                          f"{port} 서버가 {fails}회 연속으로 자리잡지 못했다 "
+                          f"({_exit_reason(rc)}) — 감시를 접는다. 사람이 봐야 한다",
+                          {"rc": rc, "reason": _exit_reason(rc), "fails": fails,
+                           "tail": _log_tail(p["serve_log"], off)}, root)
+            return "gave-up"
+        if rc in (-15, -2):
+            # 누군가 의도적으로 내렸다(SIGTERM/SIGINT). `serve --restart` 가
+            # 곧 같은 포트를 잡을 수 있으니 먼저 양보한다 — 안 잡으면 우리가 살린다.
+            delay = max(delay, GUARD_TERM_MIN_SEC)
+        _guard_record(port, "died",
+                      f"{port} 서버가 {_exit_reason(rc)} 로 죽었다 "
+                      f"({ran:.0f}s 생존, 연속 {fails}회) — {delay}s 뒤 재기동",
+                      {"rc": rc, "reason": _exit_reason(rc),
+                       "ran_sec": round(ran, 1), "fails": fails,
+                       "retry_in": delay,
+                       "tail": _log_tail(p["serve_log"], off)}, root)
+        sleep(delay)
+    return "max-rounds"
+
+
+def _guard_lock(port, root=None):
+    """감시자 단일성. 잠금을 잡으면 파일 객체(프로세스 수명 동안 보유),
+    이미 다른 감시자가 잡고 있으면 None."""
+    p = _guard_paths(port, root)
+    try:
+        import fcntl
+    except ImportError:      # 윈도우 — 잠금 없이 진행(감시자 중복은 포트 검사로 수렴)
+        fcntl = None
+    try:
+        os.makedirs(p["state"], exist_ok=True)
+        f = open(p["lock"], "a+")
+    except OSError:
+        return None
+    if fcntl is not None:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            f.close()
+            return None
+    try:
+        f.seek(0)
+        f.truncate()
+        f.write(f"{os.getpid()}\n")
+        f.flush()
+    except OSError:
+        pass
+    return f
+
+
+def _guard_alive(port, root=None):
+    """이미 감시 중이면 그 pid, 아니면 None. 잠금을 잠깐 잡아보고 되돌린다."""
+    p = _guard_paths(port, root)
+    try:
+        import fcntl
+    except ImportError:
+        return None
+    try:
+        f = open(p["lock"], "a+")
+    except OSError:
+        return None
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(f, fcntl.LOCK_UN)
+        return None          # 잡혔다 = 감시자 없음
+    except OSError:
+        try:
+            f.seek(0)
+            return int(f.read().split()[0])
+        except (OSError, ValueError, IndexError):
+            return -1        # 누군가 잡고 있는데 pid 를 못 읽었다
+    finally:
+        f.close()
+
+
+def _guard_main(port, host="127.0.0.1", root=None):
+    """분리된 감시자 프로세스의 본체."""
+    lock = _guard_lock(port, root)
+    if lock is None:
+        return 0             # 다른 감시자가 이미 있다 — 조용히 물러난다
+    stop = _guard_paths(port, root)["stop"]
+    if os.path.exists(stop):
+        # 지난번 중지 요청의 잔재 — 감시자를 새로 세우는 것이 더 최근의 의도다.
+        try:
+            os.remove(stop)
+        except OSError:
+            pass
+    _guard_record(port, "start", f"{port} 감시 시작 (pid {os.getpid()})",
+                  {"pid": os.getpid(), "host": host}, root)
+    try:
+        why = serve_guard_loop(port, host, root)
+    except BaseException as e:                    # 감시자의 죽음도 기록으로 남긴다
+        _guard_record(port, "guard-error", f"{port} 감시자 자신이 중단됐다: {e!r}",
+                      root=root)
+        raise
+    finally:
+        try:
+            lock.close()
+        except OSError:
+            pass
+    _guard_record(port, "end", f"{port} 감시 종료 ({why})", root=root)
+    return 0
+
+
+def _guard_detach(port, host="127.0.0.1", root=None):
+    """감시자를 사용자 세션에서 떼어 기동한다 (setsid + double fork).
+    이미 감시 중이면 아무것도 하지 않는다(멱등). 반환: 띄웠으면 True."""
+    if port < 1024 and hasattr(os, "geteuid") and os.geteuid() != 0:
+        # 권한상 절대 열 수 없는 포트다 — 감시해도 재기동만 반복하다 포기한다.
+        # (테스트가 "실서버 스폰 방지"용 무효 포트로 1을 쓰는 경로가 있다.)
+        return False
+    held = _guard_alive(port, root)
+    if held is not None:
+        return False
+    try:
+        pid = os.fork()
+    except OSError as e:
+        _guard_record(port, "guard-error", f"{port} 감시자 기동 실패: {e!r}", root=root)
+        return False
+    if pid:
+        os.waitpid(pid, 0)   # 중간 자식은 곧바로 죽는다 — 좀비를 남기지 않는다
+        return True
+    # --- 중간 자식: 세션을 새로 만들고 한 번 더 갈라져 세션 리더 자격을 버린다
+    try:
+        os.setsid()
+    except OSError:
+        pass
+    try:
+        if os.fork():
+            os._exit(0)
+    except OSError:
+        os._exit(1)
+    # --- 손자 = 감시자. 터미널·작업 디렉토리와의 끈을 끊는다.
+    try:
+        p = _guard_paths(port, root)
+        os.makedirs(p["state"], exist_ok=True)
+        os.chdir(root or ROOT)
+        fd0 = os.open(os.devnull, os.O_RDONLY)
+        fd1 = os.open(p["log"], os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        os.dup2(fd0, 0)
+        os.dup2(fd1, 1)
+        os.dup2(fd1, 2)
+        _guard_main(port, host, root)
+    except BaseException:
+        os._exit(1)
+    os._exit(0)
+
+
+
 def cmd_serve(args):
     if args.port is None:
         args.port = s9_port()
+    # 감시자 (REQ-20260825-096) — 이 프로세스는 감시자를 떼어 놓고 곧 돌아간다.
+    if getattr(args, "stop_guard", False):
+        if _guard_alive(args.port) is None:
+            # 중지 파일을 남겨두면 **다음에 뜨는 감시자**가 그걸 보고 곧바로
+            # 물러난다 — 감시 중이 아닐 때는 아무것도 쓰지 않는다.
+            print(f"포트 {args.port} 를 감시 중인 감시자가 없다")
+            return
+        p = _guard_paths(args.port)
+        os.makedirs(p["state"], exist_ok=True)
+        open(p["stop"], "w").close()
+        print(f"{args.port} 감시 중지 요청 — 서버는 그대로 둔다 "
+              f"(최대 {GUARD_POLL_SEC}s 안에 물러난다)")
+        return
+    if getattr(args, "supervise", False):
+        held = _guard_alive(args.port)
+        if held is not None:
+            print(f"이미 감시 중: 포트 {args.port} (감시자 pid {held})")
+            return
+        if _guard_detach(args.port, args.host):
+            print(f"대시보드 감시 시작: 포트 {args.port} "
+                  f"(사망 사유·재기동 기록 state/serve-guard.log)")
+        else:
+            print(f"감시자를 세우지 않았다: 포트 {args.port} "
+                  f"(권한상 열 수 없는 포트이거나 기동 실패 — "
+                  f"state/serve-guard.log 확인)")
+        return
     # 재기동 안정화 (REQ-20260825-075): 같은 포트에 이미 서버가 있으면
     # "Address already in use"로 죽지 않고 상황에 맞게 처리한다.
     #  - 기본: 이미 떠 있으면 그대로 두고 종료(멱등) — 실수로 두 번 띄워도 안전
@@ -6028,6 +6968,10 @@ def cmd_serve(args):
         else:
             print(f"이미 실행 중: http://127.0.0.1:{args.port}/ "
                   f"(재기동하려면 s9 serve --restart)")
+            # 감시자가 띄운 자식이면 종료 코드로 구분해 준다 — 0으로 돌아가면
+            # 감시자가 "사용자가 정상 종료시켰다"로 오해하고 감시를 접는다.
+            if os.environ.get("S9_SERVE_SUPERVISED") == "1":
+                raise SystemExit(EXIT_PORT_BUSY)
             return
     # 관계 무결성 자동 복구 (REQ-20260825-061): 기동 시 1회 — 사람이 명령을
     # 기억하지 않아도 깨진 관계가 쌓이지 않는다. 실패해도 서버는 뜬다.
@@ -6643,6 +7587,15 @@ def cmd_serve(args):
                     self._send(404, "text/plain", b"not found")
             # 가시성 필터는 응답 직전에만 — 내부 함수(catalog_with_live 등)의
             # 반환은 무필터 원본 유지 (워처·live 판정이 그 데이터로 동작)
+            elif parsed.path == "/api/serveinfo":
+                # 돌고 있는 서버가 낡았는가 (REQ-20260826-011). 판단(재기동)은
+                # 사람 몫이다 — 진행 중 요청·SSE 를 끊는 일이라 서버가 스스로
+                # 결정할 것이 아니다. 여기서는 사실만 내보낸다.
+                cur = code_stamp()
+                self._json({"started": SERVE_STARTED,
+                            "code_stamp": SERVE_CODE_STAMP,
+                            "disk_stamp": cur,
+                            "stale": code_is_stale(SERVE_CODE_STAMP, cur)})
             elif parsed.path == "/api/catalog":
                 me = viewer_of(qs)
                 self._json([r for r in catalog_with_live()
@@ -7161,6 +8114,12 @@ def cmd_serve(args):
                 time.sleep(PORT_GUARD_EVERY)
         threading.Thread(target=_port_guard_loop, daemon=True).start()
 
+    # 기동 시점의 코드 지문을 박아둔다 — 이후 디스크가 바뀌면 /api/serveinfo 가
+    # 그 사실을 알린다 (REQ-20260826-011).
+    global SERVE_CODE_STAMP, SERVE_STARTED
+    SERVE_CODE_STAMP = code_stamp()
+    SERVE_STARTED = now_iso()
+
     http.server.ThreadingHTTPServer.request_queue_size = 32
     srv = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"section9 dashboard: http://{args.host}:{args.port}/  (Ctrl-C to stop)")
@@ -7477,6 +8436,11 @@ def main():
     sv = sub.add_parser("serve", help="local web dashboard (read-only)")
     sv.add_argument("--restart", action="store_true",
                     help="이미 떠 있으면 정리하고 다시 띄운다 (포트 해제 대기)")
+    sv.add_argument("--supervise", action="store_true",
+                    help="감시자를 분리 기동한다 — 서버가 죽으면 사유를 남기고 "
+                         "백오프를 두고 되살린다 (멱등)")
+    sv.add_argument("--stop-guard", action="store_true", dest="stop_guard",
+                    help="감시자만 물러나게 한다 (서버는 그대로)")
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=None)
     sv.set_defaults(fn=cmd_serve)

@@ -249,7 +249,15 @@ class TestBoardScope(unittest.TestCase):
         g = re.search(r"GRP_LIMIT = (\d+)", self.html)
         self.assertTrue(m and g)
         self.assertLess(int(m.group(1)), int(g.group(1)))
-        self.assertIn('groups = {request:[],knowledge:[],session:[]}', self.html)
+        # 목록 그룹에 자리가 있어야 "숨기지 않되 낮춘다"가 성립한다. 다만 리터럴을
+        # 통째로 박으면 타입이 하나 늘 때마다(REQ-20260826-017의 question) 이
+        # 시나리오가 깨진다 — 고정할 성질은 "자리가 있고, 맨 뒤다" 두 가지다.
+        gm = re.search(r"const groups = \{([^}]*)\}", self.html)
+        self.assertTrue(gm, "Docs 목록의 타입 그룹 맵을 찾지 못했다")
+        keys = re.findall(r"(\w+):\[\]", gm.group(1))
+        self.assertIn("session", keys)
+        self.assertEqual(keys[-1], "session",
+                         "session 그룹이 목록 맨 뒤가 아니다 (기본 노출 우선순위)")
 
     # B5. 문서 카운터는 Board에서만 사라진다 — Docs/Graph의 필터 결과 수는 정보다.
     #     빈 줄이 유령 여백을 남기지 않게 접힌다 (REQ-20260825-085)

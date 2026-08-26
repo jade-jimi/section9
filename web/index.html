@@ -12,7 +12,7 @@
   --r:0;
   --c-draft:#868c96; --c-open:#1d4ed8; --c-inprogress:#b45309; --c-blocked:#b91c1c;
   --c-review:#6d28d9; --c-done:#047857; --c-cancelled:#868c96; --c-published:#0f766e;
-  --t-request:#1d4ed8; --t-knowledge:#0f766e; --t-session:#92400e;
+  --t-request:#1d4ed8; --t-knowledge:#0f766e; --t-session:#92400e; --t-question:#9d174d;
   --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
 }
 /* 테마: system(OS 추종) / paper(라이트 고정=기본 토큰) / carbon(다크 고정) / phosphor(CRT) */
@@ -23,7 +23,7 @@
     --accent:#e8e8e4; --accent-soft:#222327; --accent-line:#e8e8e4;
     --c-open:#5b8def; --c-inprogress:#d99537; --c-blocked:#e05d5d;
     --c-review:#a582e8; --c-done:#3fa583; --c-published:#3d9d96;
-    --t-request:#5b8def; --t-knowledge:#3d9d96; --t-session:#c08a4e;
+    --t-request:#5b8def; --t-knowledge:#3d9d96; --t-session:#c08a4e; --t-question:#e07a9f;
   }
 }
 :root[data-theme="carbon"]{
@@ -32,7 +32,7 @@
   --accent:#e8e8e4; --accent-soft:#222327; --accent-line:#e8e8e4;
   --c-open:#5b8def; --c-inprogress:#d99537; --c-blocked:#e05d5d;
   --c-review:#a582e8; --c-done:#3fa583; --c-published:#3d9d96;
-  --t-request:#5b8def; --t-knowledge:#3d9d96; --t-session:#c08a4e;
+  --t-request:#5b8def; --t-knowledge:#3d9d96; --t-session:#c08a4e; --t-question:#e07a9f;
 }
 :root[data-theme="phosphor"]{
   --bg:#0a0e0a; --panel:#0d120d; --border:#2b3a2b; --hairline:#1a231a;
@@ -40,7 +40,7 @@
   --accent:#b9e2b2; --accent-soft:#131b13; --accent-line:#b9e2b2;
   --c-draft:#5f7f5c; --c-open:#5b9bd5; --c-inprogress:#d9b13b; --c-blocked:#e06c5d;
   --c-review:#b78ee0; --c-done:#55c07a; --c-cancelled:#5f7f5c; --c-published:#46b39a;
-  --t-request:#5b9bd5; --t-knowledge:#46b39a; --t-session:#c9a35a;
+  --t-request:#5b9bd5; --t-knowledge:#46b39a; --t-session:#c9a35a; --t-question:#d98cb0;
 }
 *{box-sizing:border-box}
 ::selection{background:var(--text);color:var(--bg)}
@@ -1245,7 +1245,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   --c-open:#2f6bff; --c-inprogress:#b25e09; --c-blocked:#d92d20;
   --c-review:#7a5af8; --c-done:#0f9d76; --c-cancelled:#98a2b3;
   --c-draft:#98a2b3; --c-published:#0e7090;
-  --t-request:#2f6bff; --t-knowledge:#0e7090; --t-session:#8a5a2b;
+  --t-request:#2f6bff; --t-knowledge:#0e7090; --t-session:#8a5a2b; --t-question:#b42573;
   --accent-soft:#e4eaf5; --accent-line:#2f6bff;
 }
 /* ================= tone: graphite — 그래파이트 다크
@@ -1258,7 +1258,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   --c-open:#5b9dff; --c-inprogress:#e0a14a; --c-blocked:#f27171;
   --c-review:#a78bfa; --c-done:#34d3a6; --c-cancelled:#6b7688;
   --c-draft:#6b7688; --c-published:#3fb6c8;
-  --t-request:#5b9dff; --t-knowledge:#3fb6c8; --t-session:#e0a14a;
+  --t-request:#5b9dff; --t-knowledge:#3fb6c8; --t-session:#e0a14a; --t-question:#f08fb8;
   --accent-soft:#232a35; --accent-line:#5b9dff;
 }
 
@@ -1616,7 +1616,7 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
       <select id="f-project"><option value="">project: all</option></select>
       <select id="f-tag"><option value="">tag: all</option></select>
       <select id="f-type"><option value="">type: all</option>
-        <option>request</option><option>knowledge</option><option>session</option><option>project</option></select>
+        <option>request</option><option>knowledge</option><option>question</option><option>session</option><option>project</option></select>
     </div>
     <div class="pgroup idcol">
       <span id="usage-chip" class="usagechip" title="로그인된 클로드 계정과 사용량(세션 5h·주간·모델) — 60초 갱신, 계정 전환 즉시 반영"></span>
@@ -1638,8 +1638,9 @@ const TERMINAL = new Set(["done","cancelled"]);
 const SCOLOR = {draft:"var(--c-draft)",open:"var(--c-open)","in-progress":"var(--c-inprogress)",
   blocked:"var(--c-blocked)",review:"var(--c-review)",done:"var(--c-done)",
   cancelled:"var(--c-cancelled)",published:"var(--c-published)"};
-const TCOLOR = {request:"var(--t-request)",knowledge:"var(--t-knowledge)",session:"var(--t-session)"};
-const TCOLOR_RAW = {request:"#1d4ed8",knowledge:"#0f766e",session:"#92400e"};
+const TCOLOR = {request:"var(--t-request)",knowledge:"var(--t-knowledge)",session:"var(--t-session)",
+  question:"var(--t-question)"};
+const TCOLOR_RAW = {request:"#1d4ed8",knowledge:"#0f766e",session:"#92400e",question:"#9d174d"};
 
 const COL_LIMIT = 7, COL_LIMIT_TERMINAL = 3, GRP_LIMIT = 20, AUDIT_PAGE = 50;
 const GRP_LIMIT_SESSION = 5;                       // session은 기본 노출을 낮춘다 (REQ-20260825-084)
@@ -1676,13 +1677,50 @@ function prioHTML(r){
     + ` title="우선순위 ${p} (${tier}) — 높을수록 먼저 집는다"`
     + `><i class="pmark" aria-hidden="true">${mark}</i><b class="pnum">${p}</b></span>`;
 }
-const TYPE_ORDER = ["request", "knowledge", "session", "project"];  // Docs 타입바 순서 = 사용 빈도
+// Docs 타입바 순서 = 사용 빈도. question은 knowledge 다음 — 자주 열어보는 축이고,
+// session은 목록에서 자리만 지키는 축이라 그 앞에 둔다 (REQ-20260826-017).
+const TYPE_ORDER = ["request", "knowledge", "question", "session", "project"];
+// 그래프가 그리는 타입. 목록이 흩어지면 타입을 늘릴 때 한 곳이 빠진다 —
+// 범례와 색 해석이 같은 배열을 읽는다.
+const GRAPH_TYPES = ["request", "knowledge", "question", "session"];
+// 문서 id 접두 — 본문 링크화·[[위키링크]]·관계 필드가 같은 집합을 읽는다.
+// 흩어진 리터럴 셋을 하나로 모은다: QST를 추가할 때 한 곳이 빠지면 질문 문서만
+// 본문에서 클릭되지 않는 식으로 조용히 갈라진다 (REQ-20260826-017).
+const DOC_ID_PREFIX = "REQ|DOC|SES|QST";
+const DOC_ID_TAIL = "-\\d{8}-\\d{3,}(?:-[0-9a-z]{4})?";
+const DOC_ID_INLINE_RE = new RegExp(`(^|[^"\\w-])((?:${DOC_ID_PREFIX})${DOC_ID_TAIL})`, "g");
+const DOC_ID_FULL_RE = new RegExp(`^(?:${DOC_ID_PREFIX})${DOC_ID_TAIL}$`);
+const DOC_ID_WIKI_RE = new RegExp(`\\[\\[((?:${DOC_ID_PREFIX})${DOC_ID_TAIL})\\]\\]`, "g");
+
+// 질문 문서에는 request의 7단계 흐름이 없다 — status는 published 고정이라
+// 상태어를 그대로 노출하면 사용자에게 아무 것도 말해주지 않는다. 질문의 축은
+// "답이 있는가" 하나뿐이고, 그 값은 상태가 아니라 **파생**이다: 진실은 본문의
+// answer 노트 하나이고 카탈로그 answered 는 재생성 가능한 사본이다
+// (DOC-20260826-011-62x6 결정 3 — 전이를 잊어 "답했는데 미답"이 되는 두 번째
+// 진실을 만들지 않는다). 목록·뷰어·백링크가 이 함수 하나를 쓴다.
+// 노트 경계는 s9 의 NOTE_HDR_RE 와 같은 형식('### <ts> <label> (by ..)')이다.
+const ANSWER_NOTE_RE = /^### \S+ (?:answer|response)\b/im;
+// 본문을 들고 있는 자리(뷰어)는 원본에서 직접 읽고, 본문이 없는 자리(목록·백링크)는
+// 카탈로그 파생 필드를 쓴다 — 판정 규칙 자체는 이 함수 하나에만 있다.
+// 3상이다: true(답함) · false(미답) · null(모른다). 파생 필드가 아직 카탈로그에
+// 없을 때 모르는 것을 '미답'이라 단정하면 같은 문서를 두고 목록과 뷰어가 서로
+// 다른 말을 한다 — 그건 이 타입이 없애려던 바로 그 상태다.
+function isAnswered(r, body){
+  if (typeof body === "string") return ANSWER_NOTE_RE.test(body);
+  return r && r.answered !== undefined ? !!r.answered : null;
+}
+function statusLabel(r, body){
+  if (!r) return "";
+  if (r.type !== "question") return r.status || "";
+  const a = isAnswered(r, body);
+  return a === null ? "" : a ? "답함" : "미답";
+}
 
 let catalog = [], graph = null, auditCache = null, TRANS = {}, projects = [];
 let tab = "board", selectedDoc = null, selectedStream = null;
 let streamTimer = null, reqStreamTimer = null;  // live follow 폴링 (화면 이탈 시 정리)
 // 그래프 타입 표시 집합 — 기본은 request/knowledge (세션 로그 노드 숨김, REQ-20260824-026)
-let gtypes = new Set(["request", "knowledge"]);
+let gtypes = new Set(["request", "knowledge", "question"]);
 try{ const s = JSON.parse(localStorage.getItem("s9gtypes") || "null");
      if (Array.isArray(s) && s.length) gtypes = new Set(s); }catch(e){}
 let expanded = new Set();      // board 컬럼 / docs 그룹 펼침 상태
@@ -1844,7 +1882,7 @@ function depSummaryHTML(rows){
     ${note}</aside>`;
 }
 const linkifyIds = escaped => escaped.replace(
-  /(^|[^"\w-])((?:REQ|DOC|SES)-\d{8}-\d{3,}(?:-[0-9a-z]{4})?)/g,
+  DOC_ID_INLINE_RE,
   (mm, pre, id) => `${pre}<a class="doclink" data-doc="${id}">${shortId(id)}</a>`);
 
 // 경과시간 포맷: <60s=Ns, <60m=Mm Ss, <24h=Hh Mm, 그 이상=Dd Hh
@@ -2536,7 +2574,7 @@ async function renderDocs(rows){
     rows = rows.filter(r => matchMap[r.id]);
     $("#count").textContent = `${rows.length} matches (body search)`;
   }
-  const groups = {request:[],knowledge:[],session:[]};
+  const groups = {request:[],knowledge:[],question:[],session:[]};
   rows.forEach(r => (groups[r.type] || (groups[r.type]=[])).push(r));
   // 타입 진입점 (REQ-20260825-084): Board에서 knowledge/session 컬럼을 걷어낸 대신,
   // Docs 목록 맨 위에 타입별 건수를 붙박이로 노출하고 한 번 눌러 그 타입만 본다.
@@ -2561,8 +2599,14 @@ async function renderDocs(rows){
     list += (curType ? "" : `<div class="grp">${g}</div>`) + shown.map(r => {
       const snips = matchMap?.[r.id] ? matchMap[r.id].slice(0, 3).map(m =>
         `<div class="snip">${m.n}: ${hl(m.text, q)}</div>`).join("") : "";
-      return `<div class="row${r.id===selectedDoc?" sel":""}" data-doc="${esc(r.id)}" style="--sc:${SCOLOR[r.status]}">
-        <span class="st">${esc(r.status)}</span>
+      // 질문에는 상태 축이 없다 — 색은 상태가 아니라 "답이 남았는가"를 말한다.
+      // 미답이 타입색으로 도드라지고 답한 질문은 물러난다: 목록을 훑을 때 눈에
+      // 걸려야 하는 것은 아직 답이 없는 질문 쪽이다 (REQ-20260826-017).
+      const sc = r.type === "question"
+        ? (isAnswered(r) === false ? "var(--t-question)" : "var(--faint)")
+        : SCOLOR[r.status];
+      return `<div class="row${r.id===selectedDoc?" sel":""}" data-doc="${esc(r.id)}" style="--sc:${sc}">
+        <span class="st">${esc(statusLabel(r))}</span>
         <div class="id">${prioHTML(r)}${esc(shortId(r.id))}</div><div>${esc(r.title)}</div>${snips}</div>`;
     }).join("");
     if (grp.length > shown.length)
@@ -2653,8 +2697,12 @@ async function loadDoc(id, bg){
     return;
   }
   const d = await res.json(), m = d.meta;
+  // 질문은 여기서 본문을 들고 있다 — 미답 판정을 카탈로그 파생 필드에 의존하지
+  // 않고 원본(answer 노트)에서 직접 읽는다 (REQ-20260826-017).
+  const isQ = m.type === "question";
+  if (isQ) m.answered = isAnswered(m, d.body);
   const li = v => Array.isArray(v) && v.length
-    ? v.map(x => /^(REQ|DOC|SES)-\d{8}-\d{3,}(-[0-9a-z]{4})?$/.test(x)
+    ? v.map(x => DOC_ID_FULL_RE.test(x)
         ? `<a class="doclink" data-doc="${esc(x)}">${esc(shortId(x))}</a>` : esc(x)).join(", ") : null;
   const rel = v => v ? `<a class="doclink" data-doc="${esc(v)}">${esc(shortId(v))}</a>` : null;
   // 선행 의존 (REQ-20260826-009): "무엇을 기다리는가"를 상태 바로 아래에서 읽고,
@@ -2668,7 +2716,15 @@ async function loadDoc(id, bg){
         + `<span class="path"> ${esc(b.status)}</span></div>`).join("")
     : null;
   const fields = [
-    ["status", m.status ? `<span style="color:${SCOLOR[m.status]}">●</span> ${esc(m.status)}` : null],
+    // 미답 질문은 여기서 한 번 더 말한다 (REQ-20260826-017): 답이 없다는 사실은
+    // 한 단어로는 안 읽히고, 답을 붙이는 명령을 모르면 그대로 방치된다.
+    // 질문의 점 색은 상태(published)가 아니라 타입색을 쓴다 — 상태 축이 없는
+    // 문서에 상태색을 칠하면 없는 흐름을 읽게 된다.
+    ["status", isQ
+      ? `<span style="color:var(--t-question)">●</span> ${esc(statusLabel(m))}`
+        + (m.answered ? "" :
+           `<span class="prio-note">아직 답이 없다 — s9 note ${esc(shortId(m.id))} '…' --label answer</span>`)
+      : (m.status ? `<span style="color:${SCOLOR[m.status]}">●</span> ${esc(m.status)}` : null)],
     ["blocked_by", depRow],
     ["summary", esc(m.summary) || null], ["goal", esc(m.goal) || null],
     ["user / machine / session", esc([m.user, m.machine, m.session].filter(Boolean).join(" / "))],
@@ -2819,7 +2875,7 @@ async function renderBacklinks(id){
     back.map(b => {
       const r = byId[b] || {title: b, status: ""};
       return `<div class="bl" data-doc="${esc(b)}"><span class="id">${esc(b)}</span>
-        ${esc(r.title)} <span class="st" style="color:${SCOLOR[r.status]||"var(--muted)"};font-size:11px"> ${esc(r.status)}</span></div>`;
+        ${esc(r.title)} <span class="st" style="color:${SCOLOR[r.status]||"var(--muted)"};font-size:11px"> ${esc(statusLabel(r))}</span></div>`;
     }).join("");
 }
 
@@ -2873,7 +2929,7 @@ function md2html(src){
     return linkifyIds(src2
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-      .replace(/\[\[((?:REQ|DOC|SES)-\d{8}-\d{3,}(?:-[0-9a-z]{4})?)\]\]/g,
+      .replace(DOC_ID_WIKI_RE,
         (mm, id) => `<a class="doclink" data-doc="${id}">${shortId(id)}</a>`)
       .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>'))
       .replace(/\u0000(\d+)\u0000/g, (mm, i) => held[+i]);
@@ -4508,7 +4564,7 @@ async function renderGraph(rows){
     <div class="legend">
       <button class="gmode${graphLayout==="force"?" on":""}" data-glayout="force">force</button>
       <button class="gmode${graphLayout==="dag"?" on":""}" data-glayout="dag">dag</button>
-      ${["request","knowledge","session"].map(t => `<span class="gtype${gtypes.has(t) ? "" : " off"}" data-gtype="${t}"
+      ${GRAPH_TYPES.map(t => `<span class="gtype${gtypes.has(t) ? "" : " off"}" data-gtype="${t}"
         title="클릭 = ${t} 노드 표시 토글"><span class="dot" style="background:${TCOLOR[t]}"></span>${t}</span>`).join("")}
       <span class="gedge${depEdgeN ? "" : " none"}" title="blocked_by — 선행이 끝나야 후행이 풀린다. 화살촉이 가리키는 쪽이 막혀 있는 요청이다. 계보(parent 실선 · derived/relates 가는 점선)와 달리 잉크로 그리고, 여러 건을 붙잡은 선행일수록 진하고 굵다. 선행이 끝나면 이 화살표는 사라진다."><svg width="40" height="9" aria-hidden="true"><line x1="0" y1="4.5" x2="28" y2="4.5" stroke="currentColor" stroke-width="1.6" stroke-dasharray="9 5"/><polygon points="28,0.7 39,4.5 28,8.3" fill="currentColor"/></svg>선행 → 후행 대기 <b class="gecount">${depEdgeN}</b></span>
       <span style="margin-left:auto">앰버 호+숫자 = 미완료 파생 병목(1건=¼둘레, 4건+=만원) · 점멸 = in-progress · 실선 링 = blocked · 점선 링 = review</span>
@@ -4540,7 +4596,7 @@ async function renderGraph(rows){
   const bgRGB = parseCol(bgColor);
   // 타입색은 토큰 해석값 사용 — skin/tone이 타입 토큰을 재정의하면 그래프도 따라간다 (스킨 무관 구조 개선 — 유지)
   const TC = {};
-  for (const k of ["request","knowledge","session"])
+  for (const k of GRAPH_TYPES)
     TC[k] = rootCS.getPropertyValue("--t-" + k).trim() || TCOLOR_RAW[k];
   const TCrgb = {};
   for (const k in TC) TCrgb[k] = parseCol(TC[k]);

@@ -3,7 +3,8 @@
 
 프롬프트를 Request / Question / Fragment / Nothing 으로 1차 분류(휴리스틱)하고:
   - Request  → REQ 문서 생성 + SES 로그 + 보강 규약 주입 (오분류 시 s9 rm 정정)
-  - Question → REQ 미생성, SES 로그만 + 정정 경로 주입 (실제 요청이면 s9 new request)
+  - Question → 남을 질문이면 QST 문서 생성(답은 Stop 훅이 자동으로 붙인다),
+               아니면 SES 로그만 + 정정 경로 주입 (실제 요청이면 s9 new request)
   - Fragment → 짧은 파편("logout" 등) — REQ 미생성, SES 로그 + 정정 경로 주입
   - Nothing  → SES 로그만 (컨텍스트 주입 없음)
 
@@ -20,6 +21,15 @@ import sys
 
 S9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
 TITLE_MAX = 24  # 임시 제목 — LLM이 20자 이내 명사구 제목으로 반드시 교체
+# 질문 문서의 제목은 질문 그 자체다 — 요청과 달리 명사구로 교체하지 않는다
+# (질문을 가장 정확히 가리키는 제목은 질문문이다). 그래서 절단만 넉넉히 둔다.
+QUESTION_TITLE_MAX = 60
+# 문서가 되는 질문의 하한 (REQ-20260826-017 / DOC-20260826-011). 확인·응답 종결
+# 발화("이거 맞아?", "지금 되나요?")는 거의 예외 없이 이보다 짧고, 설계·구조를
+# 묻는 질문은 대상과 맥락을 말해야 해서 거의 언제나 이보다 길다. 사전 판정은
+# 근사일 수밖에 없으므로(남길 가치는 답이 나온 뒤에야 확정된다) 오분류는
+# 양방향 정정 경로(주입 문구의 s9 rm / s9 new question)로 푼다.
+QUESTION_DOC_MIN = 20
 
 ACK = re.compile(
     r"^(?:(?:ㅇㅋ|ok|okay|yes|no|네|넵|예|응|웅|좋아|좋다|좋네|고마워|고맙다|감사|thanks|thx|"
@@ -213,6 +223,19 @@ def classify(text):
     return "request"  # 애매하면 request — 잘못 만든 REQ는 s9 rm으로 제거 가능
 
 
+def is_durable_question(text):
+    """이 질문을 문서(QST)로 남기는가 — classify()와 별개의 축이다.
+
+    분류는 '이 프롬프트가 무엇인가'를 말하고, 이 함수는 '남을 가치가 있는가'를
+    말한다. 두 축을 한 값에 섞으면 분류 taxonomy가 흔들려 기존 경로가 함께
+    깨진다. 제외: 즉석 인터랙션(출력·표시·대기 — 응답으로 완결된다)과
+    짧은 확인 발화."""
+    t = (text or "").strip()
+    if len(t) <= 40 and INTERACTION.search(t) and not PRODUCE.search(t):
+        return False
+    return len(t) >= QUESTION_DOC_MIN
+
+
 def run(env, *argv, inp=None):
     return subprocess.run([S9, *argv], input=inp, capture_output=True,
                           text=True, env=env, timeout=15)
@@ -303,6 +326,10 @@ def main():
             f"s9 = ~/section9/bin/s9")
         return
 
+    # 답 캡처 포인터는 매 턴 초기화한다 — 질문 턴에서만 다시 세운다.
+    # (놔두면 다음 턴의 응답이 지난 질문 문서에 붙어 오귀속된다.)
+    run(env, "bind", "last_qst", "")
+
     cls = classify(prompt)
     # 유휴 중 쌓인 대시보드 채팅 — 분류와 무관하게 이번 턴에서 소화시킨다
     pend = pending_context(session)
@@ -327,7 +354,24 @@ def main():
 
     if cls == "question":
         run(env, "log", f"question: {first_line[:60]}")
-        run(env, "last", "--pause")
+        run(env, "last", "--pause")   # last_req 보존 + 응답 캡처만 중지
+        # 남을 질문이면 문서로 (REQ-20260826-017): 답은 Stop 훅이 last_qst 를 보고
+        # 자동으로 이 문서에 붙인다 — 사람에게 새 규율을 요구하지 않는 것이 핵심이다.
+        # (그 규율 의존이 "답했는데 못 찾는" 사고를 만든 경로다.)
+        qst = ""
+        if is_durable_question(prompt):
+            qbody = prompt
+            qatts = attachment_paths(prompt, data.get("session_id") or "")
+            if qatts:
+                qbody += "\n\n[첨부]\n" + "\n".join(f"- {a}" for a in qatts)
+            qtitle = first_line[:QUESTION_TITLE_MAX] + (
+                "…" if len(first_line) > QUESTION_TITLE_MAX else "")
+            qout = run(env, "new", "question", "--title", qtitle,
+                       "--tag", "auto-audit", inp=qbody)
+            if qout.returncode == 0 and qout.stdout.split():
+                qst = qout.stdout.split()[0]
+                run(env, "bind", "last_qst", qst)   # Stop 훅의 답 캡처 대상
+                run(env, "log", f"question {qst} 기록: {qtitle[:40]}")
         cur = run(env, "user", "current")
         who = cur.stdout.strip() if cur.returncode == 0 else "?"
         pref = prefs_context(env, who)
@@ -343,9 +387,23 @@ def main():
         rvwarn = ("" if rv.returncode != 0 or not rv.stdout.strip() else
                   f" ⏳ 확인 대기(review):\n{rv.stdout.strip()}\n"
                   f"이 질문이 위 항목의 재작업 요청이면 먼저 `s9 status <id> in-progress` 전이 후 작업하라.")
+        qmsg = (
+            f"이 프롬프트는 Question 으로 분류되어 **{qst}** 로 기록되었다 "
+            f"(요청 문서는 만들지 않았다). 이번 턴의 네 답변은 턴 종료 시 그 문서에 "
+            f"`answer` 노트로 자동 기록된다 — 답을 채팅에만 남기지 마라. "
+            f"이 질문이 특정 요청에서 나왔으면 `s9 link {qst} --relates <REQ>` 로 잇고, "
+            f"**답이 앞으로의 작업을 구속하는 규칙이면** `s9 new knowledge` 로 승격한 뒤 "
+            f"`s9 link <DOC> --derived-from {qst}` 로 출처를 남겨라 "
+            f"(질문=사건, 지식=규칙 — 규칙 전문을 질문 문서에 복사하지 마라, "
+            f"DOC-20260826-011). 남길 가치가 없는 질문이면 "
+            f"`s9 rm {qst} --reason question` 으로 걷어라. "
+            if qst else
+            f"이 프롬프트는 Question 으로 분류되어 문서를 만들지 않았다 "
+            f"(세션 로그에만 기록). 답이 나중에 다시 찾아질 만한 것이면 "
+            f"`S9_SESSION={session} s9 new question --title '질문 원문' --body '원문'` "
+            f"으로 남기고 답을 `s9 note <QST> --label answer` 로 붙여라. ")
         emit(pend +
-            f"[section9 audit] 이 프롬프트는 Question 으로 분류되어 요청 문서를 만들지 "
-            f"않았다 (세션 로그에만 기록). 현재 요청 주체: {who}.{pref}{untitled}{rewarn}{rvwarn} "
+            f"[section9 audit] {qmsg}현재 요청 주체: {who}.{pref}{untitled}{rewarn}{rvwarn} "
             f"오분류라면 — 실제 작업 요청이면 — `S9_SESSION={session} s9 new request "
             f"--title '20자 이내 명사구' --summary '...' --size S|M|L --body '원문'` "
             f"으로 직접 등록하고 규약대로 상태를 관리하라. s9 = ~/section9/bin/s9")

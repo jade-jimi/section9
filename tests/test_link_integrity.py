@@ -126,10 +126,20 @@ class TestAutoRepairEntrypoint(unittest.TestCase):
     의존하지 않는다 — 서버 기동 경로에 자동 복구가 걸려 있고, 규약에
     3층 관계 규칙이 명시돼 있다."""
     def test_serve_auto_repairs(self):
+        """serve 기동 경로에 자동 복구가 있다.
+
+        검사 범위를 **함수 전체**로 잡는다. 앞서 2500자 창으로 잘랐더니,
+        cmd_serve 에 감시자 분기(REQ-20260825-096)가 들어오면서 link_audit 이
+        창 밖으로 밀려 코드가 멀쩡한데 테스트만 빨개졌다. 고정할 성질은
+        "기동 경로에 있다"이지 "앞에서 2500자 안에 있다"가 아니다.
+        """
+        import re
         with open(S9, encoding="utf-8") as f:
             src = f.read()
         i = src.index("def cmd_serve(")
-        self.assertIn("link_audit(fix=True)", src[i:i + 2500],
+        m = re.compile(r"^def \w+\(", re.M).search(src, i + 1)
+        body = src[i:m.start() if m else len(src)]
+        self.assertIn("link_audit(fix=True)", body,
                       "serve 기동 경로에 자동 복구가 없다")
 
     def test_protocol_documents_model(self):

@@ -83,30 +83,48 @@ def _inbox_pending(inbox):
     return size, pending
 
 
+def _sweep_orphans(root):
+    """세션 시작 시 고아 캡처·테스트 서버 회수 (REQ-20260825-099).
+
+    회수는 serve 의 감시 틱이 1분마다 돌지만, **serve 가 죽어 있는 동안에는
+    아무도 거두지 않는다** — 2026-08-25 사고 직전이 정확히 그 구간이었다.
+    세션 시작은 그 공백을 메우는 자연스러운 체크포인트다. 비동기로 던지고
+    결과를 기다리지 않는다(세션 시작을 늦추면 안 된다)."""
+    tool = os.path.join(root, "bin", "s9-doctor")
+    if not os.path.exists(tool):
+        return
+    try:
+        subprocess.Popen([sys.executable, tool, "--sweep"],
+                         stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+    except Exception:
+        pass      # 회수 실패가 세션을 막으면 안 된다
+
+
 def ensure_serve():
-    """대시보드 서버 보장 (REQ-20260824-020) — 세션이 시작될 때 서버가 죽어 있으면
-    되살린다(멱등: 포트 응답하면 아무것도 안 함). 실수로 꺼도 다음 세션 시작에 복구."""
-    import socket
-    root0 = os.environ.get("S9_ROOT") or os.path.dirname(
+    """대시보드 **감시자** 보장 (REQ-20260824-020 → REQ-20260825-096).
+
+    예전엔 여기서 포트를 재보고 죽어 있으면 서버를 직접 띄웠다. 그러면 세션이
+    시작될 때만 복구되고, 세션 도중 죽으면 사람이 접속 거부를 겪을 때까지
+    아무도 살리지 않았다(2026-08-25 22:19). 이제는 감시자를 세운다 —
+    감시자가 서버를 띄우고, 죽으면 사유를 남기고 백오프를 두고 되살린다.
+    `serve --supervise` 는 멱등이라 이미 감시 중이면 곧바로 물러난다. 이 훅이
+    메우는 것은 감시자까지 함께 사라지는 경우(WSL 재시작)다."""
+    root = os.environ.get("S9_ROOT") or os.path.dirname(
         os.path.dirname(os.path.realpath(__file__)))
+    _sweep_orphans(root)
     port = int(os.environ.get("S9_PORT") or 0)
     if not port:
         try:
-            with open(os.path.join(root0, "state", "port")) as f:
+            with open(os.path.join(root, "state", "port")) as f:
                 port = int(f.read().strip())
         except (OSError, ValueError):
             port = 9909
     try:
-        socket.create_connection(("127.0.0.1", port), 0.5).close()
-        return  # 이미 실행 중
-    except OSError:
-        pass
-    try:
-        root = os.environ.get("S9_ROOT") or os.path.dirname(
-            os.path.dirname(os.path.realpath(__file__)))
         os.makedirs(os.path.join(root, "state"), exist_ok=True)
         lf = open(os.path.join(root, "state", "serve.log"), "a")
-        subprocess.Popen([S9, "serve", "--port", str(port)],
+        subprocess.Popen([S9, "serve", "--supervise", "--port", str(port)],
                          stdin=subprocess.DEVNULL, stdout=lf, stderr=lf,
                          start_new_session=True)
     except Exception:
@@ -195,6 +213,15 @@ def main():
                 f"**반려성 지적이면 답하기 전에 먼저 `s9 status <그 id> "
                 f"in-progress --note '채팅 반려: <요지>'` 로 전이하고 재작업하라** "
                 f"(REQ-20260825-041: 채팅 반려가 상태에 반영되지 않던 공백). "
+                f"**줄에 agent 필드가 있으면 그 메시지는 너에게 온 것이 "
+                f"아니라 그 서브에이전트에게 지목된 것이다 — 직접 답하지 말고 "
+                f"SendMessage(to=<그 agentId>)로 중계하라. 중계 문구에는 "
+                f"'지금 하던 작업을 마치고 반영하라'는 규율을 반드시 덧붙여 "
+                f"진행 중인 작업이 흔들리지 않게 하고, 중계 직후 사용자에게 "
+                f"'<타입>에게 전달했다' 한 줄로 알려라. 대상이 이미 종료됐거나 "
+                f"찾을 수 없으면 그 사실을 알리고 리드가 대신 처리할지 물어라. "
+                f"중계한 지시는 `s9 note <REQ> --label response` 로 문서에 "
+                f"남겨 감사 공백을 만들지 마라** (REQ-20260825-095: 지목 전송). "
                 f"관계는 3층으로 기록하라 — parent(주 계보 1개)·derived_from"
                 f"(다른 요청의 요구를 흡수했을 때)·relates(동급, 양방향 자동). "
                 f"다중 부모 금지(DOC-20260825-002). "

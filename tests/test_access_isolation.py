@@ -94,17 +94,23 @@ class TestAccessIsolation(unittest.TestCase):
         qs = urllib.parse.urlencode(params)
         url = f"http://127.0.0.1:{port or cls.port}{path}" \
               + (f"?{qs}" if qs else "")
-        for attempt in range(3):
+        # WSL2 는 리스너가 있어도 공개 직후 잠깐 RST 를 던진다(portpool 머리말의
+        # 실측 참조). 3회×0.3초로는 그 창을 못 넘겨 이 파일이 전체 스위트에서만
+        # 간헐적으로 깨졌다 — 혼자 돌리면 통과했다. 대기 총량을 늘리되 두드리는
+        # 횟수는 백오프로 아낀다(커넥션 하나가 호스트 동적 포트 하나다).
+        delay, spent, last = 0.2, 0.0, None
+        while spent < 12.0:
             try:
                 with urllib.request.urlopen(url, timeout=5) as r:
                     return r.status, json.loads(r.read().decode())
             except urllib.error.HTTPError as e:
                 return e.code, json.loads(e.read().decode())
-            except (ConnectionError, urllib.error.URLError):
-                # 기동 직후 loopback RST 플레이크 (WSL2) — 짧게 재시도
-                if attempt == 2:
-                    raise
-                time.sleep(0.3)
+            except (ConnectionError, urllib.error.URLError) as e:
+                last = e
+                time.sleep(delay)
+                spent += delay
+                delay = min(delay * 1.7, 2.0)
+        raise last
 
     def catalog_ids(self, viewer):
         # admin(boss) whoami 서버에서 ?as=<viewer> 로 시점 전환 (admin 본인은 무지정)
