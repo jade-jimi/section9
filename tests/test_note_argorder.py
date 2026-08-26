@@ -81,6 +81,32 @@ class NoteArgOrder(unittest.TestCase):
         r = self.cli("note", self.doc, "--label", "response")
         self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_a6_the_same_trap_elsewhere_is_closed(self):
+        """A6. 같은 함정이 있던 다른 명령들도 막혔다 (REQ-20260827-004).
+
+        41 을 닫고 전수로 훑었더니 둘이 더 있었다. `resume` 이 특히 나빴다 —
+        무인 재개 경로라 **사람이 결과를 안 보는 자리**이고, 실패 메시지가
+        입력을 되비추므로 로그만으로는 성공과 구분되지 않는다.
+        """
+        r = self.cli("resume", "--cwd", "/tmp", "abcd1234", "이어서 해")
+        self.assertNotIn("unrecognized arguments", r.stdout + r.stderr)
+        r = self.cli("user", "--role", "admin", "add", "bob")
+        self.assertNotIn("unrecognized arguments", r.stdout + r.stderr)
+
+    def test_a7_the_rule_is_asked_of_the_parser(self):
+        """A7. 대상 목록을 손으로 관리하지 않는다 — 파서 자신에게 묻는다.
+
+        하드코딩한 명령 목록은 다음 서브명령이 추가되는 순간 낡는다. 그리고
+        그 낡음은 조용하다: 새 명령이 같은 함정에 빠져도 아무도 모른다.
+        목록을 없애는 것이 목록을 지키는 테스트를 쓰는 것보다 낫다.
+        """
+        with open(S9, encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("sub.choices.get(sys.argv[1])", src,
+                      "정규화가 파서에게 묻지 않는다")
+        self.assertNotIn('"note": {"--file"', src,
+                         "손으로 관리하는 명령 목록이 남아 있다")
+
     def test_a5_log_has_the_same_trap_closed(self):
         """A5. `s9 log` 도 같은 모양이라 같이 막았다."""
         r = self.cli("log", "--session", "argordse", "옵션먼저로그")

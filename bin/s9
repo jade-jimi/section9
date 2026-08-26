@@ -9229,32 +9229,48 @@ def main():
     sv.add_argument("--port", type=int, default=None)
     sv.set_defaults(fn=cmd_serve)
 
-    # note/log 는 위치 인자(본문)가 옵션 뒤에 와도 받는다 (REQ-20260826-041).
-    # argparse 는 위치 인자를 **첫 연속 구간**에만 붙이므로
-    # `s9 note <id> --label response "본문"` 이 "unrecognized arguments: 본문"
-    # 으로 죽었다. 그 메시지가 입력 원문을 그대로 되비추기 때문에, 파이프로
-    # 마지막 줄만 보면 성공과 구분되지 않는다 — 하루치 작업 노트가 그렇게
-    # 문서에 안 남고 사라졌다. 사람도 에이전트도 옵션을 먼저 쓰는 습관이 있으니
-    # 습관을 고치라 하지 말고 명령이 받아들이게 한다.
-    _VALUED = {
-        "note": {"--file", "--label", "--user", "--agent", "--item",
-                 "--result", "--transcript"},
-        "log": {"--session", "--user"},
-    }
-    if len(sys.argv) > 2 and sys.argv[1] in _VALUED:
-        rest, free, flags = sys.argv[2:], [], []
-        valued, i = _VALUED[sys.argv[1]], 0
-        while i < len(rest):
-            a = rest[i]
-            if a.startswith("--"):
-                flags.append(a)
-                if "=" not in a and a in valued and i + 1 < len(rest):
-                    i += 1
-                    flags.append(rest[i])
-            else:
-                free.append(a)
-            i += 1
-        sys.argv = [sys.argv[0], sys.argv[1], *free, *flags]
+    # 옵션 뒤에 온 위치 인자도 받는다 (REQ-20260826-041 · REQ-20260827-004).
+    #
+    # argparse 는 위치 인자를 **첫 연속 구간**에만 붙인다. 정확히 말하면
+    # 필수 위치 인자는 옵션 건너 뒤에서도 붙여 주지만(`s9 status <id> --note X
+    # in-progress` 는 멀쩡하다), **선택적 위치 인자(`?`/`*`)는 그 자리에서
+    # '없음'으로 만족돼 버리고** 뒤에 온 실제 값이 미아가 된다:
+    #
+    #     s9 note <id> --label response "본문"
+    #       → s9: error: unrecognized arguments: 본문
+    #
+    # 나쁜 것은 실패가 아니라 **그 실패가 입력 원문을 그대로 되비추는 것**이다.
+    # 긴 값을 파이프로 넘기며 마지막 줄만 확인하면 실패 메시지의 꼬리와 성공한
+    # 출력의 꼬리가 글자 그대로 같다. 하루치 작업 노트가 그렇게 문서에 안 남고
+    # 사라졌고, 터미널에는 성공처럼 보였다.
+    #
+    # 목록을 손으로 관리하지 않는다 — **파서 자신에게 묻는다.** 새 서브명령이
+    # 같은 모양으로 추가돼도 자동으로 덮인다. 사람이 매번 기억할 일이 아니다.
+    if len(sys.argv) > 2:
+        _sp = sub.choices.get(sys.argv[1])
+        _pos = [a for a in (_sp._actions if _sp else []) if not a.option_strings]
+        # 값을 받는 옵션 (store_true 등은 nargs==0)
+        _valued = {o for a in (_sp._actions if _sp else [])
+                   if a.option_strings and a.nargs != 0 for o in a.option_strings}
+        _known = {o for a in (_sp._actions if _sp else [])
+                  for o in a.option_strings}
+        if _pos and _valued and _pos[-1].nargs in ("?", "*"):
+            rest, free, flags, i = sys.argv[2:], [], [], 0
+            while i < len(rest):
+                a = rest[i]
+                if a == "--":          # 이 뒤는 손대지 않는다
+                    flags.extend(rest[i:])
+                    break
+                if a.startswith("-") and a != "-" and (a in _known
+                                                       or a.startswith("--")):
+                    flags.append(a)
+                    if "=" not in a and a in _valued and i + 1 < len(rest):
+                        i += 1
+                        flags.append(rest[i])
+                else:
+                    free.append(a)
+                i += 1
+            sys.argv = [sys.argv[0], sys.argv[1], *free, *flags]
 
     # code 명령은 argparse를 우회해 잔여 인자를 순서 그대로 claude에 넘긴다
     # (REQ-20260824-036). REMAINDER/parse_known_args는 옵션-위치 인자 순서를
