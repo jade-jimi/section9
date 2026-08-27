@@ -3676,6 +3676,17 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False):
     if cfg.get("auto_resume_apply"):
         perm = ["--permission-mode", "acceptEdits"] + perm + \
                ["Bash(python3 tests/:*)", f"Bash(cp {ROOT}/web/:*)"]
+    # gh 는 **따로** 켠다 (REQ-20260827-076). auto_resume_apply 에 끼워 넣지
+    # 않는 이유: 그 스위치의 뜻은 "이 워크스페이스의 파일을 고쳐도 좋다"이고,
+    # gh 의 뜻은 "**바깥 서비스의 설정을 바꿔도 좋다**"다. 하나를 켰다고 다른
+    # 하나가 따라 켜지면 그 결정을 누구도 한 적이 없게 된다.
+    #
+    # 솔직히 적어 둔다: 이 봉투는 경계가 아니다. `gh api` 하나로 저장소 설정
+    # 대부분을 바꿀 수 있고 지울 수도 있다. 이걸 켠다는 것은 **사람이 없는
+    # 자리에서 도는 작업자에게 깃헙 계정 권한을 준다**는 뜻이다. 사용자가
+    # 알고 켜는 스위치여야 하고, 기본은 꺼짐이다.
+    if cfg.get("auto_resume_gh"):
+        perm = perm + ["Bash(gh:*)"]
     # 충돌 규율은 봉투와 같은 자리에 둔다 — 프롬프트마다 따로 적으면 갈린다.
     # 실사고 2026-08-26: 워커가 남의 미커밋 편집 위에 덮어써 테스트 파일 하나가
     # 디스크에서 사라졌고(커밋 전이라 git 복구 불가), 다른 건에서는 리드의
@@ -3969,7 +3980,12 @@ def trigger_dependents(done_id):
 # 클론한 사람에게는 어떤 git 쓰기도 일어나지 않는다(REQ-20260824-051 제약).
 
 SYNC_MARKER = os.path.join(ROOT, ".s9-sync")
-SYNC_DATA_PATHS = ["vault", "users", "projects", "streams", "state/sessions",
+# streams 는 **일부러 뺐다** (DOC-20260826-002 결론 B · REQ-20260827-077).
+# 대화 원문은 동기화 대상의 96%(157MB)를 차지하고, 문서 하나 만들 때마다 도는
+# 이벤트 커밋에 실릴 크기가 아니다. 지금은 .gitignore 도 막고 있어 겹치는
+# 방어처럼 보이지만, 방어가 하나뿐이면 그 한 줄이 사라지는 날 158MB 가 자동
+# 커밋된다. 목록에서 빼야 두 겹이 된다.
+SYNC_DATA_PATHS = ["vault", "users", "projects", "state/sessions",
                    ".s9-sync"]
 
 
