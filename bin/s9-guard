@@ -141,12 +141,48 @@ def staged_tests_gate(staged):
     sys.exit(1)
 
 
+def secret_gate(staged):
+    """비밀값이 커밋으로 새는 것을 막는다 (REQ-20260827-035).
+
+    경로만 보면 부족하다 — **값만 다른 파일에 붙여 넣는 것이 실제 유출 경로다.**
+    그래서 스테이지된 내용도 본다. 판정은 bin/s9 의 `secret_leak` 한 곳에 있다:
+    가드와 CLI 가 각자 알면 한쪽만 고쳐진다.
+
+    이 가드는 사고를 막는다. 작정하고 우회하는 것은 못 막고, 그 사실을 문서에
+    그대로 적어 두었다.
+    """
+    try:
+        import importlib.machinery
+        import importlib.util
+        sp = importlib.util.spec_from_loader(
+            "_s9_secret", importlib.machinery.SourceFileLoader(
+                "_s9_secret", os.path.join(ROOT, "bin", "s9")))
+        m = importlib.util.module_from_spec(sp)
+        sp.loader.exec_module(m)
+        blob = subprocess.run(["git", "diff", "--cached"], capture_output=True,
+                              text=True, cwd=ROOT).stdout
+        hits = m.secret_leak(staged, blob, root=ROOT)
+    except Exception:
+        return          # 가드 고장이 커밋을 막으면 안 된다 — 본 게이트는 아래다
+    if not hits:
+        return
+    print("s9-guard: 비밀값이 커밋에 섞여 있습니다 — 막았습니다.", file=sys.stderr)
+    for h in hits[:10]:
+        print(f"  - {h}", file=sys.stderr)
+    print("비밀은 `s9 secret set <키>` 로 users/<이름>/secrets 에 두고, 명령에서는",
+          file=sys.stderr)
+    print("`s9 secret run -- <명령>` 의 {{secret:키}} 로 쓰세요 (값은 출력에서 가려집니다).",
+          file=sys.stderr)
+    sys.exit(1)
+
+
 def main():
     out = subprocess.run(["git", "diff", "--cached", "--name-only"],
                          capture_output=True, text=True, cwd=ROOT)
     staged = [l for l in out.stdout.splitlines() if l.strip()]
     concurrent_gate(staged)
     staged_tests_gate(staged)
+    secret_gate(staged)
     hits = [f for f in staged if f.startswith(PROTECTED)]
     if not hits:
         sys.exit(0)

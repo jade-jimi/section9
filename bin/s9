@@ -2314,6 +2314,178 @@ def hooks_installed(root=None):
     return "s9-audit-prompt" in txt and (root or ROOT) in txt
 
 
+# ---------------------------------------------- 비밀값 (REQ-20260827-035)
+# **먼저 한계를 적는다.** 이 세션의 모델은 사용자와 같은 OS 계정으로 셸을 돈다 —
+# `cat` 을 실행할 수 있는 주체가 곧 모델이다. 그래서 "모델은 값을 못 본다"는
+# 이 하네스 안에서 **보장할 수 없다.** 적어 두면 거짓말이 되고, 거짓 안전은
+# 없는 안전보다 나쁘다. 진짜 경계는 다른 OS 계정 + 중개 프로세스나 키체인
+# 브로커처럼 section9 밖의 구조가 필요하다.
+#
+# 여기서 막는 것은 **사고로 새는 길**이다: 목록에 값이 안 나오고, argv 에 안
+# 남고(stdin 으로 받는다), 명령 출력에서 지워지고, 커밋에 못 들어간다.
+#
+# 키 하나 = 파일 하나다. 한 파일에 몰아넣으면 부분 유출이 전체 유출이 되고
+# 권한·삭제·감사가 전부 거칠어진다.
+SECRET_MIN_SCAN = 8       # 이보다 짧은 값은 내용 검사에서 뺀다 (오탐이 더 해롭다)
+SECRET_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+
+
+def secret_dir(user, root=None):
+    return os.path.join(root or ROOT, "users", safe_name(user), "secrets")
+
+
+def external_secret_dir(user):
+    """리포 **바깥** 비밀 경로 (사용자 설정 external_secrets_path).
+    없거나 못 읽으면 "" — 외부 경로 부재가 내부 비밀 사용을 막으면 안 된다."""
+    p = (user_config(user) or {}).get("external_secrets_path") or ""
+    p = os.path.expanduser(str(p).strip())
+    return p if p and os.path.isdir(p) else ""
+
+
+def secret_keys(user, root=None):
+    """{키: 경로} — internal 이 external 을 덮는다 (리포 안이 기본)."""
+    out = {}
+    for d in (external_secret_dir(user), secret_dir(user, root)):
+        if not d or not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            fp = os.path.join(d, fn)
+            if os.path.isfile(fp) and SECRET_KEY_RE.match(fn):
+                out[fn] = fp
+    return out
+
+
+def secret_value(user, key, root=None):
+    fp = secret_keys(user, root).get(key)
+    if not fp:
+        return None
+    try:
+        with open(fp, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def secret_leak(staged_paths, blob, root=None, user=None):
+    """커밋에 비밀이 섞였는가 — (사유 문자열) 목록. 없으면 빈 목록.
+
+    경로만 보면 부족하다: **값만 다른 파일에 붙여 넣는 것이 실제 유출 경로다.**
+    그래서 내용도 본다. 다만 짧은 값은 흔한 글자와 부딪혀 오탐이 더 해로우므로
+    SECRET_MIN_SCAN 미만은 내용 검사에서 뺀다.
+    """
+    hits = []
+    for p in staged_paths or []:
+        if re.search(r"(^|/)users/[^/]+/secrets(/|$)", p.replace("\\", "/")):
+            hits.append(f"비밀 경로가 커밋에 들어 있다: {p}")
+    users = [user] if user else []
+    if not users:
+        base = os.path.join(root or ROOT, "users")
+        try:
+            users = [d for d in os.listdir(base)
+                     if os.path.isdir(os.path.join(base, d))]
+        except OSError:
+            users = []
+    for u in users:
+        for key, fp in secret_keys(u, root).items():
+            try:
+                with open(fp, encoding="utf-8") as f:
+                    val = f.read().strip()
+            except OSError:
+                continue
+            if len(val) >= SECRET_MIN_SCAN and blob and val in blob:
+                hits.append(f"비밀 값이 커밋 내용에 들어 있다: {u}/{key}")
+    return hits
+
+
+def redact_secrets(text, values):
+    for v in values:
+        if v and len(v) >= SECRET_MIN_SCAN:
+            text = text.replace(v, "«비밀값 가림»")
+    return text
+
+
+def cmd_secret(args):
+    """비밀값 보관·조회·사용 (REQ-20260827-035). 위 주석의 한계를 함께 읽어라."""
+    import subprocess
+    user = resolve_user(getattr(args, "user", None))
+    if args.action == "ls":
+        keys = secret_keys(user)
+        ext = external_secret_dir(user)
+        for k, fp in sorted(keys.items()):
+            where = "external" if ext and fp.startswith(ext) else "internal"
+            print(f"  {k:32s} {where}")
+        print(f"비밀 {len(keys)}개 (값은 표시하지 않는다) · "
+              f"internal={secret_dir(user)}"
+              + (f" · external={ext}" if ext else " · external 미설정"))
+        return
+    key = (args.key or "").strip()
+    if args.action in ("set", "get", "rm") and not SECRET_KEY_RE.match(key):
+        die("키 이름이 잘못됐다 — 영숫자로 시작하고 `_ . -` 만 쓸 수 있다 "
+            "(경로 구분자·상위 경로 금지)")
+    if args.action == "set":
+        # 값은 stdin 으로만 받는다 — argv 로 받으면 `ps` 와 세션 기록에 남는다.
+        if sys.stdin.isatty():
+            die("값은 표준입력으로 준다: "
+                f"printf %s '<값>' | s9 secret set {key}")
+        val = sys.stdin.read().strip()
+        if not val:
+            die("빈 값은 저장하지 않는다")
+        d = secret_dir(user)
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        fp = os.path.join(d, key)
+        fd = os.open(fp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(val)
+        os.chmod(fp, 0o600)
+        print(f"저장: {key} ({len(val)}자, 값은 표시하지 않는다) → {fp}")
+        return
+    if args.action == "rm":
+        fp = os.path.join(secret_dir(user), key)
+        if not os.path.exists(fp):
+            die(f"그런 비밀이 없다(internal): {key}")
+        os.remove(fp)
+        print(f"삭제: {key}")
+        return
+    if args.action == "get":
+        val = secret_value(user, key)
+        if val is None:
+            die(f"그런 비밀이 없다: {key} — 목록은 s9 secret ls")
+        print(val)
+        return
+    # run — 자리표시자를 실행 시점에 바꾸고, 출력에서 값을 지운다.
+    # `--` 를 argparse 가 먹으면서 첫 토큰이 위치 인자 key 로 새므로 되붙인다
+    # (`s9 secret run -- sh -c …` 에서 sh 가 key 로 갔다).
+    argv = ([args.key] if (args.key or "").strip() else []) + list(args.cmd or [])
+    if not argv:
+        die("usage: s9 secret run -- <명령> …   ({{secret:KEY}} 를 쓴다)")
+    keys = secret_keys(user)
+    used = []
+
+    def sub(tok):
+        def one(m):
+            v = secret_value(user, m.group(1))
+            if v is None:
+                die(f"그런 비밀이 없다: {m.group(1)}")
+            used.append(v)
+            return v
+        return re.sub(r"\{\{secret:([A-Za-z0-9][A-Za-z0-9_.-]{0,63})\}\}",
+                      one, tok)
+
+    real = [sub(t) for t in argv]
+    r = subprocess.run(real, capture_output=True, text=True)
+    # 명령이 실수로 값을 찍어도 모델 화면에는 안 보이게 한다. 알려진 값 전부를
+    # 지운다 — 이번에 쓴 것만 지우면 다른 비밀이 섞여 나올 때 그대로 샌다.
+    allv = set(used) | {v for v in
+                        (secret_value(user, k) for k in keys) if v}
+    out = redact_secrets(r.stdout, allv)
+    err = redact_secrets(r.stderr, allv)
+    if out:
+        sys.stdout.write(out)
+    if err:
+        sys.stderr.write(err)
+    return r.returncode
+
+
 ACCOUNT_NEW_LABEL = "새-계정"      # 로그인 전 임시 이름 — 로그인하면 계정으로 바뀐다
 
 
@@ -7205,6 +7377,9 @@ INSTANCE_TRACK_GITIGNORE = """# section9 인스턴스 리포 — 데이터(vault
 # 하네스 코드 개선은 업스트림(section9)에서만 하고 merge로 받는다 (docs/08).
 .s9.lock
 index/
+# 비밀값은 어느 리포에도 올라가지 않는다 (REQ-20260827-035) — 이 리포는
+# users/ 를 track 하므로 여기서 명시하지 않으면 인스턴스를 만드는 순간 올라간다.
+users/*/secrets/
 state/*
 !state/sessions
 !state/sessions/**
@@ -10084,6 +10259,15 @@ def main():
     ins.add_argument("--create", action="store_true",
                      help="gh 로 사설 리포까지 자동 생성")
     ins.set_defaults(fn=cmd_instance)
+
+    sc = sub.add_parser("secret",
+                        help="사용자별 비밀값 (보관·조회·명령에서 사용)")
+    sc.add_argument("action", choices=["ls", "set", "get", "rm", "run"])
+    sc.add_argument("key", nargs="?", help="set/get/rm 의 키 이름")
+    sc.add_argument("cmd", nargs=argparse.REMAINDER,
+                    help="run: -- 뒤에 실행할 명령 ({{secret:KEY}} 치환)")
+    sc.add_argument("--user")
+    sc.set_defaults(fn=cmd_secret)
 
     ac = sub.add_parser("account",
                         help="Claude 로그인 계정 관리 (만들기·목록·전환)")
