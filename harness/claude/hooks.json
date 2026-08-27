@@ -1,78 +1,102 @@
 {
-  "_comment": "section9가 관리하는 Claude Code hook 정의 (canonical). {ROOT}는 s9-install이 실제 경로로 치환. ~/.claude/settings.json 반영은 bin/s9-install 이 수행하며, command에 '/section9/bin/' 이 포함된 항목만 section9 소유로 간주해 갱신한다.",
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{ROOT}/bin/s9-audit-prompt 2>/dev/null || true",
-            "timeout": 20,
-            "statusMessage": "section9 audit"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{ROOT}/bin/s9-audit-response 2>/dev/null || true",
-            "timeout": 20,
-            "statusMessage": "section9 response audit"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{ROOT}/bin/s9-audit-agent 2>/dev/null || true",
-            "timeout": 20,
-            "statusMessage": "section9 delegation audit"
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{ROOT}/bin/s9-audit-subagent 2>/dev/null || true",
-            "timeout": 20,
-            "statusMessage": "section9 subagent audit"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{ROOT}/bin/s9-audit-session start 2>/dev/null || true",
-            "timeout": 20,
-            "statusMessage": "section9 session log"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{ROOT}/bin/s9-audit-session end 2>/dev/null || true",
-            "timeout": 20,
-            "statusMessage": "section9 session log"
-          }
-        ]
-      }
+ "_comment": "section9가 관리하는 Claude Code hook 정의 (canonical). {ROOT}는 s9-install이 실제 경로로 치환. ~/.claude/settings.json 반영은 bin/s9-install 이 수행하며, command에 '/section9/bin/' 이 포함된 항목만 section9 소유로 간주해 갱신한다.",
+ "hooks": {
+  "UserPromptSubmit": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "{ROOT}/bin/s9-audit-prompt 2>/dev/null || true",
+      "timeout": 20,
+      "statusMessage": "section9 audit"
+     }
     ]
-  }
+   }
+  ],
+  "Stop": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "{ROOT}/bin/s9-audit-response 2>/dev/null || true",
+      "timeout": 20,
+      "statusMessage": "section9 response audit"
+     }
+    ]
+   }
+  ],
+  "PostToolUse": [
+   {
+    "matcher": "Agent",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "{ROOT}/bin/s9-audit-agent 2>/dev/null || true",
+      "timeout": 20,
+      "statusMessage": "section9 delegation audit"
+     }
+    ]
+   }
+  ],
+  "SubagentStop": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "{ROOT}/bin/s9-audit-subagent 2>/dev/null || true",
+      "timeout": 20,
+      "statusMessage": "section9 subagent audit"
+     }
+    ]
+   }
+  ],
+  "SessionStart": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "{ROOT}/bin/s9-audit-session start 2>/dev/null || true",
+      "timeout": 20,
+      "statusMessage": "section9 session log"
+     }
+    ]
+   }
+  ],
+  "SessionEnd": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "{ROOT}/bin/s9-audit-session end 2>/dev/null || true",
+      "timeout": 20,
+      "statusMessage": "section9 session log"
+     }
+    ]
+   }
+  ],
+  "PreCompact": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "{ROOT}/bin/s9-audit-session compact-start 2>/dev/null || true",
+      "timeout": 20,
+      "statusMessage": "section9 compact audit"
+     }
+    ]
+   }
+  ],
+  "PostCompact": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "{ROOT}/bin/s9-audit-session compact-end 2>/dev/null || true",
+      "timeout": 20,
+      "statusMessage": "section9 compact audit"
+     }
+    ]
+   }
+  ]
+ }
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """section9 session audit hook (Claude Code SessionStart / SessionEnd).
 
-usage: s9-audit-session start|end   (stdin: hook JSON)
+usage: s9-audit-session start|end|compact-start|compact-end   (stdin: hook JSON)
 
 세션 시작/종료 이벤트를 해당 세션의 SES 문서 History에 기록한다.
 SES 문서는 s9 log가 세션당 하나를 lazy 생성하고 바인딩(ses_doc)에 연결한다.
@@ -113,6 +113,25 @@ def main():
     session = (data.get("session_id") or "unknown")[:8]
     env = dict(os.environ)
     env["S9_SESSION"] = session
+
+    if event in ("compact-start", "compact-end"):
+        # 압축 중에는 응답이 한동안 멎는다. 대시보드만 보는 사람에게 그 침묵은
+        # **고장과 구분되지 않는다** — 이유를 말해 주지 않으면 고장으로 읽힌다
+        # (REQ-20260827-065). 시각을 넣어 두는 것은 압축이 끝 훅 없이 죽었을 때
+        # 표시가 영영 붙어 있지 않게 하기 위해서다.
+        from datetime import datetime
+        val = (datetime.now().astimezone().isoformat(timespec="seconds")
+               if event == "compact-start" else "")
+        for argv in (["bind", "compacting", val],
+                     ["log", f"context {event}"
+                      + (f" [{data.get('trigger', '')}]"
+                         if data.get("trigger") else "")]):
+            try:
+                subprocess.run([S9, *argv], capture_output=True, text=True,
+                               env=env, timeout=10)
+            except Exception:
+                pass
+        return
 
     tp = data.get("transcript_path")
     if tp and os.path.exists(tp):

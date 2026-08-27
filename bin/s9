@@ -2072,6 +2072,29 @@ def chat_live(b, win=300):
                for p in _binding_activity_paths(b))
 
 
+COMPACT_MAX = 900   # 압축이 이보다 오래 걸리면 표시를 거둔다
+
+
+def chat_compacting(b, win=COMPACT_MAX):
+    """지금 컨텍스트를 압축하는 중인가 (REQ-20260827-065).
+
+    압축 중에는 응답이 한동안 멎는다. 대시보드만 보는 사람에게 그 침묵은
+    **고장과 구분되지 않는다.**
+
+    끝 훅 없이 세션이 죽으면 표시가 영영 붙어 있게 된다 — 그러면 다음부터
+    아무도 안 읽는다. 그래서 시작 시각을 함께 두고 오래되면 스스로 거둔다.
+    """
+    ts = (b or {}).get("compacting") or ""
+    if not ts:
+        return False
+    try:
+        started = datetime.datetime.fromisoformat(ts)
+    except ValueError:
+        return False
+    now = datetime.datetime.now().astimezone()
+    return 0 <= (now - started).total_seconds() < win
+
+
 def chat_target(sid8=None):
     """채팅 대상 바인딩 선택 — sid 지정 시 그 세션, 아니면 살아있는
     세션(chat_live) 중 활동이 가장 최근인 세션. 없으면 None."""
@@ -10109,6 +10132,7 @@ def cmd_serve(args):
                                 "user": b.get("user")
                                 or whoami_info().get("user", ""),
                                 "live": chat_live(b),
+                                "compacting": chat_compacting(b),
                                 "listening": _inbox_watch_alive(
                                     b.get("session", "")),
                                 "model": session_model(b),
