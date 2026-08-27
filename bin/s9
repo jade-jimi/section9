@@ -2599,6 +2599,165 @@ def cmd_stream(args):
         print("  이미 있는 기록은 지우지 않았다 — 지우려면: s9 stream prune --all")
 
 
+# --------------------------------- 설정 이동 (REQ-20260827-045)
+# 머신을 바꾸면 model·theme 같은 취향이 전부 날아간다. 그건 옮길 값이 있다.
+# **권한(permissions)은 다르다.**
+#
+# 처음 판단은 "미러는 하되 적용만 수동"이었는데 그건 부족하다 — 이 리포는
+# 공개다(REQ-20260827-036). 적용을 늦춰도 **싣는 순간** "어느 머신이 무엇을
+# 확인 없이 실행하는가"가 공개 기록이 된다. 그건 설정이 아니라 공격 표면
+# 지도다. 그래서 막아야 할 곳은 적용이 아니라 **적재**다.
+#
+# 그리고 한 겹 더: 리포에 실을 수 있게 해 두면 **내가 vault 에 쓰고 → 동기화되고
+# → 다른 머신이 그것으로 settings 를 덮는** 길이 생긴다. 이 세션에서 게이트가
+# 두 번 막은 그 동작을, 내가 만든 문으로 하게 되는 셈이다.
+#
+#     자동 복원   model · theme · UI 취향       리포로 흐른다
+#     수동 반출   permissions                   리포 밖으로만, 사람이 손으로
+#     안 옮김     자격증명·토큰                  REQ-20260827-035 자리
+MIRROR_KEYS = ["model", "theme", "remoteControlAtStartup",
+               "agentPushNotifEnabled", "outputStyle", "spinnerTipsEnabled",
+               "editorMode", "verbose", "language"]
+# env 는 통째로 싣지 않는다 — 거기 API 키가 흔히 들어앉는다. 이름을 적어 넣는
+# 것이 사람의 행위여야 한다. 기본은 비어 있다.
+ENV_MIRROR_KEYS = []
+# s9-install 이 재생성하는 것들 — 옮길 이유가 없고, 옮기면 낡은 경로가 되살아난다
+CONFIG_SKIP_KEYS = {"hooks", "statusLine", "permissions"}
+
+
+def config_mirror_path(user=None):
+    u = safe_name(user or resolve_user(None))
+    return os.path.join(ROOT, "users", u, "config", "harness", "claude.json")
+
+
+def read_claude_settings():
+    try:
+        with open(os.path.join(claude_home(), "settings.json"),
+                  encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _diff_sections(blob):
+    """diff 를 파일별로 가른다 — 한 파일의 혐의가 다른 파일에 번지지 않게."""
+    out, cur = {}, None
+    for ln in (blob or "").splitlines():
+        m = re.match(r"\+\+\+ b/(.+)$", ln)
+        if m:
+            cur = m.group(1).strip()
+            out.setdefault(cur, [])
+            continue
+        if ln.startswith("--- ") or ln.startswith("diff --git "):
+            if ln.startswith("diff --git "):
+                cur = None
+            continue
+        if cur is not None and ln.startswith("+"):
+            out[cur].append(ln[1:])
+    return out
+
+
+def config_leak(staged_paths, blob):
+    """권한이 실린 미러가 커밋에 있는가 (REQ-20260827-045).
+
+    경계를 막아도 **손으로 한 번 붙여 넣으면** 그대로 들어온다. 그러면 지금 세운
+    경계가 조용히 사라진다 — 조용한 실패가 이 저장소의 상습 실패 모양이다.
+
+    보는 것은 **그 미러 파일에 들어온 줄뿐이다.** 커밋 전체에서 낱말을 찾으면
+    `permissions` 를 다루는 코드를 같이 커밋할 때마다 걸린다 — 엉뚱하게 걸리는
+    가드는 우회를 가르치므로 없느니만 못하다(실제로 이 커밋에서 걸렸다).
+    """
+    hits = []
+    secs = _diff_sections(blob)
+    for p in staged_paths or []:
+        q = p.replace("\\", "/")
+        if not re.search(r"(^|/)users/[^/]+/config/harness/", q):
+            continue
+        added = secs.get(q) or secs.get(p) or []
+        if any(re.search(r'"permissions"\s*:', ln) for ln in added):
+            hits.append(f"권한이 설정 미러에 실려 있다: {p} — 리포에 담지 않는다")
+    return hits
+
+
+def cmd_config(args):
+    """설정 반출·적용 (REQ-20260827-045)."""
+    cur = read_claude_settings()
+    user = resolve_user(getattr(args, "user", None))
+    if args.action == "export":
+        keep = {k: cur[k] for k in MIRROR_KEYS if k in cur}
+        env = {k: v for k, v in (cur.get("env") or {}).items()
+               if k in ENV_MIRROR_KEYS}
+        if env:
+            keep["env"] = env
+        dst = getattr(args, "out", None)
+        if getattr(args, "with_permissions", False):
+            # 권한은 **리포 밖으로만** 나간다. 자리를 못 정하면 쓰지 않는다 —
+            # 기본 자리를 리포 안으로 잡는 순간 이 경계가 무의미해진다.
+            if not dst:
+                ext = external_secret_dir(user)
+                dst = os.path.join(ext, "claude-permissions.json") if ext else ""
+            if not dst:
+                die("권한을 반출할 자리가 필요하다: --out <리포 밖 경로> "
+                    "(또는 user config 의 external_secrets_path 설정)")
+            if os.path.abspath(dst).startswith(os.path.abspath(ROOT) + os.sep):
+                die(f"권한은 리포 안에 쓸 수 없다: {dst} — 리포는 공유·공개된다")
+            os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
+            fd = os.open(dst, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"permissions": cur.get("permissions") or {}}, f,
+                          ensure_ascii=False, indent=1)
+            os.chmod(dst, 0o600)
+            print(f"권한 반출: {dst} (권한 0600, 리포 밖 — 손으로 옮겨라)")
+        mp = config_mirror_path(user)
+        os.makedirs(os.path.dirname(mp), exist_ok=True)
+        with open(mp, "w", encoding="utf-8") as f:
+            json.dump(keep, f, ensure_ascii=False, indent=1)
+        print(f"설정 반출: {mp} ({len(keep)}개 키 — permissions 는 담지 않는다)")
+        return
+    # apply
+    src = getattr(args, "file", None) or config_mirror_path(user)
+    try:
+        with open(src, encoding="utf-8") as f:
+            new = json.load(f)
+    except (OSError, ValueError) as ex:
+        die(f"읽을 수 없다: {src} ({ex})")
+    perms = new.get("permissions")
+    changes = []
+    for k, v in new.items():
+        if k in CONFIG_SKIP_KEYS:
+            continue
+        if cur.get(k) != v:
+            changes.append((k, cur.get(k), v))
+    if not changes and not perms:
+        print("달라진 것 없음")
+        return
+    print(f"적용 대상: {src}")
+    for k, old, v in changes:
+        print(f"  {k}: {json.dumps(old, ensure_ascii=False)} → "
+              f"{json.dumps(v, ensure_ascii=False)}")
+    if perms:
+        # 권한은 따로 세워 말한다 — 다른 값들 사이에 섞이면 사람이 못 본다.
+        print("  ── 권한 ──")
+        for rule in (perms.get("allow") or []):
+            print(f"  이 명령들이 확인 없이 실행됩니다: {rule}")
+    if getattr(args, "dry_run", False):
+        print("(--dry-run — 아무것도 고치지 않았다)")
+        return
+    if perms and not getattr(args, "yes", False):
+        die("권한이 든 설정이다 — 위 목록을 읽고 --yes 를 붙여라. "
+            "아무것도 고치지 않았다.")
+    out = dict(cur)
+    for k, _old, v in changes:
+        out[k] = v
+    if perms and getattr(args, "yes", False):
+        out["permissions"] = perms
+    sp = os.path.join(claude_home(), "settings.json")
+    with open(sp, "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False, indent=2)
+    print(f"적용 완료: {sp} ({len(changes)}개 키"
+          + (" + 권한" if perms else "") + ")")
+
+
 ACCOUNT_NEW_LABEL = "새-계정"      # 로그인 전 임시 이름 — 로그인하면 계정으로 바뀐다
 
 
@@ -10503,6 +10662,17 @@ def main():
     ins.add_argument("--create", action="store_true",
                      help="gh 로 사설 리포까지 자동 생성")
     ins.set_defaults(fn=cmd_instance)
+
+    cf = sub.add_parser("config", help="설정 반출·적용 (머신 간 이동)")
+    cf.add_argument("action", choices=["export", "apply"])
+    cf.add_argument("file", nargs="?", help="apply: 적용할 파일 (기본 미러)")
+    cf.add_argument("--out", help="export: 쓸 자리")
+    cf.add_argument("--with-permissions", action="store_true",
+                    help="권한도 반출 — 리포 **밖**으로만 (손으로 옮긴다)")
+    cf.add_argument("--yes", action="store_true", help="apply: 권한까지 적용")
+    cf.add_argument("--dry-run", action="store_true")
+    cf.add_argument("--user")
+    cf.set_defaults(fn=cmd_config)
 
     stc = sub.add_parser("stream", help="대화 기록 미러 상태·정리")
     stc.add_argument("action", nargs="?", choices=["status", "prune"],

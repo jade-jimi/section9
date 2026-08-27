@@ -162,11 +162,15 @@ def secret_gate(staged):
         blob = subprocess.run(["git", "diff", "--cached"], capture_output=True,
                               text=True, cwd=ROOT).stdout
         hits = m.secret_leak(staged, blob, root=ROOT)
+        # 권한이 실린 설정 미러도 같은 자리에서 막는다 (REQ-20260827-045) —
+        # 경계를 막아도 손으로 붙여 넣으면 그대로 들어온다.
+        hits += m.config_leak(staged, blob)
     except Exception:
         return          # 가드 고장이 커밋을 막으면 안 된다 — 본 게이트는 아래다
     if not hits:
         return
-    print("s9-guard: 비밀값이 커밋에 섞여 있습니다 — 막았습니다.", file=sys.stderr)
+    print("s9-guard: 리포에 담지 않기로 한 것이 커밋에 섞여 있습니다 — 막았습니다.",
+          file=sys.stderr)
     for h in hits[:10]:
         print(f"  - {h}", file=sys.stderr)
     print("비밀은 `s9 secret set <키>` 로 users/<이름>/secrets 에 두고, 명령에서는",
