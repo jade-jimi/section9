@@ -3204,7 +3204,15 @@ function renderBoard(rows){
   }
   html += `<div class="board">`;
   for (const st of STATUSES){
-    const grp = shown.filter(r => r.status === st);
+    let grp = shown.filter(r => r.status === st);
+    // 끝난 컬럼은 우선순위로 세우지 않는다 (REQ-20260827-016).
+    // 우선순위는 "다음에 무엇을 할 것인가"에 답하는 축이다 — 이미 끝난 일에는
+    // 그 질문이 없다. done 227건이 가중치 계단으로 묶여 있으면 방금 끝난 것을
+    // 찾으려고 계단마다 훑어야 한다. 여기서 알고 싶은 것은 "무엇이 최근에
+    // 끝났나" 하나뿐이므로 갱신 시각만으로 세운다.
+    if (TERMINAL.has(st))
+      grp = [...grp].sort((a, b) =>
+        (b.updated || b.created || "").localeCompare(a.updated || a.created || ""));
     // 주요 컬럼은 비어도 자리를 지킨다 — 드롭 대상이자 상태 안내 자리(ux-craft)
     if (!grp.length && (cur || !["open","in-progress","review","done"].includes(st))) continue;
     html += colHTML(st, st, SCOLOR[st], grp);
