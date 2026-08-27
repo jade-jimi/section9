@@ -91,6 +91,34 @@ class PrefInjection(unittest.TestCase):
     def test_r1_stamp_kept(self):
         self.assertIn("현재 시각", self.ctx("좋다"))
 
+    # R2. 한 프로세스에서 두 번 물으면 그때그때 다시 읽는다 — 캐시하면 먼저 읽은
+    #     값이 굳어 방금 바꾼 설정이 안 먹는다. 이 요청이 고치려던 바로 그 증상이다.
+    def test_r2_not_cached(self):
+        import importlib.machinery
+        import importlib.util
+        spec = importlib.util.spec_from_loader(
+            "s9_hook_cache",
+            importlib.machinery.SourceFileLoader("s9_hook_cache", HOOK))
+        h = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(h)
+        seen = []
+
+        def fake_run(env, *argv, inp=None):
+            if argv[:2] == ("user", "current"):
+                out = "alice [source: test]"
+            elif argv[:2] == ("user", "config"):
+                out = json.dumps({"pref_말투": seen.pop(0)})
+            else:
+                out = ""
+            return mock.Mock(returncode=0, stdout=out)
+
+        with mock.patch.object(h, "run", fake_run):
+            seen[:] = ["첫 값"]
+            self.assertIn("첫 값", h.turn_prefs())
+            seen[:] = ["바뀐 값"]
+            self.assertIn("바뀐 값", h.turn_prefs())
+
+
     # F1. 설정이 없으면 기본 복귀를 지시한다 (REQ-20260824-016 유지)
     def test_f1_absent_says_default(self):
         root2 = tempfile.mkdtemp(prefix="s9pref2-")
