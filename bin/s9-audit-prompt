@@ -527,6 +527,18 @@ def main():
                 f" ⚠ 대시보드에서 반려/재개된 요청이 대기 중이다:\n{ro.stdout.strip()}\n"
                 f"이번 턴에서 우선 이어서 작업하고 완료 시 전이하라 "
                 f"(즉시 처리 불가면 사유를 note로 남기고 blocked 전이). ")
+    # 클레임해 놓고 멈춘 것 (REQ-20260827-046). 대시보드는 회색 점으로 정직하게
+    # 표시하지만 그건 **사람이 화면을 볼 때만** 보인다 — 리드는 화면을 안 본다.
+    # 반려 목록과 같은 자리에 같은 방식으로 놓는다: 표식이 아니라 주입이라야
+    # 실제 장치가 된다(REQ-20260825-062에서 배운 것).
+    st = run(env, "stalled", "--quiet")
+    stalled = ("" if st.returncode != 0 or not st.stdout.strip() else
+               f" ⛔ 착수해 놓고 진전이 멈춘 요청이 있다 — 내가 잡아 놓고 손을 뗀 "
+               f"것이다. 보드에는 '진행 중'으로 보이지만 아무도 일하지 않는다:\n"
+               f"{st.stdout.strip()}\n"
+               f"**다른 일을 시작하기 전에** 이어서 하거나, 못 이어가면 그 사유를 "
+               f"note 로 남기고 blocked/review 로 옮겨라. 상태가 거짓이면 보드 전체가 "
+               f"거짓이 된다. ")
     # 미확인 승인 메모 — 질문·후속 지시가 담겼을 수 있다: 리드가 이번 턴에 소화 (1회 주입)
     ap = run(env, "approvals", "--quiet")
     approvals = ("" if ap.returncode != 0 or not ap.stdout.strip() else
@@ -568,7 +580,7 @@ def main():
     attnote = (f"첨부 {len(atts)}건이 body에 기록되었다. " if atts else "")
     emit(pend +
         f"[section9 audit] 이 프롬프트는 {doc_id} 로 자동 기록되었다 (Request 분류). {attnote}"
-        f"현재 요청 주체: {who}.{pref}{warn}{untitled}{approvals}{reopened}{blocked}{review}{wkwarn} "
+        f"현재 요청 주체: {who}.{pref}{warn}{untitled}{approvals}{reopened}{stalled}{blocked}{review}{wkwarn} "
         f"이 세션에서 s9 를 호출할 때는 반드시 `S9_SESSION={session}` 을 앞에 붙여라. 규약: "
         f"(1) 제목은 원문 복사가 아니라 20자 이내의 이해하기 쉬운 명사구로 교체하라 — "
         f"`s9 set {doc_id} --title '...' --summary '...' --size S|M|L "
