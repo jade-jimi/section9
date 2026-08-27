@@ -6128,6 +6128,41 @@ def code_is_stale(started, current):
            (current.get("mtime"), current.get("size"))
 
 
+def serve_stale():
+    """돌고 있는 대시보드 서버가 옛 코드인가 (REQ-20260827-059).
+
+    실사고: 채팅→질문 등록은 **서버 프로세스 안에서** 돈다. 그래서 질문 큐
+    (REQ-20260827-049)를 고쳐 커밋해도, 16:59에 뜬 서버는 옛 코드라 큐에
+    쌓지 않았다 — 고친 뒤에도 질문이 계속 유실됐다. 대시보드 배너는 그 사실을
+    정직하게 띄우고 있었지만 **사람이 화면을 볼 때만** 보인다.
+
+    읽을 수 없으면 낡았다고 단정하지 않는다(code_is_stale 과 같은 규율).
+    """
+    try:
+        with open(os.path.join(ROOT, "state", "serve-code.json"),
+                  encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return ""
+    pid = d.get("pid")
+    try:
+        os.kill(int(pid), 0)
+    except (TypeError, ValueError, OSError):
+        return ""          # 안 돌고 있으면 낡을 것도 없다
+    if not code_is_stale(d.get("stamp") or {}, code_stamp()):
+        return ""
+    return (f"대시보드 서버(pid {pid}, {d.get('started', '')} 기동)가 옛 코드로 "
+            f"돌고 있다 — 그 뒤 bin/s9 가 바뀌었다. 서버 안에서 도는 것"
+            f"(채팅 수신·질문 등록·API)은 **고쳐도 반영되지 않는다.** "
+            f"`s9 serve --restart` 로 다시 띄워라.")
+
+
+def cmd_serve_stale(args):
+    msg = serve_stale()
+    if msg:
+        print(msg)
+
+
 def actor_alive(actor, age=None, pid_alive=None, log_line="", recorded=""):
     """"지금 살아 있는가" 한 줄 판정 — 화면·워처·통지가 **이것만** 쓴다
     (REQ-20260826-016).
@@ -10307,6 +10342,16 @@ def cmd_serve(args):
     global SERVE_CODE_STAMP, SERVE_STARTED
     SERVE_CODE_STAMP = code_stamp()
     SERVE_STARTED = now_iso()
+    # 화면 밖에서도 물을 수 있게 디스크에 남긴다 — 배너는 사람이 볼 때만 보이고,
+    # 리드는 화면을 안 본다 (REQ-20260827-059).
+    try:
+        os.makedirs(os.path.join(ROOT, "state"), exist_ok=True)
+        with open(os.path.join(ROOT, "state", "serve-code.json"), "w",
+                  encoding="utf-8") as _f:
+            json.dump({"stamp": SERVE_CODE_STAMP, "started": SERVE_STARTED,
+                       "pid": os.getpid(), "port": args.port}, _f)
+    except OSError:
+        pass
 
     http.server.ThreadingHTTPServer.request_queue_size = 32
     srv = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
@@ -10695,6 +10740,10 @@ def main():
                         help="클레임해 놓고 진전이 멈춘 in-progress 요청")
     sl.add_argument("--quiet", action="store_true")
     sl.set_defaults(fn=cmd_stalled)
+
+    ss = sub.add_parser("serve-stale",
+                        help="돌고 있는 서버가 옛 코드면 그 사실을 출력한다")
+    ss.set_defaults(fn=cmd_serve_stale)
 
     ac = sub.add_parser("account",
                         help="Claude 로그인 계정 관리 (만들기·목록·전환)")

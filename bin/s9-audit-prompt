@@ -542,6 +542,12 @@ def main():
                f"**다른 일을 시작하기 전에** 이어서 하거나, 못 이어가면 그 사유를 "
                f"note 로 남기고 blocked/review 로 옮겨라. 상태가 거짓이면 보드 전체가 "
                f"거짓이 된다. ")
+    # 돌고 있는 서버가 옛 코드인가 (REQ-20260827-059). 고쳐 커밋해도 서버 안에서
+    # 도는 것(채팅 수신·질문 등록·API)은 재기동 전까지 옛 코드다. 대시보드 배너는
+    # 그 사실을 띄우지만 **사람이 화면을 볼 때만** 보인다 — 리드는 화면을 안 본다.
+    sv = run(env, "serve-stale")
+    stale_serve = ("" if sv.returncode != 0 or not sv.stdout.strip() else
+                   f" ♻ {sv.stdout.strip()} ")
     # 미확인 승인 메모 — 질문·후속 지시가 담겼을 수 있다: 리드가 이번 턴에 소화 (1회 주입)
     ap = run(env, "approvals", "--quiet")
     approvals = ("" if ap.returncode != 0 or not ap.stdout.strip() else
@@ -583,7 +589,7 @@ def main():
     attnote = (f"첨부 {len(atts)}건이 body에 기록되었다. " if atts else "")
     emit(pend +
         f"[section9 audit] 이 프롬프트는 {doc_id} 로 자동 기록되었다 (Request 분류). {attnote}"
-        f"현재 요청 주체: {who}.{pref}{warn}{untitled}{approvals}{reopened}{stalled}{blocked}{review}{wkwarn} "
+        f"현재 요청 주체: {who}.{pref}{warn}{untitled}{approvals}{reopened}{stalled}{stale_serve}{blocked}{review}{wkwarn} "
         f"이 세션에서 s9 를 호출할 때는 반드시 `S9_SESSION={session}` 을 앞에 붙여라. 규약: "
         f"(1) 제목은 원문 복사가 아니라 20자 이내의 이해하기 쉬운 명사구로 교체하라 — "
         f"`s9 set {doc_id} --title '...' --summary '...' --size S|M|L "
