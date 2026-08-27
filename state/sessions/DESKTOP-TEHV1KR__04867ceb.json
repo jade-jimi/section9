@@ -5,10 +5,9 @@
  "history": [],
  "ses_doc": "SES-20260827-010-62x6",
  "attach_pid": "290154",
- "ended": "",
+ "ended": "1",
  "worker": "1",
- "active_reqs": [
-  "REQ-20260827-045-62x6"
- ],
- "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/04867ceb-b95b-4a1d-b3ce-85857e1c6573.jsonl"
+ "active_reqs": [],
+ "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/04867ceb-b95b-4a1d-b3ce-85857e1c6573.jsonl",
+ "cwd": "/home/sjpark1/section9"
 }
