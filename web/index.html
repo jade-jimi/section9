@@ -403,11 +403,20 @@ main{padding:18px 22px}
    면(배경)이 아니라 글자색과 무게로만 세운다. */
 .typebar .tb .unans{margin-left:5px;font-style:normal;font-weight:700;
   color:var(--t-question);font-variant-numeric:tabular-nums}
-/* 그룹 헤더는 타입바 아래에 붙는다 — 두 sticky가 겹치지 않게 타입바 실측 높이만큼
-   내린다(--tbh는 renderDocs가 렌더 직후 설정. 줄이 접히면 높이가 달라진다). */
+/* 그룹 헤더는 목록 맨 위에 붙는다. **문턱은 0이 기본이다** — sticky는 문턱보다
+   위에 있는 상자를 아래로 밀어내면서 자리는 비워 두지 않으므로, 위에 아무것도
+   없는 목록에서 양수 문턱을 주면 머리가 내려앉아 첫 항목의 제목 줄을 제 배경으로
+   덮는다 (REQ-20260827-041 — Settings 첫 항목 `디스플레이`가 스킨 10종에서
+   19~24px 가려졌다. Stream 빈 상태 줄도 같은 자리였다). */
 .doclist .grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
-  padding:13px 14px 6px;font-weight:600;position:sticky;top:var(--tbh,30px);background:var(--panel);
+  padding:13px 14px 6px;font-weight:600;position:sticky;top:0;background:var(--panel);
   font-family:var(--mono);border-bottom:1px solid var(--hairline)}
+/* 타입바가 **실제로 앞에 있을 때만** 그 아래로 내려 붙는다 — 두 sticky가 겹치면
+   머리가 타입바 뒤에 숨는다. 조건을 선택자에 적어 두면 이 위젯을 타입바 없이
+   재사용하는 자리(Settings·Stream)가 JS가 --tbh를 채워 주기를 기다리지 않고도
+   스스로 옳게 선다. --tbh는 renderDocs가 렌더 직후 실측해 넣는다(줄이 접히면
+   높이가 달라진다). */
+.doclist .typebar ~ .grp{top:var(--tbh,30px)}
 .doclist .row{padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--hairline)}
 .doclist .row:hover{background:var(--accent-soft)}
 .doclist .row.sel{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--text)}
