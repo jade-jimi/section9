@@ -2328,12 +2328,24 @@ def account_of(cfg_dir):
     디렉토리에 `claude config ls` 를 돌려 확인). 그래서 프로필마다 자기 계정을
     갖고 있고, **사람이 이름을 지어낼 이유가 없다** (REQ-20260827-033).
     """
-    try:
-        with open(os.path.join(cfg_dir, ".claude.json"), encoding="utf-8") as f:
-            return ((json.load(f).get("oauthAccount") or {})
-                    .get("emailAddress") or "").strip()
-    except (OSError, ValueError):
-        return ""
+    cands = [os.path.join(cfg_dir, ".claude.json")]
+    # 기본 설정 디렉토리(~/.claude)만은 `.claude.json` 이 **바깥**에 있다 —
+    # CLAUDE_CONFIG_DIR 을 줄 때만 안으로 들어간다. 이걸 몰라 처음 구현이
+    # 로그인된 계정을 "(로그인 전)" 이라고 말했다 — 조용히 틀린 답이라
+    # 실환경에서 한 번 돌려 보고서야 드러났다.
+    if os.path.abspath(cfg_dir) == os.path.abspath(
+            os.path.expanduser("~/.claude")):
+        cands.append(os.path.expanduser("~/.claude.json"))
+    for c in cands:
+        try:
+            with open(c, encoding="utf-8") as f:
+                email = ((json.load(f).get("oauthAccount") or {})
+                         .get("emailAddress") or "").strip()
+        except (OSError, ValueError):
+            continue
+        if email:
+            return email
+    return ""
 
 
 def account_settle(prof):

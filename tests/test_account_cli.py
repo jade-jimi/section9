@@ -56,7 +56,12 @@ class AccountList(unittest.TestCase):
         self.env.pop("CLAUDE_CONFIG_DIR", None)
         subprocess.run([S9, "init"], capture_output=True, env=self.env,
                        timeout=20)
-        write_account(os.path.join(self.home, ".claude"), "now@example.com")
+        # 기본 설정 디렉토리는 `.claude.json` 이 **바깥**(~/.claude.json)에 있다 —
+        # CLAUDE_CONFIG_DIR 을 줄 때만 안으로 들어간다 (실환경에서 확인).
+        with open(os.path.join(self.home, ".claude.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"oauthAccount": {"emailAddress": "now@example.com"}}, f)
+        os.makedirs(os.path.join(self.home, ".claude"), exist_ok=True)
 
     def cli(self, *argv, expect=0):
         r = subprocess.run([S9, *argv], capture_output=True, text=True,
