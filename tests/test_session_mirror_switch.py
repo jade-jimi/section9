@@ -22,6 +22,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import signal
 import subprocess
 import tempfile
 import unittest
@@ -42,11 +43,33 @@ def _load(name, path):
 class Base(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp(prefix="s9smx-")
+        # S9_PORT=1: 세션 시작 훅의 ensure_serve 가 **사용자 대시보드 포트**에
+        # 서버를 띄우지 못하게 막는다 (REQ-20260828-001). 이게 없으면 훅이
+        # 9909 에 감시자를 세우고, 그 서버의 작업공간은 이 임시 디렉토리라
+        # 사람이 보는 화면이 404 또는 테스트 시점의 옛 화면으로 바뀐다.
         self.env = {**os.environ, "S9_ROOT": self.root,
-                    "S9_MACHINE": "testbox", "S9_USER": "alice"}
+                    "S9_MACHINE": "testbox", "S9_USER": "alice",
+                    "S9_PORT": "1"}
         self.env.pop("S9_SESSION", None)
         self.cli("init")
         self.cli("user", "add", "alice")
+
+    def tearDown(self):
+        """훅이 세운 감시자를 거둔다 — 자기가 띄운 것은 자기가 치운다.
+
+        `--supervise` 는 자식이 죽어도 되살리므로, 못 띄우는 포트를 줬다고
+        저절로 사라지지 않는다(포기까지 십수 분 돈다).
+        """
+        lock = os.path.join(self.root, "state", "serve-guard.1.lock")
+        try:
+            with open(lock, encoding="utf-8") as f:
+                pid = int(f.read().split()[0])
+        except (OSError, ValueError, IndexError):
+            return
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
 
     def cli(self, *argv, expect=0):
         r = subprocess.run([S9, *argv], capture_output=True, text=True,
@@ -76,7 +99,9 @@ class Base(unittest.TestCase):
 
     @property
     def mirrored(self):
-        return os.path.join(self.root, "streams", "sess-9999.jsonl")
+        # 사람별 자리 (REQ-20260827-078)
+        return os.path.join(self.root, "users", "alice", "streams",
+                            "sess-9999.jsonl")
 
     def call_mirror(self, tp):
         """세션 훅의 mirror() 를 그 훅이 실제로 도는 환경에서 부른다."""

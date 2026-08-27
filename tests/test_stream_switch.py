@@ -108,18 +108,25 @@ class MirrorSwitch(Base):
             m = _load("s9_sw_stop", STOP_HOOK)
             return m.mirror_transcript(src)
 
-    # N1. 설정이 없으면 켜진 것 — 지금 동작 그대로
+    def mirrored(self):
+        """기록이 놓이는 자리 — 사람마다 갈린다 (REQ-20260827-078)."""
+        return os.path.join(self.root, "users", "alice", "streams",
+                            "sess-2222.jsonl")
+
+    # N1. 설정이 없으면 켜진 것 — 쓰는 자리만 사람별로 갈렸다
     def test_n1_default_on(self):
         self.assertEqual(self.drive(), "full")
-        self.assertTrue(os.path.exists(
+        self.assertTrue(os.path.exists(self.mirrored()))
+        # 옛 공용 자리에는 새로 쓰지 않는다 — 섞이면 "누구 것을 누가 보는가"를
+        # 나중에 가를 수 없다.
+        self.assertFalse(os.path.exists(
             os.path.join(self.root, "streams", "sess-2222.jsonl")))
 
     # N2. 꺼 두면 쓰지 않는다
     def test_n2_off_writes_nothing(self):
         self.set_cfg(stream_mirror="off")
         self.assertEqual(self.drive(), "off")
-        self.assertFalse(os.path.exists(
-            os.path.join(self.root, "streams", "sess-2222.jsonl")))
+        self.assertFalse(os.path.exists(self.mirrored()))
 
     # R2. 설정이 깨져 있어도 켜진 것으로 본다 — 기록을 남기는 쪽이 안전하다
     def test_r2_broken_config_is_on(self):

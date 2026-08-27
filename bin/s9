@@ -30,7 +30,7 @@ CATALOG = os.path.join(INDEX, "catalog.jsonl")
 LOCKFILE = os.path.join(ROOT, ".s9.lock")
 USERS = os.path.join(ROOT, "users")
 STATE = os.path.join(ROOT, "state", "sessions")
-STREAMS = os.path.join(ROOT, "streams")  # Claude Code transcript 미러 (훅이 복사)
+STREAMS = os.path.join(ROOT, "streams")  # 옛 공용 자리 — 읽기 폴백으로만 남는다
 
 # type -> (id prefix, vault subdir, default status)
 TYPES = {
@@ -1889,7 +1889,8 @@ def _binding_activity_paths(b):
              if p and os.path.isfile(p)]
     sid8 = b.get("session", "")
     if sid8:
-        paths += _glob.glob(os.path.join(STREAMS, safe_name(sid8) + "*.jsonl"))
+        paths += streams_glob(safe_name(sid8) + "*.jsonl",
+                              b.get("user") or None)
     return paths
 
 
@@ -2664,6 +2665,46 @@ def cmd_secret(args):
 STREAM_KEEP_DAYS = 7        # 기본 보관 기간 (0 이하 = 무제한)
 
 
+def streams_dir(user=None):
+    """이 사람의 대화 기록이 놓이는 자리 (REQ-20260827-078).
+
+    예전엔 모두가 `streams/` 한 곳에 섞였다. 대화 원문은 사람마다 성격이 다른
+    기록이라(REQ-20260824-022 열람 격리) 한 자리에 섞어 두면 "누구 것을 누가
+    보는가"를 나중에 가를 수 없다. `.gitignore` 는 `users/*/streams/` 를 이미
+    막아 두었다.
+
+    **파일 이름은 건드리지 않는다** — `s9 resume` 은 미러 이름이 원본
+    basename 과 100% 일치하는 데 기댄다(DOC-20260823-002). 옮기는 것은
+    디렉터리뿐이다.
+    """
+    return os.path.join(USERS, safe_name(user or resolve_user()), "streams")
+
+
+def streams_read_dirs(user=None):
+    """읽을 때 훑는 자리들 — 새 자리 먼저, 옛 공용 자리는 폴백.
+
+    옛 자리를 계속 읽는 이유: 이 저장소에는 이미 그 자리에 쌓인 기록이 있고,
+    그것을 못 읽게 되면 과거 세션 resume 과 화면이 조용히 비어 버린다.
+    """
+    out = [streams_dir(user)]
+    if os.path.isdir(STREAMS):
+        out.append(STREAMS)
+    return [d for d in out if os.path.isdir(d)]
+
+
+def streams_glob(pattern, user=None):
+    """읽는 자리 전체에서 pattern 에 맞는 파일 (새 자리가 앞선다)."""
+    import glob as _glob
+    seen, out = set(), []
+    for d in streams_read_dirs(user):
+        for p in sorted(_glob.glob(os.path.join(d, pattern))):
+            b = os.path.basename(p)
+            if b not in seen:
+                seen.add(b)
+                out.append(p)
+    return out
+
+
 def stream_mirror_on(user=None):
     """이 사용자가 대화 기록을 남기는가 (기본 켜짐).
 
@@ -2717,7 +2758,7 @@ def prune_streams(user=None, all_=False):
         return 0, 0
     keep = _active_stream_sids()
     now, n, b = _time.time(), 0, 0
-    for p in _glob.glob(os.path.join(STREAMS, "*.jsonl")):
+    for p in streams_glob("*.jsonl"):
         base = os.path.basename(p)[:-len(".jsonl")]
         if any(base.startswith(s) or s.startswith(base[:8]) for s in keep if s):
             continue                       # 진행 중인 세션 — 건드리지 않는다
@@ -2733,11 +2774,19 @@ def prune_streams(user=None, all_=False):
 
 
 def cmd_stream(args):
+    if getattr(args, "dir", False):
+        # 훅이 쓸 자리를 여기서 받아 간다 (REQ-20260827-078) — 끄기 판정과
+        # 자리 판정을 한 번의 호출로 준다. 꺼져 있으면 아무것도 안 찍는다.
+        u = resolve_user(getattr(args, "user", None))
+        if stream_mirror_on(u):
+            print(streams_dir(u))
+        return
+
     """대화 기록 미러 상태·정리 (REQ-20260827-042)."""
     import glob as _glob
     user = resolve_user(getattr(args, "user", None))
     on, days = stream_mirror_on(user), stream_keep_days(user)
-    files = _glob.glob(os.path.join(STREAMS, "*.jsonl"))
+    files = streams_glob("*.jsonl", user)
     size = sum(os.path.getsize(p) for p in files if os.path.exists(p))
     if getattr(args, "action", "") == "prune":
         n, b = prune_streams(user, all_=getattr(args, "all", False))
@@ -2745,7 +2794,8 @@ def cmd_stream(args):
         return
     print(f"  대화 기록 미러: {'켜짐' if on else '꺼짐'}")
     print(f"  보관 기간      : {days}일" if days > 0 else "  보관 기간      : 무제한")
-    print(f"  지금 보관 중   : {len(files)}개 · {size / 2**20:.0f}MB → {STREAMS}")
+    print(f"  지금 보관 중   : {len(files)}개 · {size / 2**20:.0f}MB → "
+          f"{os.path.relpath(streams_dir(user), ROOT)}")
     if on:
         print("  끄려면: s9 user config <이름> stream_mirror off"
               "   (끄면 Stream 화면과 s9 resume 도 함께 내려간다)")
@@ -7173,14 +7223,14 @@ def cmd_resume(args):
             "켜려면: s9 user config <이름> stream_mirror on")
     arg = args.sid
     # 스트림 파일 찾기: 정확 일치 우선, 아니면 prefix-glob
-    exact = os.path.join(STREAMS, safe_name(arg) + ".jsonl")
-    if os.path.exists(exact):
-        src = exact
+    hit = streams_glob(safe_name(arg) + ".jsonl")
+    if hit:
+        src = hit[0]
     else:
-        ms = _glob.glob(os.path.join(STREAMS, safe_name(arg) + "*.jsonl"))
+        ms = streams_glob(safe_name(arg) + "*.jsonl")
         if not ms:
             avail = [os.path.basename(p)[:-6]
-                     for p in _glob.glob(os.path.join(STREAMS, "*.jsonl"))]
+                     for p in streams_glob("*.jsonl")]
             die(f"스트림 없음: {arg}. 사용 가능: {', '.join(avail) or '(없음)'}")
         if len(ms) > 1:
             die(f"모호한 SID '{arg}' — 여러 매칭: "
@@ -9935,14 +9985,12 @@ def cmd_serve(args):
         # 열리는" 상태로 남기면 사용자는 고장으로 읽는다.
         if not stream_mirror_on(None):
             return out
-        if os.path.isdir(STREAMS):
-            for fn in sorted(os.listdir(STREAMS)):
-                if fn.endswith(".jsonl"):
-                    p = os.path.join(STREAMS, fn)
-                    mt = datetime.datetime.fromtimestamp(
-                        os.path.getmtime(p)).astimezone().isoformat(timespec="seconds")
-                    out.append({"session": fn[:-6],
-                                "size": os.path.getsize(p), "mtime": mt})
+        for p in streams_glob("*.jsonl"):
+            fn = os.path.basename(p)
+            mt = datetime.datetime.fromtimestamp(
+                os.path.getmtime(p)).astimezone().isoformat(timespec="seconds")
+            out.append({"session": fn[:-6],
+                        "size": os.path.getsize(p), "mtime": mt})
         out.sort(key=lambda s: s["mtime"], reverse=True)
         return {"streams": out}
 
@@ -11357,6 +11405,8 @@ def main():
     stc.add_argument("--all", action="store_true",
                      help="prune: 보관 기간과 무관하게 전부 (진행 중 세션 제외)")
     stc.add_argument("--user")
+    stc.add_argument("--dir", action="store_true",
+                     help="기록을 쓸 자리를 찍는다 (꺼져 있으면 아무것도 안 찍음)")
     stc.set_defaults(fn=cmd_stream)
 
     sc = sub.add_parser("secret",

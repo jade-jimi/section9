@@ -38,7 +38,9 @@ class MirrorAppend(unittest.TestCase):
         self.root = tempfile.mkdtemp(prefix="s9mir-")
         self.src = os.path.join(self.root, "sess-1111.jsonl")
         self._old = os.environ.get("S9_ROOT")
+        self._olduser = os.environ.get("S9_USER")
         os.environ["S9_ROOT"] = self.root
+        os.environ["S9_USER"] = "alice"
         self.m = _load("s9_mirror", STOP_HOOK)
 
     def tearDown(self):
@@ -46,10 +48,16 @@ class MirrorAppend(unittest.TestCase):
             os.environ.pop("S9_ROOT", None)
         else:
             os.environ["S9_ROOT"] = self._old
+        if self._olduser is None:
+            os.environ.pop("S9_USER", None)
+        else:
+            os.environ["S9_USER"] = self._olduser
 
     @property
     def dst(self):
-        return os.path.join(self.root, "streams", "sess-1111.jsonl")
+        # 기록은 사람별 자리에 놓인다 (REQ-20260827-078) — 옛 공용 자리가 아니다
+        return os.path.join(self.root, "users", "alice", "streams",
+                            "sess-1111.jsonl")
 
     def write(self, text):
         with open(self.src, "w", encoding="utf-8") as f:
