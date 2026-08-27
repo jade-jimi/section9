@@ -11,11 +11,38 @@ SES 문서는 s9 log가 세션당 하나를 lazy 생성하고 바인딩(ses_doc)
 """
 import json
 import os
-import shutil
 import subprocess
 import sys
 
 S9 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9")
+STOP_HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "s9-audit-response")
+
+
+def mirror(tp):
+    """세션 시작·종료의 미러도 **매 턴 미러와 같은 함수**를 쓴다.
+
+    종전엔 이 자리만 `shutil.copyfile` 로 전체를 다시 썼다. 결과가 둘이었다
+    (REQ-20260827-077): ① 사용자가 대화 기록을 꺼도(REQ-20260827-042) 여기는
+    스위치를 보지 않아 **세션마다 전체 사본이 생겼다** — 껐다고 믿는 상태에서
+    남는 기록이 제일 나쁘다. ② "늘어난 만큼만 쓴다"(REQ-20260827-039)도 여기엔
+    없어 8MB 세션이면 시작·종료에 각각 8MB 를 다시 썼다.
+
+    구현을 베껴 오지 않고 **불러 쓴다** — 두 벌이 되면 한쪽만 고쳐지는 것이
+    시간 문제고, 위 결함이 바로 그렇게 생겼다.
+    반환: mirror_transcript 의 판단("full"|"append"|"skip"|"off"|"")."""
+    try:
+        import importlib.machinery
+        import importlib.util
+        spec = importlib.util.spec_from_loader(
+            "s9_audit_response",
+            importlib.machinery.SourceFileLoader("s9_audit_response",
+                                                 STOP_HOOK))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.mirror_transcript(tp)
+    except Exception:
+        return ""       # 미러 실패가 세션 기록을 막지 않는다
 
 
 
@@ -140,14 +167,9 @@ def main():
                        capture_output=True, text=True, env=env, timeout=10)
         subprocess.run([S9, "bind", "cwd", data.get("cwd", "")],
                        capture_output=True, text=True, env=env, timeout=10)
-        # 세션 시작/종료 시 스트림 미러링 — 파일명=원본 basename(전체SID.jsonl)
-        try:
-            root = os.environ.get("S9_ROOT") or os.path.dirname(
-            os.path.dirname(os.path.realpath(__file__)))
-            os.makedirs(os.path.join(root, "streams"), exist_ok=True)
-            shutil.copyfile(tp, os.path.join(root, "streams", os.path.basename(tp)))
-        except Exception:
-            pass
+        # 세션 시작/종료 시 스트림 미러링 — 파일명=원본 basename(전체SID.jsonl).
+        # 끄기 스위치와 증분 쓰기는 mirror() 안쪽(=매 턴 미러와 같은 코드)이 본다.
+        mirror(tp)
 
     detail = data.get("source") or data.get("reason") or ""
     cwd = data.get("cwd") or ""
