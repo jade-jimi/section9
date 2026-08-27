@@ -1,8 +1,10 @@
 <!doctype html>
-<!-- REQ-20260826-018 확인 하니스 (same-origin 보조 페이지):
+<!-- REQ-20260826-018 / REQ-20260827-017 확인 하니스 (same-origin 보조 페이지):
      서버 자동 복구 알림은 **사고가 나야만** 보인다. 사고는 헤드리스 캡처로
-     재현할 수 없으므로 대시보드의 상태 고정 훅(?guard=recovered|attention|none)
-     으로 각 상태를 띄우고, 기록 패널은 실제 클릭으로 연다.
+     재현할 수 없으므로 대시보드의 상태 고정 훅(?guard=recovered|attention|none,
+     ?oldcode=1)으로 각 상태를 띄우고, 기록 패널·접기는 실제 클릭으로 연다.
+     017 이후: 자동 복구 성공은 헤더 줄이 아니라 툴바의 서버 상태 칩으로 뜬다 —
+     그래서 여기서 재는 것은 "보이는가"만이 아니라 **헤더가 몇 줄인가**다.
      ?theme= 로 tone 을 바꿔 대비를 확인한다. -->
 <html><head><meta charset="utf-8"><title>verify guard notice</title>
 <style>
@@ -17,8 +19,11 @@ const P = new URLSearchParams(location.search);
 const TONE = P.get("theme") || "system";
 // tones=a,b,c 를 주면 tone 별로 같은 상태를 한 장에 늘어놓는다 (대비 확인용)
 const TONES = (P.get("tones") || "").split(",").filter(Boolean);
-// [상태, 기록 패널을 열까, 높이]
-const CASES = (P.get("cases") || "recovered:0:260,attention:0:260,recovered:1:560")
+/* [상태, 무엇을 할까, 높이]
+   상태: recovered | attention | none  (+oc 를 붙이면 코드 낡음 알림도 같이 띄운다)
+   무엇을: 0 그대로 · 1 기록 패널 열기 · 2 접기 눌러 칩으로 내리기 */
+const CASES = (P.get("cases")
+  || "none:0:150,recovered:0:150,recovered:1:480,attention:0:170,attention+oc:0:200,attention+oc:2:150")
   .split(",").map(s => s.split(":"));
 const host = document.getElementById("host");
 const wait = (doc, fn, ms=12000) => new Promise((res, rej) => {
@@ -29,38 +34,49 @@ const wait = (doc, fn, ms=12000) => new Promise((res, rej) => {
     else if (Date.now() - t0 > ms){ clearInterval(t); rej(new Error("timeout")); }
   }, 150);
 });
+// 헤더가 실제로 몇 픽셀을 먹는지 — 이 요청의 본론이라 캡션에 숫자로 적는다
+const headPx = doc => Math.round(doc.querySelector("header").getBoundingClientRect().height);
 (async () => {
   const PLAN = TONES.length
-    ? TONES.map(t => [P.get("kind") || "recovered", "0", P.get("h") || "250", t])
+    ? TONES.map(t => [P.get("kind") || "recovered", P.get("mode") || "0",
+                      P.get("h") || "200", t])
     : CASES.map(c => [c[0], c[1], c[2], TONE]);
-  for (const [kind, open, h, tone] of PLAN){
-    // 접어 둔 기록이 남아 있으면 한 줄로만 떠서 확인이 안 된다 — 매번 편다
-    try{ localStorage.removeItem("s9guard_ack"); }catch(e){}
+  for (const [kindRaw, mode, h, tone] of PLAN){
+    const oc = kindRaw.endsWith("+oc"), kind = kindRaw.replace("+oc", "");
+    // 접어 둔 기록이 남아 있으면 칩으로만 떠서 확인이 안 된다 — 매번 편다
+    try{ localStorage.removeItem("s9guard_ack");
+         localStorage.removeItem("s9oldcode_ack"); }catch(e){}
     const cap = document.createElement("div");
     cap.className = "cap";
-    cap.textContent = `?guard=${kind}${open === "1" ? " · 기록 패널 열기" : ""} · tone: ${tone}`;
+    cap.textContent = `?guard=${kind}${oc ? " + 코드 낡음" : ""}`
+      + (mode === "1" ? " · 기록 패널 열기" : mode === "2" ? " · 접기" : "")
+      + ` · tone: ${tone}`;
     host.appendChild(cap);
     const fr = document.createElement("iframe");
     fr.style.height = h + "px";
-    fr.src = `/?guard=${kind}&theme=${encodeURIComponent(tone)}#board`;
+    fr.src = `/?guard=${kind}${oc ? "&oldcode=1" : ""}`
+      + `&theme=${encodeURIComponent(tone)}#board`;
     host.appendChild(fr);
     await new Promise(r => fr.addEventListener("load", r, {once: true}));
     const doc = fr.contentDocument;
     try{
-      if (kind === "none"){
+      if (kind === "none" && !oc){
         // 사건이 없으면 흔적도 없어야 한다 — 여기서 기다릴 것이 없는 것이 정답이다
         await new Promise(r => setTimeout(r, 2500));
-        const shown = !doc.querySelector("#guard").hidden;
-        cap.textContent += shown ? "  — 결함: 사건이 없는데 줄이 떴다"
-                                 : "  — 기대대로 아무 흔적 없음";
+        const shown = !doc.querySelector("#guard").hidden
+                   || !!doc.querySelector("#sv-chip").innerHTML.trim();
+        cap.textContent += shown ? "  — 결함: 사건이 없는데 흔적이 남았다"
+                                 : `  — 기대대로 아무 흔적 없음 · 헤더 ${headPx(doc)}px`;
         continue;
       }
-      await wait(doc, d => d.querySelector("#guard .gw-t"));
-      if (open === "1"){
+      // 줄(경고)이든 칩(끝난 일)이든, 무엇이든 떠야 한다
+      await wait(doc, d => d.querySelector("#guard .gw-t")
+                        || d.querySelector("#sv-chip button"));
+      if (mode === "1"){
         // 재렌더가 버튼을 떼어 갈 수 있으니 결과가 나올 때까지 다시 찾아 누른다
         await wait(doc, d => {
           if (!d.querySelector("#guard-log").hidden) return true;
-          const b = d.querySelector("#gw-log");
+          const b = d.querySelector("#gw-log") || d.querySelector("#sv-chip button");
           if (b) b.click();
           return false;
         }, 8000);
@@ -71,7 +87,21 @@ const wait = (doc, fn, ms=12000) => new Promise((res, rej) => {
           if (b) b.click();
           return false;
         }, 8000);
+      } else if (mode === "2"){
+        // 접으면 줄이 정말 사라지는가 — 017 의 핵심 계약. 떠 있는 줄을 전부 접는다.
+        for (const [fold, row] of [["#gw-fold", "#guard"], ["#oc-fold", "#oldcode"]]){
+          if (doc.querySelector(row).hidden) continue;
+          await wait(doc, d => {
+            if (d.querySelector(row).hidden) return true;
+            const b = d.querySelector(fold);
+            if (b) b.click();
+            return false;
+          }, 8000);
+        }
+        await wait(doc, d => d.querySelector("#sv-chip button"), 8000);
       }
+      await new Promise(r => setTimeout(r, 250));
+      cap.textContent += `  — 헤더 ${headPx(doc)}px`;
     }catch(e){ cap.textContent += "  — 실패: " + e.message; }
   }
   document.title = "done";

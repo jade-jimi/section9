@@ -101,11 +101,10 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
 .oc-copied{display:inline-block;min-width:3.6em;font-family:var(--mono);font-size:10px;
   letter-spacing:.04em;color:var(--c-done)}
 .oc-note{font-size:12px;color:var(--muted)}
-.oc-fold,.oc-open{border:0;background:none;cursor:pointer;font-family:var(--mono);
+.oc-fold{border:0;background:none;cursor:pointer;font-family:var(--mono);
   font-size:11px;letter-spacing:.04em;color:var(--muted);padding:3px 2px}
-.oc-fold:hover,.oc-open:hover{color:var(--text);text-decoration:underline}
-.oc-open{font-size:12px;letter-spacing:.01em}
-.oc-cmd:focus-visible,.oc-fold:focus-visible,.oc-open:focus-visible{
+.oc-fold:hover{color:var(--text);text-decoration:underline}
+.oc-cmd:focus-visible,.oc-fold:focus-visible{
   outline:2px solid var(--text);outline-offset:1px}
 
 /* ── 서버 자동 복구 기록 (REQ-20260826-018-62x6) ───────────────────────────
@@ -125,10 +124,9 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
 .gw-act{margin-left:auto;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
 /* 한국어가 들어가는 컨트롤에는 자간을 벌리지 않는다 — 모노·자간은 시각·포트
    번호 같은 라틴/숫자 메타데이터의 어휘다. 문장에 쓰면 글자가 흩어져 보인다. */
-.gw-link,.gw-open{border:0;background:none;cursor:pointer;font:inherit;
+.gw-link{border:0;background:none;cursor:pointer;font:inherit;
   font-size:11.5px;color:var(--muted);padding:3px 2px}
-.gw-link:hover,.gw-open:hover{color:var(--text);text-decoration:underline}
-.gw-open{font-size:12px}
+.gw-link:hover{color:var(--text);text-decoration:underline}
 .gw-cmd{font-family:var(--mono);font-size:11px;letter-spacing:.02em;
   border:1px solid var(--border);background:var(--panel);color:var(--text);
   padding:4px 9px;cursor:pointer}
@@ -138,7 +136,7 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
 /* 복사 피드백은 자리를 미리 잡아 둔다 — 글자가 늘며 줄이 밀리면 그 자체가 결함 */
 .gw-copied{display:inline-block;min-width:3.6em;font-family:var(--mono);
   font-size:10px;letter-spacing:.04em;color:var(--c-done)}
-.gw-cmd:focus-visible,.gw-link:focus-visible,.gw-open:focus-visible{
+.gw-cmd:focus-visible,.gw-link:focus-visible{
   outline:2px solid var(--text);outline-offset:1px}
 /* 기록은 헤더 안에서 열린다 — 다른 자리로 보내면 방금 읽은 알림과의 연결이
    끊긴다. 대신 높이를 묶어 화면을 삼키지 않게 하고 자체 스크롤을 준다. */
@@ -163,6 +161,27 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
   font-family:var(--mono);font-size:10.5px;line-height:1.55;color:var(--muted);
   white-space:pre-wrap;word-break:break-all}
 .gw-none{padding:10px 0;font-size:12px;color:var(--muted)}
+/* 서버 상태 칩 (REQ-20260827-017-62x6) — 헤더 줄은 사람의 손을 요구하는 사실에만
+   준다. 자동 복구가 **성공**한 것은 이미 끝난 일이라 읽고 나서 할 일이 없는데,
+   그것에 전용 행을 주면 자주 복구되는 서버일수록 헤더가 상시 한 줄 눌린다.
+   그런 사실과 접어 둔 경고는 이미 있는 브랜드 행(hrow1)의 칩으로 내려온다 —
+   새 행을 만들지 않고 탭 높이에 묻히므로 헤더 높이 증가가 0이다.
+   :empty 가 핵심이다. 빈 칩을 남기면 flex gap 만큼 자리가 남고, 무엇보다
+   상시 자리표시자는 곧 배경이 되어 진짜 사고 때도 안 읽힌다(018 이 세운 규칙). */
+.svchip{display:flex;align-items:baseline;gap:12px;min-width:0;
+  margin-left:auto;padding-bottom:12px}
+.svchip:empty{display:none}
+.svchip button{border:0;background:none;cursor:pointer;font:inherit;font-size:11.5px;
+  color:var(--muted);padding:3px 2px;white-space:nowrap;max-width:34ch;
+  overflow:hidden;text-overflow:ellipsis}
+.svchip button:hover{color:var(--text);text-decoration:underline}
+.svchip button:focus-visible{outline:2px solid var(--text);outline-offset:1px}
+.svchip .sv-m{font-size:11px;line-height:1}          /* 마크: 색 없이도 읽히게 */
+.svchip .sv-ok .sv-m{color:var(--c-done)}
+.svchip .sv-warn{color:var(--c-inprogress)}
+.svchip .sv-warn .sv-m{color:var(--c-inprogress)}
+.svchip .sv-bad{color:var(--c-blocked)}
+.svchip .sv-bad .sv-m{color:var(--c-blocked)}
 
 .pdiv{width:1px;height:18px;background:var(--border);margin:0 4px}
 .gear{border:1px solid var(--border);background:var(--panel);color:var(--text);
@@ -1877,6 +1896,14 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
       <button data-tab="terminal">Terminal</button>
       <button data-tab="settings">Settings<span id="settings-badge" class="pbadge" hidden>⚠</span></button>
     </div>
+    <!-- 서버 상태 칩 — 사람의 손을 요구하지 않는(또는 접어 둔) 서버 사실의 자리
+         (REQ-20260827-017-62x6). 전용 행을 주면 아무 할 일 없는 사실 때문에 헤더가
+         상시 한 줄 눌린다.
+         자리는 브랜드 행의 오른쪽 끝이다. 툴바 행에 두면 필터·신원 묶음과 폭을
+         다투다 좁은 화면에서 그 행을 두 줄로 밀어 — 줄이려던 높이를 도로 쓴다.
+         브랜드 행은 오른쪽이 늘 비어 있고, 탭 높이에 묻혀 한 픽셀도 더하지 않는다.
+         사건이 없으면 비어 있고, :empty 로 자리까지 사라진다. -->
+    <span id="sv-chip" class="svchip" role="status" aria-live="polite"></span>
   </div>
   <div class="hrow2">
     <div class="fgroup">
@@ -1892,10 +1919,6 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
         <option>request</option><option>knowledge</option><option>question</option><option>session</option><option>project</option></select>
     </div>
     <div class="pgroup idcol">
-      <!-- 서버 상태 칩 — 사람의 손을 요구하지 않는(또는 접어 둔) 서버 사실의 자리.
-           전용 행을 주면 아무 할 일 없는 사실 때문에 헤더가 상시 한 줄 눌린다.
-           사건이 없으면 비어 있고, :empty 로 자리까지 사라진다. (REQ-20260827-017) -->
-      <span id="sv-chip" class="svchip" role="status" aria-live="polite"></span>
       <span id="usage-chip" class="usagechip" title="로그인된 클로드 계정과 사용량(세션 5h·주간·모델) — 60초 갱신, 계정 전환 즉시 반영"></span>
       <span id="whoami" class="who" title="서버가 파생한 신원 — 대시보드는 127.0.0.1 전용이라 브라우저 사용자 = 서버 기동 OS 계정. 다른 계정명으로 연결하려면 터미널에서 s9 user attach"></span>
     </div>
@@ -2367,6 +2390,10 @@ function renderWhoami(){
    사실이라 문구·식별자를 oldcode 로 갈랐다 — 두 경고가 같은 말을 쓰면 어느
    쪽도 못 믿게 된다. */
 const OC_ACK = "s9oldcode_ack";   // 접어둔 서버 기동 시각 — 그 서버가 살아 있는 동안만 유효
+// ?oldcode=1: 진단·헤드리스 캡처용 상태 고정 (?guard·?conn·?nosse 선례). 이 알림도
+// 서버가 낡아야만 보이는데 그 상황은 캡처로 만들 수 없다 — 두 알림이 같이 떴을 때
+// 헤더가 얼마나 먹는지를 눈으로 재려면 훅이 필요하다 (REQ-20260827-017-62x6).
+const OC_FORCE = /[?&]oldcode=1/.test(location.search);
 let ocInfo = null, ocSig = "", ocCopyT = null;
 
 const ocAck = () => { try{ return localStorage.getItem(OC_ACK); }catch(e){ return null; } };
@@ -2380,6 +2407,7 @@ async function checkOldCode(){
     const r = await fetch("/api/serveinfo", {cache: "no-store"});
     if (r.ok) d = await r.json();
   }catch(e){}
+  if (OC_FORCE) d = {started: new Date(Date.now() - 4.2e6).toISOString(), stale: true};
   // 무응답은 "코드 낡음"이 아니다 — 재기동 중일 수도 있다. 서버 단절 표시는
   // 터미널 뷰가 따로 한다. 여기서는 직전 판정을 그대로 두고 다음 폴을 기다린다.
   if (!d || typeof d.stale !== "boolean") return;
@@ -2394,22 +2422,23 @@ function renderOldCode(){
   // 낡지 않았으면 흔적을 남기지 않는다. 상시 자리표시자를 두면 곧 안 읽힌다.
   if (!d || !d.stale){
     ocSetAck(null);
-    if (ocSig !== "off"){ ocSig = "off"; el.hidden = true; el.innerHTML = ""; }
+    if (ocSig !== "off"){
+      ocSig = "off"; el.hidden = true; el.innerHTML = ""; renderSvChip();
+    }
     return;
   }
   const folded = ocAck() === d.started;
   const sig = d.started + "|" + folded;
   if (sig === ocSig) return;   // 같은 내용 재작성 금지 (aria-live 재낭독·복사 피드백 소실)
   ocSig = sig;
-  el.hidden = false;
+  renderSvChip();
   if (folded){
-    // 접어도 사실은 남는다 — 다만 한 줄로. 재기동하면 자동으로 사라진다.
-    el.innerHTML = `<button class="oc-open" id="oc-open"`
-      + ` title="구동 중인 서버가 기동 시점 코드로 돌고 있습니다 — 눌러서 자세히">`
-      + `<span class="oc-mark" aria-hidden="true">▲</span> 서버 재기동 필요 · 자세히</button>`;
-    $("#oc-open").addEventListener("click", () => { ocSetAck(null); renderOldCode(); });
+    // 접으면 줄이 사라진다 — 사실은 브랜드 행의 서버 상태 칩으로 내려간다
+    // (REQ-20260827-017). 줄을 남긴 채 글자만 줄이면 접기 버튼이 거짓말이 된다.
+    el.hidden = true; el.innerHTML = "";
     return;
   }
+  el.hidden = false;
   const at = String(d.started || "").slice(11, 16);
   el.innerHTML = `<span class="oc-t"><span class="oc-mark" aria-hidden="true">▲</span>`
     + ` 서버가 옛 코드로 돌고 있습니다</span>`
@@ -2527,66 +2556,98 @@ function renderGuard(){
       gwSig = "off"; gwOpen = false; gwAll = false; gwOut.clear();
       el.hidden = true; el.innerHTML = "";
       log.hidden = true; log.innerHTML = "";
+      renderSvChip();
     }
     return;
   }
-  const ev = d.last_death, folded = gwAck() === ev.ts;
-  const sig = [st, ev.ts, folded, gwOpen, gwAll, [...gwOut].join()].join("|");
+  const ev = d.last_death;
+  /* 헤더 줄은 **사람의 손을 요구하는 사실**에만 준다 (REQ-20260827-017-62x6).
+     자동 복구가 성공한 것은 이미 끝난 일이라 읽고 나서 할 일이 없다 — 자주
+     복구되는 서버일수록 그 줄은 사실상 상시 표시가 되어 아래의 보드를 밀어낸다.
+     그래서 성공은 브랜드 행의 상태 칩 한 자리로 말하고, "왜 죽었나"의 답은 기록
+     패널이 한다. 그 사이의 한 줄 요약은 칩과 기록 둘 다와 겹치는 잉여였다.
+     접어 둔 경고도 줄을 비운다 — 줄이 남으면 접기 버튼이 거짓말이 된다. */
+  const line = st === "attention" && gwAck() !== ev.ts;
+  const sig = [st, ev.ts, line, gwOpen, gwAll, [...gwOut].join()].join("|");
   if (sig === gwSig) return;   // 같은 내용 재작성 금지 (aria-live 재낭독·복사 피드백 소실)
   gwSig = sig;
-  el.hidden = false;
-  const mark = st === "attention" ? "▲" : "↻";
-  if (folded){
-    // 접어도 사실은 남는다 — 다만 한 줄로. 잠잠해지면 저절로 사라진다.
-    el.innerHTML = `<button class="gw-open" id="gw-open"`
-      + ` title="서버가 죽었던 기록이 있습니다 — 눌러서 자세히">`
-      + `<span class="gw-mark" aria-hidden="true">${mark}</span> `
-      + (st === "attention" ? "자동 복구 멈춤"
-                            : `서버 자동 복구 ${Math.max(1, d.restarts || 1)}회`)
-      + ` · 자세히</button>`;
-    $("#gw-open").addEventListener("click", () => { gwSetAck(null); renderGuard(); });
-    log.hidden = true; log.innerHTML = "";
-    return;
-  }
-  const at = String(ev.ts || "").slice(11, 16);
-  // 사유는 괄호로 붙인다. 값이 signal SIGTERM 이기도 exit 1 이기도 해서 뒤에
-  // 조사를 붙이면(로/으로) 어느 한쪽이 반드시 어긋난다.
-  const why = ev.reason ? ` (<code>${esc(ev.reason)}</code>)` : "";
-  const tone = st === "attention" ? "var(--c-blocked)" : "var(--c-done)";
-  let title, detail, cmd = "";
-  if (st === "attention"){
-    title = "자동 복구가 멈췄습니다";
-    detail = (d.guard === "gave-up")
+  renderSvChip();
+  el.hidden = !line;
+  el.innerHTML = "";
+  if (line){
+    const at = String(ev.ts || "").slice(11, 16);
+    // 사유는 괄호로 붙인다. 값이 signal SIGTERM 이기도 exit 1 이기도 해서 뒤에
+    // 조사를 붙이면(로/으로) 어느 한쪽이 반드시 어긋난다.
+    const why = ev.reason ? ` (<code>${esc(ev.reason)}</code>)` : "";
+    let detail = (d.guard === "gave-up")
       ? `서버가 ${ev.fails || "여러"}번 잇따라 자리잡지 못해 감시자가 물러났습니다${why}.`
       : `${at} 에 멈춘 뒤로 서버를 지켜보는 것이 없습니다${why}.`;
     detail += " 지금 서버가 죽으면 다시 뜨지 않습니다.";
-    cmd = "s9 serve --supervise";
-  } else {
-    title = "서버가 스스로 복구했습니다";
-    detail = `${at} 에 멈췄다가 `
-      + (ev.retry_in ? `${ev.retry_in}초 뒤 ` : "곧 ") + `다시 떴습니다${why}.`
-      + (d.restarts > 1 ? ` 지금까지 ${d.restarts}번 되살렸습니다.` : "");
+    el.innerHTML = `<span class="gw-t" style="color:var(--c-blocked)">`
+      +   `<span class="gw-mark" aria-hidden="true">▲</span> 자동 복구가 멈췄습니다</span>`
+      + `<span class="gw-d">${detail}</span>`
+      + `<span class="gw-act">`
+      +   `<button class="gw-cmd" id="gw-cmd"`
+      +     ` title="클릭하면 복사됩니다 — 터미널에 붙여넣어 실행하세요">s9 serve --supervise</button>`
+      +   `<span class="gw-copied" id="gw-copied" role="status"></span>`
+      +   `<button class="gw-link" id="gw-log">${gwOpen ? "기록 닫기" : "기록 보기"}</button>`
+      +   `<button class="gw-link" id="gw-fold"`
+      +     ` title="다음 사건이 날 때까지 위쪽 상태 칩으로 접어 둡니다">접기</button>`
+      + `</span>`;
+    $("#gw-cmd").addEventListener("click", gwCopyCmd);
+    $("#gw-log").addEventListener("click", () => { gwOpen = !gwOpen; renderGuard(); });
+    $("#gw-fold").addEventListener("click", () => {
+      gwSetAck(((gwInfo || {}).last_death || {}).ts || "1");
+      renderGuard();
+    });
   }
-  el.innerHTML = `<span class="gw-t" style="color:${tone}">`
-    +   `<span class="gw-mark" aria-hidden="true">${mark}</span> ${esc(title)}</span>`
-    + `<span class="gw-d">${detail}</span>`
-    + `<span class="gw-act">`
-    +   (cmd ? `<button class="gw-cmd" id="gw-cmd"`
-              + ` title="클릭하면 복사됩니다 — 터미널에 붙여넣어 실행하세요">${esc(cmd)}</button>`
-              + `<span class="gw-copied" id="gw-copied" role="status"></span>` : "")
-    +   `<button class="gw-link" id="gw-log">${gwOpen ? "기록 닫기" : "기록 보기"}</button>`
-    +   `<button class="gw-link" id="gw-fold"`
-    +     ` title="다음 사건이 날 때까지 한 줄로 접어 둡니다">접기</button>`
-    + `</span>`;
-  if (cmd) $("#gw-cmd").addEventListener("click", gwCopyCmd);
-  $("#gw-log").addEventListener("click", () => { gwOpen = !gwOpen; renderGuard(); });
-  $("#gw-fold").addEventListener("click", () => {
-    gwSetAck(((gwInfo || {}).last_death || {}).ts || "1");
-    renderGuard();
-  });
   log.hidden = !gwOpen;
   log.innerHTML = gwOpen ? gwLogHTML(d) : "";
   if (gwOpen) gwLogWire();
+}
+
+/* 서버 상태 칩 — 이 서버 자신에 대한 사실 중 **줄을 받지 못한 것**들의 자리
+   (REQ-20260827-017-62x6). 이미 있는 브랜드 행 안이라 헤더가 높아지지 않는다.
+   ① 자동 복구가 성공한 사실: 읽고 나서 할 일이 없다. 눌러서 기록으로 바로 간다.
+   ② 접어 둔 경고(코드 낡음·자동 복구 멈춤): 눌러서 되펼친다. 접기가 줄을 실제로
+      지우려면 접힌 사실이 갈 곳이 있어야 한다 — 되돌릴 수 없는 접기는 삭제다.
+   말할 것이 없으면 비운다. 상시 자리표시자는 곧 배경이 되어 진짜 사고 때도
+   안 읽힌다 — 018 이 세운 규칙을 칩에서도 그대로 지킨다. */
+let svSig = "";
+function renderSvChip(){
+  const el = $("#sv-chip");
+  if (!el) return;
+  const items = [];
+  const oc = ocInfo;
+  if (oc && oc.stale && ocAck() === oc.started)
+    items.push({tone: "sv-warn", mark: "▲", label: "서버 재기동 필요",
+      title: "구동 중인 서버가 기동 시점 코드로 돌고 있습니다 — 눌러서 자세히",
+      act: () => { ocSetAck(null); renderOldCode(); }});
+  const d = gwInfo, st = gwState(d);
+  if (st === "attention" && gwAck() === d.last_death.ts)
+    items.push({tone: "sv-bad", mark: "▲", label: "자동 복구 멈춤",
+      title: "지금 서버가 죽으면 다시 뜨지 않습니다 — 눌러서 자세히",
+      act: () => { gwSetAck(null); renderGuard(); }});
+  else if (st === "recovered"){
+    const ev = d.last_death, at = String(ev.ts || "").slice(11, 16);
+    items.push({tone: "sv-ok", mark: "↻",
+      label: `자동 복구 ${Math.max(1, d.restarts || 1)}회`,
+      title: `${at} 에 멈췄다가 `
+        + (ev.retry_in ? `${ev.retry_in}초 뒤 ` : "곧 ") + "스스로 다시 떴습니다"
+        + (ev.reason ? ` (${ev.reason})` : "") + " — 눌러서 기록 보기",
+      act: () => { gwOpen = !gwOpen; renderGuard(); }});
+  }
+  // 같은 내용 재작성 금지 — aria-live 영역을 다시 쓰면 화면 낭독이 되풀이된다
+  const sig = items.map(it => it.tone + it.label).join("|");
+  if (sig === svSig) return;
+  svSig = sig;
+  if (!items.length){ el.innerHTML = ""; return; }
+  el.innerHTML = items.map((it, i) =>
+    `<button class="${it.tone}" data-svi="${i}" title="${esc(it.title)}">`
+    + `<span class="sv-m" aria-hidden="true">${it.mark}</span> ${esc(it.label)}</button>`
+  ).join("");
+  el.querySelectorAll("[data-svi]").forEach(b =>
+    b.addEventListener("click", () => items[+b.dataset.svi].act()));
 }
 
 function gwLogHTML(d){

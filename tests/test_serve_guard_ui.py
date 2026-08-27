@@ -208,8 +208,10 @@ class ServeGuardUI(unittest.TestCase):
                             "특정 스킨/톤 전용 스타일이 아니다")
 
     def test_state_is_readable_without_colour(self):
-        """색만으로 상태를 구분하지 않는다 — 마크와 문구가 같이 말한다."""
-        body = self._fn("renderGuard")
+        """색만으로 상태를 구분하지 않는다 — 마크와 문구가 같이 말한다.
+        복구 성공(↻)은 REQ-20260827-017 이후 헤더 줄이 아니라 툴바의 상태
+        칩에서 말한다 — 그래서 renderGuard 하나가 아니라 블록 전체를 본다."""
+        body = self._block()
         self.assertRegex(body, r"[↻⟳]", "복구를 뜻하는 마크가 없다")
         self.assertIn("▲", body, "주의를 뜻하는 마크가 없다")
 

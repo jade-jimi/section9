@@ -76,8 +76,17 @@ class BindingShape(unittest.TestCase):
         self.assertEqual(b["agent_transcript_path"], [self.real])
 
     def test_s5_healthy_list_is_untouched(self):
-        """S5. 멀쩡한 목록은 건드리지 않는다 — 고침이 새 손실이 되면 안 된다."""
-        good = ["/a/b/one.output", "/a/b/two.output"]
+        """S5. 멀쩡한 목록은 건드리지 않는다 — 고침이 새 손실이 되면 안 된다.
+
+        픽스처가 실재하는 파일이어야 한다. 처음엔 가짜 경로를 썼는데, H1
+        재작업(존재가 아니라 **파일인가**로 거른다 — REQ-20260827-018)이 들어오자
+        이 테스트가 무너졌다. **테스트가 틀렸던 것**이다: "멀쩡한 목록"의 뜻은
+        "실재하는 transcript 들"이지 "그럴듯한 문자열들"이 아니다.
+        """
+        second = os.path.join(self.tmp, "agent-out2.jsonl")
+        with open(second, "w") as f:
+            f.write("{}\n")
+        good = [self.real, second]
         b = self.m._norm_binding({"agent_transcript_path": list(good)})
         self.assertEqual(b["agent_transcript_path"], good)
 
@@ -173,6 +182,107 @@ class LiveAgents(unittest.TestCase):
         open(p, "w").write("x")
         self._bind("endsess", [p], ended="1")
         self.assertEqual(self.m.live_agents(), [])
+
+
+class ShapeAudit(unittest.TestCase):
+    """전수 검사를 명령으로 남긴다 (REQ-20260827-011 반려: "한번 더 전수 점검").
+
+    한 번 더 훑는 것으로는 부족하다. **사람이 물어볼 때만 도는 검사는 물어보지
+    않으면 안 돈다.** 되돌리기보다 다시 생기는지 계속 보는 것이 본체다.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="s9shapes-")
+        os.environ["S9_ROOT"] = cls.tmp
+        spec = importlib.util.spec_from_loader(
+            "s9shapes", importlib.machinery.SourceFileLoader("s9shapes", S9))
+        cls.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.m)
+        os.makedirs(cls.m.STATE, exist_ok=True)
+
+    def setUp(self):
+        for fn in os.listdir(self.m.STATE):
+            os.remove(os.path.join(self.m.STATE, fn))
+
+    def _write(self, name, obj):
+        with open(os.path.join(self.m.STATE, name), "w",
+                  encoding="utf-8") as f:
+            json.dump(obj, f)
+
+    def test_a1_clean_state_has_no_issue(self):
+        """A1. 멀쩡하면 조용하다 — 늘 시끄러운 검사는 곧 무시된다."""
+        self._write("testbox__ok.json",
+                    {"machine": "testbox", "session": "ok",
+                     "agent_transcript_path": ["/a/b.output"]})
+        issues, stat = self.m.shape_audit()
+        self.assertEqual(issues, [], issues)
+        self.assertEqual(stat["bindings"], 1)
+
+    def test_a2_split_chars_are_found(self):
+        """A2. 글자로 쪼개진 값을 찾아낸다 (실제로 상해 있던 모양)."""
+        self._write("testbox__bad.json",
+                    {"machine": "testbox", "session": "bad",
+                     "agent_transcript_path": list("/tmp/x.output")})
+        issues, _ = self.m.shape_audit()
+        self.assertTrue(any("쪼개짐" in why for _, why in issues), issues)
+
+    def test_a3_one_field_two_shapes_is_found(self):
+        """A3. 한 필드가 두 모양으로 나타나면 잡는다.
+
+        이게 이 검사의 본체다 — 상한 결과가 아니라 **상하게 될 자리**를 본다.
+        """
+        self._write("testbox__s1.json",
+                    {"machine": "testbox", "session": "s1", "last_req": "R-1"})
+        self._write("testbox__s2.json",
+                    {"machine": "testbox", "session": "s2",
+                     "last_req": ["R-1"]})
+        issues, _ = self.m.shape_audit()
+        self.assertTrue(any("여러 모양" in why for _, why in issues), issues)
+
+    def test_a4_empty_list_is_not_a_second_shape(self):
+        """A4. 빈 리스트는 다른 뜻이 아니다.
+
+        원소 타입을 모를 뿐인데 그걸 불일치로 세면 검사가 늘 시끄러워지고,
+        시끄러운 검사는 아무도 안 본다.
+        """
+        self._write("testbox__e1.json",
+                    {"machine": "testbox", "session": "e1", "tags": []})
+        self._write("testbox__e2.json",
+                    {"machine": "testbox", "session": "e2", "tags": ["x"]})
+        issues, _ = self.m.shape_audit()
+        self.assertEqual([i for i in issues if "tags" in i[1]], [], issues)
+
+    def test_a4b_short_single_char_list_is_not_split(self):
+        """A4b. 한 글자짜리 원소가 몇 개 있다고 쪼개진 것은 아니다.
+
+        처음 판정이 `["x"]` 를 쪼개짐으로 읽었고 A4 가 그걸 잡았다. 쪼개진
+        경로는 언제나 길다 — 길이로 가른다.
+        """
+        self.assertFalse(self.m._split_chars(["x"]))
+        self.assertFalse(self.m._split_chars(list("abc")))
+        self.assertTrue(self.m._split_chars(list("/tmp/x.output")))
+
+    def test_a5_non_binding_files_are_skipped(self):
+        """A5. 바인딩 폴더의 **바인딩 아닌 파일**은 건너뛴다.
+
+        `approvals_seen.json` 이 그 폴더에 산다 — REQ id 를 키로 쓰는 별개
+        파일이다. 바인딩으로 읽으면 그 키들이 전부 "이상한 필드"가 된다.
+        """
+        self._write("approvals_seen.json",
+                    {"REQ-20260823-034": "2026-08-23T16:19:40+09:00"})
+        issues, stat = self.m.shape_audit()
+        self.assertEqual(stat["bindings"], 0)
+        self.assertEqual(issues, [], issues)
+
+    def test_a6_broken_json_is_reported_not_raised(self):
+        """A6. 깨진 파일은 보고하되 검사를 세우지 않는다 — 하나 때문에 나머지를
+        못 보면 전수 검사가 아니다."""
+        with open(os.path.join(self.m.STATE, "testbox__broken.json"),
+                  "w", encoding="utf-8") as f:
+            f.write('{"machine": "testbox", "sess')
+        issues, _ = self.m.shape_audit()
+        self.assertTrue(any("파싱 실패" in why for _, why in issues), issues)
 
 
 if __name__ == "__main__":

@@ -190,21 +190,31 @@ def _norm_binding(b):
     """
     if not isinstance(b, dict):
         return b
-    atp = b.get("agent_transcript_path")
-    if isinstance(atp, str):
-        atp = [atp] if atp else []
-    elif isinstance(atp, list):
-        # 원소가 전부 한 글자면 경로 목록이 아니라 쪼개진 문자열이다.
-        if atp and all(isinstance(x, str) and len(x) <= 1 for x in atp):
-            joined = "".join(atp)
-            atp = [joined] if os.path.exists(joined) else []
+    for key in ("agent_transcript_path", "active_reqs"):
+        if key not in b:
+            continue
+        v = b[key]
+        if isinstance(v, str):
+            v = [v] if v else []
+        elif isinstance(v, list):
+            # 원소가 전부 한 글자면 경로 목록이 아니라 쪼개진 문자열이다.
+            if _split_chars(v) or (v and all(
+                    isinstance(x, str) and len(x) <= 1 for x in v)):
+                v = [x for x in ["".join(v)] if x]
+            else:
+                v = [x for x in v if isinstance(x, str) and len(x) > 1]
         else:
-            atp = [x for x in atp if isinstance(x, str) and len(x) > 1]
-    else:
-        atp = []
-    if atp != b.get("agent_transcript_path") and (
-            atp or "agent_transcript_path" in b):
-        b["agent_transcript_path"] = atp
+            v = []
+        if key == "agent_transcript_path":
+            # **존재가 아니라 '파일인가'** 로 거른다 (REQ-20260827-011 재작업).
+            # `os.path.exists("/")` 는 참이다 — 이 결함의 진짜 해가 "실재하는
+            # 디렉토리의 mtime 이 세션 활동으로 읽히는 것"이었으므로, 걸러야 할
+            # 것은 '없는 경로'가 아니라 **'파일이 아닌 것'** 이다. transcript 는
+            # 언제나 파일이다. 아직 안 만들어진 경로도 파일이 아니므로 빠지는데,
+            # 그건 맞다 — 없는 파일의 mtime 은 활동을 증명하지 못한다.
+            v = [x for x in v if os.path.isfile(x)]
+        if v != b.get(key):
+            b[key] = v
     return b
 
 
@@ -1740,10 +1750,14 @@ def _last_transition(body):
 def _binding_activity_paths(b):
     """바인딩의 활동 경로(transcript/스트림/위임 에이전트 transcript) — 존재하는 것만."""
     import glob as _glob
-    atp = b.get("agent_transcript_path", "")
+    # 읽는 쪽에 흩어진 방어를 걷어냈다 (REQ-20260827-011 재작업): 여기서
+    # `isinstance` 로 막던 것을 경계(`_norm_binding`)가 이미 한다. 흩어진 방어는
+    # 쪼개진 리스트를 그냥 통과시켰고 — 방어가 두 벌이면 한 벌만 고쳐진다.
+    b = _norm_binding(dict(b))
     paths = [p for p in
-             ([b.get("transcript_path", "")] +
-              (atp if isinstance(atp, list) else [atp])) if p and os.path.exists(p)]
+             ([b.get("transcript_path", "")]
+              + (b.get("agent_transcript_path") or []))
+             if p and os.path.isfile(p)]
     sid8 = b.get("session", "")
     if sid8:
         paths += _glob.glob(os.path.join(STREAMS, safe_name(sid8) + "*.jsonl"))
@@ -4657,6 +4671,97 @@ def proximity_relates(fix=False):
     return hits
 
 
+def _shape_of(v):
+    """값의 모양 이름. 리스트는 원소 타입까지 — 그게 갈리는 자리가 위험하다."""
+    if isinstance(v, list):
+        inner = sorted({type(x).__name__ for x in v})
+        return "list[" + (",".join(inner) or "empty") + "]"
+    return type(v).__name__
+
+
+SPLIT_MIN = 8      # 이보다 짧으면 진짜 한 글자짜리 목록일 수 있다
+
+
+def _split_chars(v):
+    """글자 단위로 쪼개진 문자열인가.
+
+    "원소가 전부 한 글자"만으로는 부족하다 — `["x"]` 나 `["a", "b"]` 는 멀쩡한
+    데이터일 수 있고, 실제로 이 판정이 태그 하나를 쪼개짐으로 오인했다(테스트가
+    잡았다). 쪼개진 경로는 언제나 길므로 길이로 가른다: 경로 하나면 20조각을
+    훌쩍 넘고, 진짜 한 글자짜리 목록이 여덟을 넘는 일은 이 저장소에 없다.
+    """
+    return (isinstance(v, list) and len(v) >= SPLIT_MIN
+            and all(isinstance(x, str) and len(x) <= 1 for x in v))
+
+
+def shape_audit():
+    """상태 파일과 문서 앞머리의 **모양**을 전수로 훑는다 (REQ-20260827-011).
+
+    한 필드가 두 뜻(문자열/리스트)으로 쓰이면 데이터가 상한다. 실제로
+    `agent_transcript_path` 가 그렇게 상해 경로가 글자 단위로 쪼개졌고,
+    그중 `"/"` 는 실제로 존재하는 디렉토리라 활동 판정에 섞여 들어갔다.
+
+    사람이 물어볼 때만 도는 검사는 물어보지 않으면 안 돈다. 그래서 명령으로
+    남긴다 — 되돌리기보다 **다시 생기는지 계속 보는 것**이 본체다.
+
+    반환: (문제 목록, 통계). 문제는 (경로, 사유) 쌍.
+    """
+    import collections
+    import glob as _glob
+    issues, shapes = [], collections.defaultdict(collections.Counter)
+
+    def look(where, meta):
+        for k, v in (meta or {}).items():
+            shapes[k][_shape_of(v)] += 1
+            if _split_chars(v):
+                issues.append((where, f"{k}: 글자 단위로 쪼개짐 ({len(v)}조각)"))
+
+    n_bind = 0
+    for bp in sorted(_glob.glob(os.path.join(STATE, "*.json"))):
+        try:
+            with open(bp, encoding="utf-8") as f:
+                b = json.load(f)
+        except (OSError, ValueError) as e:
+            issues.append((bp, f"JSON 파싱 실패: {e}"))
+            continue
+        if not isinstance(b, dict):
+            issues.append((bp, f"최상위가 dict 가 아니다: {type(b).__name__}"))
+            continue
+        if not b.get("session"):
+            continue          # 바인딩이 아닌 파일(approvals_seen 등)은 건너뛴다
+        n_bind += 1
+        look(bp, b)
+
+    n_doc = 0
+    for p in walk_docs():
+        try:
+            meta = read_doc(p)[0]
+        except Exception as e:
+            issues.append((p, f"읽기 실패: {e}"))
+            continue
+        n_doc += 1
+        look(p, meta)
+
+    # 한 필드가 두 모양으로 나타나면 그 자리가 다음 사고의 자리다.
+    # 빈 리스트는 원소 타입을 모를 뿐 다른 뜻이 아니므로 세지 않는다.
+    for k, c in sorted(shapes.items()):
+        kinds = {kk for kk in c if not kk.startswith("list[empty")}
+        if len(kinds) > 1:
+            issues.append(("(전체)", f"{k}: 한 필드가 여러 모양 — {dict(c)}"))
+    return issues, {"bindings": n_bind, "docs": n_doc}
+
+
+def cmd_shapes(args):
+    issues, stat = shape_audit()
+    for where, why in issues[:60]:
+        print(f"  {os.path.basename(where) if where != '(전체)' else where}: {why}")
+    if len(issues) > 60:
+        print(f"  … 외 {len(issues) - 60}건")
+    print(f"모양 검사: 바인딩 {stat['bindings']}개 · 문서 {stat['docs']}개 "
+          f"→ 문제 {len(issues)}건")
+    return 1 if issues else 0
+
+
 def cmd_linkcheck(args):
     if getattr(args, "prune_proximity", False):
         hits = proximity_relates(fix=args.fix)
@@ -7224,9 +7329,19 @@ def port_guard_tick():
                    + ("정상" if verdict["ok"] else "실패 — 사람 확인 필요"))
     elif ratio >= PORT_GUARD_WARN:
         verdict["action"] = "watch"
+        # 경고는 **누가 쥐고 있는지까지** 말한다 (REQ-20260827-019).
+        # "우리 것이 아닌 점유자를 의심하라"만 남기면 사람이 doctor 를 다시
+        # 돌려 범인을 찾아야 하는데, 그 답은 방금 doctor 가 이미 줬다.
+        # 실사고: dllhost.exe 한 프로세스가 13,392개를 쥔 채 82% 를 만들었고
+        # 우리 것은 0개였다 — 사용자가 이 줄만 보고 우리 결함으로 읽었다.
+        who = ""
+        if win.get("top_name") and win.get("top_count"):
+            mine = len(win.get("sample") or [])
+            who = (f" 가장 많이 쥔 쪽은 {win['top_name']}"
+                   f"(pid {win.get('top_pid')}) {win['top_count']:,}개이고, "
+                   f"우리 것은 {mine}개다.")
         _guard_log(f"동적 포트 {bound}/{total} ({ratio:.0%}) — 평시(1~3%)보다 "
-                   f"높다. 회수는 매 틱 돌고 있으니 우리 것이 아닌 점유자를 "
-                   f"의심하라: `bin/s9 doctor`")
+                   f"높다.{who} 자세히: `bin/s9 doctor`")
     return verdict
 
 
@@ -8123,16 +8238,12 @@ def cmd_serve(args):
                     b = json.load(f)
             except (OSError, ValueError):
                 continue
-            # 활동 경로: 부모 transcript + 스트림 미러 + 위임 에이전트 transcript
-            # (병렬 위임 시 리드가 `s9 bind agent_transcript_path <path>` 로 등록)
-            atp = b.get("agent_transcript_path", "")
-            paths = [p for p in
-                     ([b.get("transcript_path", "")] +
-                      (atp if isinstance(atp, list) else [atp]))
-                     if p and os.path.exists(p)]
+            # 활동 경로(부모 transcript · 스트림 미러 · 위임 에이전트 transcript)는
+            # **한 벌뿐이다** — 여기서 손으로 다시 조립하지 않는다. 예전엔 같은
+            # 코드가 두 자리에 있었고 둘 다 읽는 쪽에서 방어해, 쪼개진 리스트가
+            # 그대로 통과했다 (REQ-20260827-011).
             sid8 = b.get("session", "")
-            if sid8:
-                paths += _glob.glob(os.path.join(STREAMS, safe_name(sid8) + "*.jsonl"))
+            paths = _binding_activity_paths(b)
             if not paths:
                 continue
             age = min(now - os.path.getmtime(p) for p in paths)
@@ -9290,6 +9401,9 @@ def main():
     ut = sub.add_parser("untitled", help="제목이 원문 그대로인 요청 목록")
     ut.add_argument("--quiet", action="store_true")
     ut.set_defaults(fn=cmd_untitled)
+    sh = sub.add_parser("shapes",
+                        help="상태·문서 필드의 모양 전수 검사 (한 필드 두 뜻 탐지)")
+    sh.set_defaults(fn=cmd_shapes)
     lc = sub.add_parser("linkcheck", help="문서 관계 전수 검사/복구")
     lc.add_argument("--fix", action="store_true")
     lc.add_argument("--prune-proximity", action="store_true",
