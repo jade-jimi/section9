@@ -2136,7 +2136,7 @@ def chat_target(sid8=None):
 
 
 def chat_send(text, sid8=None, sender="", kind="chat", req="",
-              agent="", agent_type=""):
+              agent="", agent_type="", anchor=""):
     """수신함에 한 줄 append — 대상 세션의 Monitor가 즉시 깨어난다.
     req: 서버측 audit(chat_audit)이 만든 REQ id — 수신 세션이 중복 생성 없이
     그 id로 상태를 관리하도록 줄에 동봉한다 (REQ-20260825-001).
@@ -2161,6 +2161,10 @@ def chat_send(text, sid8=None, sender="", kind="chat", req="",
             "text": text}
     if req:
         line["req"] = req
+    if anchor:
+        # 화면에서 끌어 고른 글 (REQ-20260827-072) — 무엇을 대고 한 말인지 없이
+        # "이거 무슨 뜻이냐"만 오면 답할 수 없다.
+        line["anchor"] = anchor[:ANCHOR_MAX]
     if agent:
         line["agent"] = agent
         if agent_type:
@@ -3238,15 +3242,19 @@ def chat_doc_target(text):
     return cands[0]["id"], rest, ""
 
 
-def chat_append_doc(doc_id, text, sender, sid8):
-    """지목된 문서에 이어 말한 내용을 노트로 붙인다. 반환: 경고 문구."""
+def chat_append_doc(doc_id, text, sender, sid8, anchor=""):
+    """지목된 문서에 이어 말한 내용을 노트로 붙인다. 반환: 경고 문구.
+
+    anchor 는 화면에서 끌어 고른 글이다 (REQ-20260827-072) — 어느 구간에 대고
+    한 말인지 문서 안에 남는다."""
     import subprocess
     env = dict(os.environ)
     env["S9_SESSION"] = sid8
     me = os.path.realpath(__file__)
-    subprocess.run([me, "note", doc_id, text, "--label", "ask",
-                    "--user", sender],
-                   capture_output=True, text=True, env=env, timeout=20)
+    argv = [me, "note", doc_id, text, "--label", "ask", "--user", sender]
+    if anchor:
+        argv += ["--anchor", anchor]
+    subprocess.run(argv, capture_output=True, text=True, env=env, timeout=20)
     rows = [r for r in load_catalog() if r["id"] == doc_id]
     st = rows[0].get("status", "") if rows else ""
     if st in ("done", "cancelled"):
@@ -3255,7 +3263,7 @@ def chat_append_doc(doc_id, text, sender, sid8):
     return ""
 
 
-def chat_audit(text, sender, sid8, doc=""):
+def chat_audit(text, sender, sid8, doc="", anchor=""):
     """대시보드 채팅 원문을 서버가 즉시 audit (REQ-20260825-001) — 수신 세션이
     유휴(tail 미가동)면 채팅이 수신함에만 쌓이고 아무 기록도 남지 않던 결함의
     영속성 보장: Request 분류면 REQ 문서를 즉시 생성한다. 분류 휴리스틱은
@@ -3278,7 +3286,7 @@ def chat_audit(text, sender, sid8, doc=""):
     if err:
         chat_audit_warn(err, sid8)
     if tgt:
-        chat_append_doc(tgt, body_t.strip(), sender, sid8)
+        chat_append_doc(tgt, body_t.strip(), sender, sid8, anchor)
         return tgt
     try:
         import subprocess  # s9 최상단은 stdlib 최소 import — 지역 import 관례
@@ -6500,6 +6508,17 @@ def _ts_delta(older, newer):
         return None
 
 
+ANCHOR_MARK = "\u2316"   # ⌖ — 이 노트가 문서의 어느 구간에 붙었는지
+ANCHOR_MAX = 300         # 인용은 짚을 만큼만. 문단을 통째로 옮기면 인용이 아니다
+
+
+def note_anchor(entry_text):
+    """노트 본문 첫 줄의 앵커 인용 → 그 글. 없으면 빈 문자열."""
+    m = re.match(rf"^\s*>\s*{ANCHOR_MARK}\s*(.+?)\s*$",
+                 (entry_text or "").splitlines()[0] if entry_text else "")
+    return m.group(1) if m else ""
+
+
 def cmd_note(args):
     """문서의 ## Notes 섹션 끝에 타임스탬프 붙은 내용 append (작업 기록용)."""
     path = find_path(args.id)
@@ -6569,6 +6588,14 @@ def cmd_note(args):
             item=(getattr(args, "item", "") or "").strip() or item_from_text(text),
             result=(getattr(args, "result", "") or "done"),
             transcript=(getattr(args, "transcript", "") or ""), ts=ts)
+    # 문서의 어느 구간에 붙은 말인지 (REQ-20260827-072). 줄 번호로 매지 않는다 —
+    # 문서가 한 줄만 바뀌어도 전부 어긋난다. **선택한 글 자체**를 인용으로 남기면
+    # 문서가 바뀌어도 사람은 어디였는지 읽을 수 있고, 화면은 그 글을 찾아 짚는다.
+    # 한 벌만 둔다: 프론트매터에 따로 적지 않는다 — 두 곳에 적으면 한 곳만 고쳐진다.
+    anchor = (getattr(args, "anchor", "") or "").strip()
+    if anchor:
+        q = " ".join(anchor.split())[:ANCHOR_MAX]
+        text = f"> {ANCHOR_MARK} {q}\n\n{text}"
     entry = f"\n### {ts}{label} ({attribution})\n\n{text}\n"
     if "\n## History" in body:  # Notes 섹션 끝 = History 직전
         body = body.replace("\n## History", entry + "\n## History", 1)
@@ -10493,16 +10520,19 @@ def cmd_serve(args):
                     if kind == "chat":
                         b = btgt or chat_target(sid_arg)
                         if b:
-                            req_id = chat_audit(text, actor, b["session"],
-                                                doc=str(req.get("doc")
-                                                        or "").strip())
+                            req_id = chat_audit(
+                                text, actor, b["session"],
+                                doc=str(req.get("doc") or "").strip(),
+                                anchor=str(req.get("anchor") or "").strip())
                     else:
                         # 즉시 인터럽트 시도 (REQ-20260825-008) — 가드 실패 시
                         # skipped로 보고되고 아래 큐잉이 협조적 중단을 보장한다
                         sig = interrupt_session(sid_arg)
                     sid = chat_send(text, sid8=sid_arg, sender=actor,
                                     kind=kind, req=req_id or "",
-                                    agent=agent_id, agent_type=agent_type)
+                                    agent=agent_id, agent_type=agent_type,
+                                    anchor=str(req.get("anchor")
+                                               or "").strip())
                     self._json({"ok": True, "sid": sid, "req": req_id,
                                 **({"agent": agent_id,
                                     "agent_type": agent_type} if agent_id else {}),
@@ -10826,6 +10856,8 @@ def main():
                          "옆 assets/로 옮겨지고 문서 화면에 그림으로 그려진다. "
                          "경로를 글자로 적지 마라 (REQ-20260827-028)")
     nt.add_argument("--label", help="예: 'response', 'decision'")
+    nt.add_argument("--anchor", default="",
+                    help="이 노트가 붙은 문서 구간의 원문(선택한 글 그대로)")
     nt.add_argument("--user")
     nt.add_argument("--agent", help="이 작업을 처리한 에이전트 actor "
                     "(lead:<model> / sub:<타입>:<agentId8> / wf:<이름>:<runId8> / "
