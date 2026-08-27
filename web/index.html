@@ -315,35 +315,49 @@ main{padding:18px 22px}
 .card{padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--hairline);position:relative}
 .card:hover{background:var(--accent-soft)}
 .card .id{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.02em}
-/* 우선순위 표기 (REQ-20260826-005 반려 재작업). 기본값 50도 반드시 그린다 —
-   보이지 않는 축은 없는 축이다. 값이 기본과 다를 때만 찍었더니 전 문서가 50이라
-   화면 어디에도 아무 값이 없었고 "숨겨져 있는 건가"로 반려됐다. 시끄러움보다
-   부재가 나쁘다: 늘 그리되, 낮을수록 조용하고 높을수록 또렷하게 만든다.
-   (1) 자리 — 카드 메타 줄(.m)의 맨 앞(size보다 먼저). 카드마다 같은 x에서
-       시작하는 숫자 열이 생겨 컬럼을 세로로 훑으면 순위가 서로 비교된다
-       (장부의 금액 열). 크기(S/M/L)보다 먼저 읽혀야 할 축이다.
-   (2) 표기 — 등급을 색면이 아니라 세 채널이 동시에 말한다: 게이지 마크
-       높이(▁▃▅▇) · 잉크색 · 글자 무게. 색을 못 봐도 마크 높이와 굵기로
-       갈리고, 숫자는 tabular-nums라 자릿수가 흔들리지 않는다(등급 이름만
-       두지 않는 이유 — 이 축은 '가중치'라 값 자체가 정보다).
+/* 우선순위 표기 (REQ-20260827-029 재작업 — REQ-20260826-005의 계약은 유지).
+   지켜야 하는 것: 기본값 50도 반드시 그린다. 값이 기본과 다를 때만 찍었더니
+   전 문서가 50이라 화면 어디에도 아무 값이 없었고 "숨겨져 있는 건가"로
+   반려됐다. 시끄러움보다 부재가 나쁘다.
+   고친 것: 그 '늘 그리기'가 이번엔 반대쪽으로 넘어갔다 — 카드 306장이 전부
+   메타 줄 첫 칸에 `▃ 50`을 달았고, 마크는 두부(■)로 떨어졌으며, 숫자 50은
+   처음 보는 사람에게 아무 뜻이 없었다.
+   (1) 글자 — 숫자와 마크를 등급 낱말 하나로 접었다. 색을 못 보는 조건에서
+       등급을 가르는 채널이 마크 높이에서 낱말로 옮겨왔다('긴급'≠'보통').
+       정확한 값은 문서 뷰어의 .pnum(`50/99`)과 title 툴팁에만 남는다.
+   (2) 자리 — 카드 메타 줄의 첫 칸을 담당자에게 내주고 그 뒤로 물러났다.
+       목록은 이미 이 값으로 정렬돼 있어 순위는 자리로 읽힌다 — 첫 칸의
+       숫자 열이 없어도 비교가 죽지 않는다.
+   (3) 계조 — 대부분인 기본 등급은 이웃 메타(크기·태그)와 같은 층에 서고,
+       눈이 먼저 가야 하는 high/urgent만 상태 잉크로 올라온다.
    배경 칠·세로 띠·pill 없음. 크기는 부모(메타 줄 11px / Docs 행 10px)를
    그대로 물려받아 어느 skin·density에서도 이웃 칩과 같은 리듬에 선다. */
-.prio{display:inline-flex;align-items:baseline;gap:3px;white-space:nowrap;
+/* 자간은 0이다 — 등급 이름이 한글 두 글자라, Latin 대문자에 쓰던 트래킹을
+   그대로 주면 '긴급'이 '긴 급' 두 낱말로 끊겨 보인다(첫 캡처에서 잡았다). */
+.prio{display:inline-flex;align-items:baseline;gap:6px;white-space:nowrap;
   font-family:var(--mono);font-variant-numeric:tabular-nums;
-  font-weight:500;letter-spacing:.02em;color:var(--muted)}
-.prio .pmark{font-style:normal;font-size:1.15em;line-height:0;color:var(--faint)}
-.prio .pnum{font-weight:inherit;min-width:2ch;text-align:right}
+  font-weight:500;letter-spacing:0;color:var(--muted)}
+.prio .pname{font-weight:inherit}
+.prio .pnum{font-style:normal;font-weight:400;color:var(--faint);letter-spacing:0}
 /* 낮음도 흐림(--faint)으로 지우지 않는다 — 10~11px에서 대비 3:1을 못 넘긴다.
-   조용함은 색을 빼서가 아니라 무게(400)와 마크 높이(▁)로 만든다. */
+   조용함은 색을 빼서가 아니라 무게(400)로 만든다. */
 .prio[data-tier="low"]{font-weight:400}
-.prio[data-tier="normal"] .pmark{color:var(--muted)}
 /* 여기서부터가 이 기능의 전부 — 눈이 먼저 가야 하는 두 등급만 잉크색을 쓴다 */
 .prio[data-tier="high"]{color:var(--c-inprogress);font-weight:700}
-.prio[data-tier="urgent"]{color:var(--c-blocked);font-weight:700;letter-spacing:.07em}
-.prio[data-tier="high"] .pmark,.prio[data-tier="urgent"] .pmark{color:inherit}
-/* Docs 목록 행은 flex 컨테이너가 아닌 텍스트 줄 — 간격을 직접 준다 */
-.doclist .row .id .prio{margin-right:7px}
-/* 문서 뷰어 메타: 숫자 옆에 뜻을 적는다 — 목록과 달리 여기는 읽는 자리다 */
+.prio[data-tier="urgent"]{color:var(--c-blocked);font-weight:700}
+/* Docs 목록 행은 flex 컨테이너가 아닌 텍스트 줄 — ID 뒤 간격을 직접 준다 */
+.doclist .row .id .prio{margin-left:7px;display:inline-flex}
+/* 문서 뷰어: 등급 낱말이 척도를 여는 손잡이다. 점선 밑줄은 이 화면에서 이미
+   doclink가 쓰는 "여기 더 있다"는 약속이고, 열리는 것도 doclink와 같은
+   hovercard다 — 새 어휘를 만들지 않았다. 늘 떠 있던 설명문은 그 카드로 옮겼다. */
+.prio.pfull{cursor:help}
+.prio.pfull .pname{border-bottom:1px dotted currentColor}
+.prio.pfull:focus-visible{outline:2px solid var(--text);outline-offset:3px}
+/* 척도 카드의 4등급 줄: 지금 등급만 잉크로 서고 나머지는 물러난다 */
+.hovercard .pscale{margin-top:5px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+.hovercard .pscale b{color:var(--text)}
+.hovercard code{font-family:var(--mono);font-size:11px}
+/* 미답 질문 안내 등 메타 행의 곁말 */
 .prio-note{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:7px}
 .card .t{margin:3px 0 6px;font-weight:600;line-height:1.45;font-size:13.5px;letter-spacing:-.01em;
   padding-right:56px}
@@ -1729,17 +1743,14 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   letter-spacing:.06em;border-radius:4px;padding:1px 5px;line-height:1.4;
   border:1px solid color-mix(in srgb,var(--text) 14%,transparent)}
 [data-skin="calm"] .card .tdd{border-radius:999px;padding:1px 7px;font-size:9.5px}
-/* 우선순위 = 잉크와 마크. calm도 색면·pill은 쓰지 않는다(위 .size 칩과 달리
-   윤곽조차 두지 않는다 — 카드 첫 칸이라 테두리를 주면 눈이 그 상자에 먼저
-   걸린다). low/normal은 참조 잉크(--calm-quiet: id·size와 같은 층)로 물러나고,
+/* 우선순위 = 등급 낱말과 잉크. calm도 색면·pill은 쓰지 않는다(위 .size 칩과
+   달리 윤곽조차 두지 않는다 — 테두리를 주면 눈이 그 상자에 먼저 걸린다).
+   low/normal은 참조 잉크(--calm-quiet: id·size와 같은 층)로 물러나고,
    high/urgent만 상태 잉크로 나온다. 이니셜 링·태그 글자와 색이 겹치지 않게
    카드 한 장에 뜨는 강조는 최대 하나로 유지된다. */
-[data-skin="calm"] .card .prio{font-size:11px;gap:4px;letter-spacing:.01em}
+[data-skin="calm"] .card .prio{font-size:11px}
 [data-skin="calm"] .card .prio[data-tier="low"],
-[data-skin="calm"] .card .prio[data-tier="normal"],
-[data-skin="calm"] .card .prio[data-tier="low"] .pmark,
-[data-skin="calm"] .card .prio[data-tier="normal"] .pmark{color:var(--calm-quiet)}
-[data-skin="calm"] .card .prio[data-tier="urgent"]{letter-spacing:.05em}
+[data-skin="calm"] .card .prio[data-tier="normal"]{color:var(--calm-quiet)}
 
 /* ---- 판정 블록: 캡션은 상태색 글자, 본문은 3줄로 접어 컬럼 리듬을 지킨다.
    접힌 내용은 카드 호버·키보드 포커스에서 전문으로 펼친다 (REQ-071 반려:
@@ -1965,34 +1976,46 @@ const GRP_LIMIT_SESSION = 5;                       // session은 기본 노출�
 // 우선순위 (REQ-20260826-005): 값이 없거나 범위 밖이면 기본 50으로 읽는다 —
 // s9의 work_order()와 같은 규칙이라 화면과 CLI의 순서 해석이 갈리지 않는다.
 // 정렬은 아래 workOrder() 한 곳에서만 건다.
-const PRIO_DEFAULT = 50;
+const PRIO_DEFAULT = 50, PRIO_MAX = 99;
 // 등급 경계는 척도 의미 그대로다: low 25 · normal 50 · high 75 · urgent 90.
 // 값에서 등급을 파생하는 함수는 하나(prioTier)뿐 — 카드·Docs 목록·문서 뷰어가
 // 같은 함수를 쓰므로 세 화면의 등급 판정이 갈릴 수 없다.
-// 이름/마크 표: [한글 이름, 게이지 마크]. 마크는 아래로 정렬된 블록 문자라
-// 높이만으로 순위가 읽힌다 — 색을 못 보는 조건에서도 등급이 갈린다
-// (s9-design 접근성 기준 7). ▁(1/8)은 10px에서 밑줄로 보여 ▂부터 쓴다.
-const PRIO_TIERS = {
-  urgent: ["긴급", "▇"],
-  high:   ["높음", "▅"],
-  normal: ["보통", "▃"],
-  low:    ["낮음", "▂"],
-};
+// 표는 등급 → 한글 이름 하나다. 게이지 마크(▂▃▅▇)를 뺐다 (REQ-20260827-029):
+// 그 블록 문자는 10px 모노 글꼴에서 두부(■)로 떨어져 순위가 아니라 얼룩으로
+// 읽혔고, 사용자가 지목한 "예쁘지 않다"의 절반이 그 글자였다. 색을 못 보는
+// 조건에서 등급을 가르는 채널은 이제 마크가 아니라 낱말 자체다 —
+// '긴급'과 '보통'은 색 없이도 갈린다 (s9-design 접근성 기준 7).
+const PRIO_TIERS = {urgent: "긴급", high: "높음", normal: "보통", low: "낮음"};
 function prioOf(r){
   const n = Number(r && r.priority);
-  return Number.isFinite(n) && n >= 1 && n <= 99 ? Math.round(n) : PRIO_DEFAULT;
+  return Number.isFinite(n) && n >= 1 && n <= PRIO_MAX ? Math.round(n) : PRIO_DEFAULT;
 }
 function prioTier(p){ return p >= 90 ? "urgent" : p >= 75 ? "high" : p >= 50 ? "normal" : "low"; }
 // request에만 붙인다 — knowledge/session에는 이 축이 없다.
-// 마크와 숫자를 함께 낸다: 마크는 훑을 때(순위), 숫자는 볼 때(정확한 값).
-function prioHTML(r){
+//
+// 사람이 읽는 글자는 **등급 낱말**이다 (REQ-20260827-029). 306건이 전부 `50`을
+// 달고 있어도 처음 보는 사람은 그 숫자가 무엇인지, 큰 쪽이 급한 것인지 알 수
+// 없었다. '보통'은 그 자체로 읽힌다. 접은 것은 표기이지 값이 아니다 —
+// 원래 가중치는 세 곳에 그대로 남는다:
+//   data-prio  → 정렬·기계·테스트가 읽는 축 (workOrder는 손대지 않았다)
+//   title      → 훑는 자리에서 방향까지 한 문장으로 (큰 값이 먼저)
+//   full 표기  → 문서 뷰어의 `보통 50/99` — 값과 척도를 함께 가르치는 자리
+// full 은 문서 뷰어만 참이다. 훑는 화면에 정확한 값을 다시 깔면 처음 상태로
+// 돌아간다 — 목록은 이미 이 값으로 정렬돼 있어 순위는 자리로 읽힌다.
+function prioHTML(r, full){
   if (!r || r.type !== "request") return "";
-  const p = prioOf(r), tier = prioTier(p), mark = PRIO_TIERS[tier][1];
-  // 툴팁은 한 문장만 — 척도 설명(1~99·기본 50·등급 이름)은 문서 뷰어 메타 행이
-  // 맡는다. 카드 위 툴팁에 설명서를 넣으면 아무도 끝까지 읽지 않는다.
-  return `<span class="prio" data-prio="${p}" data-tier="${tier}"`
-    + ` title="우선순위 ${p} (${tier}) — 높을수록 먼저 집는다"`
-    + `><i class="pmark" aria-hidden="true">${mark}</i><b class="pnum">${p}</b></span>`;
+  const p = prioOf(r), tier = prioTier(p), name = PRIO_TIERS[tier];
+  const tip = `우선순위 ${name} · ${p}/${PRIO_MAX} — 숫자가 클수록 먼저 집는다`
+    + ` (기본 ${PRIO_DEFAULT})`;
+  // 문서 뷰어 표기는 hovercard로 척도를 여는 손잡이가 된다 — 그래서 tabindex로
+  // 키보드도 닿게 하고, 그림 대신 문장을 읽는 도구에는 aria-label로 답한다.
+  // 훑는 자리는 손잡이가 아니라 표기라서 title 한 문장으로 끝낸다.
+  return `<span class="prio${full ? " pfull" : ""}" data-prio="${p}" data-tier="${tier}"`
+    + (full ? ` tabindex="0" data-prioscale="${p}" aria-label="${esc(tip)}"`
+            : ` title="${esc(tip)}"`)
+    + `><b class="pname">${name}</b>`
+    + (full ? `<i class="pnum">${p}/${PRIO_MAX}</i>` : "")
+    + `</span>`;
 }
 // Docs 타입바 순서 = 사용 빈도. question은 knowledge 다음 — 자주 열어보는 축이고,
 // session은 목록에서 자리만 지키는 축이라 그 앞에 둔다 (REQ-20260826-017).
@@ -3207,8 +3230,8 @@ function cardHTML(r){
     <div class="id">${liveDot}${esc(shortId(r.id))}</div>
     <div class="t">${esc(r.title)}</div>
     <div class="m">
-      ${prioHTML(r)}
       <span class="badge" style="--ah:${tagHue(r.user||"?")}"><i class="av">${esc((r.user||"?").slice(0,1).toUpperCase())}</i>${esc(r.user)}</span>
+      ${prioHTML(r)}
       ${r.size ? `<span class="size">${esc(r.size)}</span>` : ""}
       ${r.tdd ? `<span class="tdd${r.tdd.passed===r.tdd.total?" full":""}" title="TDD 시나리오 ${r.tdd.passed}/${r.tdd.total} 통과">TDD ${r.tdd.passed}/${r.tdd.total}</span>` : ""}
       ${(r.tags||[]).filter(t=>!SYS_TAGS.has(t)).slice(0,2).map(t=>`<span class="tag" style="--th:${tagHue(t)}">#${esc(t)}</span>`).join("")}
@@ -3378,7 +3401,7 @@ async function renderDocs(rows){
         role="button" tabindex="-1" data-rove-item${r.id===selectedDoc?' aria-current="true"':""}
         style="--sc:${sc}">
         <span class="st">${esc(statusLabel(r))}</span>
-        <div class="id">${prioHTML(r)}${esc(shortId(r.id))}</div><div>${esc(r.title)}</div>${snips}</div>`;
+        <div class="id">${esc(shortId(r.id))}${prioHTML(r)}</div><div>${esc(r.title)}</div>${snips}</div>`;
     }).join("");
     if (grp.length > shown.length)
       list += `<button class="more" data-expand="grp:${g}">${grp.length - shown.length}개 더 보기</button>`;
@@ -3518,13 +3541,11 @@ async function loadDoc(id, bg){
     ["user / machine / session", esc([m.user, m.machine, m.session].filter(Boolean).join(" / "))],
     ["project", esc(m.project) || null],
     // 우선순위는 기본값(50)일 때도 적는다 — 값이 안 보여 "숨겨져 있는 건가"로
-    // 반려된 축이다 (REQ-20260826-005). 여기가 그 물음에 답하는 자리이므로
-    // 숫자만 두지 않고 등급 이름과 CLI 별칭까지 적는다 — 카드의 마크가 무슨
-    // 뜻인지 배우는 곳이자, 값을 바꾸려면 어떤 단어를 쓰는지 아는 곳이다.
+    // 반려된 축이다 (REQ-20260826-005). 다만 그 답을 설명문으로 하지는 않는다
+    // (REQ-20260827-029): `보통 50/99` 두 낱말이 등급·값·척도를 한 번에 말하고,
+    // 척도표와 바꾸는 법은 낱말에 손을 얹거나 Tab으로 닿을 때 카드로 열린다.
     // 카드와 같은 순서로 size보다 앞에 둔다(우선순위 → 크기).
-    ["priority", m.type === "request"
-      ? `${prioHTML(m)}<span class="prio-note">${esc(PRIO_TIERS[prioTier(prioOf(m))][0])}`
-        + `(${prioTier(prioOf(m))}) · 높을수록 먼저 집는다 (1~99, 기본 ${PRIO_DEFAULT})</span>` : null],
+    ["priority", m.type === "request" ? prioHTML(m, true) : null],
     ["size", esc(m.size) || null],
     ["parent", rel(m.parent)], ["children", li(m.children)],
     ["derived_from", rel(m.derived_from)], ["relates", li(m.relates)],
@@ -3694,20 +3715,45 @@ hovercard.className = "hovercard";
 hovercard.setAttribute("aria-hidden", "true");
 document.body.appendChild(hovercard);
 function hideHover(){ hovercard.classList.remove("show"); }
+function placeHover(el){
+  const rect = el.getBoundingClientRect();
+  const top = rect.bottom + 8 + 260 > innerHeight ? rect.top - 8 - 150 : rect.bottom + 8;
+  hovercard.style.left = Math.min(rect.left, innerWidth - 360) + "px";
+  hovercard.style.top = Math.max(8, top) + "px";
+  hovercard.classList.add("show");
+}
+/* 우선순위 척도 (REQ-20260827-029). 문서 메타 행에 상주하던 설명문
+   (`높을수록 먼저 집는다 (1~99, 기본 50)`)이 여기로 왔다 — 한 번 읽으면 끝인
+   문장을 306장의 화면에 늘 띄워 둘 이유가 없다. 새 팝오버를 만들지 않고
+   doclink 미리보기와 **같은 카드**를 쓴다: 점선 밑줄에 손을 얹으면 뜬다는
+   약속이 이 화면에 이미 있어서, 배울 것이 하나도 늘지 않는다. */
+function showPrioHover(el){
+  const p = Number(el.dataset.prioscale) || PRIO_DEFAULT, cur = prioTier(p);
+  const bands = [["urgent", 90], ["high", 75], ["normal", 50], ["low", 1]]
+    .map(([t, lo]) => {
+      const seg = `${PRIO_TIERS[t]} ${lo}${t === "low" ? "~49" : "+"}`;
+      return t === cur ? `<b>${seg}</b>` : seg;
+    }).join(" · ");
+  hovercard.innerHTML = `<div class="hid">우선순위</div>
+    <div class="ht">${PRIO_TIERS[cur]} · ${p}/${PRIO_MAX}</div>
+    <div class="hs">숫자가 클수록 먼저 집는다. 값을 적지 않으면 ${PRIO_DEFAULT}(보통)이다.</div>
+    <div class="pscale">${bands}</div>
+    <div class="hs" style="margin-top:5px">바꾸기 — <code>s9 set &lt;요청&gt; --priority high</code></div>`;
+  placeHover(el);
+}
 function showHover(a){
+  if (a.classList.contains("prio")){ showPrioHover(a); return; }
   const r = catFind(a.dataset.doc);   // uid·짧은 지칭 모두 해석 (REQ-034)
   if (!r){ hideHover(); return; }
   hovercard.innerHTML = `<div class="hid">${esc(shortId(r.id))} · ${esc(r.user)} · ${esc((r.updated||"").slice(0,10))}</div>
     <div class="ht">${esc(r.title)}</div>
     ${r.summary ? `<div class="hs">${esc(r.summary)}</div>` : ""}
     <div class="hs" style="margin-top:4px"><span style="color:${SCOLOR[r.status]||"inherit"}">●</span> ${esc(r.status)}${r.project ? " · " + esc(r.project) : ""}</div>`;
-  const rect = a.getBoundingClientRect();
-  const top = rect.bottom + 8 + 260 > innerHeight ? rect.top - 8 - 150 : rect.bottom + 8;
-  hovercard.style.left = Math.min(rect.left, innerWidth - 360) + "px";
-  hovercard.style.top = Math.max(8, top) + "px";
-  hovercard.classList.add("show");
+  placeHover(a);
 }
-const hoverTarget = t => t && t.closest ? t.closest("a.doclink") : null;
+// 여는 손잡이는 둘이다: 문서 링크와 문서 메타의 우선순위 낱말. 선택자를 하나로
+// 두어야 mouseover·focusin·mouseout·focusout 네 경로가 같은 것을 가리킨다.
+const hoverTarget = t => t && t.closest ? t.closest("a.doclink, .prio.pfull") : null;
 document.addEventListener("mouseover", e => {
   const a = hoverTarget(e.target);
   a ? showHover(a) : hideHover();

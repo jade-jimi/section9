@@ -12,8 +12,13 @@
 "조건부 표기"로 되돌아가는 회귀를 계약으로 막는다.
 
 DOM 계약(테스트가 검사하는 이름):
-  <span class="prio" data-prio="75" data-tier="high" title="...">…</span>
+  <span class="prio[ pfull]" data-prio="75" data-tier="high" …>…</span>
   등급 파생: >=90 urgent · >=75 high · >=50 normal · 그 아래 low
+
+후속: REQ-20260827-029 에서 **사람이 읽는 글자**가 숫자에서 등급 낱말로 바뀌었다
+(카드 306장이 전부 `50` 을 달고 있어도 뜻이 안 읽혔다는 두 번째 불만). 이 파일이
+지키는 계약은 그대로다 — 축이 조건 없이 보일 것, 파생·정렬 진입점이 하나일 것,
+색면을 칠하지 않을 것. 표기의 모양은 test_priority_legible.py 가 맡는다.
 
 표기는 세 화면(보드 카드·Docs 목록 행·문서 뷰어 메타)이 공용 함수 prioHTML()
 하나로 그린다. 그래서 "카드에 마크업이 있는가"가 아니라 "카드가 그 함수를
@@ -57,7 +62,9 @@ class CardShowsPriority(unittest.TestCase):
     def test_card_renders_prio_span(self):
         self.assertIn("prioHTML(r)", self.card,
                       "보드 카드가 우선순위를 그리지 않는다 — 반려 사유 그대로다")
-        self.assertIn('class="prio"', self.prio,
+        # 클래스 목록은 문서 뷰어용 pfull 로 갈라진다 (REQ-20260827-029) —
+        # 여는 따옴표까지만 본다. 여기서 고정할 것은 이름이지 문자열 모양이 아니다.
+        self.assertIn('class="prio', self.prio,
                       "prioHTML() 이 .prio 를 그리지 않는다")
 
     def test_card_carries_numeric_value(self):
