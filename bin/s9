@@ -5570,10 +5570,18 @@ def cmd_note(args):
     if not text and args.file:
         with open(args.file, encoding="utf-8") as f:
             text = f.read()
-    if not text and not sys.stdin.isatty():
+    atts = list(getattr(args, "attach", None) or [])
+    # 없는 파일은 여기서 죽는다 (REQ-20260827-028). 조용히 넘어가면 "붙였다고
+    # 믿는 노트"가 남는데, 그게 이 요청이 고치려는 바로 그 실패다 — 판정을
+    # 청하면서 증거는 없는 상태.
+    for a in atts:
+        if not os.path.isfile(a):
+            die(f"첨부할 파일이 없다: {a}")
+    if not text and not atts and not sys.stdin.isatty():
         text = sys.stdin.read()
-    if not text or not text.strip():
-        die("no text (인자, --file, 또는 stdin)")
+    if (not text or not text.strip()) and not atts:
+        die("no text (인자, --file, --attach, 또는 stdin)")
+    text = text or ""
     meta, body = read_doc(path)
     ts = now_iso()
     user = resolve_user(args.user)
@@ -5582,6 +5590,15 @@ def cmd_note(args):
     # H1/H2가 문서 구조(## Notes/## History)와 충돌하지 않게 H3로 강등
     text = re.sub(r"(?m)^#{1,2} ", "### ", text.strip())
     text, _ = normalize_ids(text)  # short REQ-id → full-id 자동 확장
+    # 첨부는 절대경로로 적어 둔다 — 아래 ingest_assets 가 문서 옆 assets/로
+    # 옮기면서 상대경로로 고쳐 쓰고, 그때부터 문서 화면이 그림으로 그린다.
+    if atts:
+        lines = []
+        for a in atts:
+            kind = ("Image" if os.path.splitext(a)[1].lower()
+                    in TYPE_GROUPS["image"] else "File")
+            lines.append(f"[{kind}: {os.path.abspath(a)}]")
+        text = (text.rstrip() + "\n\n" + "\n".join(lines)).strip()
     # 중복 억제 (REQ-20260825-066): 훅 재발화·재시도로 같은 완결 보고가 연속 두 번
     # 붙은 사고가 있었다. 창을 NOTE_DUP_WINDOW_SEC로 좁게 잡은 근거 — 즉시 재시도만
     # 겨냥한다. 시간이 지나 같은 문장을 다시 남기는 정상 경로(같은 체크리스트를
@@ -5626,7 +5643,15 @@ def cmd_note(args):
         rebuild_index(quiet=True)
     finally:
         release_lock()
-    print(f"{args.id}: note appended ({len(text)} chars)")
+    # 캡처를 경로가 아니라 그림으로 (REQ-20260827-028): `s9 new` 는 예전부터
+    # 이걸 불렀는데 `s9 note` 는 안 불렀다. 그래서 노트에 캡처를 남기는 유일한
+    # 방법이 경로를 글자로 붙여넣는 것이었고, 사용자는 판정하라고 불려 와서
+    # 증거는 직접 열어야 했다. `--attach` 든 본문에 손으로 쓴 절대경로든 같은
+    # 규칙으로 이전된다 — 입구가 둘이어도 규칙은 하나다.
+    moved = ingest_assets(args.id) if ("[Image: /" in text or
+                                       "[File: /" in text) else 0
+    print(f"{args.id}: note appended ({len(text)} chars)"
+          + (f" · 첨부 {moved}개 이전" if moved else ""))
     try:
         maybe_sync(f"note {args.id}")
     except Exception:
@@ -9619,6 +9644,13 @@ def main():
     # 사라졌다(문서에는 안 남고 터미널에는 성공처럼 보인 채로).
     nt.add_argument("text", nargs="*")
     nt.add_argument("--file")
+    # 한 번에 하나씩(action=append) — nargs="+" 로 두면 뒤따르는 파일이 위치
+    # 인자 text 로 새어 들어간다(`s9 note <id> 본문 --attach a.png b.png` 에서
+    # b.png 가 본문에 붙었다). 애매하지 않은 쪽을 고른다.
+    nt.add_argument("--attach", action="append", metavar="FILE",
+                    help="캡처·로그 등을 이 노트에 붙인다 (여러 개면 반복) — 문서 "
+                         "옆 assets/로 옮겨지고 문서 화면에 그림으로 그려진다. "
+                         "경로를 글자로 적지 마라 (REQ-20260827-028)")
     nt.add_argument("--label", help="예: 'response', 'decision'")
     nt.add_argument("--user")
     nt.add_argument("--agent", help="이 작업을 처리한 에이전트 actor "
