@@ -311,8 +311,26 @@ def resolve_user(explicit=None, with_source=False):
         elif os.environ.get("S9_USER"):
             result = (os.environ["S9_USER"], "$S9_USER")
         else:
-            result = (getpass.getuser(), "os-account")
+            # 운영체제 계정 그대로 쓰기 전에 os_accounts 별칭을 본다
+            # (REQ-20260827-060). 계정 이름을 바꾸면 하네스의 이름과 로그인한
+            # 계정이 갈라진다 — 그때 여기서 못 이으면 **자기 문서가 하나도 안
+            # 보인다.** 실제로 그랬다. whoami_info 는 이미 이 매칭을 했는데
+            # 여기만 안 해서 화면과 CLI 의 판정이 갈렸다.
+            acct = getpass.getuser()
+            result = (_user_by_os_account(acct) or acct, "os-account")
     return result if with_source else result[0]
+
+
+def _user_by_os_account(acct):
+    """os_accounts 에 이 운영체제 계정을 적어 둔 등록 사용자."""
+    try:
+        for u in registered_users():
+            a = user_profile(u).get("os_accounts") or []
+            if acct in (a if isinstance(a, list) else [a]):
+                return u
+    except Exception:
+        pass
+    return ""
 
 
 # ------------------------------------------------------------- frontmatter
@@ -7125,7 +7143,21 @@ def cmd_user_rename(old, new):
             with open(q, "w", encoding="utf-8") as f:
                 f.write(t2)
             touched += 1
+    # 이름은 바뀌었지만 **로그인한 운영체제 계정은 그대로다.** 옛 이름을 os 계정
+    # 별칭으로 남기지 않으면 다음 명령부터 "미참여" 로 떨어진다 — 실제로 그랬다.
+    prof = os.path.join(dst, "profile.md")
+    try:
+        with open(prof, encoding="utf-8") as f:
+            meta, body = fm_parse(f.read())
+        accts = meta.get("os_accounts") or []
+        if old not in accts:
+            meta["os_accounts"] = accts + [old]
+            write_doc(prof, meta, body)
+    except OSError:
+        pass
+
     print(f"{old} -> {new}: 디렉터리 이동, 문서 {touched}건 갱신")
+    print(f"   os_accounts 에 '{old}' 를 남겼다 — 운영체제 로그인은 그대로다.")
     print("   경로(/home/... · -" + old + "-...)와 os_accounts 는 그대로 둔다 — "
           "운영체제 계정은 별개 층이다.")
     print("   다음: s9 index rebuild")
