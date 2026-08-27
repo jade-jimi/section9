@@ -7,16 +7,19 @@
  "attach_pid": "946",
  "entry": "code",
  "ended": "",
- "last_qst": "",
+ "last_qst": "QST-20260827-023-62x6",
  "last_req": "REQ-20260827-046-62x6",
  "capture_paused": false,
  "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/3da5b9de-895e-4435-9e4c-262ae0d58d32.jsonl",
  "active_reqs": [
   "REQ-20260827-026-62x6",
   "REQ-20260827-042-62x6",
-  "REQ-20260827-046-62x6",
-  "REQ-20260827-049-62x6",
-  "REQ-20260827-050-62x6"
+  "REQ-20260827-050-62x6",
+  "REQ-20260827-044-62x6",
+  "REQ-20260827-045-62x6",
+  "REQ-20260827-047-62x6",
+  "REQ-20260827-048-62x6",
+  "REQ-20260827-051-62x6"
  ],
  "cwd": "/home/sjpark1/section9",
  "agent_transcript_path": [

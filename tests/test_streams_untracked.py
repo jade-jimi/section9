@@ -1,0 +1,171 @@
+"""대화 기록은 리포에 다시 실리지 않는다 (REQ-20260827-047-62x6).
+
+이 리포는 공개다. 2026-08-27 20:21 의 커밋 하나(c16d407)가 대화 미러 158MB 를
+이력에 실었고, 같은 날 filter-branch 로 걷어냈다. git 은 지운 것도 기억하므로
+보관 기간을 아무리 짧게 둬도 **이력은 영구 누적**이었다 — 한 달 0.3GB 규모.
+되돌릴 기회는 그 커밋이 원격의 tip 이던 그때뿐이었다.
+
+그래서 막는 것은 "다시 들어오는 길"이다. 길은 둘이다.
+  ① .gitignore 에서 streams 줄이 사라진다 (누가 정리하다 지운다)
+  ② 미러를 쓰는 코드가 **다른 자리로 옮겨 간다** — 사용자별 보관
+     (`users/<u>/streams/`)으로 옮기는 일이 이 요청에 남아 있다. 옮긴 자리가
+     ignore 밖이면 .gitignore 는 멀쩡한 채로 158MB 가 다시 실린다.
+
+②를 잡으려면 .gitignore 만 읽어서는 안 된다. **미러 코드가 실제로 만든 파일**을
+git 에게 물어야 한다. 그래서 이 테스트는 임시 리포에 이 리포의 .gitignore 를
+그대로 깔고, 훅의 미러 함수를 진짜로 돌린 뒤 `git add -A` 로 무엇이 담기는지
+본다. 미러가 어디로 가든, 담기면 실패한다.
+
+실행: python3 tests/ streams_untracked
+"""
+import importlib.machinery
+import importlib.util
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, ".."))
+STOP_HOOK = os.path.join(ROOT, "bin", "s9-audit-response")
+GITIGNORE = os.path.join(ROOT, ".gitignore")
+
+
+def git(*argv, cwd=ROOT):
+    return subprocess.run(["git", "-C", cwd, *argv],
+                          capture_output=True, text=True, timeout=30)
+
+
+def _load(name, path):
+    spec = importlib.util.spec_from_loader(
+        name, importlib.machinery.SourceFileLoader(name, path))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _stream_paths(names):
+    """`streams` 디렉토리 아래에 있는 경로만 골라낸다 — 자리를 옮겨도 잡힌다."""
+    return [n for n in names
+            if "streams/" in n.replace("\\", "/") and n.strip()]
+
+
+@unittest.skipUnless(os.path.isdir(os.path.join(ROOT, ".git")),
+                     "git 리포가 아니면 이력을 물을 수 없다")
+class StreamsUntracked(unittest.TestCase):
+    """이 리포의 지금 상태 — 인덱스와 HEAD 이력에 미러가 없어야 한다."""
+
+    # N1. 지금 track 되는 파일 중 미러가 없다
+    def test_n1_index_has_no_mirror(self):
+        names = git("ls-files").stdout.splitlines()
+        self.assertEqual(_stream_paths(names), [],
+                         "미러가 인덱스에 있다 — 다음 커밋에 실린다")
+
+    # N2. HEAD 트리에도 없다
+    def test_n2_head_tree_has_no_mirror(self):
+        names = git("ls-tree", "-r", "--name-only", "HEAD").stdout.splitlines()
+        self.assertEqual(_stream_paths(names), [])
+
+    # N3. HEAD 에서 거슬러 올라간 **이력 전체**에도 없다.
+    #     재작성이 되돌려지거나(backup 브랜치 merge) 새로 실리면 여기서 걸린다.
+    def test_n3_history_has_no_mirror(self):
+        out = git("log", "--oneline", "--all-match", "--",
+                  "streams", "users/*/streams").stdout.strip()
+        self.assertEqual(out, "", f"이력에 미러를 담은 커밋이 있다:\n{out}")
+
+    # N4. 지금 자리와 옮겨 갈 자리 둘 다 ignore 다 —
+    #     옮기고 나서 막으면 옮긴 경로가 또 한 번 이력에 실린다
+    def test_n4_both_locations_ignored(self):
+        for rel in ("streams/abc.jsonl",
+                    "users/sjpark1/streams/abc.jsonl"):
+            with self.subTest(rel=rel):
+                self.assertEqual(git("check-ignore", "-q", rel).returncode, 0,
+                                 f"{rel} 이 ignore 밖이다")
+
+    # B1. vault/users/projects 는 계속 track 한다 — 이 요청이 바꾼 것은
+    #     대화 원문 158MB 뿐이고, 하네스 기록 공개 판정(REQ-20260827-036)은 유효하다
+    def test_b1_vault_still_tracked(self):
+        for rel in ("vault", "users", "projects"):
+            with self.subTest(rel=rel):
+                if not os.path.isdir(os.path.join(ROOT, rel)):
+                    continue
+                n = len(git("ls-files", "--", rel).stdout.splitlines())
+                self.assertGreater(n, 0, f"{rel} 이 통째로 ignore 됐다")
+
+    # B2. 비밀값은 여전히 막혀 있다 (REQ-20260827-035) —
+    #     users/ 를 track 하므로 이 줄이 사라지면 그대로 올라간다
+    def test_b2_secrets_still_ignored(self):
+        self.assertEqual(
+            git("check-ignore", "-q", "users/sjpark1/secrets/token").returncode,
+            0)
+
+
+class MirrorWriterStaysIgnored(unittest.TestCase):
+    """미러 코드가 실제로 만드는 파일이 git 에 담기지 않는가.
+
+    .gitignore 를 읽어 비교하지 않는다 — 그건 규칙을 규칙으로 검사하는 것이라,
+    미러가 자리를 옮기는 순간 무력해진다. 여기서는 **써 놓고 git 에게 묻는다.**
+    """
+
+    def setUp(self):
+        if not shutil.which("git"):
+            self.skipTest("git 없음")
+        self.root = tempfile.mkdtemp(prefix="s9strm-")
+        git("init", "-q", cwd=self.root)
+        git("config", "user.email", "t@t", cwd=self.root)
+        git("config", "user.name", "t", cwd=self.root)
+        shutil.copyfile(GITIGNORE, os.path.join(self.root, ".gitignore"))
+        self._old = os.environ.get("S9_ROOT")
+        os.environ["S9_ROOT"] = self.root
+        self.m = _load("s9_mirror_ign", STOP_HOOK)
+
+    def tearDown(self):
+        if self._old is None:
+            os.environ.pop("S9_ROOT", None)
+        else:
+            os.environ["S9_ROOT"] = self._old
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def staged(self):
+        git("add", "-A", cwd=self.root)
+        return git("diff", "--cached", "--name-only", cwd=self.root
+                   ).stdout.splitlines()
+
+    # N1. 훅이 미러를 쓴 뒤에도 담기는 것은 .gitignore 뿐이다
+    def test_n1_mirror_never_staged(self):
+        src = os.path.join(self.root, "sess-2222.jsonl")
+        with open(src, "w", encoding="utf-8") as f:
+            f.write('{"a":1}\n')
+        r = self.m.mirror_transcript(src)
+        if r == "off":
+            self.skipTest("이 환경은 미러가 꺼져 있다 (REQ-20260827-042)")
+        self.assertEqual(r, "full")
+        names = self.staged()
+        self.assertEqual(_stream_paths(names), [],
+                         f"미러가 담겼다: {names}")
+
+    # B1. 미러가 자리를 옮겨도 잡힌다 — 옮긴 자리를 .gitignore 가 안 막으면 실패
+    def test_b1_moved_location_would_be_caught(self):
+        for rel in (os.path.join("streams", "x.jsonl"),
+                    os.path.join("users", "sjpark1", "streams", "x.jsonl")):
+            with self.subTest(rel=rel):
+                p = os.path.join(self.root, rel)
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write("x\n")
+        self.assertEqual(_stream_paths(self.staged()), [])
+
+    # F1. ignore 밖으로 옮기면 **이 테스트가 반드시 깨진다** — 감시가 살아 있는지
+    #     스스로 증명한다. 여기가 통과하면 위 두 개는 우연이 아니다
+    def test_f1_guard_is_alive(self):
+        p = os.path.join(self.root, "chatlogs", "streams", "x.jsonl")
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("x\n")
+        self.assertNotEqual(_stream_paths(self.staged()), [],
+                            "감시가 죽었다 — 무엇을 놓든 통과한다")
+
+
+if __name__ == "__main__":
+    unittest.main()

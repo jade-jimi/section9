@@ -2107,6 +2107,13 @@ const workOrder = rows => [...rows].sort((a, b) =>
   (prioOf(b) - prioOf(a)) ||
   (b.updated || b.created || "").localeCompare(a.updated || a.created || ""));
 
+// Docs 목록만은 **최근 수정 순**이다 (REQ-20260827-051). Board 는 "무엇부터
+// 집을까"를 묻는 화면이라 우선순위가 앞서지만, Docs 는 "무슨 일이 있었나"를
+// 훑는 화면이다 — 거기서는 우선순위 50짜리 옛 문서가 방금 고친 문서 위에
+// 앉아 있는 것이 방해가 된다. 정렬 규칙을 흩지 않으려고 여기 나란히 둔다.
+const recentOrder = rows => [...rows].sort((a, b) =>
+  (b.updated || b.created || "").localeCompare(a.updated || a.created || ""));
+
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g,
   c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -3376,7 +3383,7 @@ async function renderDocs(rows){
     $("#count").textContent = `${rows.length} matches (body search)`;
   }
   const groups = {request:[],knowledge:[],question:[],session:[]};
-  rows.forEach(r => (groups[r.type] || (groups[r.type]=[])).push(r));
+  recentOrder(rows).forEach(r => (groups[r.type] || (groups[r.type]=[])).push(r));
   // 타입 진입점 (REQ-20260825-084): Board에서 knowledge/session 컬럼을 걷어낸 대신,
   // Docs 목록 맨 위에 타입별 건수를 붙박이로 노출하고 한 번 눌러 그 타입만 본다.
   // 카운트는 타입 조건을 뺀 현재 필터 기준 — 다른 타입을 보는 중에도 남은 건수가 보인다.
@@ -4136,6 +4143,15 @@ const CC_BUILTINS = [     // CC CLI 빌트인 — 대시보드에선 실행 불�
   ["model","모델 선택"],["resume","이전 세션 재개"],["config","설정"],
   ["cost","토큰 사용량"],["status","세션 상태"],["memory","메모리 편집"],
   ["init","CLAUDE.md 생성"],["doctor","설치 진단"],
+  // 아래는 이 세션에서 실제로 필요해진 것들 (REQ-20260827-050). 목록에 없으면
+  // 사용자가 친 `/permissions` 가 **그냥 채팅 메시지로 전송돼** 리드가 "그건
+  // 터미널에서만 됩니다"라고 답하는 데서 끝난다 — 팔레트가 미리 말해 주는 편이
+  // 한 왕복 빠르다. 이름을 지어내지 않고 이 하네스가 실제로 안내하는 것만 넣는다.
+  ["permissions","도구 권한 허용/거부 (CLI 전용)"],
+  ["hooks","훅 확인·편집 (CLI 전용)"],
+  ["artifacts","발행한 아티팩트 목록 (CLI 전용)"],
+  ["tasks","백그라운드 작업 목록 (CLI 전용)"],
+  ["workflows","워크플로 진행 보기 (CLI 전용)"],
 ].map(([n,d]) => ({name:n, desc:d, source:"cli"}));
 
 /* 계정·사용량 (REQ-043): 서버가 60s 캐시+계정전환 즉시 무효화 — 클라이언트는
