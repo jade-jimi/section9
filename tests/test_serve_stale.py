@@ -70,6 +70,27 @@ class ServeStale(unittest.TestCase):
         self.stamp({"stamp": {"mtime": 1.0, "size": 10}, "pid": 999999999})
         self.assertEqual(self.m.serve_stale(), "")
 
+    # B3. 지문을 남긴 프로세스가 죽었는데 **다른 쪽이 그 포트를 물고 있으면**
+    #     "최신"이라고 답하지 않는다 (REQ-20260828-007).
+    #     실사고 2026-08-28 08:12: `--restart` 가 포트를 못 뺏고 물러났는데 새
+    #     프로세스가 지문만 남기고 죽었고, 07:51 에 뜬 옛 서버가 계속 응답했다.
+    #     그 사이 이 명령은 "최신"이라고 답했다 — 모른다고 말해야 할 자리에서
+    #     안심시켰다. 안심시키는 거짓이 침묵보다 나쁘다.
+    def test_b3_other_process_owns_the_port(self):
+        self.stamp({"stamp": {"mtime": 1.0, "size": 10}, "pid": 999999999,
+                    "port": 9909})
+        self.m._port_owner_pid = lambda port: 4242
+        msg = self.m.serve_stale()
+        self.assertIn("4242", msg)
+        self.assertIn("--restart", msg)
+
+    # B4. 아무도 안 물고 있으면 조용하다 — 낡을 것도 없다
+    def test_b4_nobody_owns_the_port(self):
+        self.stamp({"stamp": {"mtime": 1.0, "size": 10}, "pid": 999999999,
+                    "port": 9909})
+        self.m._port_owner_pid = lambda port: 0
+        self.assertEqual(self.m.serve_stale(), "")
+
     # B2. 지문 파일이 없거나 깨졌으면 단정하지 않는다
     def test_b2_no_stamp_silent(self):
         self.assertEqual(self.m.serve_stale(), "")

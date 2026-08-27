@@ -104,6 +104,20 @@ class NoteAnchor(unittest.TestCase):
         self.assertIn('req.get("anchor")', src[j:j + 3000],
                       "/api/chat 이 앵커를 받지 않는다")
 
+    # N6. 메모는 살아 있는 세션 없이도 남는다 (REQ-20260828-006).
+    #     **메모는 기록이지 메시지가 아니다.** 문서에 한 줄 남기는 데 클로드
+    #     세션이 있어야 할 이유가 없는데, 구간 메모가 /api/chat 을 타는 바람에
+    #     세션이 없으면 통째로 실패했다 — 사용자가 캡처로 지적했다:
+    #     "메모를 보내지 못했습니다 — 지금 붙어 있는 세션이 없습니다".
+    def test_n6_note_path_needs_no_session(self):
+        src = open(S9, encoding="utf-8").read()
+        i = src.index('parsed.path == "/api/note"')
+        seg = src[i:i + 1800]
+        self.assertIn("chat_append_doc", seg)
+        self.assertNotIn("chat_target", seg,
+                         "메모가 살아 있는 세션을 요구한다")
+        self.assertNotIn("chat_send", seg)
+
     # N5. 수신함 줄에도 실린다 — 무엇을 대고 한 말인지 없으면 답할 수 없다
     def test_n5_inbox_carries(self):
         src = open(S9, encoding="utf-8").read()
