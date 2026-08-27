@@ -1,0 +1,111 @@
+"""개인 설정은 모든 턴에 실린다 (REQ-20260827-069-62x6).
+
+사용자: "개인 설정의 개인 선호 저장을 했는데 왜 적용이안되지"
+
+값은 제대로 저장돼 있었다. **주입이 빠진 경로가 있었다.**
+
+    request / question 턴   pref 있음
+    nothing / fragment 턴   pref 없음      ← 짧은 대화 턴
+    시스템 통지 턴          pref 없음      ← 대시보드 채팅이 도착하는 자리
+
+하필 그 셋이 짧은 대화 턴이라 **말투 설정이 가장 필요한 자리**였다. 그리고 이
+사용자는 주로 대시보드로 말한다 — 그 말은 시스템 통지로 도착하므로, 평소 경로가
+통째로 빠져 있었던 셈이다. (이 저장소가 겪은 "입구는 둘인데 한쪽만 열려 있었다"
+와 같은 모양이다 — REQ-20260826-033.)
+
+그래서 분기마다 문자열을 조립하지 않고 **모든 경로가 지나는 emit 한 자리**로
+옮겼다. 시각 주입과 같은 성격이다: 규칙이 아니라 재료이고, 매 턴 함께 줘야
+지켜진다.
+
+실행: python3 tests/ pref_injection
+"""
+import importlib.machinery
+import importlib.util
+import io
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+S9 = os.path.join(HERE, "..", "bin", "s9")
+HOOK = os.path.join(HERE, "..", "bin", "s9-audit-prompt")
+
+
+class PrefInjection(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.root = tempfile.mkdtemp(prefix="s9pref-")
+        cls.env = {**os.environ, "S9_ROOT": cls.root, "S9_MACHINE": "boxA",
+                   "S9_USER": "alice"}
+        cls.env.pop("S9_SESSION", None)
+        cls.env.pop("S9_AUTO_RESUME", None)
+        for argv in (["init"], ["user", "add", "alice"],
+                     ["user", "config", "alice", "pref_말투", "존댓말 쓰기"]):
+            r = subprocess.run([S9, *argv], capture_output=True, text=True,
+                               env=cls.env, timeout=30)
+            assert r.returncode == 0, r.stdout + r.stderr
+
+    def ctx(self, prompt):
+        """훅을 한 번 돌리고 주입 컨텍스트를 준다."""
+        data = json.dumps({"prompt": prompt, "session_id": "abcd1234",
+                           "cwd": self.root})
+        r = subprocess.run([HOOK], input=data, capture_output=True, text=True,
+                           env=self.env, timeout=60)
+        try:
+            return json.loads(r.stdout or "{}").get(
+                "hookSpecificOutput", {}).get("additionalContext", "")
+        except ValueError:
+            return ""
+
+    # N1. 시스템 통지 턴 — 대시보드 채팅이 도착하는 자리
+    def test_n1_system_notification_turn(self):
+        c = self.ctx("<system-reminder>\n어떤 통지\n</system-reminder>")
+        self.assertIn("존댓말", c, "대시보드로 온 말에는 개인 설정이 안 실린다")
+
+    # N2. 짧은 파편 턴
+    def test_n2_fragment_turn(self):
+        self.assertIn("존댓말", self.ctx("ㅇㅇ"))
+
+    # N3. 감탄·잡담 턴
+    def test_n3_nothing_turn(self):
+        self.assertIn("존댓말", self.ctx("좋다"))
+
+    # N4. 원래 실리던 곳은 그대로 실린다
+    def test_n4_request_turn_kept(self):
+        self.assertIn("존댓말",
+                      self.ctx("대시보드 카드 정렬을 바꿔 줘. 지금은 뒤죽박죽이다."))
+
+    # B1. 두 번 실리지 않는다 — 같은 지시가 두 번 오면 어느 쪽이 최신인지 흐려진다
+    def test_b1_not_duplicated(self):
+        self.assertEqual(self.ctx("좋다").count("이 사용자의 개인 설정"), 1)
+
+    # B2. 명령(`/x`)·빈 프롬프트 턴에도 실린다 — 예외를 만들면 규칙이 곧 죽는다
+    def test_b2_command_turn(self):
+        self.assertIn("존댓말", self.ctx("/permissions"))
+
+    # R1. 시각 주입은 그대로 — 한 자리에 모으면서 잃지 않았다
+    def test_r1_stamp_kept(self):
+        self.assertIn("현재 시각", self.ctx("좋다"))
+
+    # F1. 설정이 없으면 기본 복귀를 지시한다 (REQ-20260824-016 유지)
+    def test_f1_absent_says_default(self):
+        root2 = tempfile.mkdtemp(prefix="s9pref2-")
+        env2 = {**self.env, "S9_ROOT": root2, "S9_USER": "bob"}
+        for argv in (["init"], ["user", "add", "bob"]):
+            subprocess.run([S9, *argv], capture_output=True, env=env2,
+                           timeout=30)
+        data = json.dumps({"prompt": "좋다", "session_id": "efgh5678",
+                           "cwd": root2})
+        r = subprocess.run([HOOK], input=data, capture_output=True, text=True,
+                           env=env2, timeout=60)
+        c = json.loads(r.stdout or "{}").get("hookSpecificOutput", {}).get(
+            "additionalContext", "")
+        self.assertIn("개인 설정: 없음", c)
+
+
+if __name__ == "__main__":
+    unittest.main()

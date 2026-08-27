@@ -337,12 +337,41 @@ def stamp_context():
             f"보여야 위임 보고를 리드의 말과 구분할 수 있다. ")
 
 
+_EMIT_ENV = None       # main 이 세션을 알게 되면 채워 넣는다
+
+
+def turn_prefs():
+    """이 턴에 실을 개인 설정 — **모든 경로가 지나는 자리에서** 만든다.
+
+    분류마다 문자열을 따로 조립하던 때, `nothing`·`fragment` 와 시스템 통지
+    턴에는 개인 설정이 아예 빠져 있었다(REQ-20260827-069). 하필 그 셋이 짧은
+    대화 턴이라 **말투 설정이 가장 필요한 자리**였고, 사용자에게는 "저장했는데
+    적용이 안 된다"로 보였다. 대시보드로 말하면 그 말은 시스템 통지로 도착한다 —
+    즉 이 사용자의 평소 경로가 통째로 빠져 있었다.
+
+    시각과 같은 성격이다: 규칙이 아니라 **재료**이고, 매 턴 함께 줘야 지켜진다.
+    """
+    global _PREF_CACHE
+    if _PREF_CACHE is None:
+        env = _EMIT_ENV or dict(os.environ)
+        try:
+            cur = run(env, "user", "current")
+            who = cur.stdout.strip() if cur.returncode == 0 else ""
+            _PREF_CACHE = prefs_context(env, who) if who else ""
+        except Exception:
+            _PREF_CACHE = ""
+    return _PREF_CACHE
+
+
+_PREF_CACHE = None
+
+
 def emit(context):
     print(json.dumps({
         "suppressOutput": True,
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": stamp_context() + context,
+            "additionalContext": stamp_context() + turn_prefs() + context,
         },
     }, ensure_ascii=False))
 
@@ -368,6 +397,8 @@ def main():
     session = (data.get("session_id") or "unknown")[:8]
     env = dict(os.environ)
     env["S9_SESSION"] = session
+    global _EMIT_ENV
+    _EMIT_ENV = env
     first_line = prompt.splitlines()[0].strip()
 
     # attach 생존 신호 갱신 (REQ-20260824-041): SessionStart 시점의 attach_pid가
@@ -429,8 +460,10 @@ def main():
     if cls == "nothing":
         run(env, "log", f"note: {first_line[:40]}")
         run(env, "last", "--pause")  # 응답 캡처만 중지 — last_req는 유지(위임 캡처/스트림 활성 보존)
-        if pend:
-            emit(f"[section9 audit]{pend}")
+        # 수신함이 비어도 **반드시 내보낸다** (REQ-20260827-069). 예전엔 여기서
+        # 조용히 빠져나가서 시각도 개인 설정도 안 실렸다 — 하필 잡담 턴이라
+        # 말투 설정이 가장 필요한 자리였다. 규칙에 예외를 만들면 규칙이 곧 죽는다.
+        emit(f"[section9 audit]{pend}" if pend else "")
         return
 
     if cls == "fragment":
@@ -469,7 +502,6 @@ def main():
                 run(env, "log", f"question {qst} 기록: {qtitle[:40]}")
         cur = run(env, "user", "current")
         who = cur.stdout.strip() if cur.returncode == 0 else "?"
-        pref = prefs_context(env, who)
         ro = run(env, "reopened", "--quiet")
         rewarn = ("" if ro.returncode != 0 or not ro.stdout.strip() else
                   f" ⚠ 대시보드에서 반려/재개된 요청 대기:\n{ro.stdout.strip()}\n답변 후 이어서 처리하라.")
@@ -499,7 +531,7 @@ def main():
             f"`S9_SESSION={session} s9 new question --title '질문 원문' --body '원문'` "
             f"으로 남기고 답을 `s9 note <QST> --label answer` 로 붙여라. ")
         emit(pend +
-            f"[section9 audit] {qmsg}현재 요청 주체: {who}.{pref}{untitled}{rewarn}{rvwarn}{wkwarn} "
+            f"[section9 audit] {qmsg}현재 요청 주체: {who}.{untitled}{rewarn}{rvwarn}{wkwarn} "
             f"오분류라면 — 실제 작업 요청이면 — `S9_SESSION={session} s9 new request "
             f"--title '20자 이내 명사구' --summary '...' --size S|M|L --body '원문'` "
             f"으로 직접 등록하고 규약대로 상태를 관리하라. s9 = ~/section9/bin/s9")
@@ -522,7 +554,6 @@ def main():
     run(env, "last", doc_id)  # Stop hook의 응답 캡처 대상
     cur = run(env, "user", "current")
     who = cur.stdout.strip() if cur.returncode == 0 else "?"
-    pref = prefs_context(env, who)
 
     # 대시보드에서 반려/재개된 요청 — 어떤 프롬프트가 오든 최우선 주입해 자동 재개
     ro = run(env, "reopened", "--quiet")
@@ -589,7 +620,7 @@ def main():
     attnote = (f"첨부 {len(atts)}건이 body에 기록되었다. " if atts else "")
     emit(pend +
         f"[section9 audit] 이 프롬프트는 {doc_id} 로 자동 기록되었다 (Request 분류). {attnote}"
-        f"현재 요청 주체: {who}.{pref}{warn}{untitled}{approvals}{reopened}{stalled}{stale_serve}{blocked}{review}{wkwarn} "
+        f"현재 요청 주체: {who}.{warn}{untitled}{approvals}{reopened}{stalled}{stale_serve}{blocked}{review}{wkwarn} "
         f"이 세션에서 s9 를 호출할 때는 반드시 `S9_SESSION={session}` 을 앞에 붙여라. 규약: "
         f"(1) 제목은 원문 복사가 아니라 20자 이내의 이해하기 쉬운 명사구로 교체하라 — "
         f"`s9 set {doc_id} --title '...' --summary '...' --size S|M|L "
