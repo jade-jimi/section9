@@ -11088,8 +11088,21 @@ def cmd_serve(args):
     global SERVE_CODE_STAMP, SERVE_STARTED
     SERVE_CODE_STAMP = code_stamp()
     SERVE_STARTED = now_iso()
-    # 화면 밖에서도 물을 수 있게 디스크에 남긴다 — 배너는 사람이 볼 때만 보이고,
-    # 리드는 화면을 안 본다 (REQ-20260827-059).
+
+    http.server.ThreadingHTTPServer.request_queue_size = 32
+    # **포트를 실제로 잡은 뒤에 지문을 남긴다** (REQ-20260828-010).
+    # 예전엔 잡기 전에 남겼다. `--restart` 가 포트를 못 뺏고 물러나면 새
+    # 프로세스는 **지문만 남기고 죽고**, 옛 서버가 계속 응답한다. 그러면 지문은
+    # 있지도 않은 서버를 가리키고, 판정은 "안 돌고 있으니 낡을 것도 없다"로
+    # 넘어간다 — 실사고 2026-08-28 08:12 이 그것이다.
+    # 지문은 **지금 듣고 있는 프로세스**를 가리켜야 한다. 못 잡으면 아무것도
+    # 남기지 않고 **시끄럽게 죽는다** — 조용히 죽으면 사람은 성공으로 읽는다.
+    try:
+        srv = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
+    except OSError as e:
+        die(f"포트 {args.port} 를 잡지 못했다: {e}\n"
+            f"  다른 프로세스가 물고 있다면 그쪽이 계속 응답한다 — "
+            f"`bin/s9 serve --stop` 으로 내린 뒤 다시 띄워라.")
     try:
         os.makedirs(os.path.join(ROOT, "state"), exist_ok=True)
         with open(os.path.join(ROOT, "state", "serve-code.json"), "w",
@@ -11098,9 +11111,6 @@ def cmd_serve(args):
                        "pid": os.getpid(), "port": args.port}, _f)
     except OSError:
         pass
-
-    http.server.ThreadingHTTPServer.request_queue_size = 32
-    srv = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"section9 dashboard: http://{args.host}:{args.port}/  (Ctrl-C to stop)")
     try:
         srv.serve_forever()

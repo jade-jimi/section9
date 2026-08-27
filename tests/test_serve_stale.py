@@ -98,11 +98,31 @@ class ServeStale(unittest.TestCase):
             f.write("{깨진")
         self.assertEqual(self.m.serve_stale(), "")
 
+    # N5. 지문은 **포트를 잡은 뒤에** 남긴다 (REQ-20260828-010).
+    #     잡기 전에 남기면 못 잡고 죽은 프로세스의 지문이 남아, 실제로 응답하는
+    #     옛 서버를 가린다. 지문은 지금 듣고 있는 쪽을 가리켜야 한다.
+    def test_n5_stamp_after_bind(self):
+        src = open(S9, encoding="utf-8").read()
+        i = src.index("SERVE_CODE_STAMP = code_stamp()")
+        seg = src[i:i + 2200]
+        bind = seg.index("ThreadingHTTPServer((args.host")
+        stamp = seg.index("serve-code.json")
+        self.assertLess(bind, stamp,
+                        "포트를 잡기 전에 지문을 남긴다")
+
+    # N6. 포트를 못 잡으면 시끄럽게 죽는다 — 조용히 죽으면 성공으로 읽힌다
+    def test_n6_bind_failure_is_loud(self):
+        src = open(S9, encoding="utf-8").read()
+        i = src.index("SERVE_CODE_STAMP = code_stamp()")
+        seg = src[i:i + 2200]
+        self.assertIn("잡지 못했다", seg)
+        self.assertIn("except OSError", seg)
+
     # N3. serve 가 기동 시 지문을 남긴다 — 남기지 않으면 물어볼 데가 없다
     def test_n3_serve_writes_stamp(self):
         src = open(S9, encoding="utf-8").read()
         i = src.index("SERVE_CODE_STAMP = code_stamp()")
-        self.assertIn("serve-code.json", src[i:i + 800],
+        self.assertIn("serve-code.json", src[i:i + 2200],
                       "serve 가 기동 지문을 디스크에 남기지 않는다")
 
     # N4. 프롬프트 훅이 매 턴 주입한다 — 배너는 화면을 볼 때만 보인다
