@@ -284,12 +284,19 @@ def whoami_info():
             if raw in (accts if isinstance(accts, list) else [accts]):
                 name = u
                 break
+    # 화면이 Stream 탭을 감출 근거 (REQ-20260827-042) — 목록을 비우는 것만으로는
+    # "탭은 있는데 비어 있다"가 되고, 사용자는 그걸 고장으로 읽는다.
+    try:
+        st_on = stream_mirror_on(name or raw)
+    except Exception:
+        st_on = True
     if name:
         return {"workspace": workspace, "user": name, "display": user_profile(name).get("display", ""),
                 "role": user_role(name), "machine": current_machine(),
-                "registered": True}
+                "registered": True, "stream_mirror": st_on}
     return {"user": raw, "display": "", "role": "",
-            "machine": current_machine(), "registered": False}
+            "machine": current_machine(), "registered": False,
+            "stream_mirror": st_on}
 
 
 def resolve_user(explicit=None, with_source=False):
@@ -2484,6 +2491,107 @@ def cmd_secret(args):
     if err:
         sys.stderr.write(err)
     return r.returncode
+
+
+# ------------------------------------------- 대화 기록 미러 (REQ-20260827-042)
+# 미러는 **같은 대화를 그대로 되살리는** 유일한 길이다(`s9 resume` 이 이걸 복원한
+# 뒤 `claude --resume` 을 띄운다). 문서로는 "이어서 일하기"가 되지만 "같은 대화
+# 되살리기"는 안 된다 — 둘은 다른 일이다. 그래서 기본은 켜 둔다.
+#
+# 다만 값이 싸지 않다: 하루 47MB 씩 쌓이고 아무도 안 지웠다. 그래서 보관 기간을
+# 둔다(기본 1주일). **끄는 것과 지우는 것은 다른 결정이라** 끈다고 있던 것을
+# 지우지는 않는다 — 말없이 지우면 되돌릴 수 없다.
+STREAM_KEEP_DAYS = 7        # 기본 보관 기간 (0 이하 = 무제한)
+
+
+def stream_mirror_on(user=None):
+    """이 사용자가 대화 기록을 남기는가 (기본 켜짐).
+
+    설정을 못 읽으면 **켜진 것으로 본다** — 기록을 남기는 쪽이 안전한 기본값이다.
+    끄면 미러도, 화면도, `s9 resume` 도 함께 내린다: 미러만 끄면 원본이 있는
+    머신에서는 계속 열려 "껐는데 왜 보이지"가 되고, 어느 날 Claude Code 가 제
+    기록을 지우면 말없이 사라진다.
+    """
+    try:
+        v = (user_config(user or resolve_user(None)) or {}).get("stream_mirror")
+    except Exception:
+        return True
+    return str(v).strip().lower() not in ("off", "false", "0", "no")
+
+
+def stream_keep_days(user=None):
+    try:
+        v = (user_config(user or resolve_user(None)) or {}).get("stream_keep_days")
+        return int(v) if v not in (None, "") else STREAM_KEEP_DAYS
+    except Exception:
+        return STREAM_KEEP_DAYS
+
+
+def _active_stream_sids():
+    """진행 중 REQ 가 붙들고 있는 세션들 — 이 기록은 기간이 지나도 안 지운다.
+    일하는 도중에 그 대화가 사라지면 되살릴 것이 없어진다."""
+    import glob as _glob
+    out = set()
+    for bp in _glob.glob(os.path.join(STATE, "*.json")):
+        try:
+            with open(bp, encoding="utf-8") as f:
+                b = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if binding_req_ids(b):
+            sid = b.get("session", "")
+            tp = b.get("transcript_path", "")
+            if sid:
+                out.add(sid)
+            if tp:
+                out.add(os.path.splitext(os.path.basename(tp))[0])
+    return out
+
+
+def prune_streams(user=None, all_=False):
+    """보관 기간이 지난 미러를 정리한다. 반환: (지운 수, 지운 바이트)."""
+    import glob as _glob
+    import time as _time
+    days = stream_keep_days(user)
+    if not all_ and days <= 0:
+        return 0, 0
+    keep = _active_stream_sids()
+    now, n, b = _time.time(), 0, 0
+    for p in _glob.glob(os.path.join(STREAMS, "*.jsonl")):
+        base = os.path.basename(p)[:-len(".jsonl")]
+        if any(base.startswith(s) or s.startswith(base[:8]) for s in keep if s):
+            continue                       # 진행 중인 세션 — 건드리지 않는다
+        if not all_ and (now - os.path.getmtime(p)) <= days * 86400:
+            continue
+        try:
+            b += os.path.getsize(p)
+            os.remove(p)
+            n += 1
+        except OSError:
+            continue
+    return n, b
+
+
+def cmd_stream(args):
+    """대화 기록 미러 상태·정리 (REQ-20260827-042)."""
+    import glob as _glob
+    user = resolve_user(getattr(args, "user", None))
+    on, days = stream_mirror_on(user), stream_keep_days(user)
+    files = _glob.glob(os.path.join(STREAMS, "*.jsonl"))
+    size = sum(os.path.getsize(p) for p in files if os.path.exists(p))
+    if getattr(args, "action", "") == "prune":
+        n, b = prune_streams(user, all_=getattr(args, "all", False))
+        print(f"정리: {n}개 · {b / 2**20:.0f}MB")
+        return
+    print(f"  대화 기록 미러: {'켜짐' if on else '꺼짐'}")
+    print(f"  보관 기간      : {days}일" if days > 0 else "  보관 기간      : 무제한")
+    print(f"  지금 보관 중   : {len(files)}개 · {size / 2**20:.0f}MB → {STREAMS}")
+    if on:
+        print("  끄려면: s9 user config <이름> stream_mirror off"
+              "   (끄면 Stream 화면과 s9 resume 도 함께 내려간다)")
+    else:
+        print("  꺼져 있어 Stream 화면·문서별 스트림·s9 resume 이 모두 비활성이다.")
+        print("  이미 있는 기록은 지우지 않았다 — 지우려면: s9 stream prune --all")
 
 
 ACCOUNT_NEW_LABEL = "새-계정"      # 로그인 전 임시 이름 — 로그인하면 계정으로 바뀐다
@@ -6321,6 +6429,11 @@ def cmd_resume(args):
     native transcript는 덮어쓰지 않는다(--force 예외).
     """
     import glob as _glob
+    # 미러가 꺼져 있으면 되살릴 기록이 없다 (REQ-20260827-042). 조용히 실패하면
+    # 사용자는 왜 안 되는지 모른다 — 이유를 말하고 켜는 법을 알려 준다.
+    if not stream_mirror_on(None):
+        die("대화 기록 미러가 꺼져 있어 되살릴 기록이 없다 — "
+            "켜려면: s9 user config <이름> stream_mirror on")
     arg = args.sid
     # 스트림 파일 찾기: 정확 일치 우선, 아니면 prefix-glob
     exact = os.path.join(STREAMS, safe_name(arg) + ".jsonl")
@@ -8895,6 +9008,10 @@ def cmd_serve(args):
 
     def streams_list():
         out = []
+        # 꺼 두었으면 목록 자체가 비어야 한다 (REQ-20260827-042) — "있는데 안
+        # 열리는" 상태로 남기면 사용자는 고장으로 읽는다.
+        if not stream_mirror_on(None):
+            return out
         if os.path.isdir(STREAMS):
             for fn in sorted(os.listdir(STREAMS)):
                 if fn.endswith(".jsonl"):
@@ -9203,6 +9320,8 @@ def cmd_serve(args):
 
     # 특정 요청 문서 구간의 스트림만 잘라내기
     def req_stream(doc_id):
+        if not stream_mirror_on(None):
+            return None          # 문서별 스트림도 함께 내린다 (REQ-20260827-042)
         path = locate(doc_id)
         if not path:
             return None
@@ -9893,11 +10012,24 @@ def cmd_serve(args):
         import threading
 
         def _port_guard_loop():
+            n = 0
             while True:
                 try:
                     port_guard_tick()
                 except Exception:
                     pass
+                # 미러 정리는 자주 돌 이유가 없다 — 한 시간에 한 번이면 충분하고,
+                # 매 틱 디렉토리를 훑으면 그 자체가 비용이다 (REQ-20260827-042).
+                n += 1
+                if n % max(1, 3600 // PORT_GUARD_EVERY) == 0:
+                    try:
+                        k, b = prune_streams()
+                        if k:
+                            _guard_log(f"대화 기록 정리: {k}개 "
+                                       f"{b / 2**20:.0f}MB (보관 "
+                                       f"{stream_keep_days()}일)")
+                    except Exception:
+                        pass
                 time.sleep(PORT_GUARD_EVERY)
         threading.Thread(target=_port_guard_loop, daemon=True).start()
 
@@ -10259,6 +10391,14 @@ def main():
     ins.add_argument("--create", action="store_true",
                      help="gh 로 사설 리포까지 자동 생성")
     ins.set_defaults(fn=cmd_instance)
+
+    stc = sub.add_parser("stream", help="대화 기록 미러 상태·정리")
+    stc.add_argument("action", nargs="?", choices=["status", "prune"],
+                     default="status")
+    stc.add_argument("--all", action="store_true",
+                     help="prune: 보관 기간과 무관하게 전부 (진행 중 세션 제외)")
+    stc.add_argument("--user")
+    stc.set_defaults(fn=cmd_stream)
 
     sc = sub.add_parser("secret",
                         help="사용자별 비밀값 (보관·조회·명령에서 사용)")

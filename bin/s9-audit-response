@@ -77,6 +77,17 @@ def _detect_root(data):
             and os.path.isdir(os.path.join(cwd, "vault")):
         os.environ["S9_ROOT"] = cwd
 
+def _mirror_on(root):
+    """이 사용자가 대화 기록을 남기는가 — 판정은 bin/s9 한 곳에 있다.
+    못 읽으면 켜진 것으로 본다(기록을 남기는 쪽이 안전한 기본값)."""
+    try:
+        out = subprocess.run([S9, "stream"], capture_output=True, text=True,
+                             env={**os.environ, "S9_ROOT": root}, timeout=10)
+        return "꺼짐" not in out.stdout
+    except Exception:
+        return True
+
+
 MIRROR_PREFIX_CHECK = 4096      # 되감김 판별용으로 앞머리를 이만큼 비교한다
 
 
@@ -100,6 +111,10 @@ def mirror_transcript(tp):
     try:
         root = os.environ.get("S9_ROOT") or os.path.dirname(
             os.path.dirname(os.path.realpath(__file__)))
+        # 사용자가 껐으면 아무것도 쓰지 않는다 (REQ-20260827-042). 깃헙에 안
+        # 올라가는 것도 여기서 저절로 성립한다 — **없어서 안 올라간다.**
+        if not _mirror_on(root):
+            return "off"
         dst_dir = os.path.join(root, "streams")
         os.makedirs(dst_dir, exist_ok=True)
         dst = os.path.join(dst_dir, os.path.basename(tp))
