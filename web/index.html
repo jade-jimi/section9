@@ -1892,6 +1892,10 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
         <option>request</option><option>knowledge</option><option>question</option><option>session</option><option>project</option></select>
     </div>
     <div class="pgroup idcol">
+      <!-- 서버 상태 칩 — 사람의 손을 요구하지 않는(또는 접어 둔) 서버 사실의 자리.
+           전용 행을 주면 아무 할 일 없는 사실 때문에 헤더가 상시 한 줄 눌린다.
+           사건이 없으면 비어 있고, :empty 로 자리까지 사라진다. (REQ-20260827-017) -->
+      <span id="sv-chip" class="svchip" role="status" aria-live="polite"></span>
       <span id="usage-chip" class="usagechip" title="로그인된 클로드 계정과 사용량(세션 5h·주간·모델) — 60초 갱신, 계정 전환 즉시 반영"></span>
       <span id="whoami" class="who" title="서버가 파생한 신원 — 대시보드는 127.0.0.1 전용이라 브라우저 사용자 = 서버 기동 OS 계정. 다른 계정명으로 연결하려면 터미널에서 s9 user attach"></span>
     </div>
@@ -3207,12 +3211,17 @@ function renderBoard(rows){
     let grp = shown.filter(r => r.status === st);
     // 끝난 컬럼은 우선순위로 세우지 않는다 (REQ-20260827-016).
     // 우선순위는 "다음에 무엇을 할 것인가"에 답하는 축이다 — 이미 끝난 일에는
-    // 그 질문이 없다. done 227건이 가중치 계단으로 묶여 있으면 방금 끝난 것을
-    // 찾으려고 계단마다 훑어야 한다. 여기서 알고 싶은 것은 "무엇이 최근에
-    // 끝났나" 하나뿐이므로 갱신 시각만으로 세운다.
+    // 그 질문이 없다. done 286건이 가중치 계단으로 묶여 있으면 방금 끝난 것을
+    // 찾으려고 계단마다 훑어야 한다.
+    //
+    // 세우는 기준은 **카드가 실제로 보여주는 시각**이다 — `status_since`,
+    // 즉 그 상태가 된 때. `updated` 로 세웠다가 반려를 받았다(1차): 그 필드는
+    // 노트·링크·인덱스 작업으로 계속 밀려서, 21시간 전에 끝난 문서가 "방금
+    // 갱신"으로 맨 위에 왔다. 화면의 시계와 정렬의 자가 다르면 사용자에게는
+    // 정렬이 안 된 것으로 보인다 — 그리고 그 말이 맞다.
     if (TERMINAL.has(st))
-      grp = [...grp].sort((a, b) =>
-        (b.updated || b.created || "").localeCompare(a.updated || a.created || ""));
+      grp = [...grp].sort((a, b) => (b.status_since || b.updated || b.created || "")
+        .localeCompare(a.status_since || a.updated || a.created || ""));
     // 주요 컬럼은 비어도 자리를 지킨다 — 드롭 대상이자 상태 안내 자리(ux-craft)
     if (!grp.length && (cur || !["open","in-progress","review","done"].includes(st))) continue;
     html += colHTML(st, st, SCOLOR[st], grp);

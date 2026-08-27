@@ -41,8 +41,24 @@ class BoardDoneOrder(unittest.TestCase):
         self.assertTrue(self.loop, "보드 컬럼 루프를 찾지 못했다")
         self.assertIn("TERMINAL.has(st)", self.loop,
                       "끝난 컬럼을 따로 가르지 않는다")
-        self.assertIn("b.updated || b.created", self.loop,
-                      "갱신 시각으로 세우지 않는다")
+        self.assertIn("b.status_since || b.updated", self.loop,
+                      "카드가 보여주는 시각(status_since)으로 세우지 않는다")
+
+    def test_b1b_it_sorts_by_what_the_card_shows(self):
+        """B1b. 세우는 자와 **카드가 보여주는 시계**가 같아야 한다.
+
+        1차에서 `updated` 로 세웠다가 반려를 받았다. 그 필드는 노트·링크·인덱스
+        작업으로 계속 밀린다 — 21시간 전에 끝난 문서가 "오늘 10:07 갱신"이 되어
+        맨 위에 왔고, 카드는 여전히 "21h 30m"이라 적혀 있었다. **화면의 시계와
+        정렬의 자가 다르면 사용자에게는 정렬이 안 된 것으로 보이고, 그 말이 맞다.**
+
+        카드가 그리는 것은 `status_since`(그 상태가 된 때)다.
+        """
+        self.assertRegex(
+            self.src,
+            r'data-since="\$\{esc\(r\.status_since\)\}"',
+            "카드 시계가 status_since 가 아니다 — 정렬 기준을 다시 맞춰야 한다")
+        self.assertIn("b.status_since", self.loop)
 
     def test_b2_it_uses_the_shared_terminal_set(self):
         """B2. '끝났다'의 정의를 새로 쓰지 않고 이미 있는 것을 쓴다.
