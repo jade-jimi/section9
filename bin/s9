@@ -7220,7 +7220,14 @@ def record_machine_account(name, machine=None, acct=None):
     if not os.path.isfile(ppath):
         return False
     machine = machine or current_machine()
-    acct = acct or os_identity()
+    # **운영체제 계정 그대로** 쓴다 — `os_identity()` 는 `$S9_USER` 를 먼저 보는데
+    # 그건 하네스 신원을 갈아 끼우는 스위치지 로그인한 계정이 아니다
+    # (REQ-20260827-066 반려: "이 머신에 nicehugepark 이라는 os 계정은 없다.
+    # 그냥 하네스 아이디를 내가 자주 쓰는 순수 개인 아이디로서 정한거다").
+    # 이 표의 뜻이 "어느 머신에 어느 **OS 계정**으로 로그인해 일했나" 이므로
+    # 여기서 하네스 이름이 섞이면 표가 통째로 거짓이 된다 — 실제로 리드가
+    # 커밋할 때 쓰던 S9_USER 가 없는 계정 한 줄을 만들어 냈다.
+    acct = acct or getpass.getuser()
     plat, ts = os_platform(), now_iso()
     with open(ppath, encoding="utf-8") as f:
         meta, body = fm_parse(f.read())
@@ -7427,7 +7434,8 @@ def cmd_user(args):
         if not user_role(name):
             die(f"not registered: {name}")
         record_machine_account(name)
-        print(f"{name}: {os_identity()}@{current_machine()} ({os_platform()})")
+        print(f"{name}: {getpass.getuser()}@{current_machine()} "
+              f"({os_platform()})")
         return
 
     if args.action == "rename":

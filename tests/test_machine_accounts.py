@@ -15,6 +15,7 @@
 
 실행: python3 tests/ machine_accounts
 """
+import getpass
 import json
 import os
 import subprocess
@@ -56,20 +57,19 @@ class MachineAccounts(unittest.TestCase):
         r = self.rows()
         self.assertEqual(len(r), 1)
         self.assertEqual(r[0]["machine"], "boxA")
-        self.assertEqual(r[0]["account"], "alice")
+        # 계정은 **로그인한 운영체제 계정**이다 (하네스 이름 alice 가 아니다)
+        self.assertEqual(r[0]["account"], getpass.getuser())
         self.assertTrue(r[0]["os"], "운영체제가 비어 있다")
         self.assertTrue(r[0]["first"] and r[0]["last"])
 
-    # N2. 머신이 늘면 줄이 는다 — 짝이 보존된다.
-    #     다른 머신의 OS 계정 이름이 다르면 이름으로는 못 찾는다(자동 역추론
-    #     없음, REQ-20260824-027) — 그 잇기는 attach 의 몫이고, 여기서는
-    #     이름을 대고 적는 경로를 본다.
+    # N2. 머신이 늘면 줄이 는다 — 머신마다 한 줄이다
     def test_n2_second_machine(self):
         self.cli("user", "seen")
         self.cli("user", "seen", "alice",
-                 env={**self.env, "S9_MACHINE": "boxB", "S9_USER": "al"})
+                 env={**self.env, "S9_MACHINE": "boxB"})
+        me = getpass.getuser()
         pairs = {(x["machine"], x["account"]) for x in self.rows()}
-        self.assertEqual(pairs, {("boxA", "alice"), ("boxB", "al")})
+        self.assertEqual(pairs, {("boxA", me), ("boxB", me)})
 
     # B1. 같은 짝을 또 보면 줄이 늘지 않고 마지막 시각만 바뀐다
     def test_b1_same_pair_updates(self):
@@ -79,6 +79,18 @@ class MachineAccounts(unittest.TestCase):
         r = self.rows()
         self.assertEqual(len(r), 1, "같은 짝이 두 줄이 됐다")
         self.assertEqual(r[0]["first"], first, "처음 본 때가 덮였다")
+
+    # B3. S9_USER 는 하네스 신원을 갈아 끼우는 스위치지 로그인한 계정이 아니다
+    #     (REQ-20260827-066 반려). 이 표의 뜻이 "어느 머신에 어느 **OS 계정**으로
+    #     로그인해 일했나" 이므로 여기서 하네스 이름이 섞이면 표가 통째로 거짓이
+    #     된다 — 실제로 리드가 커밋할 때 쓰던 S9_USER 가 없는 계정 한 줄을 만들었다.
+    def test_b3_s9_user_does_not_leak_into_account(self):
+        self.cli("user", "seen", "alice",
+                 env={**self.env, "S9_USER": "가짜하네스이름"})
+        accts = {x["account"] for x in self.rows()}
+        self.assertIn(getpass.getuser(), accts)
+        self.assertNotIn("가짜하네스이름", accts,
+                         "하네스 이름이 OS 계정 자리에 들어갔다")
 
     # B2. 미등록 이름은 거부한다
     def test_b2_unknown_refused(self):

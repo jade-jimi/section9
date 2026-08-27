@@ -6,7 +6,7 @@ role: admin
 emails: ["claude01.pfe@example.invalid"]
 github: nicehugepark
 os_accounts: ["sjpark1"]
-machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-27T21:58:53+09:00"}]
+machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-27T23:41:45+09:00"}]
 ---
 
 ## Notes
@@ -83,3 +83,10 @@ machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpar
 - 2026-08-27T18:21:52+09:00 config pref_examples=예시에 실제 회사·조직·고객 이름을 쓰지 마라 (example, example 등). 이건 누구나 쓰는 하네스다 — 예시는 일반 명사로(예: my-team-work, acme-work). 실제 이름은 실데이터(계정 이메일 등)에만 나타난다. (by nicehugepark)
 - 2026-08-27T18:50:36+09:00 config pref_examples=(삭제) (by nicehugepark via dashboard)
 - 2026-08-27T21:58:53+09:00 처음 본 머신 sjpark1@DESKTOP-TEHV1KR (WSL)
+- 2026-08-27T22:16:20+09:00 처음 본 머신 nicehugepark@DESKTOP-TEHV1KR (WSL)
+- 2026-08-27T22:18:35+09:00 config pref_말투=칭찬, 아부성 발언 절대 금지, 존댓말 (by nicehugepark via dashboard)
+- 2026-08-27T22:20:09+09:00 config pref_말투=칭찬, 아부성 발언 절대 금지, 존댓말 쓰기 (by nicehugepark via dashboard)
+- 2026-08-27T23:03:23+09:00 config stream_mirror=off (by nicehugepark)
+- 2026-08-27T23:03:45+09:00 config stream_mirror=on (by nicehugepark)
+- 2026-08-27T23:34:56+09:00 config auto_resume_gh=on (by nicehugepark)
+- 2026-08-27T23:38:27+09:00 config pref_비식별=로그인 계정 이메일(회사 도메인 포함)은 가려지 마라 — 엔터프라이즈에서도 그렇게 된다. 가릴 것은 토큰·키·비밀번호와 대화 원문 통째로다. 회사·계열 이름을 예시나 리포 이름에 섞는 것만 피한다 (by nicehugepark)
