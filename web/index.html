@@ -4676,7 +4676,7 @@ async function termAttach(T, nt){
   const src = $("#cc-src"); if (src) src.textContent = `${sid} transcript`;
   const ta = $("#chat-in");
   ta.disabled = false;
-  ta.placeholder = "메시지 — Enter 전송 · Shift+Enter 줄바꿈 · / 명령 · 이미지 붙여넣기/드래그";
+  ta.placeholder = "메시지 — Enter 전송 · Shift+Enter·Ctrl+Enter 줄바꿈 · / 명령 · 이미지 붙여넣기/드래그";
   if (tab === "terminal" && !document.hidden) ta.focus();
   termMeta(T);
   // 초기 로드: 수신함 로그 + transcript 병합(동초는 chat 먼저 — 안정 정렬)
@@ -5205,7 +5205,21 @@ function termKeydown(T, e){
     if (e.key === "Enter" || e.key === "Tab"){ e.preventDefault(); termPalPick(T); return; }
     if (e.key === "Escape"){ e.preventDefault(); termPalClose(T); return; }
   }
-  if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendChat(); return; }
+  // 줄바꿈은 두 키 다 받는다 (REQ-20260827-038): Shift+Enter 는 원래 되던 것이고,
+  // Ctrl+Enter 는 Claude Code 터미널의 손버릇이다. **textarea 는 Shift+Enter 에는
+  // 스스로 줄바꿈을 넣지만 Ctrl+Enter 에는 아무것도 넣지 않는다** — 전송만 막으면
+  // "아무 일도 안 일어나는 키"가 되어 사용자 눈에는 여전히 안 되는 것이다.
+  // 그래서 커서 자리에 손으로 넣고 높이도 다시 잡는다.
+  if (e.key === "Enter" && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey){
+    e.preventDefault();
+    const i = ta.selectionStart, j = ta.selectionEnd;
+    ta.value = ta.value.slice(0, i) + "\n" + ta.value.slice(j);
+    ta.selectionStart = ta.selectionEnd = i + 1;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+    return;
+  }
+  if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey){ e.preventDefault(); sendChat(); return; }
   if (e.key === "Escape"){       // L7 — 첨부 → 입력 → (비었으면) 세션 중단 요청
     e.preventDefault();
     if (T.atts.length){ T.atts = []; termAttRender(T); }
