@@ -70,7 +70,7 @@ class StreamsUntracked(unittest.TestCase):
     # N3. HEAD 에서 거슬러 올라간 **이력 전체**에도 없다.
     #     재작성이 되돌려지거나(backup 브랜치 merge) 새로 실리면 여기서 걸린다.
     def test_n3_history_has_no_mirror(self):
-        out = git("log", "--oneline", "--all-match", "--",
+        out = git("log", "--oneline", "--",
                   "streams", "users/*/streams").stdout.strip()
         self.assertEqual(out, "", f"이력에 미러를 담은 커밋이 있다:\n{out}")
 
@@ -132,7 +132,15 @@ class MirrorWriterStaysIgnored(unittest.TestCase):
         return git("diff", "--cached", "--name-only", cwd=self.root
                    ).stdout.splitlines()
 
-    # N1. 훅이 미러를 쓴 뒤에도 담기는 것은 .gitignore 뿐이다
+    def find(self, basename):
+        """미러가 실제로 어디에 쓰였는지 찾는다 — 자리를 옮겨도 따라간다."""
+        for dirpath, _dirs, files in os.walk(self.root):
+            if basename in files and os.path.abspath(dirpath) != os.path.abspath(self.root):
+                return os.path.relpath(os.path.join(dirpath, basename),
+                                       self.root).replace("\\", "/")
+        return None
+
+    # N1. 훅이 실제로 쓴 미러 파일이 — 그 자리가 어디든 — 담기지 않는다
     def test_n1_mirror_never_staged(self):
         src = os.path.join(self.root, "sess-2222.jsonl")
         with open(src, "w", encoding="utf-8") as f:
@@ -141,30 +149,32 @@ class MirrorWriterStaysIgnored(unittest.TestCase):
         if r == "off":
             self.skipTest("이 환경은 미러가 꺼져 있다 (REQ-20260827-042)")
         self.assertEqual(r, "full")
-        names = self.staged()
-        self.assertEqual(_stream_paths(names), [],
-                         f"미러가 담겼다: {names}")
+        rel = self.find("sess-2222.jsonl")
+        self.assertIsNotNone(rel, "미러가 만들어지지 않았다")
+        self.assertNotIn(rel, self.staged(),
+                         f"미러가 담겼다: {rel} — 이 자리를 .gitignore 가 막지 않는다")
 
-    # B1. 미러가 자리를 옮겨도 잡힌다 — 옮긴 자리를 .gitignore 가 안 막으면 실패
-    def test_b1_moved_location_would_be_caught(self):
-        for rel in (os.path.join("streams", "x.jsonl"),
-                    os.path.join("users", "sjpark1", "streams", "x.jsonl")):
+    # B1. 지금 자리와 옮겨 갈 자리 둘 다, 파일을 놓아도 담기지 않는다
+    def test_b1_both_locations_stay_out(self):
+        rels = ["streams/x.jsonl", "users/sjpark1/streams/x.jsonl"]
+        for rel in rels:
+            p = os.path.join(self.root, rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("x\n")
+        staged = self.staged()
+        for rel in rels:
             with self.subTest(rel=rel):
-                p = os.path.join(self.root, rel)
-                os.makedirs(os.path.dirname(p), exist_ok=True)
-                with open(p, "w", encoding="utf-8") as f:
-                    f.write("x\n")
-        self.assertEqual(_stream_paths(self.staged()), [])
+                self.assertNotIn(rel, staged)
 
-    # F1. ignore 밖으로 옮기면 **이 테스트가 반드시 깨진다** — 감시가 살아 있는지
-    #     스스로 증명한다. 여기가 통과하면 위 두 개는 우연이 아니다
+    # F1. 감시가 살아 있는지 스스로 증명한다 — ignore 밖 파일은 **담겨야** 한다.
+    #     이게 없으면 위 두 개는 "아무것도 안 담긴다"로도 통과한다
     def test_f1_guard_is_alive(self):
-        p = os.path.join(self.root, "chatlogs", "streams", "x.jsonl")
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "w", encoding="utf-8") as f:
+        with open(os.path.join(self.root, "plain.txt"), "w",
+                  encoding="utf-8") as f:
             f.write("x\n")
-        self.assertNotEqual(_stream_paths(self.staged()), [],
-                            "감시가 죽었다 — 무엇을 놓든 통과한다")
+        self.assertIn("plain.txt", self.staged(),
+                      "감시가 죽었다 — 무엇을 놓아도 통과한다")
 
 
 if __name__ == "__main__":

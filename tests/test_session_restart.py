@@ -312,11 +312,13 @@ class TestRestartUiContract(unittest.TestCase):
 
     # R10 (실사고): 모델 선택지에 fable 누락 → opus로 바꾼 뒤 되돌아갈 수 없었다.
     #      claude --help의 별칭(fable/opus/sonnet)이 모두 선택 가능해야 한다.
+    #      REQ-20260827-079 로 인라인 패널이 판정 대화상자의 "고르는 변형"으로
+    #      바뀌면서 선택지의 출처가 MODELS 배열이 됐다 — 계약은 그대로다.
     def test_r10_model_choices_include_fable(self):
         import re as _re
-        m = _re.search(r'row\("m", "model", \[([^\]]*)\]\)', self.html)
-        self.assertIsNotNone(m, "모델 선택 행 정의를 찾을 수 없다")
-        choices = [c.strip().strip('"') for c in m.group(1).split(",")]
+        m = _re.search(r"const MODELS = \[([\s\S]*?)\];", self.html)
+        self.assertIsNotNone(m, "모델 선택지 정의를 찾을 수 없다")
+        choices = _re.findall(r'\["([a-z]+)"', m.group(1))
         for alias in ("fable", "opus", "sonnet"):
             self.assertIn(alias, choices)
 

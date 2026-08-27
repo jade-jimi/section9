@@ -26,6 +26,7 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
 STOP_HOOK = os.path.join(HERE, "..", "bin", "s9-audit-response")
+INDEX = os.path.join(HERE, "..", "web", "index.html")
 
 
 class env_as:
@@ -193,12 +194,93 @@ class Surface(Base):
         self.set_cfg(stream_mirror="off")
         self.assertIn("꺼짐", self.cli("stream"))
 
+    # F2 의 뿌리 — 화면이 자리를 내릴 **근거**를 서버가 실어 보낸다.
+    # 목록만 비우면 "탭은 있는데 비어 있다"가 되고 사용자는 그걸 고장으로 읽는다.
+    # 이 값이 없으면 화면은 판단할 수 없다 (없을 때는 켜진 것으로 본다 — R2).
+    def test_f2_whoami_carries_flag(self):
+        with env_as(self.root):
+            self.assertIs(_load("s9_sw_on", S9).whoami_info().get(
+                "stream_mirror"), True)
+        self.set_cfg(stream_mirror="off")
+        with env_as(self.root):
+            self.assertIs(_load("s9_sw_off", S9).whoami_info().get(
+                "stream_mirror"), False)
+
     # F1. 꺼져 있으면 resume 이 거부하고 이유를 말한다 — 조용히 실패하지 않는다
     def test_f1_resume_refuses_with_reason(self):
         self.set_cfg(stream_mirror="off")
         self.mirror("aaaa1111-2222-3333-4444-555555555555")
         out = self.cli("resume", "aaaa1111", "--yes", expect=1)
         self.assertIn("꺼져", out, out)
+
+
+class Screen(unittest.TestCase):
+    """F2 — 꺼진 계정의 **화면**에는 스트림 자리가 없다.
+
+    서버가 목록을 비우는 것만으로는 부족하다. 탭은 그대로 남고 안이 비므로
+    사용자는 그걸 설정의 결과가 아니라 **고장으로 읽는다.** 그래서 서버가
+    whoami 에 `stream_mirror` 를 실었는데(이미 구현됨), 화면이 그 값을 실제로
+    읽지 않으면 실은 것이 없는 것과 같다 — 여기서 그 연결을 붙든다.
+
+    화면 소스를 글자로 검사한다. 브라우저를 띄우지 않고 지킬 수 있는 계약만
+    담되, "있더라"가 아니라 **어느 자리에 어떤 순서로** 있는지를 본다.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        with open(INDEX, encoding="utf-8") as f:
+            cls.src = f.read()
+
+    def fn(self, name):
+        """`async function <name>(` 부터 다음 최상위 function 앞까지."""
+        i = self.src.index("function " + name + "(")
+        j = self.src.find("\nfunction ", i + 1)
+        k = self.src.find("\nasync function ", i + 1)
+        end = min([x for x in (j, k) if x > 0] or [len(self.src)])
+        return self.src[i:end]
+
+    # R2 의 화면 쪽 짝 — 모르면 켜진 것으로 본다.
+    # 서버가 낡아 이 값을 안 주거나 whoami 가 통째로 실패했을 때 기록이 말없이
+    # 사라지는 쪽보다 남아 있는 쪽이 안전하다. `=== true` 로 쓰면 그 반대가 된다.
+    def test_unknown_means_on(self):
+        self.assertRegex(
+            self.src, r"streamOn\s*=\s*\(\)\s*=>[^\n]*stream_mirror\s*!==\s*false")
+
+    # 탭 자체가 사라진다 — 비어 있는 탭을 남기지 않는다
+    def test_tab_hidden_when_off(self):
+        vis = self.fn("applyStreamVisibility")
+        self.assertIn('[data-tab="stream"]', vis)
+        self.assertRegex(vis, r"hidden\s*=\s*!\s*streamOn\(\)")
+        # 화면을 세우는 자리에서 실제로 불려야 한다 — 정의만 있으면 죽은 코드다
+        self.assertIn("applyStreamVisibility();", self.fn("boot"))
+
+    # 북마크·뒤로가기로 #stream 에 들어와도 빈 탭에 앉히지 않는다
+    def test_hash_falls_back_to_board(self):
+        route = self.fn("applyRoute")
+        self.assertRegex(
+            route, r'parts\[0\]\s*===\s*"stream"\s*&&\s*!\s*streamOn\(\)')
+        self.assertRegex(route, r'parts\[0\]\s*=\s*"board"')
+
+    # 문서별 스트림 터미널도 함께 내린다 — 스위치의 뜻은 하나다
+    def test_per_doc_stream_gated(self):
+        i = self.src.index("const streamSec =")
+        self.assertIn("streamOn()", self.src[i:i + 160])
+
+    # 꺼 두고 그려도 "미러링합니다"라고 말하지 않는다.
+    # 서버가 빈 목록을 주므로 그대로 그리면 no-streams 안내가 나오는데, 그건
+    # 미러링을 안 하기로 한 사용자에게 미러링 중이라고 말하는 **거짓말**이다.
+    def test_off_branch_precedes_fetch(self):
+        r = self.fn("renderStream")
+        off = r.index("꺼져 있습니다")
+        self.assertLess(off, r.index('"/api/streams"'))
+        self.assertLess(off, r.index("훅이 턴 종료마다"))
+        self.assertIn("stream_mirror on", r)      # 되돌리는 법을 함께 적는다
+
+    # 없는 자리로 안내하지 않는다 — 터미널의 줄 생략 안내가 Stream 탭을 가리킨다
+    def test_trim_notice_no_dead_pointer(self):
+        t = self.fn("termTrim")
+        self.assertIn("streamOn()", t)
+        self.assertRegex(t, r'streamOn\(\)\s*\?\s*"전체 이력은 Stream 탭')
 
 
 if __name__ == "__main__":

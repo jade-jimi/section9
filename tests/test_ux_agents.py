@@ -210,7 +210,11 @@ class TestBoardScope(unittest.TestCase):
         # 그 게이트가 어떤 이름으로 어떻게 조립되는지가 아니다 —
         # 실제로 REQ-20260826-006이 게이트를 넓히자 이 줄이 깨졌다.
         import re
-        m = re.search(r"function filtered\(skipQ, skipType\)(.*?)\n}", self.html, re.S)
+        # 인자 목록은 계약이 아니다 — REQ-20260827-054 가 "조건 하나를 빼고 다시
+        # 세기" 위해 skip 집합을 세 번째 인자로 더했다. 여기서 고정할 성질은
+        # 타입 게이트의 동작이지 시그니처가 아니다.
+        m = re.search(r"function filtered\(skipQ, skipType(?:, \w+)?\)(.*?)\n}",
+                      self.html, re.S)
         self.assertTrue(m, "filtered()가 타입 조건 제외 인자를 받지 않는다")
         body = m.group(1)
         # (1) 타입 조건은 해제 가능한 게이트를 통과해야 한다
@@ -229,7 +233,11 @@ class TestBoardScope(unittest.TestCase):
     #      Docs에서 knowledge를 고른 채 Board로 넘어오면 전 컬럼이 0건이 됐다.
     def test_b3b_type_filter_absent_on_board(self):
         import re
-        m = re.search(r"function filtered\(skipQ, skipType\)(.*?)\n}", self.html, re.S)
+        # 인자 목록은 계약이 아니다 — REQ-20260827-054 가 "조건 하나를 빼고 다시
+        # 세기" 위해 skip 집합을 세 번째 인자로 더했다. 여기서 고정할 성질은
+        # 타입 게이트의 동작이지 시그니처가 아니다.
+        m = re.search(r"function filtered\(skipQ, skipType(?:, \w+)?\)(.*?)\n}",
+                      self.html, re.S)
         body = m.group(1)
         ty = re.search(r"if \(!(\w+) && ty && r\.type !== ty\) return false;", body)
         gate = ty.group(1)
