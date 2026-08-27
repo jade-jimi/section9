@@ -38,15 +38,28 @@ class PortWarnNames(unittest.TestCase):
         for f in ("top_name", "top_pid", "top_count"):
             self.assertIn(f, self.warn, f"{f} 를 쓰지 않는다")
 
-    def test_p2_it_says_how_many_are_ours(self):
-        """P2. **우리 몫**을 함께 말한다.
+    def test_p2_it_never_claims_a_share_it_cannot_know(self):
+        """P2. **모르는 것을 단언하지 않는다** (REQ-20260827-022 정정).
 
-        이게 판단의 핵심이다 — 82% 라도 우리 것이 0개면 우리가 할 일이 없다.
-        그 사실을 말하지 않으면 사람은 우리 결함으로 읽는다(실제로 그랬다).
+        이 테스트는 원래 정반대를 요구했다 — "우리 몫이 몇 개인지 말하라".
+        그 요구가 틀렸다. 읽던 키(`sample`)를 `windows_ports()` 가 **만들지
+        않으므로** 그 값은 언제나 0이었고, 경고는 "우리 것은 0개다"라는 거짓을
+        매번 단언했다. 사용자가 "이 머신엔 section9밖에 없다"고 짚어 준 뒤에야
+        드러났고, 실제로 그 포트들은 우리 것이었다.
+
+        읽을 수 있었어도 답할 수 없는 질문이었다: WSL 이 포트를 호스트에
+        공개하면 소유자는 호스트 릴레이가 되므로, 소유자 값으로는 귀속을
+        가릴 수 없다.
+
+        **테스트가 거짓을 계약으로 굳히면 그 거짓이 회귀로 보호된다.**
         """
-        self.assertIn('win.get("sample")', self.warn,
-                      "우리 것이 몇 개인지 말하지 않는다")
-        self.assertIn("우리 것은", self.warn)
+        # **주석이 아니라 실제로 찍히는 문장**을 본다. 처음엔 소스 블록을 통째로
+        # 훑었는데, 이 결함의 내력을 적어 둔 주석에 그 문구가 들어 있어 테스트가
+        # 헛되이 붉어졌다 — 계약은 코드가 하는 말이지 코드에 대한 설명이 아니다.
+        code = "\n".join(l for l in self.warn.splitlines()
+                         if not l.strip().startswith("#"))
+        self.assertNotIn('win.get("sample")', code, "없는 필드를 다시 읽는다")
+        self.assertNotIn("우리 것은", code, "알 수 없는 몫을 다시 단언한다")
 
     def test_p3_it_survives_missing_fields(self):
         """P3. doctor 가 그 값을 안 주면 조용히 예전처럼 말한다.

@@ -208,6 +208,12 @@ def pending_context(sid8, env=None):
         return ""
 
 
+# `s9 code` 가 세션을 한 턴 돌리려고 넣는 기동 줄의 마커 (REQ-20260827-025-62x6).
+# bin/s9 의 CODE_BOOTSTRAP_MARK 와 같은 문자열이어야 한다 —
+# tests/test_code_bootstrap.py 가 두 자리를 맞물려 검사한다.
+BOOTSTRAP_MARK = "[section9 bootstrap]"
+
+
 def classify(text):
     """휴리스틱 1차 분류.
     우선순위: nothing > meta지시 > request(명령형) > question > fragment > request"""
@@ -400,6 +406,16 @@ def main():
             f"새 REQ 카드는 만들지 마라(대상 REQ가 이미 있다). 재작업 완료 시 "
             f"`s9 status {target} review --note '확인 포인트...'` 로 전이하라. "
             f"s9 = ~/section9/bin/s9")
+        return
+
+    # 기동 턴 (REQ-20260827-025): `s9 code` 가 넣은 줄이지 사람이 친 말이 아니다.
+    # 카드도 서문도 만들지 않는다 — 세션 첫 화면을 훅 텍스트로 덮으면 사람이 읽을
+    # 것이 사라지고, 없는 요청이 보드에 카드로 쌓인다. 바인딩 갱신(위 attach_pid)은
+    # 이미 지났으므로 여기서 나가도 이 세션은 채팅 대상으로 제대로 잡힌다.
+    if prompt.startswith(BOOTSTRAP_MARK):
+        run(env, "log", "세션 기동 — 수신 대기 arm")
+        run(env, "last", "--pause")   # 이 턴의 응답을 남의 REQ에 붙이지 않는다
+        emit("")
         return
 
     # 답 캡처 포인터는 매 턴 초기화한다 — 질문 턴에서만 다시 세운다.
