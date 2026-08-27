@@ -6,6 +6,7 @@ role: admin
 emails: ["claude01.pfe@example.invalid"]
 github: nicehugepark
 os_accounts: ["sjpark1"]
+machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-27T21:58:53+09:00"}]
 ---
 
 ## Notes
@@ -81,3 +82,4 @@ os_accounts: ["sjpark1"]
 - 2026-08-27T16:45:37+09:00 config ui_tone=carbon (by nicehugepark via dashboard)
 - 2026-08-27T18:21:52+09:00 config pref_examples=예시에 실제 회사·조직·고객 이름을 쓰지 마라 (example, example 등). 이건 누구나 쓰는 하네스다 — 예시는 일반 명사로(예: my-team-work, acme-work). 실제 이름은 실데이터(계정 이메일 등)에만 나타난다. (by nicehugepark)
 - 2026-08-27T18:50:36+09:00 config pref_examples=(삭제) (by nicehugepark via dashboard)
+- 2026-08-27T21:58:53+09:00 처음 본 머신 sjpark1@DESKTOP-TEHV1KR (WSL)

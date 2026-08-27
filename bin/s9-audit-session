@@ -169,6 +169,13 @@ def main():
     chat_ctx = ""
     if event == "start":
         ensure_serve()  # 대시보드가 죽어 있으면 세션 시작이 되살린다 (REQ-020)
+        # 이 사람이 어느 머신에서 어느 OS 계정으로 일하는지 스스로 적는다
+        # (REQ-20260827-066). 손으로 attach 할 때만 남기면 기록이 늘 뒤처진다.
+        try:
+            subprocess.run([S9, "user", "seen"], capture_output=True,
+                           text=True, env=env, timeout=10)
+        except Exception:
+            pass
         # 프로젝트 에이전트 동기화 (REQ-20260824-038): projects/*/agents/*.md →
         # .claude/agents/<slug>--이름.md — 이 세션부터 네이티브 subagent로 로드된다
         try:

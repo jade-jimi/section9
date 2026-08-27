@@ -7011,6 +7011,64 @@ def do_user_add(name, role="member", display="", email="", machine=None,
     return udir
 
 
+def os_platform():
+    """이 머신의 운영체제 한 마디 — linux · macOS · Windows · WSL.
+
+    WSL 은 리눅스이면서 리눅스가 아니다: 같은 사람이 같은 노트북에서 두 이름으로
+    보일 수 있어 이력을 읽을 때 헷갈린다. 그래서 따로 적는다."""
+    if sys.platform == "darwin":
+        return "macOS"
+    if sys.platform.startswith("win"):
+        return "Windows"
+    if sys.platform.startswith("linux"):
+        try:
+            with open("/proc/version") as f:
+                if "microsoft" in f.read().lower():
+                    return "WSL"
+        except OSError:
+            pass
+        return "Linux"
+    return sys.platform
+
+
+def record_machine_account(name, machine=None, acct=None):
+    """이 사람이 어느 머신에서 어느 운영체제 계정으로 일했는지 (REQ-20260827-066).
+
+    `os_accounts` 와 `machines` 는 각각 납작한 목록이라 **둘을 짝지을 수 없다** —
+    머신이 셋이고 계정이 둘이면 어느 쌍이 실제였는지 알 수 없다. 계정 이름을
+    바꿔 보고 나서야 이 짝이 신원 판정의 실제 근거라는 것이 드러났다
+    (REQ-20260827-060: 짝을 못 이어서 자기 문서가 하나도 안 보였다).
+
+    처음 본 때와 마지막으로 본 때를 함께 둔다 — 목록만 있으면 "지금도 쓰는
+    머신"과 "한 번 스쳐간 머신"이 같아 보인다.
+    """
+    ppath = os.path.join(USERS, name, "profile.md")
+    if not os.path.isfile(ppath):
+        return False
+    machine = machine or current_machine()
+    acct = acct or os_identity()
+    plat, ts = os_platform(), now_iso()
+    with open(ppath, encoding="utf-8") as f:
+        meta, body = fm_parse(f.read())
+    rows = meta.get("machine_accounts") or []
+    if not isinstance(rows, list):
+        rows = []
+    for r in rows:
+        if isinstance(r, dict) and r.get("machine") == machine \
+                and r.get("account") == acct:
+            if r.get("last") == ts and r.get("os") == plat:
+                return False
+            r["last"], r["os"] = ts, plat
+            break
+    else:
+        rows.append({"machine": machine, "os": plat, "account": acct,
+                     "first": ts, "last": ts})
+        body = body.rstrip("\n") + f"\n- {ts} 처음 본 머신 {acct}@{machine} ({plat})\n"
+    meta["machine_accounts"] = rows
+    write_doc(ppath, meta, body)
+    return True
+
+
 def do_user_attach(name, machine=None):
     """로밍 1회 연결 (REQ-20260824-027): 현재 OS 계정·머신을 name 프로필의
     os_accounts/machines에 추가한다. 이후 이 계정으로 기동한 서버의 whoami가
@@ -7032,6 +7090,7 @@ def do_user_attach(name, machine=None):
     if changed:
         body = body.rstrip("\n") + f"\n- {now_iso()} attach {acct}@{machine}\n"
         write_doc(ppath, meta, body)
+    record_machine_account(name, machine, acct)
     return acct, machine, changed
 
 
@@ -7188,6 +7247,14 @@ def cmd_user_rename(old, new):
 
 def cmd_user(args):
     machine = args.machine or current_machine()
+
+    if args.action == "seen":
+        name = args.name or resolve_user()
+        if not user_role(name):
+            die(f"not registered: {name}")
+        record_machine_account(name)
+        print(f"{name}: {os_identity()}@{current_machine()} ({os_platform()})")
+        return
 
     if args.action == "rename":
         old = args.name or die("usage: s9 user rename <old> <new>")
@@ -10115,6 +10182,9 @@ def cmd_serve(args):
                                 "github_org": meta.get("github_org", ""),
                                 "registered": meta.get("registered", ""),
                                 "registered_on": meta.get("registered_on", ""),
+                                "os_accounts": meta.get("os_accounts", []),
+                                "machine_accounts":
+                                    meta.get("machine_accounts", []),
                                 "config": user_config(u)})
                 self._json({"users": out, "machine": machine})
             elif parsed.path == "/api/chat/target":
@@ -10764,7 +10834,7 @@ def main():
     up = sub.add_parser("user", help="user registry & session binding")
     up.add_argument("action",
                     choices=["add", "attach", "list", "switch", "current",
-                             "role", "config", "update", "rename"])
+                             "role", "config", "update", "rename", "seen"])
     up.add_argument("name", nargs="?")
     up.add_argument("key", nargs="?", help="config: 설정 키 / role: 무시")
     up.add_argument("value", nargs="?", help="config: 설정 값 / role: 새 역할")
