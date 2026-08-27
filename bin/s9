@@ -2164,7 +2164,12 @@ def _chat_question(s9bin, env, text, first_line, sender):
         if out.returncode != 0 or not out.stdout.split():
             return None
         qst = out.stdout.split()[0]
+        # 한 칸짜리 포인터에 덮어쓰기만 하면 **답보다 빨리 온 다음 질문이 앞
+        # 질문을 지운다** (REQ-20260827-049 실사고). 목록에 쌓는다 — Stop 훅이
+        # 그 턴의 답을 전부에게 붙이고 비운다. last_qst 는 폴백으로 함께 둔다.
         subprocess.run([s9bin, "bind", "last_qst", qst],
+                       capture_output=True, text=True, env=env, timeout=15)
+        subprocess.run([s9bin, "bind", "pending_qst", "--add", qst],
                        capture_output=True, text=True, env=env, timeout=15)
         subprocess.run([s9bin, "log", f"dashboard question {qst} 기록: {title}"],
                        capture_output=True, text=True, env=env, timeout=15)
@@ -5429,7 +5434,16 @@ def cmd_bind(args):
         try:
             b = read_binding(machine, session) or {
                 "machine": machine, "session": session, "user": "", "history": []}
-            b[args.key] = args.value or ""
+            if getattr(args, "add", False):
+                # 목록 키에 덧붙인다 (REQ-20260827-049) — 덮어쓰면 앞 값을 잃는다
+                cur = b.get(args.key) or []
+                if isinstance(cur, str):
+                    cur = [x for x in cur.split(",") if x.strip()]
+                if args.value and args.value not in cur:
+                    cur.append(args.value)
+                b[args.key] = cur
+            else:
+                b[args.key] = args.value or ""
             write_binding(b)
         finally:
             release_lock()
@@ -10268,6 +10282,8 @@ def main():
     bd = sub.add_parser("bind", help="session binding key 조회/설정")
     bd.add_argument("key", nargs="?")
     bd.add_argument("value", nargs="?")
+    bd.add_argument("--add", action="store_true",
+                    help="목록 키에 덧붙인다 (덮어쓰지 않는다)")
     bd.add_argument("--session")
     bd.set_defaults(fn=cmd_bind)
 

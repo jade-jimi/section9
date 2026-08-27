@@ -463,6 +463,9 @@ def main():
             if qout.returncode == 0 and qout.stdout.split():
                 qst = qout.stdout.split()[0]
                 run(env, "bind", "last_qst", qst)   # Stop 훅의 답 캡처 대상
+                # 목록에도 쌓는다 (REQ-20260827-049) — 한 칸짜리 포인터는 답보다
+                # 빨리 온 다음 질문에 덮여 앞 질문을 잃는다.
+                run(env, "bind", "pending_qst", "--add", qst)
                 run(env, "log", f"question {qst} 기록: {qtitle[:40]}")
         cur = run(env, "user", "current")
         who = cur.stdout.strip() if cur.returncode == 0 else "?"
