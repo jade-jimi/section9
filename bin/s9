@@ -73,7 +73,8 @@ FM_ORDER = [
     "contributions", "project",
     "slug", "customer", "contact_name", "contact_email",
     "contact_phone", "contact_org", "members",
-    "parent", "children", "derived_from", "relates", "blocked_by",
+    "parent", "children", "derived_from", "relates", "relates_why",
+    "blocked_by",
     "refs_docs", "refs_links", "refs_files", "tags",
     "created", "status_since", "updated",
 ]
@@ -316,7 +317,10 @@ def fm_dump(meta):
         v = meta.get(k)
         if v is None or v == [] or v == "":
             continue
-        if k in LIST_KEYS or isinstance(v, list):
+        # dict 도 json 으로 (REQ-20260827-030: relates_why) — str(dict) 는
+        # 파이썬 repr 이라 홑따옴표가 나오고, 다시 읽을 때 json 이 아니어서
+        # 통째로 문자열이 된다. 쓰는 쪽과 읽는 쪽이 같은 문법을 써야 한다.
+        if k in LIST_KEYS or isinstance(v, (list, dict)):
             lines.append(f"{k}: {json.dumps(v, ensure_ascii=False)}")
         else:
             s = str(v)
@@ -899,6 +903,10 @@ def _recent_duplicate(doc_type, title, body, window_sec=180):
 
 
 def cmd_new(args):
+    # 관계에는 이유가 남는다 (REQ-20260827-030) — `s9 link` 와 같은 규칙이다.
+    # 입구가 둘인데 한쪽만 막으면 다른 입구로 그대로 샌다.
+    if getattr(args, "relates", None) and not (getattr(args, "why", "") or "").strip():
+        die("--relates 에는 --why '한 줄 이유' 가 필요하다 (REQ-20260827-030)")
     if args.doc_type not in TYPES:
         die(f"unknown type: {args.doc_type}")
     prefix, subdir, default_status = TYPES[args.doc_type]
@@ -954,6 +962,8 @@ def cmd_new(args):
             "project": proj,
             "parent": args.parent or "", "children": [],
             "derived_from": args.derived_from or "", "relates": args.relates or [],
+            "relates_why": ({r: (getattr(args, "why", "") or "").strip()
+                             for r in args.relates} if args.relates else {}),
             "refs_docs": args.ref_doc or [], "refs_links": args.ref_link or [],
             "refs_files": args.ref_file or [],
             # 통제 어휘 자동 태깅 (REQ-20260825-052) — 사람 태그가 있으면
@@ -2631,7 +2641,9 @@ def chat_audit(text, sender, sid8):
             rel = [r for r in _review_refs(t) if r != doc_id][:5]
             if rel:
                 subprocess.run([me, "link", doc_id] +
-                               [x for r in rel for x in ("--relates", r)],
+                               [x for r in rel for x in ("--relates", r)] +
+                               ["--why", "이 메시지가 판정 대기 문서를 이름으로 "
+                                         "지목했다 (대시보드 채팅 audit)"],
                                capture_output=True, text=True, env=env,
                                timeout=15)
         except Exception:
@@ -3367,12 +3379,34 @@ def cmd_link(args):
         meta["parent"] = args.parent
     if args.derived_from:
         meta["derived_from"] = args.derived_from
+    # 연관에는 이유가 남는다 (REQ-20260827-030). 간선에 상대 id 하나만 남으면
+    # 나중에 누가 봐도 **'진짜 관계'와 '그때 사정'을 구별할 수 없다.** 실사고:
+    # 리드가 "둘 다 같은 파일을 고치니 순서를 나눠야 한다"는 작업 순서 사실을
+    # relates 로 걸었고, 사용자가 "이게 연관되는 게 맞나"로 잡아냈다. 기록할
+    # 자리가 없어 관계 필드로 샌 것이다.
+    #
+    # 그래서 걸 때 한 줄을 받는다. 그러면 전수 검사가 추측이 아니라 읽기가 된다
+    # — 119개를 사람이 다시 추측해 판정하는 일을 되풀이하지 않는 유일한 길이다.
+    # parent·derived_from 은 강제하지 않는다: 방향과 뜻이 이름에 이미 있다.
+    why = (getattr(args, "why", "") or "").strip()
+    if args.relates and not why:
+        die("--relates 에는 --why '한 줄 이유' 가 필요하다 — 이유 없는 연관이 "
+            "쌓여 나중에 아무도 판정할 수 없게 된다 (REQ-20260827-030)")
     extend("relates", args.relates)
+    if args.relates:
+        wmap = dict(meta.get("relates_why") or {})
+        for rid in args.relates:
+            wmap[rid] = why
+        meta["relates_why"] = wmap
     # 연관 해제 (REQ-20260826-040): 자동 연결이 틀리게 걸리는 일이 있는데
     # 되돌릴 명령이 없어 md 를 손으로 고쳐야 했다. 관계를 자동으로 거는
     # 시스템이라면 자동으로 잘못 건 것을 거두는 길도 같은 자리에 있어야 한다.
     for u in (args.unrelate or []):
         meta["relates"] = [x for x in (meta.get("relates") or []) if x != u]
+        # 이유도 함께 거둔다 — 없는 관계를 설명하는 유령이 남으면 안 된다
+        if meta.get("relates_why"):
+            meta["relates_why"] = {k: v for k, v in meta["relates_why"].items()
+                                   if k != u}
     # 선행 의존 (REQ-20260825-097): 존재·자기참조·순환을 경계에서 막는다 —
     # 대기 순환은 그래프에 그려지는 순간 교착이라, 기록 자체를 거부한다.
     for b in (args.blocked_by or []):
@@ -3411,8 +3445,16 @@ def cmd_link(args):
                 continue
             rmeta, rbody = read_doc(rp)
             rrel = rmeta.get("relates", [])
+            rwhy = dict(rmeta.get("relates_why") or {})
+            changed = False
             if args.id not in rrel:
                 rmeta["relates"] = rrel + [args.id]
+                changed = True
+            if rwhy.get(args.id) != why:   # 이유도 대칭이다 (REQ-20260827-030)
+                rwhy[args.id] = why
+                rmeta["relates_why"] = rwhy
+                changed = True
+            if changed:
                 rmeta["updated"] = ts
                 write_doc(rp, rmeta, rbody)
         # 해제도 대칭이다 — 한쪽만 지우면 반대편 문서에서 유령 관계가 남는다.
@@ -3422,8 +3464,12 @@ def cmd_link(args):
                 continue
             umeta, ubody = read_doc(up)
             urel = [x for x in (umeta.get("relates") or []) if x != args.id]
-            if urel != (umeta.get("relates") or []):
+            uwhy = {k: v for k, v in (umeta.get("relates_why") or {}).items()
+                    if k != args.id}
+            if urel != (umeta.get("relates") or []) \
+                    or uwhy != (umeta.get("relates_why") or {}):
                 umeta["relates"] = urel
+                umeta["relates_why"] = uwhy
                 umeta["updated"] = ts
                 write_doc(up, umeta, ubody)
         rebuild_index(quiet=True)
@@ -4796,7 +4842,52 @@ def cmd_shapes(args):
     return 1 if issues else 0
 
 
+def relates_audit():
+    """모든 relates 간선 + 그 이유 (REQ-20260827-030).
+
+    이유가 있으면 판정이 **읽기**가 되고, 없으면 다시 추측이 된다. 그래서 이
+    리포트가 답하는 질문은 "이 관계가 맞나"가 아니라 **"이 관계가 왜 걸렸는지
+    알 수 있나"** 다 — 앞의 질문은 사람만 답할 수 있고, 뒤의 질문은 도구가
+    답할 수 있다. 없는 이유를 그럴듯하게 채우지 않는다: 미기재는 미기재다.
+
+    반환: [(a, b, 이유, 양쪽 이유가 어긋났는가), …]
+    """
+    docs = {}
+    for r in load_catalog():
+        pth = locate(r["id"])
+        if pth:
+            try:
+                docs[r["id"]] = read_doc(pth)[0]
+            except OSError:
+                continue
+    edges = set()
+    for did, meta in docs.items():
+        for o in (meta.get("relates") or []):
+            edges.add(tuple(sorted((did, o))))
+    out = []
+    for a, b in sorted(edges):
+        wa = ((docs.get(a) or {}).get("relates_why") or {}).get(b, "")
+        wb = ((docs.get(b) or {}).get("relates_why") or {}).get(a, "")
+        why = (wa or wb).strip()
+        out.append((a, b, why, bool(wa and wb and wa != wb)))
+    return out
+
+
 def cmd_linkcheck(args):
+    if getattr(args, "relates_audit", False):
+        rows = relates_audit()
+        missing = [r for r in rows if not r[2]]
+        for a, b, why, split in rows:
+            mark = "⚠" if split else " "
+            print(f"  {mark} {a} ✕ {b}\n      {why or '미기재'}")
+        split_n = sum(1 for r in rows if r[3])
+        print(f"연관 간선 {len(rows)}개 · 이유 미기재 {len(missing)}개"
+              + (f" · 양쪽 이유 불일치 {split_n}개" if split_n else ""))
+        if missing:
+            print("미기재는 결함이 아니라 옛 기록이다 — 그 문서를 다음에 만질 때 "
+                  "`s9 link <id> --relates <상대> --why '...'` 로 덮어 적어라.")
+        return 0
+
     if getattr(args, "prune_proximity", False):
         hits = proximity_relates(fix=args.fix)
         for a, b, d in hits:
@@ -9514,6 +9605,8 @@ def main():
     np.add_argument("--parent")
     np.add_argument("--derived-from")
     np.add_argument("--relates", action="append")
+    np.add_argument("--why", help="--relates 를 왜 걸었는지 한 줄 "
+                                  "(REQ-20260827-030 — 이유 없는 연관 금지)")
     np.add_argument("--ref-doc", action="append")
     np.add_argument("--ref-link", action="append")
     np.add_argument("--ref-file", action="append")
@@ -9540,6 +9633,8 @@ def main():
     lk.add_argument("--parent")
     lk.add_argument("--derived-from")
     lk.add_argument("--relates", action="append")
+    lk.add_argument("--why", help="--relates 를 왜 걸었는지 한 줄 — 나중에 "
+                                  "판정할 수 있게 (REQ-20260827-030). 필수")
     lk.add_argument("--unrelate", action="append",
                     help="잘못 걸린 연관을 거둔다 (양쪽에서 지운다)")
     lk.add_argument("--blocked-by", action="append",
@@ -9586,6 +9681,8 @@ def main():
     lc.add_argument("--prune-proximity", action="store_true",
                     dest="prune_proximity",
                     help="근접만으로 걸린 연관을 찾는다 (--fix 로 거둔다)")
+    lc.add_argument("--relates-audit", action="store_true",
+                    help="연관 간선 전수 + 이유 (REQ-20260827-030)")
     lc.set_defaults(fn=cmd_linkcheck)
     tg = sub.add_parser("tag", help="태그 유지보수 (통제 어휘 백필)")
     tg.add_argument("action", choices=["backfill"])

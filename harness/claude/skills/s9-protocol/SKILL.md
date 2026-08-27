@@ -10,6 +10,10 @@ description: section9 외부기억 작업 규약. 어떤 역할이든 작업 기
 - 외부기억 = `~/section9`, CLI = `~/section9/bin/s9`. 컨텍스트가 아니라 문서만 영속한다.
 - 상황 파악: `s9 digest` → `s9 ls --status/--user` → `s9 show <id> [--meta]` → `s9 search <kw> --body`. 넓은 것부터 좁혀 토큰을 아껴라.
 - 작업 기록: 진행/결정은 `s9 note <REQ-id> "..." --label <역할명>`, 상태는 `s9 status <id> <to> --note`, 재사용 지식은 `s9 new knowledge`.
+- `relates` 를 걸 때는 `--why '한 줄 이유'` 가 필수다 (REQ-20260827-030). 이유 없는 간선은
+  나중에 '진짜 관계'와 '그때 사정'을 구별할 수 없게 만든다 — 실사고: "둘 다 같은 파일을
+  고치니 순서를 나눠야 한다"는 작업 순서 사실이 relates 로 걸렸다. 그런 것은 관계가 아니라
+  노트에 적어라. 전수 점검은 `s9 linkcheck --relates-audit`.
 - 캡처·로그 등 증거는 **경로를 글자로 적지 말고 붙여라** — `s9 note <id> '...' --attach <파일>`
   (반복 지정 가능). 문서 옆 `assets/` 로 옮겨져 문서 화면에 그림으로 그려진다
   (REQ-20260827-028). 판정을 청하면서 증거를 상대가 직접 열게 만들지 마라.

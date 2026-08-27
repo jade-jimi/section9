@@ -123,7 +123,8 @@ class TestQuestionInVault(unittest.TestCase):
         self.assertIn("cron", self.cli("show", qid).stdout)
         self.cli("note", qid, "crontab/systemctl 호출 0건이다.",
                  "--label", "answer")
-        self.cli("link", qid, "--relates", self.req)
+        self.cli("link", qid, "--relates", self.req,
+                 "--why", "이 질문이 그 요청을 두고 나왔다")
         body = self.cli("show", qid).stdout
         self.assertIn("crontab/systemctl 호출 0건", body)
         self.assertIn(self.req, self.cli("show", qid, "--meta").stdout)

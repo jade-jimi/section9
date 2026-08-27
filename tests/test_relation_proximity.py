@@ -122,7 +122,7 @@ class RelationProximity(unittest.TestCase):
                             "t", "--goal", "t", "--size", "S", "--user",
                             "tester", "--body", "x").stdout.split()[0]
         x, y = mk("한쪽"), mk("다른쪽")
-        self.cli("link", x, "--relates", y)
+        self.cli("link", x, "--relates", y, "--why", "거두기 검사용 픽스처")
         self.assertIn(y, self.relates(x))
         self.assertIn(x, self.relates(y))
         self.cli("link", x, "--unrelate", y)
@@ -148,14 +148,14 @@ class RelationProximity(unittest.TestCase):
             "도는 것 같으니 확인해서 고쳐 달라.", "tester", "backfillsess")
         self.assertTrue(a and b and a != b, (a, b))
         # 자동 연결이 걸던 그 간선을 손으로 재현한다 (지금 코드는 안 건다)
-        self.cli("link", a, "--relates", b)
+        self.cli("link", a, "--relates", b, "--why", "근접 백필 검사용 픽스처")
         self.assertIn(b, self.relates(a))
 
         # 손으로 건 연관(본문이 서로를 부르는 쪽)은 살아남아야 한다
         keep = self.cli("new", "request", "--title", "언급되는쪽", "--summary",
                         "t", "--goal", "t", "--size", "S", "--user", "tester",
                         "--body", "x").stdout.split()[0]
-        self.cli("link", a, "--relates", keep)
+        self.cli("link", a, "--relates", keep, "--why", "남아야 하는 간선")
 
         hits = self.s9.proximity_relates(fix=True)
         pairs = {tuple(sorted((x, y))) for x, y, _ in hits}

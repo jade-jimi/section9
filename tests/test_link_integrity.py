@@ -94,7 +94,9 @@ class TestLinkAudit(unittest.TestCase):
     # L2. relates는 양방향으로 기록된다 (단방향이 "연관 누락"의 원인)
     def test_l2_relates_symmetric(self):
         a, b = self.new("A"), self.new("B")
-        self.cli("link", a, "--relates", b)
+        # --why 는 필수다 (REQ-20260827-030) — 여기서 보는 것은 대칭이지
+        # 이유가 아니므로 픽스처용 한 줄이면 된다.
+        self.cli("link", a, "--relates", b, "--why", "대칭 검사용 픽스처")
         self.assertIn(a, self._meta(b).get("relates") or [])
 
     # L3. 깨진 관계 검출 + 복구, 복구는 멱등(재실행 시 문제 0)
