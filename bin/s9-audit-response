@@ -77,18 +77,63 @@ def _detect_root(data):
             and os.path.isdir(os.path.join(cwd, "vault")):
         os.environ["S9_ROOT"] = cwd
 
+MIRROR_PREFIX_CHECK = 4096      # 되감김 판별용으로 앞머리를 이만큼 비교한다
+
+
 def mirror_transcript(tp):
-    """transcript를 section9/streams/ 로 복사 — 파일명은 원본 basename(=전체SID.jsonl).
-    resume이 찾는 이름과 100% 일치해 크로스머신 resume 가능(DOC-20260823-002).
-    vault와 함께 git 동기화되어 다른 머신/계정에서도 스트림/세션 복원 가능."""
+    """transcript 를 section9/streams/ 로 미러 — **늘어난 만큼만** 쓴다.
+
+    파일명은 원본 basename(=전체SID.jsonl)이다. resume 이 찾는 이름과 100%
+    일치해야 크로스머신 resume 이 된다(DOC-20260823-002).
+
+    예전에는 매 턴 `copyfile` 로 전체를 다시 썼다. 세션이 자랄수록 턴당 비용이
+    커지고 누적은 대략 제곱으로 는다 — 실측(REQ-20260827-039): 7.7MB 세션에서
+    한 턴에 7.7MB, 하루 누적 7GB 규모. 미러 50개 156MB 중 원본이 사라져 미러만
+    남은 것은 1개뿐이었다. 미러를 없앨 게 아니라 **값을 치르는 방식**이 틀렸다.
+
+    이어 쓰기의 함정: transcript 는 압축(compact)으로 줄거나 다시 쓰일 수 있다.
+    그때 뒤에만 붙이면 미러는 원본과 다른 파일이 된다. 그래서 길이만 보지 않고
+    **앞머리가 그대로인지도** 본다 — 아니면 전체 복사로 물러난다.
+
+    반환: "full" | "append" | "skip" | "" (실패). 테스트가 이 판단을 본다.
+    """
     try:
         root = os.environ.get("S9_ROOT") or os.path.dirname(
             os.path.dirname(os.path.realpath(__file__)))
-        dst = os.path.join(root, "streams")
-        os.makedirs(dst, exist_ok=True)
-        shutil.copyfile(tp, os.path.join(dst, os.path.basename(tp)))
+        dst_dir = os.path.join(root, "streams")
+        os.makedirs(dst_dir, exist_ok=True)
+        dst = os.path.join(dst_dir, os.path.basename(tp))
+        ssz = os.path.getsize(tp)
+        try:
+            dsz = os.path.getsize(dst)
+        except OSError:
+            dsz = -1
+        if dsz < 0 or ssz < dsz:
+            shutil.copyfile(tp, dst)          # 첫 복사 · 되감김(압축)
+            return "full"
+        if dsz and not _same_head(tp, dst, min(dsz, MIRROR_PREFIX_CHECK)):
+            shutil.copyfile(tp, dst)          # 앞머리가 바뀜 — 다른 파일이다
+            return "full"
+        if ssz == dsz:
+            return "skip"                     # 늘어난 게 없으면 건드리지 않는다
+        with open(tp, "rb") as src, open(dst, "ab") as out:
+            src.seek(dsz)
+            while True:
+                chunk = src.read(1 << 20)
+                if not chunk:
+                    break
+                out.write(chunk)
+        return "append"
     except Exception:
-        pass
+        return ""                             # 미러 실패가 응답 캡처를 막지 않는다
+
+
+def _same_head(a, b, n):
+    try:
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            return fa.read(n) == fb.read(n)
+    except OSError:
+        return False
 
 
 def run(env, *argv, inp=None):
