@@ -7066,8 +7066,78 @@ def do_user_config_set(name, key, value, actor=""):
         pass
 
 
+ACCOUNT_TOKEN = r"(?<![\w/\\.\-])%s(?![\w/\\.\-])"
+
+
+def rename_account_text(text, old, new):
+    """글 안의 **계정 이름**만 바꾼다 — 경로는 건드리지 않는다.
+
+    계정 이름 옆에는 경로 구분자도 하이픈도 오지 않는다. `/home/sjpark1` 이나
+    `-sjpark1-section9` 는 운영체제의 홈이고 Claude 의 프로젝트 폴더다 —
+    거기까지 바꾸면 기록된 경로가 전부 거짓이 된다.
+
+    `os_accounts` 는 **운영체제 계정**이라 일부러 그대로 둔다. 하네스의 이름과
+    로그인한 사람의 이름은 원래 다른 층이다(그래서 이 필드가 있다).
+    """
+    out = []
+    for ln in text.split("\n"):
+        if ln.lstrip().startswith("os_accounts:"):
+            out.append(ln)
+        else:
+            out.append(re.sub(ACCOUNT_TOKEN % re.escape(old), new, ln))
+    return "\n".join(out)
+
+
+def cmd_user_rename(old, new):
+    """계정 이름을 바꾼다 — 디렉터리·문서·세션 상태를 한 번에 (REQ-20260827-060).
+
+    손으로 한 군데씩 고치면 반드시 어딘가 남는다. 남은 한 곳이 "누가 한 일인가"를
+    조용히 틀리게 만든다 — 이 저장소에서 상습적으로 겪은 실패 모양이다.
+    """
+    if not re.fullmatch(r"[A-Za-z0-9_]+", new or ""):
+        die(f"쓸 수 없는 이름: {new} (영문·숫자·밑줄만)")
+    src, dst = os.path.join(USERS, old), os.path.join(USERS, new)
+    if not os.path.isdir(src):
+        die(f"없는 계정: {old}")
+    if os.path.exists(dst):
+        die(f"이미 있는 계정: {new}")
+
+    scan = []
+    for base in ("vault", "users", "projects", "state/sessions", "docs"):
+        d = os.path.join(ROOT, base)
+        for dp, dn, fns in os.walk(d):
+            dn[:] = [x for x in dn if x not in ("secrets", "streams")]
+            for fn in fns:
+                if fn.endswith((".md", ".json")):
+                    scan.append(os.path.join(dp, fn))
+
+    os.rename(src, dst)
+    touched = 0
+    for q in scan:
+        q = q.replace(os.path.join(USERS, old), os.path.join(USERS, new))
+        try:
+            with open(q, encoding="utf-8") as f:
+                t = f.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        t2 = rename_account_text(t, old, new)
+        if t2 != t:
+            with open(q, "w", encoding="utf-8") as f:
+                f.write(t2)
+            touched += 1
+    print(f"{old} -> {new}: 디렉터리 이동, 문서 {touched}건 갱신")
+    print("   경로(/home/... · -" + old + "-...)와 os_accounts 는 그대로 둔다 — "
+          "운영체제 계정은 별개 층이다.")
+    print("   다음: s9 index rebuild")
+
+
 def cmd_user(args):
     machine = args.machine or current_machine()
+
+    if args.action == "rename":
+        old = args.name or die("usage: s9 user rename <old> <new>")
+        cmd_user_rename(old, args.key or die("usage: s9 user rename <old> <new>"))
+        return
 
     if args.action == "role":
         name = args.name or die("usage: s9 user role <name> [admin|member|viewer]")
@@ -10638,7 +10708,7 @@ def main():
     up = sub.add_parser("user", help="user registry & session binding")
     up.add_argument("action",
                     choices=["add", "attach", "list", "switch", "current",
-                             "role", "config", "update"])
+                             "role", "config", "update", "rename"])
     up.add_argument("name", nargs="?")
     up.add_argument("key", nargs="?", help="config: 설정 키 / role: 무시")
     up.add_argument("value", nargs="?", help="config: 설정 값 / role: 새 역할")
