@@ -6,7 +6,7 @@ role: admin
 emails: ["claude01.pfe@example.invalid"]
 github: nicehugepark
 os_accounts: ["sjpark1"]
-machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-27T23:41:45+09:00"}]
+machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-28T00:06:23+09:00"}]
 ---
 
 ## Notes
@@ -90,3 +90,4 @@ machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpar
 - 2026-08-27T23:03:45+09:00 config stream_mirror=on (by nicehugepark)
 - 2026-08-27T23:34:56+09:00 config auto_resume_gh=on (by nicehugepark)
 - 2026-08-27T23:38:27+09:00 config pref_비식별=로그인 계정 이메일(회사 도메인 포함)은 가려지 마라 — 엔터프라이즈에서도 그렇게 된다. 가릴 것은 토큰·키·비밀번호와 대화 원문 통째로다. 회사·계열 이름을 예시나 리포 이름에 섞는 것만 피한다 (by nicehugepark)
+- 2026-08-27T23:43:45+09:00 config pref_비식별=(삭제) (by nicehugepark)

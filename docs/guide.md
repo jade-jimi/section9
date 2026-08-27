@@ -224,7 +224,7 @@ project 필터 선택 시 — 프로젝트 정보 패널에서 멤버·권한·�
 이렇게 출력되면 성공입니다:
 
 ```
-PRJ-20260824-002  (pay)  owner=sjpark1
+PRJ-20260824-002  (pay)  owner=nicehugepark
   ↳ 에셋 공간: projects/pay/ — CONTEXT.md(진입점) + assets/
 ```
 
