@@ -5875,14 +5875,22 @@ def stalled_requests(win=None):
     for r in catalog_with_live():
         if r.get("status") != "in-progress":
             continue
-        if r.get("live"):
-            continue                       # 직접 증거 — 일하는 중이다
-        if r.get("live_kind") in ("session", "spawned"):
-            continue                       # 세션이 활동 중이거나 워커 기동 중
+        # 무인 워커가 **이 요청을 위해** 돌고 있으면 직접 증거다 — 넘어간다.
+        if r.get("live_kind") == "spawned":
+            continue
+        # 세션이 살아 있다는 것은 **이 요청의** 증거가 아니다 (REQ-20260827-074).
+        # 리드 세션은 늘 살아 있고 여러 요청을 한꺼번에 클레임한다. 그래서
+        # 예전 판정은 리드가 잡아 놓고 손을 뗀 경우를 하나도 못 잡았다 —
+        # 그게 이 장치(REQ-20260827-046)가 겨냥한 바로 그 상황인데도.
+        # 사용자가 화면을 보고 먼저 알아챘다: "지금 멈춘 작업들이 있는 것 같은데
+        # 진도가 나가고 있는게 맞나?" 그때 이 명령은 "없음"이라고 답했다.
+        #
+        # 물어야 할 것은 "그 세션이 살아 있나"가 아니라 **"그 요청에 진전이 있나"**다.
+        # 진전의 흔적은 문서가 바뀐 때(updated)다 — 노트·전이·수정이 모두 찍힌다.
         age = None
         try:
             age = now - datetime.datetime.fromisoformat(
-                r.get("status_since") or r.get("updated") or "").timestamp()
+                r.get("updated") or r.get("status_since") or "").timestamp()
         except (ValueError, TypeError):
             age = None
         if age is not None and age < win:

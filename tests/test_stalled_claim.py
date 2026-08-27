@@ -100,8 +100,14 @@ class StalledClaim(unittest.TestCase):
                 if fn.startswith(rid) and fn.endswith(".md"):
                     q = os.path.join(dp, fn)
                     t = open(q, encoding="utf-8").read()
+                    # updated 도 함께 되돌린다 (REQ-20260827-074): 멈춤 판정의
+                    # 시계는 "언제 착수했나"가 아니라 **"문서가 언제 마지막으로
+                    # 바뀌었나"** 다. 착수만 과거로 돌리고 updated 를 지금으로
+                    # 두면 "한 시간 전에 착수했는데 방금 뭔가 했다"가 되어,
+                    # 만들려던 상황(착수 뒤 아무 일도 없음)이 아니다.
                     t = "\n".join(
                         (f"status_since: {ts}" if ln.startswith("status_since:")
+                         else f"updated: {ts}" if ln.startswith("updated:")
                          else ln) for ln in t.splitlines()) + "\n"
                     open(q, "w", encoding="utf-8").write(t)
                     cls.cli(None, "index", "rebuild")
@@ -126,9 +132,22 @@ class StalledClaim(unittest.TestCase):
     def test_n1_stalled_listed(self):
         self.assertIn(self.A, self.stalled())
 
-    # N2. 일하는 중은 안 뜬다 — 거짓 목록은 안 읽히는 목록이 된다
+    # N2. 방금 움직인 것은 안 뜬다 — 거짓 목록은 안 읽히는 목록이 된다
     def test_n2_working_not_listed(self):
         self.assertNotIn(self.B, self.stalled())
+
+    # B4. 세션이 살아 있다는 것만으로는 넘어가지 않는다 (REQ-20260827-074).
+    #     리드 세션은 늘 살아 있고 여러 요청을 한꺼번에 클레임한다 — 그걸
+    #     증거로 쳤더니 리드가 잡아 놓고 손을 뗀 경우를 하나도 못 잡았다.
+    #     그게 이 장치가 겨냥한 바로 그 상황이었다.
+    def test_b4_live_session_is_not_evidence(self):
+        src = open(S9, encoding="utf-8").read()
+        i = src.index("def stalled_requests(")
+        seg = src[i:i + 2500]
+        self.assertNotIn('r.get("live_kind") in ("session"', seg,
+                         "세션 생존을 그 요청의 진전으로 치고 있다")
+        self.assertIn('r.get("updated")', seg,
+                      "진전의 시계로 문서 변경 시각을 쓰지 않는다")
 
     # B1. 무인 워커가 도는 중이면 멈춘 것이 아니다
     def test_b1_live_worker_not_stalled(self):
