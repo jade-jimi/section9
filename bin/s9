@@ -3544,6 +3544,21 @@ def dep_edges(rows=None):
     return out
 
 
+def dep_blocker_type(doc_id):
+    """그 문서의 타입 (카탈로그 → 파일 순). 못 읽으면 "" — 모르면 막지 않는다."""
+    cid = canon_id(doc_id)
+    for r in load_catalog():
+        if r.get("id") in (doc_id, cid):
+            return r.get("type", "")
+    p = locate(doc_id)
+    if not p:
+        return ""
+    try:
+        return read_doc(p)[0].get("type", "")
+    except OSError:
+        return ""
+
+
 def dep_would_cycle(doc_id, blocker, rows=None):
     """doc_id ← blocker 를 추가하면 대기 순환(교착)이 되는가."""
     rows = rows if rows is not None else load_catalog()
@@ -3850,6 +3865,20 @@ def cmd_link(args):
             die("자기 자신을 선행으로 지정할 수 없다")
         if not locate(b):
             die(f"선행 문서 없음: {b}")
+        # 완료되지 않는 문서는 선행이 될 수 없다 (REQ-20260827-055).
+        # 지식의 종착 상태는 published — **완료되는 개념이 없다.** 그것을 기다리게
+        # 하면 영원히 안 풀리는 대기가 된다: 보드에는 "막혀 있다"고 뜨는데 풀
+        # 방법이 없다. 실사고 21:08, 무인 워커가 자기가 쓴 지식 문서를 선행으로
+        # 걸었고 자기 참조·존재·순환 세 검사를 전부 통과했다 — **아무도 "그게
+        # 완료될 수 있는 문서인가"를 묻지 않았다.**
+        #
+        # 막는 것은 대기뿐이다. relates·parent·derived_from 으로 지식과 요청을
+        # 잇는 것은 정상이고 오히려 권장된다.
+        bt = dep_blocker_type(b)
+        if bt and bt != "request":
+            die(f"선행으로 걸 수 없다: {b} 는 {bt} 다 — 완료되는 문서가 아니라 "
+                f"영원히 안 풀리는 대기가 된다. 관계를 남기려면 "
+                f"`--relates` 나 `--derived-from` 을 써라.")
         if dep_would_cycle(args.id, b):
             die(f"대기 순환(교착): {b} 는 이미 {args.id} 를 기다리는 사슬에 있다")
     extend("blocked_by", args.blocked_by)
@@ -5014,6 +5043,14 @@ def link_audit(fix=False):
                     if fix:
                         pm["children"] = (pm.get("children") or []) + [did]
                         mark(par)
+        # 완료되지 않는 문서를 기다리는 대기 (REQ-20260827-055) — 경계를 막아도
+        # 이미 걸린 것은 남는다. 영원히 안 풀리는 대기는 보드를 거짓말로 만든다.
+        for bk in (meta.get("blocked_by") or []):
+            ent = docs.get(bk) or docs.get(canon_id(bk))
+            bt = (ent[1].get("type") if ent else "")   # docs = [경로,메타,본문,변경]
+            if bt and bt != "request":
+                issues.append(f"{did}: 선행 {bk} 가 {bt} — 완료되지 않는 문서를 "
+                              f"기다린다(영원히 안 풀린다)")
         for c in list(meta.get("children") or []):
             if c not in docs:
                 issues.append(f"{did}: 자식 {c} 미존재")
