@@ -8508,8 +8508,24 @@ def cmd_serve(args):
             except (OSError, ValueError):
                 continue
             tp = b.get("transcript_path", "")
-            if tp and os.path.exists(tp):
-                return tp, True  # 라이브 원본 우선
+            # 끝난 세션은 live 가 아니다 (REQ-20260827-010). 예전에는 "바인딩이
+            # 있고 파일이 남아 있으면 살아있다"였다 — `ended` 도, 마지막 활동도
+            # 보지 않아서 **한 번이라도 돌았고 파일이 남아 있으면 영원히 live**
+            # 였다. 어제 22:14 에 끝난 세션이 `● live` 로 떠 있었고, 화면은
+            # `term.scrollTop = live ? scrollHeight : 0` 이라 열자마자 맨 아래로
+            # 뛰어 본문 앞부분이 안 보였다. follow 폴링도 죽은 세션을 계속 따라간다.
+            #
+            # 생존 판정은 이미 이 저장소에 한 벌 있다 — chat_target 이 쓰는 그대로
+            # (`ended` + chat_live). 여기서 두 번째 정의를 만들지 않는다.
+            #
+            # 그리고 live 를 끄는 것이지 **접근을 막는 게 아니다**: 아래 줄이 끝난
+            # 세션의 기록을 그대로 읽게 한다. 못 읽게 되면 이 화면의 존재 이유가
+            # 사라진다. `exists` 가 아니라 `isfile` 인 것은 디렉토리가 통과해
+            # 파싱에서 터지기 때문이다 (REQ-20260827-018 에서 배운 같은 자리).
+            if tp and os.path.isfile(tp):
+                if not b.get("ended") and chat_live(b):
+                    return tp, True      # 진짜로 도는 세션만 live
+                return tp, False         # 기록은 읽되 살아있다고 말하지 않는다
         # 미러: 정확 일치(전체SID) 후, 못 찾으면 prefix-glob (8자→전체SID 파일, 레거시 8자 파일 모두)
         exact = os.path.join(STREAMS, safe_name(session) + ".jsonl")
         if os.path.exists(exact):
