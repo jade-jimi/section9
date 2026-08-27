@@ -7,9 +7,7 @@
  "attach_pid": "414649",
  "ended": "",
  "worker": "1",
- "active_reqs": [
-  "REQ-20260827-078-62x6"
- ],
+ "active_reqs": [],
  "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/d7f21881-ea52-44bb-ba8f-e3e51d93e99d.jsonl",
  "last_req": "",
  "capture_paused": false,
