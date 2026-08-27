@@ -1,0 +1,1 @@
+배포 파이프라인 점검 보고서 section9 대시보드의 첨부 인제스트 경로에서 한글 본문이 추출되지 않는 결함을 확인했다. 원인은 hex 문자열 미처리와 ToUnicode CMap 미적용, endstream 매칭 결함, 그리고 8메가바이트 컷 이다. 항목 상태 읽기 경로 수정 중 쓰기 경로 대기 English mixed content: deploy pipeline verification report 2026. 26. 8. 26. 오후 7:26 배포 파이프라인 점검 보고서 file:///C:/Users/Public/s9pdflab/ko.html 1 / 1
