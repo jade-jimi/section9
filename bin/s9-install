@@ -70,13 +70,18 @@ def install_git_hooks():
             '"$PY" "$TOP/bin/s9-install" --quiet || true\n')
     guard = ('#!/bin/sh\n' + py +
              'exec "$PY" "$(git rev-parse --show-toplevel)/bin/s9-guard"\n')
+    # 커밋이 스스로 문서에 남는다 (REQ-20260828-005) — 구현이 끝나는 지점은
+    # 커밋인데 그것을 문서에 옮기는 일이 손에 맡겨져 있어 몇 시간씩 밀렸다.
+    cnote = ('#!/bin/sh\n' + py +
+             'TOP="$(git rev-parse --show-toplevel)"\n'
+             '"$PY" "$TOP/bin/s9" commit-note >/dev/null 2>&1 || true\n')
     for name, body in [("post-merge", sync), ("post-checkout", sync),
-                       ("pre-commit", guard)]:
+                       ("pre-commit", guard), ("post-commit", cnote)]:
         p = os.path.join(hooks_dir, name)
         with open(p, "w") as f:
             f.write(body)
         os.chmod(p, os.stat(p).st_mode | stat.S_IEXEC | stat.S_IXGRP)
-    say("git hooks OK: post-merge, post-checkout, pre-commit(guard)")
+    say("git hooks OK: post-merge, post-checkout, pre-commit(guard), post-commit(기록)")
 
 
 def install_claude_hooks():

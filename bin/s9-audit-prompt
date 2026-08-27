@@ -562,6 +562,13 @@ def main():
     # 표시하지만 그건 **사람이 화면을 볼 때만** 보인다 — 리드는 화면을 안 본다.
     # 반려 목록과 같은 자리에 같은 방식으로 놓는다: 표식이 아니라 주입이라야
     # 실제 장치가 된다(REQ-20260825-062에서 배운 것).
+    # 고칠 명령이 분명한 것만 좁게 (REQ-20260828-005). 넓은 목록은 훑고
+    # 넘어가게 된다 — 실제로 그렇게 네 건을 몇 시간씩 방치했다.
+    lo = run(env, "loose", "--quiet")
+    loose = ("" if lo.returncode != 0 or not lo.stdout.strip() else
+             f" ⚑ 한 줄이면 닫히는 것이 있다:\n{lo.stdout.strip()}\n"
+             f"**다른 일을 시작하기 전에** 이 줄들을 실행하라. 상태가 거짓이면 "
+             f"보드 전체가 거짓이 된다. ")
     st = run(env, "stalled", "--quiet")
     stalled = ("" if st.returncode != 0 or not st.stdout.strip() else
                f" ⛔ 착수해 놓고 진전이 멈춘 요청이 있다 — 내가 잡아 놓고 손을 뗀 "
@@ -617,7 +624,7 @@ def main():
     attnote = (f"첨부 {len(atts)}건이 body에 기록되었다. " if atts else "")
     emit(pend +
         f"[section9 audit] 이 프롬프트는 {doc_id} 로 자동 기록되었다 (Request 분류). {attnote}"
-        f"현재 요청 주체: {who}.{warn}{untitled}{approvals}{reopened}{stalled}{stale_serve}{blocked}{review}{wkwarn} "
+        f"현재 요청 주체: {who}.{warn}{untitled}{approvals}{reopened}{loose}{stalled}{stale_serve}{blocked}{review}{wkwarn} "
         f"이 세션에서 s9 를 호출할 때는 반드시 `S9_SESSION={session}` 을 앞에 붙여라. 규약: "
         f"(1) 제목은 원문 복사가 아니라 20자 이내의 이해하기 쉬운 명사구로 교체하라 — "
         f"`s9 set {doc_id} --title '...' --summary '...' --size S|M|L "
