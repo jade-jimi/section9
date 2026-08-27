@@ -397,6 +397,10 @@ main{padding:18px 22px}
 .doclist .row{padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--hairline)}
 .doclist .row:hover{background:var(--accent-soft)}
 .doclist .row.sel{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--text)}
+/* 점선 = 여기를 누르세요 / 실선 = 지금 여기 있습니다 (REQ-20260827-007 어휘).
+   행은 아래 테두리로 맞닿아 있으므로 링을 안쪽으로 물려 이웃 행을 덮지 않게 한다. */
+.doclist .row:focus-visible,.backlinks .bl:focus-visible{
+  outline:1px solid var(--text);outline-offset:-1px}
 .doclist .row .id{font-family:var(--mono);font-size:10px;color:var(--faint)}
 .doclist .row .st{float:right;font-size:10px;color:var(--sc,var(--muted));
   font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em}
@@ -1055,6 +1059,12 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="terminal"] .typebar .tb.on .unans{color:var(--bg)}
 [data-skin="terminal"] .doclist .row.sel{background:var(--text);box-shadow:none}
 [data-skin="terminal"] .doclist .row.sel *{color:var(--bg) !important}
+/* 반전된 행 위에서는 링도 반전한다 — 잉크 배경에 잉크 링은 없는 것과 같다.
+   뜻("실선 = 지금 여기")은 그대로 두고 색만 뒤집는다 (REQ-20260827-013,
+   실브라우저 캡처로 발견). 열린 행이 곧 포커스 행인 순간이 기본값이라
+   그냥 두면 터미널 스킨에서는 키보드가 어디 있는지 보이지 않는다. */
+[data-skin="terminal"] .doclist .row.sel:focus-visible,
+[data-skin="terminal"] .doclist .row:hover:focus-visible{outline-color:var(--bg)}
 [data-skin="terminal"] .stat.on{background:var(--text);color:var(--bg);box-shadow:none}
 [data-skin="terminal"] .stat.on b{color:var(--bg)}
 [data-skin="terminal"] .brand .dot{width:9px;height:14px;animation:s9blink 1.1s steps(1) infinite}
@@ -2079,6 +2089,15 @@ function shortId(id){
   if (!m) return id;
   return (idBaseCount.get(m[1]) || 0) > 1 ? id : m[1];
 }
+// 문서 링크는 이 한 곳에서만 만든다 (REQ-20260827-013). href 가 있어야 앵커가
+// 링크가 된다 — Tab·가운데클릭·"새 탭에서 열기"가 전부 여기서 따라온다. 아홉
+// 자리에 손으로 적으면 언젠가 한 자리가 빠지고, 그 자리만 마우스 전용이 된다.
+// href 와 data-doc 은 **반드시 같은 값**이다: 갈라지면 새 탭만 다른 문서를 연다.
+// inner 는 이미 escape 된 HTML(짧은 id·세션 이름 등)이다.
+const cssq = v => window.CSS && CSS.escape ? CSS.escape(String(v))
+  : String(v).replace(/["\\]/g, "\\$&");
+const dlink = (id, inner) =>
+  `<a class="doclink" href="#docs/${esc(id)}" data-doc="${esc(id)}">${inner}</a>`;
 function catFind(id){         // 정확 일치 우선, 아니면 유일 prefix (resolve와 동형)
   const r = catalog.find(x => x.id === id);
   if (r) return r;
@@ -2174,12 +2193,12 @@ function depSummaryHTML(rows){
   // 대신한다 — 막힌 요청이 위, 기다리는 선행이 ↳ 로 들여쓰기. 상태·경과는 선행
   // 아래 한 줄로 접어 폭 300px 안에서 줄바꿈 없이 읽히게 한다.
   const body = shown.map(g => `<div class="dsitem">
-      <div class="dsreq">${dot(g.r.status)}<a class="doclink" data-doc="${esc(g.r.id)}">${esc(shortId(g.r.id))}</a>
+      <div class="dsreq">${dot(g.r.status)}${dlink(g.r.id, esc(shortId(g.r.id)))}
         <span class="ti">${esc(g.r.title)}</span></div>
       ${g.blockers.map(b => {
         const held = d.hold[b.id], mark = held > 1 && !seen.has(b.id);
         seen.add(b.id);
-        return `<div class="dsblk">${dot(b.status)}<a class="doclink" data-doc="${esc(b.id)}">${esc(shortId(b.id))}</a>
+        return `<div class="dsblk">${dot(b.status)}${dlink(b.id, esc(shortId(b.id)))}
           <span class="ti">${esc(b.title)}</span>
           <span class="dsmeta"><span class="st" style="color:${SCOLOR[b.status] || "var(--muted)"}">${esc(b.status)}</span><span
             class="num" title="선행이 현재 상태로 머문 시간">${esc(fmtElapsed(b.status_since) || "-")}</span>${
@@ -2198,7 +2217,7 @@ function depSummaryHTML(rows){
 }
 const linkifyIds = escaped => escaped.replace(
   DOC_ID_INLINE_RE,
-  (mm, pre, id) => `${pre}<a class="doclink" data-doc="${id}">${shortId(id)}</a>`);
+  (mm, pre, id) => `${pre}` + dlink(id, esc(shortId(id))));
 
 // 확인 포인트/대기 사유를 갈래로 끊어 렌더한다 (DOC-20260826-015).
 // 전이 note 는 대개 "① … ② … ③ …" 또는 "(1) … (2) …" 로 여러 갈래를 한
@@ -3262,7 +3281,7 @@ function renderBoard(rows){
   if (dbk.top && dbk.top[1] > 1){
     const b = catFind(dbk.top[0]);
     if (b) html += `<div class="bneck"><span class="bcap">병목</span> `
-      + `<a class="doclink" data-doc="${esc(b.id)}">${esc(shortId(b.id))}</a> `
+      + `${dlink(b.id, esc(shortId(b.id)))} `
       + `<b>${esc(b.title)}</b> 이(가) ${dbk.top[1]}건을 붙잡고 있다 · `
       + `전체 ${dbk.groups.length}건이 선행을 기다린다`
       + `<button class="bgo" data-goto="graph">선행 대기 현황 →</button></div>`;
@@ -3352,7 +3371,12 @@ async function renderDocs(rows){
       const sc = r.type === "question"
         ? (isAnswered(r) === false ? "var(--t-question)" : "var(--faint)")
         : SCOLOR[r.status];
-      return `<div class="row${r.id===selectedDoc?" sel":""}" data-doc="${esc(r.id)}" style="--sc:${sc}">
+      // 행 전체가 하나의 컨트롤이다 (REQ-20260827-013) — 보드 카드와 같은 어휘
+      // (role=button). 제목만 링크로 떼면 같은 줄에 목적지가 둘로 보인다.
+      // tabindex 는 항상 -1 로 나가고 roveSync 가 딱 하나만 0 으로 올린다.
+      return `<div class="row${r.id===selectedDoc?" sel":""}" data-doc="${esc(r.id)}"
+        role="button" tabindex="-1" data-rove-item${r.id===selectedDoc?' aria-current="true"':""}
+        style="--sc:${sc}">
         <span class="st">${esc(statusLabel(r))}</span>
         <div class="id">${prioHTML(r)}${esc(shortId(r.id))}</div><div>${esc(r.title)}</div>${snips}</div>`;
     }).join("");
@@ -3362,9 +3386,21 @@ async function renderDocs(rows){
   // 백그라운드 catalog 갱신(15s 폴링)이 뷰어를 파괴하지 않도록 doclist만 교체 —
   // 열려 있는 reqstream 터미널·스크롤·live 폴링이 그대로 산다 (REQ-20260823-071)
   const wrap = $("#view .docs .doclist");
-  if (wrap && $("#viewer")) wrap.innerHTML = list;
-  else $("#view").innerHTML = `<div class="docs"><div class="doclist">${list}</div>
+  if (wrap && $("#viewer")){
+    // 15초 폴링이 목록을 통째로 갈아끼운다 — 키보드로 짚어 둔 자리를 여기서
+    // 놓치면 방향키로 훑던 일이 15초마다 처음으로 돌아간다 (REQ-20260827-013).
+    const af = document.activeElement;
+    const keepRow = af && af.closest && af.closest(ROVE_ITEM) ? af.dataset.doc : null;
+    wrap.innerHTML = list;
+    if (keepRow){
+      const t = wrap.querySelector(`[data-doc="${cssq(keepRow)}"]`);
+      if (t){ t.tabIndex = 0; t.focus({preventScroll: true}); }
+    }
+  }
+  else $("#view").innerHTML = `<div class="docs"><div class="doclist" data-rove
+      role="group" aria-label="문서 목록 — 방향키로 이동, Enter 로 열기">${list}</div>
     <div class="viewer" id="viewer"><p class="empty">← 문서를 선택하세요</p></div></div>`;
+  roveSync();
   // 그룹 헤더가 붙을 위치 = 타입바의 실제 높이. 좁은 목록에서 타입바가 두 줄로
   // 접히면 30px 고정값은 헤더를 타입바 아래에 숨긴다.
   const tbEl = $("#view .typebar"), dlEl = $("#view .doclist");
@@ -3402,8 +3438,13 @@ if (window.ResizeObserver) requestAnimationFrame(() => {
 // 클릭하는 경로는 bg 없이 호출되어 기존처럼 상단부터·접힘 기본 (REQ-20260823-071).
 async function loadDoc(id, bg){
   selectedDoc = id;
-  document.querySelectorAll(".doclist .row").forEach(el =>
-    el.classList.toggle("sel", el.dataset.doc === id));
+  document.querySelectorAll(".doclist .row").forEach(el => {
+    const on = el.dataset.doc === id;
+    el.classList.toggle("sel", on);
+    // 배경 틴트와 왼쪽 잉크 바는 눈에만 있다 — 열려 있다는 사실을 속성으로도 남긴다
+    on ? el.setAttribute("aria-current", "true") : el.removeAttribute("aria-current");
+  });
+  roveSync();
   const viewer = $("#viewer");
   if (!viewer) return;
   const row = catalog.find(r => r.id === id);
@@ -3450,8 +3491,8 @@ async function loadDoc(id, bg){
   if (isQ) m.answered = isAnswered(m, d.body);
   const li = v => Array.isArray(v) && v.length
     ? v.map(x => DOC_ID_FULL_RE.test(x)
-        ? `<a class="doclink" data-doc="${esc(x)}">${esc(shortId(x))}</a>` : esc(x)).join(", ") : null;
-  const rel = v => v ? `<a class="doclink" data-doc="${esc(v)}">${esc(shortId(v))}</a>` : null;
+        ? `${dlink(x, esc(shortId(x)))}` : esc(x)).join(", ") : null;
+  const rel = v => v ? `${dlink(v, esc(shortId(v)))}` : null;
   // 선행 의존 (REQ-20260826-009): "무엇을 기다리는가"를 상태 바로 아래에서 읽고,
   // 그 문서로 바로 건너뛴다. 끝난 선행은 이 줄에서 사라지고 근거는 아래 History
   // 라인에 남는다 (DOC-20260826-001 규칙 4) — 그래서 목록이 과거로 안 늘어난다.
@@ -3459,7 +3500,7 @@ async function loadDoc(id, bg){
   const depRow = blk.length
     ? `<span class="depcap">${blk.length > 1 ? `이 ${blk.length}건이 모두` : "이 문서가"} 끝나야 풀린다</span>` + blk.map(b =>
         `<div class="depitem"><span class="cdot" style="background:${SCOLOR[b.status] || "var(--muted)"}"></span>`
-        + `<a class="doclink" data-doc="${esc(b.id)}">${esc(shortId(b.id))}</a> ${esc(b.title)}`
+        + `${dlink(b.id, esc(shortId(b.id)))} ${esc(b.title)}`
         + `<span class="path"> ${esc(b.status)}</span></div>`).join("")
     : null;
   const fields = [
@@ -3634,20 +3675,28 @@ async function renderBacklinks(id){
   el.innerHTML = `<h4>Linked mentions — 이 문서를 참조하는 문서 (${back.length})</h4>` +
     back.map(b => {
       const r = byId[b] || {title: b, status: ""};
-      return `<div class="bl" data-doc="${esc(b)}"><span class="id">${esc(b)}</span>
+      return `<div class="bl" data-doc="${esc(b)}"
+        role="button" tabindex="-1" data-rove-item><span class="id">${esc(b)}</span>
         ${esc(r.title)} <span class="st" style="color:${SCOLOR[r.status]||"var(--muted)"};font-size:11px"> ${esc(statusLabel(r))}</span></div>`;
     }).join("");
+  el.setAttribute("data-rove", "");   // 방향키로 훑는 목록 (REQ-20260827-013)
+  roveSync();
 }
 
-/* Obsidian식 링크 hover 미리보기 카드 */
+/* Obsidian식 링크 미리보기 카드.
+   여는 경로는 하나(showHover)이고 부르는 손이 둘이다 — 마우스가 얹힐 때와
+   키보드가 닿을 때 (REQ-20260827-013). 마우스에만 매달아 두면 링크에 href 를
+   붙여 Tab 을 통과시켜 놓고도 "그래서 이게 어느 문서냐"는 마우스에게만 답하는
+   꼴이 된다. 읽어 주는 도구에는 숨긴다(aria-hidden) — 링크가 이미 말한 것을
+   그림으로 되풀이하는 자리라서다. */
 const hovercard = document.createElement("div");
 hovercard.className = "hovercard";
+hovercard.setAttribute("aria-hidden", "true");
 document.body.appendChild(hovercard);
-document.addEventListener("mouseover", e => {
-  const a = e.target.closest("a.doclink");
-  if (!a){ hovercard.classList.remove("show"); return; }
+function hideHover(){ hovercard.classList.remove("show"); }
+function showHover(a){
   const r = catFind(a.dataset.doc);   // uid·짧은 지칭 모두 해석 (REQ-034)
-  if (!r){ hovercard.classList.remove("show"); return; }
+  if (!r){ hideHover(); return; }
   hovercard.innerHTML = `<div class="hid">${esc(shortId(r.id))} · ${esc(r.user)} · ${esc((r.updated||"").slice(0,10))}</div>
     <div class="ht">${esc(r.title)}</div>
     ${r.summary ? `<div class="hs">${esc(r.summary)}</div>` : ""}
@@ -3657,10 +3706,24 @@ document.addEventListener("mouseover", e => {
   hovercard.style.left = Math.min(rect.left, innerWidth - 360) + "px";
   hovercard.style.top = Math.max(8, top) + "px";
   hovercard.classList.add("show");
+}
+const hoverTarget = t => t && t.closest ? t.closest("a.doclink") : null;
+document.addEventListener("mouseover", e => {
+  const a = hoverTarget(e.target);
+  a ? showHover(a) : hideHover();
 });
 document.addEventListener("mouseout", e => {
-  if (e.target.closest && e.target.closest("a.doclink")) hovercard.classList.remove("show");
+  if (hoverTarget(e.target)) hideHover();
 });
+document.addEventListener("focusin", e => {
+  const a = hoverTarget(e.target);
+  a ? showHover(a) : hideHover();
+});
+document.addEventListener("focusout", e => {
+  if (hoverTarget(e.target)) hideHover();
+});
+// 키보드에는 '마우스를 치우기'가 없다 — 물리는 길을 준다
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideHover(); });
 
 /* minimal markdown renderer */
 function md2html(src){
@@ -3691,8 +3754,12 @@ function md2html(src){
     return linkifyIds(src2
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      // 자리표시자로 빼 두는 이유는 위 첨부와 같다 — 이제 문서 링크도 href 를
+      // 가진다(REQ-20260827-013). "#docs/REQ-…" 의 id 앞자는 '/' 인데
+      // DOC_ID_INLINE_RE 가 막아 주는 앞자는 따옴표뿐이라, 그대로 두면
+      // linkifyIds 가 href 안의 id 를 또 링크로 바꿔 앵커를 중첩시킨다.
       .replace(DOC_ID_WIKI_RE,
-        (mm, id) => `<a class="doclink" data-doc="${id}">${shortId(id)}</a>`)
+        (mm, id) => hold(dlink(id, esc(shortId(id)))))
       .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>'))
       .replace(/\u0000(\d+)\u0000/g, (mm, i) => held[+i]);
   };
@@ -3839,7 +3906,7 @@ async function renderAudit(){
       <td><span class="kind" style="--kc:${KC[k]}">${k}</span></td>
       <td>${linkifyIds(esc(e.text))}</td>
       <td>${esc(e.by)}</td>
-      <td><a class="doclink" data-doc="${esc(e.doc)}">${esc(e.session)}@${esc(e.machine)}</a></td>
+      <td>${dlink(e.doc, esc(e.session) + "@" + esc(e.machine))}</td>
     </tr>`;
   }).join("");
   $("#view").innerHTML = `<div class="audit">
@@ -3921,23 +3988,30 @@ async function renderStream(){
   $("#count").textContent = `${data.streams.length} stream logs (streams/*.jsonl — transcript 미러, 시간은 서버 설정 시간대)`;
   const list = data.streams.map(s => {
     const d = sesDocs[s.session];
-    return `<div class="row${s.session===selectedStream?" sel":""}" data-stream="${esc(s.session)}">
+    return `<div class="row${s.session===selectedStream?" sel":""}" data-stream="${esc(s.session)}"
+      role="button" tabindex="-1" data-rove-item${s.session===selectedStream?' aria-current="true"':""}>
       <span class="st">${(s.size/1024).toFixed(0)}KB</span>
       <div class="id">${esc(s.session)}</div>
       <div>${esc(d ? d.title : "(SES 문서 없음)")}</div>
       <div class="snip">${esc(s.mtime.slice(0,16).replace("T"," "))}</div></div>`;
   }).join("");
   $("#view").innerHTML = `<div class="streamwrap">
-    <div class="doclist">${list || '<div class="grp">no streams — 훅이 턴 종료마다 미러링합니다</div>'}</div>
+    <div class="doclist" data-rove role="group"
+      aria-label="세션 목록 — 방향키로 이동, Enter 로 열기">${list || '<div class="grp">no streams — 훅이 턴 종료마다 미러링합니다</div>'}</div>
     <div class="term" id="term"><span class="meta">← 세션을 선택하세요. 터미널 transcript와 동일한 이벤트 흐름이 표시됩니다 (⚙agent = 서브에이전트 실행분). 검색창 = 이벤트 필터. 특정 요청의 구간만 보려면 Docs 탭에서 문서를 열고 "이 요청의 스트림"을 사용하세요.</span></div></div>`;
+  roveSync();
   if (selectedStream) loadStream(selectedStream);
 }
 
 async function loadStream(s){
   selectedStream = s;
   if (streamTimer){ clearInterval(streamTimer); streamTimer = null; }
-  document.querySelectorAll("[data-stream]").forEach(el =>
-    el.classList.toggle("sel", el.dataset.stream === s));
+  document.querySelectorAll("[data-stream]").forEach(el => {
+    const on = el.dataset.stream === s;
+    el.classList.toggle("sel", on);
+    on ? el.setAttribute("aria-current", "true") : el.removeAttribute("aria-current");
+  });
+  roveSync();
   const term = $("#term");
   if (!term) return;
   const d = await ccFetch("/api/stream?session=" + encodeURIComponent(s));
@@ -5125,6 +5199,56 @@ document.addEventListener("keydown", e => {
   if (!b || b.tabIndex < 0) return;
   e.preventDefault();     // Space 가 페이지를 같이 스크롤하지 않도록
   b.click();
+});
+/* 목록 하나 = Tab 한 번 (REQ-20260827-013).
+   행마다 Tab 을 세우면 300건짜리 문서 목록은 "닿는다"가 아니라 "빠져나올 수
+   없다"가 된다 — 뷰어로 가려면 Tab 을 300번 눌러야 하는 목록은 뚫린 길이 아니라
+   새 함정이다. 그래서 목록에는 Tab 으로 한 번 들어가고(입구는 열려 있는 행,
+   없으면 첫 행) 안에서는 방향키로 옮긴다(roving tabindex).
+   방향키는 **옮기기만 한다**: 여는 것은 Enter/Space 뿐이다 — 옮길 때마다 열면
+   목록을 훑는 동안 문서를 300장 부른다. 여는 경로는 바로 위 REQ-007 의 그
+   핸들러 하나로 흐른다(role="button" → .click()).
+   끝에서 감싸지 않는 것도 값이다: 목록의 처음과 끝이 어디인지 손끝으로 알아야
+   한다. 표시는 기존 어휘 그대로 — 실선 잉크 링 = 지금 여기. */
+const ROVE_ITEM = "[data-rove-item]";
+function roveSync(){
+  document.querySelectorAll("[data-rove]").forEach(c => {
+    const rows = [...c.querySelectorAll(ROVE_ITEM)];
+    if (!rows.length) return;
+    // 이미 짚어 둔 자리가 있으면 그 자리를 지킨다 — 폴링이 입구를 되돌리지 않게
+    const act = rows.find(r => r.tabIndex === 0)
+             || rows.find(r => r.classList.contains("sel")) || rows[0];
+    rows.forEach(r => { r.tabIndex = r === act ? 0 : -1; });
+  });
+}
+function roveMove(cur, dir){
+  const c = cur.closest("[data-rove]");
+  if (!c) return;
+  const rows = [...c.querySelectorAll(ROVE_ITEM)];
+  const i = rows.indexOf(cur);
+  if (i < 0) return;
+  const j = dir === "home" ? 0 : dir === "end" ? rows.length - 1
+          : Math.min(rows.length - 1, Math.max(0, i + dir));
+  const t = rows[j];
+  if (!t || t === cur) return;
+  rows.forEach(r => { r.tabIndex = r === t ? 0 : -1; });
+  t.focus();
+}
+document.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const cur = e.target && e.target.closest && e.target.closest(ROVE_ITEM);
+  if (!cur) return;
+  const dir = {ArrowDown: 1, ArrowUp: -1, Home: "home", End: "end"}[e.key];
+  if (dir === undefined) return;
+  e.preventDefault();   // 목록과 페이지가 같이 스크롤되지 않게
+  roveMove(cur, dir);
+});
+// 포커스가 옮겨 가면 Tab 의 입구도 따라간다 — 목록을 떠났다 돌아오면 마지막 자리
+document.addEventListener("focusin", e => {
+  const it = e.target && e.target.closest && e.target.closest(ROVE_ITEM);
+  if (!it) return;
+  const c = it.closest("[data-rove]");
+  if (c) c.querySelectorAll(ROVE_ITEM).forEach(r => { r.tabIndex = r === it ? 0 : -1; });
 });
 document.addEventListener("keydown", e => {
   if (tab !== "terminal" || !TERM) return;
@@ -6454,6 +6578,14 @@ document.addEventListener("click", e => {
   if (rd){ loadDoc(rd.dataset.retrydoc); return; }
   const doc = e.target.closest("[data-doc]");
   if (doc){
+    // 문서 링크가 진짜 href 를 갖게 되면서(REQ-20260827-013) 클릭에는 두 주인이
+    // 생겼다. 수식키/가운데클릭은 브라우저 몫으로 남긴다 — 새 탭으로 여는 중에
+    // 이 탭의 문서까지 바꾸면 "새 탭에서 열기"가 아니라 "두 군데서 열기"다.
+    // 맨클릭은 우리가 막는다: 해시 이동과 pushRoute 가 겹쳐 뒤로가기가 두 번
+    // 눌려야 하는 일을 없앤다. 카드·행(div)에는 막을 기본 동작이 없다.
+    const link = doc.tagName === "A" && doc.getAttribute("href");
+    if (link && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)) return;
+    if (link) e.preventDefault();
     selectedDoc = doc.dataset.doc;
     if (tab !== "docs"){
       tab = "docs";
