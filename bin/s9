@@ -2314,6 +2314,119 @@ def hooks_installed(root=None):
     return "s9-audit-prompt" in txt and (root or ROOT) in txt
 
 
+ACCOUNT_NEW_LABEL = "새-계정"      # 로그인 전 임시 이름 — 로그인하면 계정으로 바뀐다
+
+
+def profiles_base():
+    return os.path.join(os.path.expanduser("~"), ".claude-profiles")
+
+
+def account_of(cfg_dir):
+    """그 설정 디렉토리에 로그인된 계정 이메일 (없으면 "").
+
+    `CLAUDE_CONFIG_DIR` 을 주면 `.claude.json` 도 그 안으로 들어간다(빈
+    디렉토리에 `claude config ls` 를 돌려 확인). 그래서 프로필마다 자기 계정을
+    갖고 있고, **사람이 이름을 지어낼 이유가 없다** (REQ-20260827-033).
+    """
+    try:
+        with open(os.path.join(cfg_dir, ".claude.json"), encoding="utf-8") as f:
+            return ((json.load(f).get("oauthAccount") or {})
+                    .get("emailAddress") or "").strip()
+    except (OSError, ValueError):
+        return ""
+
+
+def account_settle(prof):
+    """로그인이 끝난 프로필의 이름을 그 계정으로 정한다. 최종 경로를 준다.
+
+    로그인을 안 하고 나갔으면 이름을 바꾸지 않는다 — 지어낼 근거가 없다.
+    같은 계정이 이미 있으면 새로 만든 쪽을 거둔다: 같은 자격증명이 두 자리에
+    있으면 어느 쪽이 최신인지 아무도 모른다.
+    """
+    email = account_of(prof)
+    if not email:
+        return prof
+    target = os.path.join(os.path.dirname(prof), safe_name(email))
+    if os.path.abspath(target) == os.path.abspath(prof):
+        return prof
+    if os.path.isdir(target):
+        if account_of(target) == email:
+            shutil.rmtree(prof, ignore_errors=True)   # 같은 계정 중복 — 거둔다
+            return target
+        return prof                                   # 이름 충돌 — 건드리지 않는다
+    os.rename(prof, target)
+    return target
+
+
+def cmd_account(args):
+    """계정(=Claude 로그인) 관리 — 만들기·목록·전환 (REQ-20260827-033).
+
+    Claude Code 는 로그인 정보를 설정 디렉토리 한 곳에 둔다. 계정이 둘이면
+    디렉토리가 둘이어야 한다 — 그게 프로필이다. **Claude Code 의 제약이지
+    사용자가 알아야 할 개념이 아니라서**, 환경변수도 이름도 여기서 처리한다.
+    """
+    import subprocess
+    base = profiles_base()
+    if args.action == "ls":
+        cur = claude_home()
+        rows = [(cur, account_of(cur), True)]
+        for d in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+            p = os.path.join(base, d)
+            if os.path.isdir(p) and os.path.abspath(p) != os.path.abspath(cur):
+                rows.append((p, account_of(p), False))
+        for p, email, is_cur in rows:
+            mark = "지금 쓰는 계정" if is_cur else "              "
+            print(f"  {mark}  {email or '(로그인 전)':32s}  {p}")
+        if len(rows) == 1:
+            print("계정을 더 두려면: s9 account add   "
+                  "(이름은 로그인한 계정으로 자동으로 정해진다)")
+        return
+    if args.action == "add":
+        os.makedirs(base, exist_ok=True)
+        label = (args.name or "").strip()
+        if label:
+            prof = os.path.join(base, safe_name(label))
+            if os.path.exists(prof):
+                die(f"이미 있는 계정 자리다: {label} — 목록은 s9 account ls")
+        else:
+            prof, i = os.path.join(base, ACCOUNT_NEW_LABEL), 2
+            while os.path.exists(prof):
+                prof = os.path.join(base, f"{ACCOUNT_NEW_LABEL}-{i}")
+                i += 1
+        os.makedirs(prof, exist_ok=True)
+        env = {**os.environ, "CLAUDE_CONFIG_DIR": prof}
+        print(f"◌ 새 계정으로 로그인한다 — 뜨는 화면에서 /login 안내를 따르고, "
+              f"끝나면 그 창을 닫아라(Ctrl-D).")
+        if os.environ.get("S9_ACCOUNT_DRYRUN"):
+            print(f"CLAUDE_CONFIG_DIR={prof} claude")   # 테스트 시임
+            return
+        subprocess.run(["claude"], env=env)
+        final = account_settle(prof)
+        email = account_of(final)
+        if email:
+            print(f"◌ 계정 등록: {email}")
+            print(f"  이 세션을 그 계정으로 바꾸려면: s9 account use {email}")
+        else:
+            print("◌ 로그인이 끝나지 않아 계정을 확인하지 못했다 — "
+                  f"다시 하려면: s9 account add {os.path.basename(final)}")
+        return
+    # use
+    want = safe_name((args.name or "").strip())
+    if not want:
+        die("usage: s9 account use <계정>   (목록: s9 account ls)")
+    if not os.path.isdir(os.path.join(base, want)):
+        die(f"그런 계정 자리가 없다: {args.name} — 목록은 s9 account ls")
+    sid = os.environ.get("S9_SESSION", "")
+    if not sid:
+        die("S9_SESSION 이 필요하다 — 이 세션의 식별자로 재기동한다")
+    r = restart_session(sid, account=want)
+    if not r.get("ok"):
+        die(f"전환 실패: {r.get('reason')}")
+    print(f"계정 전환 요청: {want} ({r.get('mode')})")
+    if r.get("mode") == "manual":
+        print(f"  세션 터미널에서 실행: {r.get('cmd')}")
+
+
 def claude_profiles():
     """계정 프로필 목록 (REQ-037) — ~/.claude-profiles/<이름>/ 디렉토리.
     프로필 생성·최초 로그인은 터미널에서: CLAUDE_CONFIG_DIR=~/.claude-profiles/<이름> claude"""
@@ -9959,6 +10072,14 @@ def main():
     ins.add_argument("--create", action="store_true",
                      help="gh 로 사설 리포까지 자동 생성")
     ins.set_defaults(fn=cmd_instance)
+
+    ac = sub.add_parser("account",
+                        help="Claude 로그인 계정 관리 (만들기·목록·전환)")
+    ac.add_argument("action", choices=["ls", "add", "use"])
+    ac.add_argument("name", nargs="?",
+                    help="add: 이름(생략하면 로그인한 계정으로 자동) · "
+                         "use: 바꿀 계정")
+    ac.set_defaults(fn=cmd_account)
 
     cd2 = sub.add_parser("code", help="대시보드 보장 + 이 터미널에서 claude 실행 (통합 진입)")
     cd2.add_argument("--no-claude", action="store_true", help="대시보드만 보장(테스트용)")
