@@ -44,6 +44,8 @@ bind 적발 · 촘촘한 재시도 루프 적발).
     from portpool import wait_server        # 서버가 뜰 때까지 (백오프)
 """
 import os
+import re
+import signal
 import socket
 import subprocess
 import sys
@@ -70,6 +72,11 @@ LOCK_DIR = os.path.join(tempfile.gettempdir(), "s9-portpool")
 
 WIN_DYNAMIC_START = 49152          # 윈도우 기본 동적 포트 시작
 EPHEMERAL_FALLBACK = (32768, 60999)  # /proc 을 못 읽을 때의 리눅스 기본값
+
+# 사람이 보는 대시보드가 사는 대역(기본 9909 + 스캔 9910~9950). 테스트는 이
+# 대역에 **절대** 서버를 띄우지 않는다 — 띄우면 사용자 화면을 뺏는다.
+DASHBOARD_PORT = 9909
+DASHBOARD_PORTS = range(9909, 9951)
 
 _lock = threading.Lock()
 _slot = None        # 이 프로세스가 잡은 슬롯 번호
@@ -263,3 +270,135 @@ def wait_server(port, host="127.0.0.1", timeout=WAIT_TIMEOUT, _connect=None):
                     f"{timeout:.0f}초 동안 {attempts}회 시도")
             time.sleep(min(delay, left))
             delay = min(delay * WAIT_GROWTH, WAIT_MAX)
+
+
+# ---------------------------------------------------------------------------
+# 실서비스 포트를 뺏은 테스트 서버 회수 (REQ-20260828-001)
+#
+# 스위트가 끝난 뒤 `/tmp/...` 작업공간의 `s9 serve` 가 9909 를 물고 살아남은
+# 일이 있었다. 진짜 서버(cwd `~/section9`)와 번갈아 응답해 사용자 화면이
+# 새로고침마다 정상/404 를 오갔고, 더 나쁘게는 **테스트 시작 시점의
+# web/index.html 사본**을 내줘 화면 검증이 조용히 옛 화면을 통과시켰다.
+#
+# 회수 기준은 두 가지를 함께 본다 — ① 대시보드 대역(9909~9950) 포트,
+# ② 작업공간(S9_ROOT 또는 cwd)이 임시 디렉토리. 진짜 서버는 작업공간이
+# 저장소라 걸리지 않고, 풀 포트(18800~)를 쓰는 정상적인 테스트 서버도
+# 걸리지 않는다(그쪽 회수는 s9-doctor --sweep 의 몫이다).
+#
+# `--supervise` 라 자식만 죽이면 되살아난다 — 감시자를 먼저 죽이고 몇 바퀴
+# 돌며 확인한다.
+# ---------------------------------------------------------------------------
+
+_PORT_ARG = re.compile(r"^--port(?:=(\d+))?$")
+
+
+def _argv_port(argv):
+    """`--port 9909` / `--port=9909` 에서 포트 번호. 없으면 None."""
+    for i, a in enumerate(argv):
+        m = _PORT_ARG.match(a)
+        if not m:
+            continue
+        if m.group(1):
+            return int(m.group(1))
+        if i + 1 < len(argv) and argv[i + 1].isdigit():
+            return int(argv[i + 1])
+    return None
+
+
+def _under_tmp(path):
+    if not path:
+        return False
+    path = path.replace(" (deleted)", "")
+    tmp = os.path.realpath(tempfile.gettempdir())
+    try:
+        real = os.path.realpath(path)
+    except OSError:
+        real = path
+    return real == tmp or real.startswith(tmp + os.sep)
+
+
+def is_stray_dashboard_server(info):
+    """이 프로세스가 '사용자 포트를 뺏은 테스트 서버' 인가.
+
+    info: {"argv": [...], "cwd": str, "root": str(S9_ROOT)}
+    """
+    argv = list(info.get("argv") or [])
+    if "serve" not in argv:
+        return False
+    if not any(os.path.basename(a) == "s9" for a in argv):
+        return False
+    if _argv_port(argv) not in DASHBOARD_PORTS:
+        return False
+    return _under_tmp(info.get("root")) or _under_tmp(info.get("cwd"))
+
+
+def _proc_snapshot():
+    """지금 살아 있는 프로세스의 argv·cwd·S9_ROOT. /proc 이 없으면 빈 목록."""
+    out = []
+    if not os.path.isdir("/proc"):
+        return out
+    for name in os.listdir("/proc"):
+        if not name.isdigit():
+            continue
+        try:
+            with open(f"/proc/{name}/cmdline", "rb") as f:
+                argv = [a.decode("utf-8", "replace")
+                        for a in f.read().split(b"\0") if a]
+        except OSError:
+            continue
+        if not argv:
+            continue
+        try:
+            cwd = os.readlink(f"/proc/{name}/cwd")
+        except OSError:
+            cwd = ""
+        root = ""
+        try:
+            with open(f"/proc/{name}/environ", "rb") as f:
+                for kv in f.read().split(b"\0"):
+                    if kv.startswith(b"S9_ROOT="):
+                        root = kv[8:].decode("utf-8", "replace")
+                        break
+        except OSError:
+            pass
+        out.append({"pid": int(name), "argv": argv, "cwd": cwd, "root": root})
+    return out
+
+
+def stray_dashboard_servers(snapshot=None):
+    procs = _proc_snapshot() if snapshot is None else snapshot
+    return [p for p in procs if is_stray_dashboard_server(p)]
+
+
+def reap_stray_dashboard_servers(rounds=3, snapshot=None, kill=None,
+                                 sleep=None):
+    """대시보드 대역을 물고 있는 임시 작업공간 서버를 거둔다.
+
+    반환: 거둔 프로세스 정보 목록(같은 pid 는 한 번만). 아무것도 없으면 [].
+    """
+    kill = kill or os.kill
+    sleep = sleep or time.sleep
+    reaped, seen = [], set()
+    for _ in range(max(1, rounds)):
+        strays = stray_dashboard_servers(
+            snapshot() if callable(snapshot) else snapshot)
+        if not strays:
+            break
+        # 감시자 먼저 — 자식만 죽이면 감시자가 곧바로 되살린다
+        strays.sort(key=lambda p: 0 if "--supervise" in p["argv"] else 1)
+        for p in strays:
+            try:
+                kill(p["pid"], signal.SIGKILL)
+            except OSError:
+                pass
+            if p["pid"] not in seen:
+                seen.add(p["pid"])
+                reaped.append(p)
+        sleep(1.0)          # 포트를 실제로 놓을 틈
+    return reaped
+
+
+def describe_stray(p):
+    port = _argv_port(p.get("argv") or [])
+    where = p.get("root") or p.get("cwd") or "?"
+    return f"pid {p.get('pid')} port {port} 작업공간 {where}"

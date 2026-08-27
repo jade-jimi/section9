@@ -11,12 +11,15 @@ WSL 로 들어오는 요청은 +0). portpool 모듈 머리말에 측정표가 �
 2) 풀이 윈도우 동적 범위·커널 임시 범위 **밖**에 있고, 몇 번을 할당하든
    서로 다른 포트 번호가 풀 크기를 넘지 않는다.
 3) 소스 규율 — 임시 포트 직접 bind 금지, 촘촘한 재시도 루프 금지.
+4) 사용자 대시보드 포트(9909~9950)를 테스트가 물지 않는다 — 물면 사람이 보는
+   화면이 404 나 **옛 화면**으로 바뀐다(REQ-20260828-001).
 
 실행: python3 tests/ port_pool
 """
 import os
 import re
 import socket
+import tempfile
 import time
 import unittest
 
@@ -226,6 +229,141 @@ class NoEphemeralBind(unittest.TestCase):
             if "import portpool" not in src and "from portpool import" not in src:
                 missing.append(name)
         self.assertEqual(missing, [])
+
+
+class StrayDashboardServers(unittest.TestCase):
+    """테스트가 **사용자 대시보드 포트**를 물지 않는다 (REQ-20260828-001).
+
+    2026-08-28: 스위트가 끝난 뒤에도 `/tmp/s9smx-*` 작업공간의 `s9 serve` 가
+    9909 를 물고 살아남았다. 진짜 서버와 번갈아 응답해 새로고침마다 404 가
+    났고, 더 나쁘게는 **테스트 시작 시점의 옛 web/index.html** 을 내줘 화면을
+    고치고 눈으로 확인하는 절차를 조용히 통과시켰다.
+    """
+
+    REPO = os.path.dirname(HERE)
+    TMP = tempfile.gettempdir()
+
+    def proc(self, **kw):
+        base = {"pid": 4242, "argv": ["/repo/bin/s9", "serve", "--port", "9909"],
+                "cwd": "", "root": ""}
+        base.update(kw)
+        return base
+
+    # ---------- 무엇을 거두고 무엇을 남기는가 ----------
+
+    def test_temp_workspace_on_dashboard_port_is_stray(self):
+        p = self.proc(root=os.path.join(self.TMP, "s9smx-abcd"))
+        self.assertTrue(portpool.is_stray_dashboard_server(p))
+
+    def test_cwd_alone_is_enough_to_recognize(self):
+        """S9_ROOT 를 못 읽어도 작업 디렉토리로 알아본다 — 사람이 쓴 방법과 같다."""
+        p = self.proc(cwd=os.path.join(self.TMP, "s9smx-abcd"))
+        self.assertTrue(portpool.is_stray_dashboard_server(p))
+
+    def test_real_server_is_never_touched(self):
+        """진짜 서버(작업공간=저장소)는 절대 회수 대상이 아니다."""
+        p = self.proc(cwd=self.REPO, root=self.REPO)
+        self.assertFalse(portpool.is_stray_dashboard_server(p))
+
+    def test_pool_port_test_server_is_left_alone(self):
+        """풀 포트를 쓰는 정상적인 테스트 서버는 남의 몫이다(s9-doctor --sweep).
+
+        여기서 거두면 **동시에 도는 다른 스위트**의 서버를 죽인다.
+        """
+        p = self.proc(argv=["/repo/bin/s9", "serve", "--port",
+                            str(portpool.POOL_BASE)],
+                      root=os.path.join(self.TMP, "s9guardp-x"))
+        self.assertFalse(portpool.is_stray_dashboard_server(p))
+
+    def test_scan_band_counts_too(self):
+        """9909 하나가 아니라 스캔 대역 전체가 사용자 자리다."""
+        p = self.proc(argv=["/repo/bin/s9", "serve", "--port", "9931"],
+                      root=os.path.join(self.TMP, "s9smx-abcd"))
+        self.assertTrue(portpool.is_stray_dashboard_server(p))
+
+    def test_other_programs_are_not_ours(self):
+        p = self.proc(argv=["python3", "-m", "http.server", "--port", "9909"],
+                      root=os.path.join(self.TMP, "x"))
+        self.assertFalse(portpool.is_stray_dashboard_server(p))
+
+    def test_port_flag_forms(self):
+        self.assertEqual(portpool._argv_port(["s9", "serve", "--port=9909"]), 9909)
+        self.assertEqual(portpool._argv_port(["s9", "serve", "--port", "9909"]), 9909)
+        self.assertIsNone(portpool._argv_port(["s9", "serve"]))
+
+    # ---------- 거두는 방식 ----------
+
+    def test_guard_dies_before_its_child(self):
+        """감시자를 먼저 죽여야 한다 — 자식만 죽이면 곧바로 되살아난다."""
+        tmp = os.path.join(self.TMP, "s9smx-abcd")
+        child = self.proc(pid=101, root=tmp)
+        guard = self.proc(pid=100, root=tmp,
+                          argv=["/repo/bin/s9", "serve", "--supervise",
+                                "--port", "9909"])
+        killed = []
+        rounds = [[child, guard], []]
+        portpool.reap_stray_dashboard_servers(
+            snapshot=lambda: rounds.pop(0) if rounds else [],
+            kill=lambda pid, sig: killed.append(pid),
+            sleep=lambda _s: None)
+        self.assertEqual(killed, [100, 101])
+
+    def test_reap_retries_until_gone(self):
+        """한 바퀴로 안 죽으면 다시 본다 — 되살아난 자식을 놓치지 않는다."""
+        tmp = os.path.join(self.TMP, "s9smx-abcd")
+        alive = [[self.proc(pid=1)], [self.proc(pid=2)], []]
+        for p in (alive[0][0], alive[1][0]):
+            p["root"] = tmp
+        killed = []
+        reaped = portpool.reap_stray_dashboard_servers(
+            snapshot=lambda: alive.pop(0) if alive else [],
+            kill=lambda pid, sig: killed.append(pid),
+            sleep=lambda _s: None)
+        self.assertEqual(killed, [1, 2])
+        self.assertEqual([p["pid"] for p in reaped], [1, 2])
+
+    def test_nothing_to_reap_is_silent(self):
+        self.assertEqual(portpool.reap_stray_dashboard_servers(
+            snapshot=lambda: [], kill=None, sleep=lambda _s: None), [])
+
+    def test_runner_reaps_and_fails(self):
+        """러너가 회수를 부르고, 남은 게 있으면 실패로 센다 — 조용히 치우면
+        다음 실행에서 또 생긴다."""
+        src = open(os.path.join(HERE, "__main__.py"), encoding="utf-8").read()
+        self.assertIn("reap_stray_dashboard_servers", src,
+                      "러너가 스위트 뒤에 포트를 거두지 않는다")
+        self.assertIn("return 1", src.split("leaked")[-1][:400],
+                      "포트를 뺏은 채 끝났는데 성공으로 끝난다")
+
+    # ---------- 소스 규율 ----------
+
+    HOOK_RUN = re.compile(
+        r"(?:run|Popen)\(\s*\[[^\]]*(?:SESSION_HOOK|\bHOOK\b|hook|"
+        r"\"s9-audit-session\")", re.S)
+
+    def test_session_hook_tests_isolate_the_port(self):
+        """세션 훅을 돌리는 테스트는 S9_PORT 로 격리해야 한다.
+
+        훅의 `ensure_serve()` 는 S9_PORT 가 없으면 `state/port` → 9909 로
+        떨어진다. 임시 작업공간에는 그 파일이 없으니 **사용자 포트**에
+        감시자를 세운다. 이 검사가 없으면 다음 테스트가 같은 자리에 빠진다.
+        """
+        offenders = []
+        for name in sorted(os.listdir(HERE)):
+            if not name.startswith("test_") or not name.endswith(".py"):
+                continue
+            src = open(os.path.join(HERE, name), encoding="utf-8").read()
+            if "s9-audit-session" not in src:
+                continue
+            if not self.HOOK_RUN.search(src):
+                continue          # 소스만 읽는 테스트 — 훅을 돌리지 않는다
+            # 주석에 이름만 적어 두는 것으로는 격리가 되지 않는다 —
+            # env 에 실제로 들어간 형태(따옴표로 감싼 키)를 본다.
+            if not re.search(r"[\"']S9_PORT[\"']", src):
+                offenders.append(name)
+        self.assertEqual(offenders, [],
+                         "세션 훅을 돌리면서 포트를 격리하지 않는다 — "
+                         "S9_PORT='1' 을 env 에 넣어라: " + ", ".join(offenders))
 
 
 if __name__ == "__main__":
