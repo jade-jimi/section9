@@ -11118,6 +11118,95 @@ def cmd_serve(args):
         pass
 
 
+WORKTREE_HOME = os.path.join(ROOT, "state", "worktrees")
+
+
+def _wt_root():
+    """워크트리에서 돌더라도 **데이터의 본 저장소**를 가리킨다.
+
+    ROOT 는 `$S9_ROOT` 가 있으면 그것을, 없으면 `bin/s9` 의 부모를 쓴다. 워크트리
+    안에서는 후자가 그 워크트리라, 아무것도 안 하면 문서·상태까지 함께 갈린다.
+    """
+    return ROOT
+
+
+def worktree_list():
+    """이 저장소의 워크트리들 — (경로, 가지). 본 저장소는 뺀다."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "worktree", "list", "--porcelain"],
+                           capture_output=True, text=True, cwd=ROOT, timeout=15)
+    except OSError:
+        return []
+    out, cur = [], {}
+    for ln in (r.stdout or "").splitlines():
+        if ln.startswith("worktree "):
+            if cur:
+                out.append(cur)
+            cur = {"path": ln[9:].strip(), "branch": ""}
+        elif ln.startswith("branch "):
+            cur["branch"] = ln[7:].strip().replace("refs/heads/", "")
+    if cur:
+        out.append(cur)
+    return [w for w in out
+            if os.path.realpath(w["path"]) != os.path.realpath(ROOT)]
+
+
+def cmd_worktree(args):
+    """코드는 갈리고 데이터는 하나다 (REQ-20260828-011).
+
+    같은 파일을 두 주체가 동시에 고쳐 **남의 미커밋 작업이 조용히 사라진** 일이
+    이 저장소에서 네 번 났다. 워크트리는 그것을 없애지 않는다 — **보이는 충돌로
+    바꾼다.** 지금은 그 자리에서 소실되고 나중에야 알아챈다.
+
+    다만 그냥 만들면 `vault`·`index`·`state` 까지 갈려 **진실이 두 벌**이 된다.
+    그래서 만들 때 `S9_ROOT` 를 본 저장소로 못박아 준다.
+    """
+    import subprocess
+    act = args.action
+    if act == "ls":
+        rows = worktree_list()
+        if not rows:
+            print("(없음)")
+            return
+        for w in rows:
+            print(f"{w['branch'] or '(분리)'}\t{w['path']}")
+        return
+    name = (args.name or "").strip()
+    if act in ("add", "rm") and not name:
+        die(f"usage: s9 worktree {act} <이름>")
+    if act == "add":
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
+            die(f"쓸 수 없는 이름: {name}")
+        os.makedirs(WORKTREE_HOME, exist_ok=True)
+        path = os.path.join(WORKTREE_HOME, name)
+        if os.path.exists(path):
+            die(f"이미 있다: {path}")
+        branch = f"wt/{name}"
+        r = subprocess.run(["git", "worktree", "add", "-b", branch, path],
+                           capture_output=True, text=True, cwd=ROOT, timeout=60)
+        if r.returncode != 0:
+            die(f"만들지 못했다: {(r.stderr or r.stdout).strip()}")
+        print(f"{path}  ({branch})")
+        print(f"  거기서 일할 때는 반드시:  export S9_ROOT={ROOT}")
+        print("  그래야 문서·상태가 한 곳에 모인다 — 안 하면 진실이 두 벌이 된다.")
+        print(f"  끝나면:  s9 worktree rm {name}")
+        return
+    if act == "rm":
+        path = os.path.join(WORKTREE_HOME, name)
+        r = subprocess.run(["git", "worktree", "remove", path],
+                           capture_output=True, text=True, cwd=ROOT, timeout=60)
+        if r.returncode != 0:
+            # 미커밋 변경이 있으면 git 이 막는다 — **그게 맞다.** 남의 작업을
+            # 말없이 지우지 않는 것이 이 기능의 존재 이유다.
+            die(f"거두지 못했다: {(r.stderr or r.stdout).strip()}\n"
+                f"  미커밋 변경이 있으면 먼저 그 가지에 커밋하거나 옮겨라 — "
+                f"확인 없이 지우지 않는다.")
+        print(f"거뒀다: {path}")
+        return
+    die(f"unknown worktree action: {act}")
+
+
 def cmd_init(_args):
     for d in [VAULT, INDEX, USERS, STATE, STREAMS,
               *(os.path.join(VAULT, sub) for _p, sub, _s in TYPES.values()),
@@ -11500,6 +11589,12 @@ def main():
                         help="클레임해 놓고 진전이 멈춘 in-progress 요청")
     sl.add_argument("--quiet", action="store_true")
     sl.set_defaults(fn=cmd_stalled)
+
+    wt = sub.add_parser("worktree",
+                        help="코드만 갈라 작업할 자리 (데이터는 본 저장소 하나)")
+    wt.add_argument("action", choices=["add", "ls", "rm"])
+    wt.add_argument("name", nargs="?")
+    wt.set_defaults(fn=cmd_worktree)
 
     cn = sub.add_parser("commit-note",
                         help="방금 커밋을 그 REQ 문서에 남긴다 (post-commit)")
