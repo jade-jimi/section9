@@ -22,6 +22,7 @@
 import importlib.machinery
 import importlib.util
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -146,6 +147,33 @@ class WorkerWorktree(unittest.TestCase):
                                            "created": time.time() - 86400})
         self.assertEqual(self.m.worktree_sweep(), [])
         self.assertTrue(os.path.isdir(cwd))
+
+
+class WorktreeEnvelope(unittest.TestCase):
+    """B5 — 워크트리 워커는 자기 가지에 커밋할 수 있어야 한다.
+
+    실사고 2026-08-28 15:07: 워크트리에서 돈 무인 작업자가 REQ-20260828-007 을
+    고쳐 놓고 **커밋하지 못했다** — 봉투(allowedTools)에 git 이 없었다. 규율은
+    "자기 가지에 커밋하라"인데 그럴 손이 없었던 것이다. 변경은 작업 트리에만
+    남았고, 사용자 화면에는 아무것도 반영되지 않은 채 두 시간이 지났다.
+    커밋할 수 없는 워크트리는 소실 장치다 — 거두는 순간 다 사라진다.
+
+    다만 넓히지 않는다: 담고(add)·박고(commit)·보는(status·diff) 것까지다.
+    push 도 checkout·reset 도 주지 않는다 — 앞엣것은 바깥으로 나가는 일이고
+    뒤엣것은 남의 작업을 지우는 손이다.
+    """
+
+    def test_b5_worktree_worker_may_commit_its_branch(self):
+        src = open(os.path.join(HERE, "..", "bin", "s9"), encoding="utf-8").read()
+        self.assertIn("WORKTREE_GIT_TOOLS", src,
+                      "워크트리 봉투가 따로 없다 — 워커가 커밋할 수 없다")
+        m = re.search(r"WORKTREE_GIT_TOOLS = \[([^\]]*)\]", src)
+        self.assertIsNotNone(m, "WORKTREE_GIT_TOOLS 를 읽을 수 없다")
+        body = m.group(1)
+        for allow in ("git add", "git commit", "git status", "git diff"):
+            self.assertIn(allow, body, f"{allow} 가 봉투에 없다")
+        for deny in ("git push", "git checkout", "git reset", "git stash"):
+            self.assertNotIn(deny, body, f"{deny} 를 워커에게 준다")
 
 
 if __name__ == "__main__":

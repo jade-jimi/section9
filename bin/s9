@@ -3906,6 +3906,14 @@ def chat_notify_transition(doc_id, old, new, note, actor):
     return sent[0]
 
 
+# 워크트리 워커에게만 더 주는 손 — 담고·박고·보는 것까지다.
+# push 는 바깥으로 나가는 일이고, checkout·reset·stash 는 남의 작업을 지우는
+# 손이라 주지 않는다. 워크트리 안이라 해도 그 셋은 자기 것을 지운다.
+WORKTREE_GIT_TOOLS = ["Bash(git add:*)", "Bash(git commit:*)",
+                      "Bash(git status:*)", "Bash(git diff:*)",
+                      "Bash(git log:*)"]
+
+
 def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False):
     """무인 워커 스폰의 **유일한** 경로 (REQ-20260825-090에서 추출).
 
@@ -3949,6 +3957,13 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False):
     # 알고 켜는 스위치여야 하고, 기본은 꺼짐이다.
     if cfg.get("auto_resume_gh"):
         perm = perm + ["Bash(gh:*)"]
+    # 워크트리 워커는 자기 가지에 커밋할 손이 있어야 한다 (REQ-20260828-011).
+    # 실사고 2026-08-28 15:07: 규율은 "자기 가지에 커밋하라"인데 봉투에 git 이
+    # 없어 워커가 고쳐 놓고 커밋하지 못했고, 변경이 작업 트리에만 남아 사용자
+    # 화면에는 두 시간 동안 아무것도 반영되지 않았다. **커밋할 수 없는
+    # 워크트리는 소실 장치다** — 거두는 순간 다 사라진다.
+    if wt_name:
+        perm = perm + WORKTREE_GIT_TOOLS
     # 충돌 규율은 봉투와 같은 자리에 둔다 — 프롬프트마다 따로 적으면 갈린다.
     # 실사고 2026-08-26: 워커가 남의 미커밋 편집 위에 덮어써 테스트 파일 하나가
     # 디스크에서 사라졌고(커밋 전이라 git 복구 불가), 다른 건에서는 리드의

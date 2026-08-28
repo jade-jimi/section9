@@ -91,17 +91,28 @@ def install_git_hooks():
         return
     # Git for Windows 포함 어디서든: python3 → python 순으로 탐색 (셔뱅 의존 제거)
     py = ('if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi\n')
-    sync = ('#!/bin/sh\n' + py +
-            'TOP="$(git rev-parse --show-toplevel)"\n'
-            '"$PY" "$TOP/bin/s9" index rebuild >/dev/null 2>&1 || true\n'
-            '"$PY" "$TOP/bin/s9-install" --quiet || true\n')
-    guard = ('#!/bin/sh\n' + py +
-             'exec "$PY" "$(git rev-parse --show-toplevel)/bin/s9-guard"\n')
+    # 코드는 갈리고 데이터는 하나다 (REQ-20260828-011). 훅은 **제 자리의**
+    # 스크립트를 부르되(워크트리에서는 그 사본이 맞다) `S9_ROOT` 는 언제나
+    # 본 저장소로 못박는다. 본 저장소는 `--git-common-dir` 의 부모다.
+    #
+    # 실사고 2026-08-28 15:07: 워커가 워크트리에서 커밋하자 post-commit 이
+    # 남기는 "커밋 기록" 노트가 **워크트리 사본의 vault/** 에 쓰였다. 본
+    # 저장소 문서에는 흔적이 없었고, 대시보드는 그 일이 없었던 것처럼 보였다.
+    # `--show-toplevel` 은 워크트리에서 워크트리를 가리킨다.
+    where = ('TOP="$(git rev-parse --show-toplevel)"\n'
+             'MAIN="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" '
+             '&& pwd)"\n')
+    sync = ('#!/bin/sh\n' + py + where +
+            'S9_ROOT="$MAIN" "$PY" "$TOP/bin/s9" index rebuild '
+            '>/dev/null 2>&1 || true\n'
+            'S9_ROOT="$MAIN" "$PY" "$TOP/bin/s9-install" --quiet || true\n')
+    guard = ('#!/bin/sh\n' + py + where +
+             'S9_ROOT="$MAIN" exec "$PY" "$TOP/bin/s9-guard"\n')
     # 커밋이 스스로 문서에 남는다 (REQ-20260828-005) — 구현이 끝나는 지점은
     # 커밋인데 그것을 문서에 옮기는 일이 손에 맡겨져 있어 몇 시간씩 밀렸다.
-    cnote = ('#!/bin/sh\n' + py +
-             'TOP="$(git rev-parse --show-toplevel)"\n'
-             '"$PY" "$TOP/bin/s9" commit-note >/dev/null 2>&1 || true\n')
+    cnote = ('#!/bin/sh\n' + py + where +
+             'S9_ROOT="$MAIN" "$PY" "$TOP/bin/s9" commit-note '
+             '>/dev/null 2>&1 || true\n')
     for name, body in [("post-merge", sync), ("post-checkout", sync),
                        ("pre-commit", guard), ("post-commit", cnote)]:
         p = os.path.join(hooks_dir, name)
