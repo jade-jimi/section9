@@ -68,10 +68,12 @@ class StreamSwitchUI(unittest.TestCase):
     def test_the_tab_follows_immediately(self):
         """껐는데 Stream 탭이 남아 있으면 설정이 안 먹은 것으로 읽힌다."""
         fn = self._fn("saveStream")
-        self.assertIn('fetch("/api/whoami")', fn, "신원을 다시 받지 않는다")
+        # 신원을 받는 자리는 하나다 (REQ-20260828-039) — 직접 fetch 하면 그
+        # 한 번의 실패로 탭이 옛 설정에 묶인다. loadWhoami 는 물러섰다 다시 받는다.
+        self.assertIn("loadWhoami()", fn, "신원을 다시 받지 않는다")
         self.assertIn("applyStreamVisibility()", fn, "탭이 그대로 남는다")
         self.assertGreater(fn.index("applyStreamVisibility()"),
-                           fn.index('fetch("/api/whoami")'),
+                           fn.index("loadWhoami()"),
                            "옛 신원으로 탭을 다시 그린다")
 
     # ---------- ④ 끄면 보관 기간 줄이 물러난다 ----------

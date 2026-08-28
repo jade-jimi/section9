@@ -7204,6 +7204,41 @@ HEALTH_FAIL_RE = re.compile(
 
 SERVE_CODE_STAMP = {}   # serve 기동 시점의 코드 지문 (파일이름 -> 지문)
 SERVE_STARTED = ""      # serve 기동 시각
+SERVE_HOST = ""         # serve 가 실제로 바인드한 주소 (REQ-20260828-028)
+
+# 루프백 바인드 = "브라우저 사용자 = 서버 기동 계정" 이라는 전제가 서는 자리.
+# whoami_info 가 그 전제를 파생 신원으로 쓴다(306행 주석). 전제가 깨진 자리에서
+# 조용히 동작하는 것이 가장 나쁜 경우라, 그 전제에 기대는 라우트는 여기서 갈린다.
+LOOPBACK_BINDS = ("127.0.0.1", "localhost", "::1", "")
+
+
+def bind_is_loopback(host=None):
+    return (SERVE_HOST if host is None else host) in LOOPBACK_BINDS
+
+
+def host_header_ok(host, bind=None):
+    """Host 헤더가 이 서버를 실제로 가리키나 — DNS 리바인딩 방어.
+
+    공격: 사용자가 방문한 아무 페이지가 `evil.example.com` 을 짧은 TTL 로
+    127.0.0.1 에 재해석시키면, 그 페이지의 스크립트에게 우리 대시보드는
+    **same-origin** 이 된다. 뷰어는 서버 기동 계정(대개 admin)이므로
+    `/api/*` 가 통째로 읽힌다. 브라우저가 보내는 Host 는 그때 공격자의
+    이름이지 루프백 리터럴이 아니다 — 그것이 유일한 구분점이다.
+
+    ⚠ **루프백 바인드일 때만** 건다. `--host 0.0.0.0` 은 운영자가 원격 접속을
+    의도적으로 연 것이고, 거기서 루프백 Host 를 요구하면 그 접속이 통째로
+    죽는다. 리바인딩이 노리는 것도 원래 "밖에서는 못 닿는 서버" 다.
+    """
+    if not bind_is_loopback(bind):
+        return True
+    if not host:
+        return False                     # HTTP/1.1 은 Host 필수 — 없으면 거부
+    h = host.strip().lower()
+    if h.startswith("["):                # [::1]:9909
+        h = h[1:h.find("]")] if "]" in h else h[1:]
+    elif h.count(":") == 1:              # 127.0.0.1:9909 · localhost:9909
+        h = h.rsplit(":", 1)[0]
+    return h in ("localhost", "::1") or bool(re.fullmatch(r"127(\.\d{1,3}){3}", h))
 
 # 서버가 기동 시점 코드를 **메모리에 들고 도는** 파일들 (REQ-20260828-025).
 # 이름은 지문 파일(state/serve-code.json)에 그대로 쓰이므로 바꾸지 마라 —
@@ -7834,16 +7869,25 @@ def _claim_req(machine, session, doc_id, agent_transcript=""):
     # "에이전트 4명 작업 중" 으로, 정작 일하던 문서를 "아무도 없음" 으로
     # 그렸다. `update_active_reqs` 가 done 전이 때 지운 것을 여기가 되살렸다.
     if doc_status(doc_id) in TERMINAL_STATUSES:
-        return doc_id
+        doc_id_terminal = True
+    else:
+        doc_id_terminal = False
     acquire_lock()
     try:
         b = read_binding(machine, session) or {
             "machine": machine, "session": session, "user": "", "history": []}
         before = list(b.get("active_reqs") or [])
-        ar = [canon_id(x) for x in before]
-        if doc_id not in ar:
+        # 끝난 것은 **들어오는 것도 막고 이미 있는 것도 걷어낸다**
+        # (REQ-20260828-036 후속). 들어오는 것만 막았더니 이전에 쌓인 done 이
+        # 그대로 남아, 이 세션의 위임이 계속 그리로 붙었다 — 화면이 끝난 문서를
+        # "작업 중" 으로, 진짜 도는 것을 "멈춤" 으로 그렸다. 반대 방향의 같은 거짓말이다.
+        ar = [x for x in (canon_id(y) for y in before)
+              if doc_status(x) not in TERMINAL_STATUSES]
+        if not doc_id_terminal and doc_id not in ar:
             ar.append(doc_id)
         b["active_reqs"] = ar
+        if doc_status(b.get("last_req") or "") in TERMINAL_STATUSES:
+            b.pop("last_req", None)
         # 클레임한 때를 함께 남긴다 (REQ-20260828-005). 클레임은 "내가 하겠다"는
         # 표시일 뿐인데 보드는 그것만으로 '진행 중'을 그린다 — 착수하지 않은
         # 클레임이 7시간 반 동안 일하는 중으로 보인 일이 있었다(REQ-078).
@@ -9011,6 +9055,91 @@ def project_can(ref, user, action):
         return True  # 시스템 admin 우회
     lvl = PROJECT_ROLE_LEVEL.get(project_role(ref, user), 0)  # 미참여/만료=0
     return lvl >= ACTION_MIN_LEVEL[action]
+
+
+# ── 소스 파일 열람 (REQ-20260828-028-62x6) ──────────────────────────────────
+# doc_visible 의 형제다. doc_visible 이 '주인 있는 문서'를 주인으로 가르고,
+# 이것은 '주인 없는 소스'만 연다 — 그래서 me 를 인자로 받지 않는다.
+#
+# ⚠ vault/·users/·state/·index/·projects/ 는 여기 없다. 그 파일들에는 판정이
+#   따로 있고(doc_visible·stream_visible·secret_keys·project_can), 여기로
+#   내주면 그 판정들이 전부 옆문으로 무효가 된다. 뿌리를 늘리기 전에 이 줄을
+#   읽어라 — tests/test_code_read_gate.py 의 클래스 단위 시험이 막는다.
+#
+# 왜 "git 추적 파일만" 이 아닌가: 이 저장소는 vault/**(약 900개)·
+# state/sessions/*.json(91개)·users/*/config/settings.json 을 **추적한다**.
+# 그 규칙을 쓰면 doc_visible 이 통째로 무효가 되고, REQ-20260828-012 의
+# "비밀은 값도 경로도 주지 않는다" 가 그 자리에서 뒤집힌다. 방향이 정반대다 —
+# 방금 만들어 커밋 전인 tests/test_새것.py 는 못 열고, 막아야 할 vault 는 연다.
+CODE_ROOTS = ("bin", "docs", "harness", "tests", "web")
+CODE_FILES = ("CLAUDE.md", "README.md", "pyproject.toml")
+CODE_EXT = (".py", ".md", ".html", ".css", ".js", ".json", ".toml",
+            ".txt", ".sh", ".cmd", ".yml", ".yaml")
+CODE_MAX_BYTES = 4 * 1024 * 1024     # web/guide.html 1.7MB 가 최대 실물
+CODE_MAX_LINES = 400                 # 한 응답이 낼 수 있는 줄 수 상한
+CODE_MAX_COLS = 400                  # 한 줄이 낼 수 있는 글자 수 상한
+CODE_MAX_CTX = 60                    # ?ctx= 상한
+
+
+def code_read_on():
+    """인스턴스 스위치 (기본 on). `S9_CODE_READ=off` 하나 — S9_SYNC=off 와 같은 모양.
+
+    사용자별 등급은 두지 않는다. 등급을 두면 "코드에는 주인이 없다"는 이 판정의
+    전제가 흐려지고, 그 순간 vault/ 를 뿌리에 넣자는 말이 논리적으로 가능해진다.
+    포크가 bin/ 안에 인스턴스 고유의 것(사내 엔드포인트·계정명)을 넣었다면 off.
+    """
+    return os.environ.get("S9_CODE_READ", "").strip().lower() != "off"
+
+
+def _code_shape_ok(rel):
+    """경로 '모양'만 본다 — 파일시스템을 만지지 않는다.
+
+    정규화 전(글자)과 후(실경로) **두 번** 부른다. 한 번만 부르면 심링크가 샌다:
+    web/x.html -> ../users/*/config/settings.json 은 글자로는 흠이 없다.
+    """
+    if not rel or len(rel) > 512 or "\0" in rel:
+        return False
+    segs = rel.split("/")
+    if any(s in ("", ".", "..") or s.startswith(".") for s in segs):
+        return False          # 빈 조각·상대참조·점파일(.git/.claude/.github)
+    if len(segs) == 1:
+        return segs[0] in CODE_FILES
+    if segs[0] not in CODE_ROOTS:
+        return False
+    base = segs[-1]
+    if "." not in base:       # 확장자 없는 것은 bin/ 바로 밑에서만 (bin/s9)
+        return segs[0] == "bin" and len(segs) == 2
+    return base.lower().endswith(CODE_EXT)
+
+
+def code_visible(rel):
+    """소스 파일 열람 판정. 통과하면 절대경로, 아니면 "" — 이유는 돌려주지 않는다.
+
+    없는 것과 막힌 것을 구분해 주면 그 차이가 곧 목록이 된다.
+    """
+    if not code_read_on():
+        return ""
+    rel = (rel or "").replace("\\", "/").strip()
+    if rel.startswith("/") or re.match(r"^[A-Za-z]:", rel):
+        return ""                                   # 절대경로·드라이브 주입
+    if not _code_shape_ok(rel):
+        return ""
+    root = os.path.realpath(ROOT)                   # ROOT 는 S9_ROOT 로 바뀐다
+    full = os.path.realpath(os.path.join(root, rel))
+    try:
+        if os.path.commonpath([full, root]) != root:
+            return ""                               # 리포 밖 (6014행과 같은 관용구)
+    except ValueError:
+        return ""                                   # 드라이브가 다름(Windows)
+    # 실경로로 같은 모양 검사를 한 번 더 — 모양 검사는 심링크를 모른다.
+    if not _code_shape_ok(os.path.relpath(full, root).replace(os.sep, "/")):
+        return ""
+    try:
+        if not os.path.isfile(full) or os.path.getsize(full) > CODE_MAX_BYTES:
+            return ""
+    except OSError:
+        return ""
+    return full
 
 
 def doc_visible(row, me):
@@ -11367,7 +11496,23 @@ def cmd_serve(args):
         def log_message(self, fmt, *a):
             pass  # 조용히
 
+        def _host_guard(self):
+            """DNS 리바인딩 차단 (REQ-20260828-028). 막았으면 True.
+
+            루프백 바인드일 때만 건다 — host_header_ok 의 주석 참조.
+            404 가 아니라 421 을 쓴다: 숨길 것이 없고(공격자는 이미 붙어 있다),
+            사람이 이 응답을 보면 원인을 바로 알아야 한다.
+            """
+            if host_header_ok(self.headers.get("Host")):
+                return False
+            self._send(421, "text/plain; charset=utf-8",
+                       "이 서버는 루프백에만 응답한다 — "
+                       "http://127.0.0.1:<port>/ 로 접속하라.".encode())
+            return True
+
         def do_GET(self):
+            if self._host_guard():
+                return
             parsed = urllib.parse.urlparse(self.path)
             qs = urllib.parse.parse_qs(parsed.query)
             if parsed.path in ("/", "/index.html"):
@@ -11378,9 +11523,15 @@ def cmd_serve(args):
                     self._send(404, "text/plain", b"web/index.html not found")
             elif re.fullmatch(r"/[\w.-]+\.html", parsed.path or ""):
                 # web/ 아래 정적 html (테스트/보조 페이지) — same-origin 검증용
-                fp = os.path.join(ROOT, "web", os.path.basename(parsed.path))
-                if os.path.abspath(fp).startswith(os.path.join(ROOT, "web")) \
-                        and os.path.exists(fp):
+                #
+                # realpath 로 본다 (REQ-20260828-028). abspath 는 심링크를 모른다:
+                # web/x.html -> ../users/*/config/settings.json 이 basename 검사도
+                # 접두 검사도 통과해 그대로 서빙됐다. /api/code 만 막고 이 옆문을
+                # 열어 두면 막은 것이 아니다.
+                fp = os.path.realpath(
+                    os.path.join(ROOT, "web", os.path.basename(parsed.path)))
+                webdir = os.path.realpath(os.path.join(ROOT, "web"))
+                if os.path.dirname(fp) == webdir and os.path.isfile(fp):
                     with open(fp, "rb") as f:
                         self._send(200, "text/html; charset=utf-8", f.read())
                 else:
@@ -11760,6 +11911,62 @@ def cmd_serve(args):
                 else:
                     self._json({"doc": doc_id, "file": fn,
                                 "chars": len(body_t), "text": body_t})
+            elif parsed.path == "/api/code":
+                # 소스 한 줄 언저리 (REQ-20260828-028-62x6). 파일 전체를 내지
+                # 않는다 — 화면이 원하는 것은 그 줄이고, 전체를 내면 비용도
+                # 노출도 파일 크기만큼 는다. 전체 보기를 열면 상한·창 논의가
+                # 무의미해지고 다음 요청은 반드시 "그럼 편집도" 가 된다.
+                #
+                # 게이트는 `code_visible` **하나**다 — 여기서 다시 판정하지
+                # 마라. `/api/asset-text` 가 `/api/asset` 과 "글자 그대로 같은
+                # 게이트" 를 쓴 그 규율 그대로다.
+                #
+                # ⚠ 이 라우트는 **루프백 전제 위에서만** 성립한다. whoami_info
+                #   가 "브라우저 사용자 = 서버 기동 계정" 을 파생으로 쓰기
+                #   때문이다(306행). --host 0.0.0.0 으로 띄운 서버에서는 소스를
+                #   내주지 않는다 — 전제가 깨진 자리에서 조용히 동작하는 것이
+                #   가장 나쁜 경우다.
+                def _cint(k, d, lo_, hi_):
+                    try:
+                        return max(lo_, min(hi_, int(qs.get(k, [str(d)])[0])))
+                    except (TypeError, ValueError):
+                        return d
+                line = _cint("line", 0, 0, 10 ** 7)
+                ctx = _cint("ctx", 12, 0, CODE_MAX_CTX)
+                full = code_visible(qs.get("path", [""])[0]) \
+                    if bind_is_loopback() else ""
+                ok, out, total, lo, hi = False, [], 0, 1, 0
+                if full:
+                    try:
+                        with open(full, "rb") as f:
+                            binary = b"\0" in f.read(8192)
+                        if not binary:      # 이진 파일은 내지 않는다
+                            lo = max(1, line - ctx) if line else 1
+                            hi = lo + min(CODE_MAX_LINES, 2 * ctx + 1) - 1
+                            with open(full, encoding="utf-8",
+                                      errors="replace") as f:
+                                for i, ln in enumerate(f, 1):
+                                    total = i
+                                    if lo <= i <= hi:
+                                        out.append(
+                                            ln.rstrip("\n")[:CODE_MAX_COLS])
+                            ok = True
+                    except OSError:
+                        ok = False
+                if not ok:
+                    # 막힌 것·없는 것·이진 파일이 **바이트까지 같은 404** 다.
+                    # 갈라 놓으면 그 차이가 곧 목록이 된다.
+                    self._send(404, "text/plain", b"not found")
+                else:
+                    # 돌려주는 path 는 입력이 아니라 **정규화된 실경로**다.
+                    # 입력을 되비추면 그 글자가 화면에 들어가는데, 이 경로의
+                    # 출처는 터미널 원문(에이전트가 쓴 글자)이다.
+                    self._json({"path": os.path.relpath(
+                                    full, os.path.realpath(ROOT)
+                                ).replace(os.sep, "/"),
+                                "line": line, "from": lo,
+                                "to": min(hi, total), "total": total,
+                                "lines": out})
             elif parsed.path == "/api/doc":
                 doc_id = qs.get("id", [""])[0]
                 path = locate(doc_id)
@@ -11777,6 +11984,8 @@ def cmd_serve(args):
                 self._send(404, "text/plain", b"not found")
 
         def do_POST(self):
+            if self._host_guard():
+                return
             parsed = urllib.parse.urlparse(self.path)
             try:
                 n = int(self.headers.get("Content-Length", 0))
@@ -12085,9 +12294,12 @@ def cmd_serve(args):
     # 그 사실을 알린다 (REQ-20260826-011). 지문은 **서버가 메모리에 들고 도는
     # 것 전부**다 — bin/s9 와 채팅 판정자가 있는 bin/s9-audit-prompt
     # (REQ-20260828-025).
-    global SERVE_CODE_STAMP, SERVE_STARTED
+    global SERVE_CODE_STAMP, SERVE_STARTED, SERVE_HOST
     SERVE_CODE_STAMP = running_code_stamp()
     SERVE_STARTED = now_iso()
+    # 실제로 바인드한 주소를 박아 둔다 (REQ-20260828-028) — 루프백 전제에
+    # 기대는 라우트(/api/code)와 리바인딩 방어가 이 값 하나로 갈린다.
+    SERVE_HOST = args.host
 
     http.server.ThreadingHTTPServer.request_queue_size = 32
     # **포트를 실제로 잡은 뒤에 지문을 남긴다** (REQ-20260828-010).

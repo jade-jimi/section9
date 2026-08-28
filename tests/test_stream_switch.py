@@ -258,8 +258,12 @@ class Screen(unittest.TestCase):
         vis = self.fn("applyStreamVisibility")
         self.assertIn('[data-tab="stream"]', vis)
         self.assertRegex(vis, r"hidden\s*=\s*!\s*streamOn\(\)")
-        # 화면을 세우는 자리에서 실제로 불려야 한다 — 정의만 있으면 죽은 코드다
-        self.assertIn("applyStreamVisibility();", self.fn("boot"))
+        # 화면을 세우는 자리에서 실제로 불려야 한다 — 정의만 있으면 죽은 코드다.
+        # REQ-20260828-039 에서 그 자리가 boot() 에서 loadWhoami() 로 옮겨졌다:
+        # 신원이 **늦게 도착해도** 탭이 따라오려면, 부르는 자리가 신원을 받는
+        # 자리여야 한다. 부트는 그 함수를 부른다.
+        self.assertIn("applyStreamVisibility();", self.fn("loadWhoami"))
+        self.assertIn("loadWhoami()", self.fn("boot"))
 
     # 북마크·뒤로가기로 #stream 에 들어와도 빈 탭에 앉히지 않는다
     def test_hash_falls_back_to_board(self):

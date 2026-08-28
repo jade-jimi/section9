@@ -3347,7 +3347,17 @@ function updateProfileBadge(){
 
 function renderWhoami(){
   const el = $("#whoami"), w = window.__whoami || {};
-  if (!el || !w.user) return;
+  if (!el) return;
+  /* **신원을 못 받은 것과 미등록 계정은 다른 일이다** (REQ-20260828-039).
+     예전엔 못 받으면 이 자리가 그냥 비었다 — 빈 자리는 "아무 문제 없음" 으로
+     읽힌다. 조용히 물러나지 않고, 그 자리에서 다시 받는 길을 준다. */
+  if (!w.user){
+    if (!supplyLost("whoami")) return;
+    el.className = "who warn";
+    // 다시 받는 길은 바로 위 칩이 준다 — 같은 행동을 두 곳에 두지 않는다.
+    el.textContent = "⚠ 내 계정을 받지 못했습니다";
+    return;
+  }
   if (!w.registered){
     el.className = "who warn";
     el.innerHTML = `⚠ 미등록 계정 <b>${esc(w.user)}</b> @ ${esc(w.machine || "")} — 터미널에서 <code>s9 user add ${esc(w.user)}</code> 로 등록하세요`;
@@ -3381,10 +3391,12 @@ const ocSetAck = v => { try{
 
 async function checkOldCode(){
   let d = null;
-  try{
+  // 나중 것(prio 1) — 판이 그려진 뒤에 줄을 선다. 못 받아도 안 알린다:
+  // 20초 폴이 스스로 메우고, 무응답은 "코드 낡음" 이 아니다 (아래 판정 참조).
+  d = await loadSupply("serveinfo", async () => {
     const r = await fetch("/api/serveinfo", {cache: "no-store"});
-    if (r.ok) d = await r.json();
-  }catch(e){}
+    return r.ok ? await r.json() : null;
+  }, {prio: 1, tries: 1, quiet: true});
   // 강제 표시는 **가장 긴 경우**를 보여준다 — 두 파일이 다 바뀐 줄이 헤더를
   // 얼마나 먹는지가 이 훅으로 재려던 것이다 (REQ-20260828-025).
   if (OC_FORCE) d = {started: new Date(Date.now() - 4.2e6).toISOString(),
@@ -3509,10 +3521,10 @@ const gwSetAck = v => { try{
 
 async function checkGuard(){
   let d = null;
-  try{
+  d = await loadSupply("serveguard", async () => {
     const r = await fetch("/api/serveguard", {cache: "no-store"});
-    if (r.ok) d = await r.json();
-  }catch(e){}
+    return r.ok ? await r.json() : null;
+  }, {prio: 1, tries: 1, quiet: true});
   if (GW_FORCE) d = gwDemo(GW_FORCE);
   // 서버가 죽어 있는 동안 이 폴은 실패한다 — 그 실패를 사건 없음으로 읽으면
   // 알림은 정확히 필요한 순간에 침묵한다. 직전 판정을 두고 다음 폴을 기다린다.
@@ -3604,6 +3616,18 @@ function renderSvChip(){
   const el = $("#sv-chip");
   if (!el) return;
   const items = [];
+  /* 못 받은 값은 **여기서 한 번은 보인다** (REQ-20260828-039). 새 띠를 세우지
+     않는다 — 헤더엔 이미 알림 줄이 둘 있고, 손이 필요한 서버 사실의 자리가
+     바로 이 칩이다. 누르면 그 자리에서 다시 받는다. 화면 설정처럼 제 자리가
+     없는 값이 조용히 사라지지 않게 하는 것이 이 칩의 몫이다. */
+  const lost = Object.keys(SUPPLY).filter(k => supplyLost(k) && !SUPPLY[k].quiet);
+  if (lost.length)
+    items.push({tone: "sv-bad", mark: "▲",
+      label: lost.length === 1 ? supplyLabel(lost[0]) + " 못 받음"
+                               : `못 받은 것 ${lost.length}개`,
+      title: lost.map(k => eul(supplyLabel(k)) + " 받지 못했습니다").join(" · ")
+             + " — 눌러서 다시 받습니다",
+      act: () => lost.forEach(supplyAgain)});
   const oc = ocInfo;
   if (oc && oc.stale && ocAck() === oc.started)
     items.push({tone: "sv-warn", mark: "▲", label: "서버 재기동 필요",
@@ -3755,9 +3779,189 @@ function syncMineToggle(){
   const el = $("#f-mine"), me = viewMe();
   el.disabled = !me;
   el.checked = mineActive();
+  // 못 받은 것을 미등록이라고 부르지 않는다 (REQ-20260828-039) — 등록하라는
+  // 안내는 등록이 실제로 안 돼 있을 때만 맞는 말이다.
   $("#mine-wrap").title = me
     ? `@${me}가 active 멤버인 프로젝트의 문서만 표시 (Board·Docs·Graph 공통)`
-    : "미등록 계정 — s9 user add 로 등록하면 내 프로젝트만 볼 수 있습니다";
+    : supplyLost("whoami")
+      ? "내 계정을 받지 못했습니다 — 헤더의 다시 받기를 눌러 보세요"
+      : "미등록 계정 — s9 user add 로 등록하면 내 프로젝트만 볼 수 있습니다";
+}
+
+/* ── 받아 오는 값은 전부 이 문을 지난다 (REQ-20260828-039-62x6) ────────────
+
+   화면이 뜨는 순간 부트는 여덟 개 남짓한 API 를 부른다. 예전엔 자리마다
+   `catch(e){}` 로 제각각 물러났고, **물러난 사실이 화면 어디에도 안 남았다.**
+   실제로 잡힌 판: `/api/users` 가 끊기면 저장해 둔 화면 설정(skin·tone)이 안
+   실려 기본 스킨으로 떴다 — 사용자에게는 "가끔 내 화면 설정이 초기화된다" 로
+   보인다. 목록이 끊기면 열 다섯이 "…없음" 으로 서서 "할 일이 없다" 로 읽혔다.
+
+   REQ-20260828-027 이 전이표 하나에 세운 문법을 값 전체로 넓힌 것이 이 문이다.
+
+   ① **한꺼번에 안 던진다.** 여덟 개를 동시에 던지면 이 환경(WSL 로컬 중계)에서
+      120 요청 중 25~30건이 `Connection reset by peer` 다(실측). 하나씩이면 2%.
+      그래서 동시에 도는 수를 SUPPLY_LANES 로 묶는다.
+   ② **첫 화면 것과 나중 것을 가른다.** 신원·화면 설정은 그리기 전에, 목록은
+      판을 채울 때(prio 0), usage·serveinfo·serveguard 는 판이 그려진 뒤에
+      (prio 1) 줄을 선다. 첫 묶음도 서로 기다리지 않는다 — 목록은 신원과
+      무관하다(열람 격리는 서버가 한다).
+   ③ **물러섰다 다시 받는다.** 400·800ms.
+   ④ **그래도 못 받으면 그 사실을 남긴다.** 화면이 "없다"와 "안 왔다"를 가르는
+      근거가 이것이고, 조용히 기본값으로 떨어지는 자리는 이제 없다.
+
+   그리고 **첫 그림은 이 문을 기다리지 않는다** — FIRST_PAINT_GRACE 만큼만
+   봐 주고 그 뒤엔 있는 것으로 그린다. 늦게 온 값은 도착한 자리에서 스스로
+   화면을 고친다. */
+const SUPPLY = {};                    // 이름 → {state:'wait'|'ok'|'lost', tries, at, quiet}
+const SUPPLY_LANES = 3;               // 동시에 도는 요청 수 상한
+const SUPPLY_BACKOFF = [400, 800];    // 물러서는 폭 (마지막 시도 뒤엔 안 쉰다)
+const FIRST_PAINT_GRACE = 600;        // 첫 그림이 값을 기다려 주는 최대 시간(ms)
+let supplyBusy = 0, supplyOpen = false;
+const supplyQ = [];
+
+/* 손 없이 이 상황을 만드는 스위치 (진단·헤드리스 캡처용 — ?nosse·?conn= 과 같은
+   어휘). 값은 **몇 번을 실패시킬지**다:
+     ?apifail=users          계속 실패 — 못 받은 화면 그 자체
+     ?apifail=users:once     첫 한 번만 — 스스로 낫는 것을 본다
+     ?apifail=users:3        처음 세 번 — 부트는 못 받고, 손으로 누른 `다시 받기` 가 낫는다
+   `?apifail=users,catalog` 처럼 쉼표로 여럿. */
+const API_FAIL = new Map();
+(function(){
+  for (const raw of (new URLSearchParams(location.search).get("apifail") || "").split(",")){
+    const [k, mode] = raw.split(":");
+    if (k && k.trim())
+      API_FAIL.set(k.trim(), mode === "once" ? 1
+        : (/^\d+$/.test(mode || "") ? +mode : Infinity));
+  }
+  // ?transfail 은 027 이 쓰던 이름 그대로 둔다 — 그 건의 재현 절차가 문서에 적혀 있다.
+  if (/[?&]transfail\b/.test(location.search))
+    API_FAIL.set("trans", /[?&]transfail=once\b/.test(location.search) ? 1 : Infinity);
+})();
+
+const supplyState = k => (SUPPLY[k] || {}).state || "";
+const supplyLost = k => supplyState(k) === "lost";
+const supplyLabel = k => (SUPPLY_JOBS[k] || {}).label || k;
+// 받침에 따라 을/를 — 문구를 값 이름으로 짓기 때문에 필요하다
+const eul = w => { const s = String(w), c = s.charCodeAt(s.length - 1);
+  return s + (c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 === 0 ? "를" : "을"); };
+
+function supplyPump(){
+  while (supplyBusy < SUPPLY_LANES){
+    const i = supplyQ.findIndex(j => !j.prio || supplyOpen);
+    if (i < 0) return;
+    const job = supplyQ.splice(i, 1)[0];
+    supplyBusy++;
+    job.run().then(supplyFree, supplyFree);
+  }
+}
+function supplyFree(){ supplyBusy--; supplyPump(); }
+// 나중 것은 판이 그려진 뒤에야 줄을 선다 — 첫 화면을 밀지 않기 위한 문이다.
+function supplyRelease(){ supplyOpen = true; supplyPump(); }
+
+async function loadSupply(key, fetcher, opts){
+  const o = opts || {};
+  const s = SUPPLY[key] || (SUPPLY[key] = {state: "wait", tries: 0, at: 0});
+  if (s.wait) return s.wait;   // 같은 값을 두 곳에서 부르면 한 번만 나간다
+  s.state = "wait"; s.quiet = !!o.quiet;
+  s.wait = new Promise(res => {
+    supplyQ.push({prio: o.prio || 0, run: async () => {
+      const n = o.tries || 3;
+      for (let i = 0; i < n; i++){
+        try{
+          // 진단 스위치의 셈은 tries 와 따로 센다 — `다시 받기` 가 tries 를
+          // 0 으로 되돌리므로, 같이 쓰면 손으로 눌러도 영영 안 낫는다.
+          const m = API_FAIL.get(key);
+          if (m !== undefined && (s.hits = (s.hits || 0) + 1) <= m)
+            throw new Error("진단: " + key + " 를 일부러 못 받게 했다");
+          const d = await fetcher();
+          // 못 받은 것을 성공으로 치면 다시 받을 길이 닫힌다 — fetcher 는
+          // 쓸 수 없는 답(비었거나 모양이 다른 것)을 null 로 돌려준다.
+          if (d != null){ s.state = "ok"; s.at = Date.now(); s.tries = 0; res(d); return; }
+        }catch(e){ /* 다음 시도로 */ }
+        s.tries++;
+        if (i < n - 1) await new Promise(r => setTimeout(r, SUPPLY_BACKOFF[i] || 1200));
+      }
+      s.state = "lost"; s.at = Date.now(); res(null);
+    }});
+    supplyPump();
+  });
+  try{ return await s.wait; } finally{ s.wait = null; supplyRender(); }
+}
+
+/* 값마다 **사용자에게 말할 이름**을 준다. 못 받았을 때 화면에 적히는 말이고,
+   `다시 받기` 가 다시 부르는 자리다. quiet 인 값(usage·serveinfo·serveguard)은
+   주기 폴이 스스로 메우므로 이름을 안 띄운다 — 알릴 것과 안 알릴 것의 경계가
+   여기 한 곳에 있다. */
+const SUPPLY_JOBS = {
+  whoami:   {label: "내 계정",          run: () => loadWhoami().then(applyMyUI)},
+  users:    {label: "내 화면 설정",     run: () => loadUsers().then(applyMyUI)},
+  catalog:  {label: "문서 목록",        run: () => refreshCatalog(true)},
+  projects: {label: "프로젝트 목록",    run: () => refreshProjects()},
+  trans:    {label: "상태 옮기기 목록", run: () => transRefill(selectedDoc)},
+};
+
+async function loadWhoami(){
+  const d = await loadSupply("whoami", async () => {
+    const r = await fetch("/api/whoami");
+    const j = r.ok ? await r.json() : null;
+    return (j && j.user) ? j : null;
+  });
+  if (d){ window.__whoami = d; updateTitle(); applyStreamVisibility(); }
+  renderWhoami();
+  return d;
+}
+
+async function loadUsers(){
+  const d = await loadSupply("users", async () => {
+    const r = await fetch("/api/users");
+    const j = r.ok ? await r.json() : null;
+    return (j && Array.isArray(j.users)) ? j : null;
+  });
+  if (d) window.__users = d.users;
+  return d;
+}
+
+/* 내 화면 설정(skin·tone·density)은 **그리기 전에** 필요하고, 못 받았을 때
+   기본값으로 덮으면 사용자는 "설정이 초기화됐다" 로 읽는다 — 이 건의 증상이
+   정확히 그것이다. 그래서 신원과 목록이 **둘 다 손에 있을 때만** 적용하고,
+   그 전에는 initTheme 이 깔아 둔 값(localStorage·기본)을 건드리지 않는다. */
+function applyMyUI(){
+  if (!window.__users || !window.__whoami) return;
+  const me = getMe();
+  const cfg = me ? ((window.__users.find(x => x.name === me) || {}).config || null) : null;
+  applyUISettings(cfg);
+  updateProfileBadge();
+}
+
+/* 못 받은 값을 **그 자리에서** 말하는 한 줄. 문서 화면의 전이 버튼 줄과 같은
+   어휘다(.transwait 회색 보조문 + .deed 텍스트 버튼) — 새 배지도 색면도 없다. */
+function supplyLine(key, asName){
+  // 한 값이 두 자리를 먹이면(예: /api/users → 내 화면 설정 · 사용자 목록) 그
+  // 자리에서 부르는 이름으로 말한다 — 행동(`다시 받기`)은 같은 말로 둔다.
+  const lost = supplyLost(key), name = asName || supplyLabel(key);
+  return `<div class="acts" style="margin:18px 0 0">`
+    + `<span class="transwait" role="status">${esc(eul(name))} `
+    + (lost ? "받지 못했습니다" : "불러오는 중…") + `</span>`
+    + (lost ? `<button class="deed" data-resupply="${esc(key)}"`
+        + ` title="${esc(eul(name))} 다시 받아 옵니다">다시 받기</button>` : "")
+    + `</div>`;
+}
+
+// 못 받은 값이 늘거나 줄면 헤더가 그 사실을 다시 쓴다 (칩 · 신원 자리)
+function supplyRender(){ renderSvChip(); renderWhoami(); }
+
+/* 손으로 누른 `다시 받기` — 횟수를 처음부터 세고(진단 스위치의 once 도 풀린다)
+   그 값을 쓰는 화면을 다시 그린다. */
+async function supplyAgain(key){
+  const j = SUPPLY_JOBS[key];
+  if (!j) return;
+  const s = SUPPLY[key] || (SUPPLY[key] = {state: "wait", tries: 0, at: 0});
+  s.tries = 0; s.state = "wait";
+  supplyRender();
+  if (!catalog.length && tab !== "settings") render();   // "불러오는 중…" 으로 바뀐다
+  await j.run();
+  supplyRender();
+  if (tab !== "settings") render();
 }
 
 /* 전이표는 **한 번 놓치면 끝나는 값이 아니다** (REQ-20260828-027).
@@ -3771,37 +3975,27 @@ function syncMineToggle(){
    그래서 `TRANS` 는 그 세션 내내 빈 채로 남고, 문서 화면은 아무 말 없이 상태
    옮기기 버튼을 안 그렸다 — 사용자는 "이 문서는 옮길 수 없구나"로 읽는다.
 
-   표를 받는 문은 이제 여기 하나다. 물러섰다 세 번까지 다시 받고, 그래도 못
-   받으면 **그 사실을 남긴다**(transFailed) — 화면이 "없다"와 "아직 안 왔다"를
-   가르는 근거가 이것이다. */
-let transFailed = false, transWait = null, transTries = 0, transAt = 0;
+   표를 받는 문은 여기 하나다. 물러섰다 다시 받고, 그래도 못 받으면 **그 사실을
+   남긴다**(transFailed) — 화면이 "없다"와 "아직 안 왔다"를 가르는 근거가
+   이것이다. 물러서기·재시도·기록은 REQ-20260828-039 에서 공통 문(loadSupply)
+   으로 옮겼다: 이 화면이 받아 오는 값 전부가 같은 규칙을 탄다. */
+let transFailed = false, transWait = null, transAt = 0;
 const transReady = () => Object.keys(TRANS).length > 0;
-// 손 없이 이 상황을 만드는 스위치 (진단·헤드리스 캡처용 — ?nosse·?conn= 과 같은 어휘).
-// ?transfail 은 계속 실패, ?transfail=once 는 첫 번만 실패하고 회복을 보여준다.
-const TRANS_FAIL = /[?&]transfail\b/.test(location.search);
-const TRANS_FAIL_ONCE = /[?&]transfail=once\b/.test(location.search);
 async function loadTrans(force){
   if (transReady() && !force) return TRANS;
-  if (transWait) return transWait;
-  transWait = (async () => {
-    for (let i = 0; i < 3; i++){
-      try{
-        if (TRANS_FAIL && !(TRANS_FAIL_ONCE && transTries++))
-          throw new Error("진단: 상태 옮기기 목록을 일부러 못 받게 했다");
-        const r = await fetch("/api/transitions");
-        if (r.ok){
-          const d = await r.json();
-          // 빈 객체는 받은 것이 아니다 — 그걸 성공으로 치면 다시 받을 길이 닫힌다.
-          if (d && Object.keys(d).length){ TRANS = d; transFailed = false; return TRANS; }
-        }
-      }catch(e){ /* 다음 시도로 */ }
-      await new Promise(r2 => setTimeout(r2, 400 * (i + 1)));
-    }
-    transFailed = true;
+  if (transWait) return transWait.then(() => TRANS);
+  transWait = loadSupply("trans", async () => {
+    const r = await fetch("/api/transitions");
+    if (!r.ok) return null;
+    const d = await r.json();
+    // 빈 객체는 받은 것이 아니다 — 그걸 성공으로 치면 다시 받을 길이 닫힌다.
+    return (d && Object.keys(d).length) ? d : null;
+  });
+  try{
+    const d = await transWait;
+    if (d){ TRANS = d; transFailed = false; } else transFailed = true;
     return TRANS;
-  })();
-  transWait.then(() => { transAt = Date.now(); }, () => { transAt = Date.now(); });
-  try{ return await transWait; } finally{ transWait = null; }
+  } finally{ transWait = null; transAt = Date.now(); }
 }
 
 /* 표가 도착하면 **보고 있던 문서를 다시 그린다.** 사람이 새로고침해서 스스로
@@ -3814,32 +4008,39 @@ function transRefill(id){
 }
 
 async function boot(){
-  await loadTrans();
-  try{
-    // 신원은 서버가 파생 — 표시 라벨 1회 + 등록 계정의 저장 설정 적용
-    window.__whoami = await (await fetch("/api/whoami")).json();
-    updateTitle();
-    refreshUsage();
-    setInterval(() => { if (!document.hidden) refreshUsage(); }, 60000);
-    renderWhoami();
-    applyStreamVisibility();   // 스트림을 끈 사용자에겐 Stream 탭 자체가 없다
-    let cfg = null;
-    try{
-      const u = await (await fetch("/api/users")).json();
-      window.__users = u.users;
-      cfg = ((u.users || []).find(x => x.name === getMe()) || {}).config || null;
-    }catch(e){}
-    applyUISettings(cfg);
-    updateProfileBadge();
-  }catch(e){}
+  /* 첫 묶음은 **그리기 전에 필요한 것**만이다 (REQ-20260828-039).
+     예전엔 신원 → 사용자 → 프로젝트 → 목록이 한 줄로 늘어서서 목록이 여섯
+     번째로야 출발했다 — 보드 첫 그림이 640ms 였다. 목록은 신원을 안 기다려도
+     된다(열람 격리는 서버가 한다). 다섯을 같이 던지되 통로가 동시 3개로 묶고,
+     첫 그림은 그중 늦는 것을 FIRST_PAINT_GRACE 까지만 봐 준다. */
+  const grace = p => Promise.race([p, new Promise(r => setTimeout(r, FIRST_PAINT_GRACE))]);
+  const pWho = loadWhoami();       // 신원 — 제목 · 스트림 탭 가시성
+  const pUsr = loadUsers();        // 내 화면 설정 — 그리기 전에 필요하다
+  const pCat = refreshCatalog();   // 판을 채울 것
+  const pPrj = refreshProjects();  // 프로젝트 필터
+  const pTr  = loadTrans();        // 상태 옮기기 목록 · 드롭 대상
+  // 늦게 온 값은 도착한 자리에서 스스로 화면을 고친다 — 사람이 새로고침하게
+  // 두지 않는다. (whoami·users 는 loadWhoami/applyMyUI 가, 전이표는 027 이.)
+  Promise.all([pWho, pUsr]).then(applyMyUI);
+  await Promise.all([grace(pWho), grace(pUsr)]);
+  applyMyUI();
   applyRoute(location.hash, false);  // 초기 URL 해시(#docs/REQ-... 등) 반영
   if (!location.hash) history.replaceState(null, "", "#" + tab);  // 초기 진입점 고정(뒤로가기 기준)
-  await refreshProjects();
-  await refreshCatalog();
+  await Promise.all([grace(pCat), grace(pPrj), grace(pTr)]);
   // ?project=slug — 공유 가능한 프로젝트 단위 뷰(보드/그래프가 그 프로젝트로 필터)
   const qp = new URLSearchParams(location.search).get("project");
   if (qp && [...$("#f-project").options].some(o => o.value === qp)) $("#f-project").value = qp;
   render();
+  /* 목록이 봐 준 시간 안에 못 왔으면 판은 "불러오는 중…" 으로 서 있다. 늦게
+     도착하든 끝내 못 받든, **결말이 정해진 자리에서 판을 다시 그린다** — 받는
+     중이라고 써 놓고 아무도 안 받고 있는 화면이 이 계열 결함의 원형이다. */
+  const paintedWith = supplyState("catalog");
+  pCat.then(() => { if (supplyState("catalog") !== paintedWith) render(); });
+  /* 여기서부터가 **나중 것**이다 — 판이 그려진 뒤에 줄을 선다. usage 는 헤더
+     칩, serveinfo·serveguard 는 알림 줄이라 첫 그림을 붙잡을 이유가 없다. */
+  supplyRelease();
+  refreshUsage();
+  setInterval(() => { if (!document.hidden) refreshUsage(); }, 60000);
   setTimeout(docPickDiag, 900);   // ?pick=<문서id> — 진단·헤드리스 캡처용 (셸이 선 뒤)
   shortRefDiag();  // ?shortref — 축약 풀기 계약을 이 화면에서 실제로 재 본다
   anchorBind();    // 구간 메모 팝업 (REQ-20260827-072)
@@ -3974,35 +4175,48 @@ function pushRoute(){
   if (location.hash !== h){ history.pushState(null, "", h); }
 }
 
-async function refreshProjects(){
-  try{
-    const d = await (await fetch("/api/projects?" + meQ())).json();
-    projects = d.projects || [];
-    window.__projects = projects;
-  }catch(e){ /* 구버전 서버 등 — 프로젝트 API 없으면 무시 */ }
+/* 프로젝트·목록도 공통 문을 지난다 (REQ-20260828-039). 예전엔 둘 다 빈 catch 로
+   물러나 **아무 일 없었던 것처럼** 보였다 — 목록이 끊긴 판은 "할 일이 없는 판"
+   과 화면에서 구별되지 않았다. 주기 폴(rerender)은 다음 주기가 곧 오므로 두 번만
+   시도한다; 부트의 첫 요청은 세 번까지 물러서며 받는다. */
+async function refreshProjects(rerender){
+  const d = await loadSupply("projects", async () => {
+    const r = await fetch("/api/projects?" + meQ());
+    const j = r.ok ? await r.json() : null;
+    return (j && Array.isArray(j.projects)) ? j : null;
+  }, {tries: rerender ? 2 : 3});
+  if (!d) return;   // 구버전 서버·끊긴 연결 — SUPPLY 가 그 사실을 들고 있다
+  projects = d.projects || [];
+  window.__projects = projects;
 }
 
 async function refreshCatalog(rerender){
-  try{
-    const fresh = await (await fetch("/api/catalog?" + meQ())).json();
-    const before = JSON.stringify(projects);
-    await refreshProjects();  // 프로젝트는 자주 안 바뀌므로 catalog와 함께 갱신
-    const changed = JSON.stringify(fresh) !== JSON.stringify(catalog)
-                 || JSON.stringify(projects) !== before;
-    catalog = fresh;
-    /* 전이표를 못 받은 채로 도는 화면을 배경 갱신이 조용히 메운다 — 보드의
-       드롭 대상 표시(.dropok)도 같은 표를 읽는다 (REQ-20260828-027).
-       방금 실패한 직후에는 손대지 않는다(10초 유예): 부트가 막 세 번 실패하고
-       물러난 자리에 곧바로 네 번째를 걸면, 문서 화면이 "받는 중" 이라고 쓴
-       채로 그 시도가 끝나 버려 **아무도 안 받고 있는데 받는 중이라고 말하는**
-       화면이 된다. 실제로 그렇게 찍혔다. */
-    if (!transReady() && Date.now() - transAt > 10000) transRefill(selectedDoc);
-    rebuildIdMap();   // uid 축약 표시의 겹침 판정 갱신 (REQ-20260825-031)
-    if (changed){ fillFilters(); graph = null; }
-    // Settings는 폼 입력 중일 수 있다 — 폴링발 재렌더로 DOM(입력값)을 파괴하지
-    // 않는다. 탭을 떠날 때 render()가 최신 catalog로 다시 그린다 (REQ-055 E7).
-    if (rerender && changed){ auditCache = null; if (tab !== "settings") render(); }
-  }catch(e){ /* 서버 재시작 중 등 — 다음 주기에 재시도 */ }
+  const fresh = await loadSupply("catalog", async () => {
+    const r = await fetch("/api/catalog?" + meQ());
+    const j = r.ok ? await r.json() : null;
+    return Array.isArray(j) ? j : null;
+  }, {tries: rerender ? 2 : 3});
+  /* 전이표를 못 받은 채로 도는 화면을 배경 갱신이 조용히 메운다 — 보드의
+     드롭 대상 표시(.dropok)도 같은 표를 읽는다 (REQ-20260828-027).
+     방금 실패한 직후에는 손대지 않는다(10초 유예): 부트가 막 세 번 실패하고
+     물러난 자리에 곧바로 네 번째를 걸면, 문서 화면이 "받는 중" 이라고 쓴
+     채로 그 시도가 끝나 버려 **아무도 안 받고 있는데 받는 중이라고 말하는**
+     화면이 된다. 실제로 그렇게 찍혔다. */
+  if (!transReady() && Date.now() - transAt > 10000) transRefill(selectedDoc);
+  if (!fresh) return fresh;   // 못 받았다 — 빈 판으로 덮지 않는다. 화면이 그렇게 말한다.
+  const before = JSON.stringify(projects);
+  // 프로젝트는 자주 안 바뀌므로 catalog 와 함께 갱신한다. 다만 방금(1초 안에)
+  // 받았으면 건너뛴다 — 부트가 나란히 던진 것과 겹쳐 같은 값을 두 번 받았다.
+  if (Date.now() - ((SUPPLY.projects || {}).at || 0) > 1000) await refreshProjects(rerender);
+  const changed = JSON.stringify(fresh) !== JSON.stringify(catalog)
+               || JSON.stringify(projects) !== before;
+  catalog = fresh;
+  rebuildIdMap();   // uid 축약 표시의 겹침 판정 갱신 (REQ-20260825-031)
+  if (changed){ fillFilters(); graph = null; }
+  // Settings는 폼 입력 중일 수 있다 — 폴링발 재렌더로 DOM(입력값)을 파괴하지
+  // 않는다. 탭을 떠날 때 render()가 최신 catalog로 다시 그린다 (REQ-055 E7).
+  if (rerender && changed){ auditCache = null; if (tab !== "settings") render(); }
+  return fresh;
 }
 
 function fillFilters(){
@@ -4271,6 +4485,14 @@ function render(){
   if (tab === "stream"){ renderStream(); return; }
   if (tab === "terminal"){ renderTerminal(); return; }
   if (tab === "settings"){ renderSettings(); return; }
+  /* **목록을 못 받은 판과 정말 빈 판은 다른 화면이다** (REQ-20260828-039).
+     예전엔 목록 요청이 끊기면 열 다섯이 "…없음" 으로 서서 "할 일이 없다" 로
+     읽혔다 — 없는 것과 안 온 것이 같아 보이던 REQ-027 과 같은 결함이다. */
+  if (!catalog.length && supplyState("catalog") !== "ok"){
+    $("#count").textContent = "";
+    $("#view").innerHTML = supplyLine("catalog");
+    return;
+  }
   const bodyMode = tab === "docs" && $("#q-body").checked && $("#q").value.trim();
   const rows = filtered(!!bodyMode);
   // 문서 카운터는 "지금 좁혀져 있다"는 사실이 있을 때만 정보다 (REQ-20260825-085).
@@ -6352,7 +6574,10 @@ async function refreshUsage(){
   const el = $("#usage-chip");
   if (!el) return;
   try{
-    const d = await (await fetch("/api/claude/usage")).json();
+    const d = await loadSupply("usage", async () => {
+      const r = await fetch("/api/claude/usage");
+      return r.ok ? await r.json() : null;
+    }, {prio: 1, tries: 1, quiet: true});
     if (!d || (!d.ok && !d.stale)){
       // 폭 0 인 빈 칩에 키보드가 멈추면 아무 일도 안 일어나는 정거장이 된다
       // (교차 리뷰 지적 6) — 보여 줄 것이 없으면 tab 순서에서도 빠진다.
@@ -9957,9 +10182,10 @@ async function postJSON(url, body){
 let settingsSection = "display";  // display | account | users
 
 async function renderSettings(){
-  let data = {users: []};
-  try{ data = await (await fetch("/api/users")).json(); }catch(e){}
-  window.__users = data.users;
+  // 같은 값은 같은 문을 지난다 (REQ-20260828-039) — 여기서만 조용히 빈 목록으로
+  // 물러나면 "등록된 사용자가 없다" 는 거짓말이 화면에 선다.
+  await loadUsers();
+  const data = {users: window.__users || []};
   updateProfileBadge();
   const me = getMe();   // 서버 파생 whoami (미등록이면 "")
   const meAdmin = isAdmin();
@@ -10024,8 +10250,11 @@ function renderSettingsSection(meAdmin){
         <span class="st">${esc(u.role)}</span> <b>${esc(u.display||u.name)}</b>
         <span class="path">@${esc(u.name)} · ${esc((u.registered||"").slice(0,10))}</span>${
           profileMissing(u).length ? `<span class="pbadge" title="프로필 미기재: ${esc(profileMissing(u).join(" · "))}">⚠</span>` : ""}</div>`).join("");
-    v.innerHTML = `<h1 style="margin:0 0 10px">사용자 관리</h1>
-      <div class="ulist">${list}</div>
+    // 못 받은 목록을 "등록된 사용자가 없다" 로 그리지 않는다 (REQ-20260828-039)
+    v.innerHTML = `<h1 style="margin:0 0 10px">사용자 관리</h1>`
+      + (supplyLost("users") ? supplyLine("users", "사용자 목록")
+                             : `<div class="ulist">${list}</div>`)
+      + `
       <div class="cfg-h">새 사용자 등록</div>
       <div class="uform" style="max-width:340px">
         <input id="nu-name" type="text" placeholder="계정명 (영문/숫자/._-)">
@@ -10793,7 +11022,7 @@ function showUserForm(u, host, isAdminEdit){
     const res = await postJSONRaw("/api/user/config", {name: u.name, key, value: val});
     if (!res.ok){ smMsg.className = "secmsg bad"; smMsg.textContent = "✕ " + res.error; return; }
     smMsg.textContent = said;
-    try{ window.__whoami = await (await fetch("/api/whoami")).json(); }catch(e){}
+    await loadWhoami();
     applyStreamVisibility();
   }
   if (smSel){
@@ -11488,6 +11717,14 @@ document.addEventListener("click", e => {
     rt.disabled = true; rt.textContent = "받는 중…";
     transFailed = false;                 // 다시 "받는 중" 으로 되돌린다
     transRefill(rt.dataset.retrans);
+    return;
+  }
+  /* 못 받은 값을 그 자리에서 다시 받는다 (REQ-20260828-039) — 문서 화면의
+     `data-retrans` 와 같은 어휘를 값 전체로 넓힌 것이다. */
+  const rs = e.target.closest("[data-resupply]");
+  if (rs){
+    rs.disabled = true; rs.textContent = "받는 중…";
+    supplyAgain(rs.dataset.resupply);
     return;
   }
   /* 터미널 안의 문서 언급 (REQ-20260828-021 · -022). `[data-doc]` 보다 **먼저**
