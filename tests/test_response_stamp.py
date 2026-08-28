@@ -28,7 +28,10 @@ AGENTS = os.path.join(ROOT, "harness", "claude", "agents")
 
 # 백틱까지 계약이다 — "해시 강조" 는 커밋 해시가 받는 그 강조(인라인 코드)를
 # 뜻한다. 마크다운 제목(#)이 아니다: 한 번 그렇게 읽어 `#` 이 화면에 새어나왔다.
-STAMP_RE = (r"(?<!#\s)`\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) KST - ([\w-]+)\]`")
+# 시간대 이름은 고정이 아니다 (REQ-20260828-024) — 개인 설정 timezone 을
+# 따르므로 KST·EDT·+09 등 무엇이든 올 수 있다. 계약은 "시각 뒤에 시간대
+# 이름이 붙는다" 이지 "KST 다" 가 아니다.
+STAMP_RE = (r"(?<!#\s)`\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([A-Za-z]{2,5}|[+-]\d{2}(?::?\d{2})?) - ([\w-]+)\]`")
 
 
 # 훅은 세션 로그를 남긴다 — 실 vault 를 더럽히지 않게 임시 루트로 격리한다.
@@ -62,7 +65,7 @@ class ResponseStamp(unittest.TestCase):
         """이름이 함께 나온다 — 위임 보고를 리드의 말과 구분할 수 있어야 한다."""
         m = re.search(STAMP_RE, hook("아무 말"))
         self.assertIsNotNone(m)
-        self.assertEqual(m.group(2), "lead")
+        self.assertEqual(m.group(3), "lead")
 
     def test_injected_time_is_real_and_kst(self):
         """주입된 값이 진짜 지금이다 — 지어낸 시각을 규약이 승인하면 안 된다."""
@@ -70,8 +73,8 @@ class ResponseStamp(unittest.TestCase):
         m = re.search(STAMP_RE, ctx)
         self.assertIsNotNone(m)
         got = datetime.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
-        kst = datetime.timezone(datetime.timedelta(hours=9))
-        now = datetime.datetime.now(kst).replace(tzinfo=None)
+        # 이 테스트 환경에는 사용자 설정이 없어 시스템 로컬로 물러선다.
+        now = datetime.datetime.now().astimezone().replace(tzinfo=None)
         self.assertLess(abs((now - got).total_seconds()), 120,
                         "주입 시각이 지금과 다르다 — 고정값이나 다른 시간대다")
 
@@ -100,8 +103,9 @@ class ResponseStamp(unittest.TestCase):
             src = f.read()
         self.assertIn("KST", src)
         self.assertIn("지어내지 마라", src)
-        self.assertIn("date '+%Y-%m-%d %H:%M:%S KST'", src,
-                      "주입이 없는 환경에서 시각을 얻을 방법을 알려줘야 한다")
+        self.assertIn("date '+%Y-%m-%d %H:%M:%S %Z'", src,
+                      "주입이 없는 환경에서 시각을 얻을 방법을 알려줘야 한다 — "
+                      "시간대는 %Z 로 따라가야 한다 (REQ-20260828-024)")
         self.assertIn("lead", src, "응답 주체 이름 규칙이 공통 규약에 없다")
         self.assertIn("KST - lead]`", src, "표기 형태가 규약과 어긋난다")
         self.assertNotIn("# `[2026", src, "제목 기호(#)가 규약에 남아 있다")
