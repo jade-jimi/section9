@@ -3842,8 +3842,9 @@ def chat_audit(text, sender, sid8, doc="", anchor="", as_type=""):
         if _chat_classifier is None:
             import importlib.util
             import importlib.machinery
-            hp = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                              "s9-audit-prompt")
+            # 지문(running_code_stamp)과 **같은 경로**로 로드한다 — 갈리면
+            # 배너가 안 도는 파일을 보게 된다 (REQ-20260828-025).
+            hp = hook_path()
             spec = importlib.util.spec_from_loader(
                 "_s9_audit_prompt",
                 importlib.machinery.SourceFileLoader("_s9_audit_prompt", hp))
@@ -7156,8 +7157,13 @@ HEALTH_FAIL_RE = re.compile(
     re.I)
 
 
-SERVE_CODE_STAMP = {}   # serve 기동 시점의 bin/s9 지문
+SERVE_CODE_STAMP = {}   # serve 기동 시점의 코드 지문 (파일이름 -> 지문)
 SERVE_STARTED = ""      # serve 기동 시각
+
+# 서버가 기동 시점 코드를 **메모리에 들고 도는** 파일들 (REQ-20260828-025).
+# 이름은 지문 파일(state/serve-code.json)에 그대로 쓰이므로 바꾸지 마라 —
+# 옛 지문과 새 지문을 이름으로 맞춰 본다.
+RUNNING_FILES = {"s9": "bin/s9", "hook": "bin/s9-audit-prompt"}
 
 
 def code_stamp(path=None):
@@ -7183,6 +7189,58 @@ def code_is_stale(started, current):
         return False
     return (started.get("mtime"), started.get("size")) != \
            (current.get("mtime"), current.get("size"))
+
+
+def hook_path():
+    """프롬프트 훅(= 채팅 판정자)이 있는 파일.
+
+    chat_audit 이 실제로 로드하는 그 경로여야 한다 — 지문과 로드가 다른
+    파일을 가리키면 배너는 또 엉뚱한 것을 본다."""
+    return os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                        "s9-audit-prompt")
+
+
+def running_code_stamp():
+    """서버가 메모리에 들고 도는 **모든** 코드의 지문 (REQ-20260828-025).
+
+    예전엔 bin/s9 하나만 떴다. 그런데 채팅 판정자(classify)는
+    bin/s9-audit-prompt 에 있고 서버가 첫 채팅 때 한 번 로드해 캐시한다 —
+    **훅만 고치면 배너는 침묵했다.** 실사고가 REQ-20260826-034 다: 첨부 분류
+    고침이 훅에 들어갔는데 1시간 반 낡은 판정자가 채팅을 받아 질문이 요청
+    카드가 됐고, 그때 배너가 뜬 것은 우연히 bin/s9 도 같이 만져지던 덕이었다.
+
+    서버가 들고 도는 것이 그 둘이니 지문도 그 둘이다."""
+    return {"s9": code_stamp(), "hook": code_stamp(hook_path())}
+
+
+def _as_multi(stamp):
+    """옛 단일 지문({mtime,size})을 새 형식으로 맞춘다.
+
+    이 고침 이전에 뜬 서버는 bin/s9 지문만 남겼다. 그 서버를 판정 불가로
+    떨어뜨리면 **정작 낡은 쪽이 조용해진다** — 비교할 수 있는 것은 비교한다."""
+    if not isinstance(stamp, dict) or not stamp:
+        return {}
+    if "mtime" in stamp or "size" in stamp:
+        return {"s9": stamp}
+    return stamp
+
+
+def stale_parts(started, current):
+    """기동 시점과 지금 디스크가 어긋난 파일들 (사람이 읽을 이름으로).
+
+    한쪽에만 있는 이름은 판정하지 않는다 — 옛 서버는 훅 지문을 뜬 적이 없고,
+    뜬 적 없는 것으로 낡음을 단정하면 근거 없는 경고가 된다(code_is_stale 과
+    같은 규율)."""
+    a, b = _as_multi(started), _as_multi(current)
+    if not a or not b:
+        return []
+    return [RUNNING_FILES.get(k, k) for k in RUNNING_FILES
+            if k in a and k in b and code_is_stale(a[k], b[k])]
+
+
+def stamp_is_stale(started, current):
+    """들고 도는 파일 중 **하나라도** 어긋났는가."""
+    return bool(stale_parts(started, current))
 
 
 def _port_owner_pid(port):
@@ -7252,10 +7310,12 @@ def serve_stale():
                 f"그건 기동 지문을 남긴 프로세스(pid {pid}, 죽음)가 아니다 — "
                 f"지금 응답하는 코드가 무엇인지 알 수 없다. "
                 f"`s9 serve --restart` 로 다시 띄워 확실히 하라.")
-    if not code_is_stale(d.get("stamp") or {}, code_stamp()):
+    changed = stale_parts(d.get("stamp") or {}, running_code_stamp())
+    if not changed:
         return ""
     return (f"대시보드 서버(pid {pid}, {d.get('started', '')} 기동)가 옛 코드로 "
-            f"돌고 있다 — 그 뒤 bin/s9 가 바뀌었다. 서버 안에서 도는 것"
+            f"돌고 있다 — 그 뒤 {' · '.join(changed)} 가 바뀌었다. "
+            f"서버 안에서 도는 것"
             f"(채팅 수신·질문 등록·API)은 **고쳐도 반영되지 않는다.** "
             f"`s9 serve --restart` 로 다시 띄워라.")
 
@@ -11238,11 +11298,12 @@ def cmd_serve(args):
                 # 돌고 있는 서버가 낡았는가 (REQ-20260826-011). 판단(재기동)은
                 # 사람 몫이다 — 진행 중 요청·SSE 를 끊는 일이라 서버가 스스로
                 # 결정할 것이 아니다. 여기서는 사실만 내보낸다.
-                cur = code_stamp()
+                cur = running_code_stamp()
                 self._json({"started": SERVE_STARTED,
                             "code_stamp": SERVE_CODE_STAMP,
                             "disk_stamp": cur,
-                            "stale": code_is_stale(SERVE_CODE_STAMP, cur)})
+                            "changed": stale_parts(SERVE_CODE_STAMP, cur),
+                            "stale": stamp_is_stale(SERVE_CODE_STAMP, cur)})
             elif parsed.path == "/api/serveguard":
                 # 대시보드가 왜 죽었는지를 대시보드 안에서 답한다
                 # (REQ-20260826-018). 명세는 그 문서의 decision 노트 —
@@ -11928,9 +11989,11 @@ def cmd_serve(args):
         threading.Thread(target=_port_guard_loop, daemon=True).start()
 
     # 기동 시점의 코드 지문을 박아둔다 — 이후 디스크가 바뀌면 /api/serveinfo 가
-    # 그 사실을 알린다 (REQ-20260826-011).
+    # 그 사실을 알린다 (REQ-20260826-011). 지문은 **서버가 메모리에 들고 도는
+    # 것 전부**다 — bin/s9 와 채팅 판정자가 있는 bin/s9-audit-prompt
+    # (REQ-20260828-025).
     global SERVE_CODE_STAMP, SERVE_STARTED
-    SERVE_CODE_STAMP = code_stamp()
+    SERVE_CODE_STAMP = running_code_stamp()
     SERVE_STARTED = now_iso()
 
     http.server.ThreadingHTTPServer.request_queue_size = 32

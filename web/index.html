@@ -3340,7 +3340,10 @@ async function checkOldCode(){
     const r = await fetch("/api/serveinfo", {cache: "no-store"});
     if (r.ok) d = await r.json();
   }catch(e){}
-  if (OC_FORCE) d = {started: new Date(Date.now() - 4.2e6).toISOString(), stale: true};
+  // 강제 표시는 **가장 긴 경우**를 보여준다 — 두 파일이 다 바뀐 줄이 헤더를
+  // 얼마나 먹는지가 이 훅으로 재려던 것이다 (REQ-20260828-025).
+  if (OC_FORCE) d = {started: new Date(Date.now() - 4.2e6).toISOString(),
+                     stale: true, changed: ["bin/s9", "bin/s9-audit-prompt"]};
   // 무응답은 "코드 낡음"이 아니다 — 재기동 중일 수도 있다. 서버 단절 표시는
   // 터미널 뷰가 따로 한다. 여기서는 직전 판정을 그대로 두고 다음 폴을 기다린다.
   if (!d || typeof d.stale !== "boolean") return;
@@ -3373,9 +3376,14 @@ function renderOldCode(){
   }
   el.hidden = false;
   const at = String(d.started || "").slice(11, 16);
+  // 바뀐 파일은 서버가 알려준 것을 그대로 말한다 (REQ-20260828-025). 예전엔
+  // `bin/s9` 로 못 박혀 있었는데, 지문이 채팅 판정자(bin/s9-audit-prompt)까지
+  // 보게 된 지금 그 문구는 훅만 바뀐 경우에 거짓말이 된다.
+  const chg = Array.isArray(d.changed) && d.changed.length ? d.changed : ["bin/s9"];
   el.innerHTML = `<span class="oc-t"><span class="oc-mark" aria-hidden="true">▲</span>`
     + ` 서버가 옛 코드로 돌고 있습니다</span>`
-    + `<span class="oc-d">${at ? esc(at) + " 기동 이후 " : ""}<code>bin/s9</code> 가 바뀌었습니다`
+    + `<span class="oc-d">${at ? esc(at) + " 기동 이후 " : ""}`
+    + `${chg.map(f => `<code>${esc(f)}</code>`).join(" · ")} 가 바뀌었습니다`
     + ` — 서버 쪽 변경은 재기동해야 동작합니다.</span>`
     + `<span class="oc-act">`
     +   `<span class="oc-note">재기동은 진행 중 요청·실시간 연결을 끊습니다</span>`
