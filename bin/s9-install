@@ -15,10 +15,37 @@ usage: s9-install [--quiet] [--no-claude]
 import json
 import os
 import stat
+import subprocess
 import sys
 
-ROOT = os.environ.get("S9_ROOT") or os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__)))
+
+def main_worktree_root(root):
+    """링크된 git 워크트리에서 실행돼도 **메인 저장소**를 돌려준다.
+
+    전역 `~/.claude/settings.json` 은 워크트리보다 오래 산다 (REQ-20260828-014).
+    워크트리 경로를 심으면 그 디렉토리가 지워진 순간 훅 전부가 조용한 no-op 이
+    된다 — 실사고: 재시작 뒤 세션 바인딩이 안 써져 대시보드가 "라이브 세션 없음"
+    으로 굳었고, 프롬프트 audit 도 함께 죽어 있었다. 청소(owned_hook)만으로는
+    같은 사고가 또 난다. 심는 자리에서 막는다.
+
+    git 이 없거나 저장소가 아니면 받은 경로 그대로 — 판정이 없던 때와 같다.
+    """
+    try:
+        r = subprocess.run(["git", "-C", root, "rev-parse", "--git-common-dir"],
+                           capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return root
+    common = (r.stdout or "").strip()
+    if r.returncode != 0 or not common:
+        return root
+    if not os.path.isabs(common):
+        common = os.path.join(root, common)
+    main = os.path.dirname(os.path.abspath(common))
+    return main if os.path.isdir(os.path.join(main, "bin")) else root
+
+
+ROOT = os.environ.get("S9_ROOT") or main_worktree_root(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))))
 QUIET = "--quiet" in sys.argv
 MARK = "/section9/bin/"  # section9 소유 hook 식별자(이 설치본)
 

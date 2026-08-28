@@ -150,9 +150,17 @@ class CodePreflightSeesProfile(unittest.TestCase):
                          "빈 프로필인데 설치됐다고 본다")
 
     def test_b2b_hooked_profile_reads_as_installed(self):
+        # 훅은 '적혀 있는가'가 아니라 '부를 수 있는가'로 본다 —
+        # 실재하는 스크립트를 세워 둔다 (REQ-20260828-014).
+        os.makedirs(os.path.join(self.root, "bin"), exist_ok=True)
+        script = os.path.join(self.root, "bin", "s9-audit-prompt")
+        with open(script, "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\nexit 0\n")
         with open(os.path.join(self.prof, "settings.json"),
                   "w", encoding="utf-8") as f:
-            f.write(json.dumps({"h": f"s9-audit-prompt {self.root}"}))
+            f.write(json.dumps({"hooks": {"UserPromptSubmit": [{"hooks": [
+                {"type": "command",
+                 "command": f"{script} 2>/dev/null || true"}]}]}}))
         os.environ["CLAUDE_CONFIG_DIR"] = self.prof
         m = _load("s9_hooked_b", S9)
         self.assertTrue(m.hooks_installed(root=self.root))

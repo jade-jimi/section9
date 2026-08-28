@@ -2471,15 +2471,55 @@ def claude_home():
         or os.path.expanduser("~/.claude")
 
 
+def hook_script_path(cmd):
+    """훅 명령에서 section9 스크립트의 경로만 떼어낸다 ("" = 우리 훅 아님)."""
+    import shlex
+    try:
+        toks = shlex.split(cmd, posix=(os.name != "nt"))
+    except ValueError:
+        toks = cmd.split()
+    for t in toks:
+        t = t.strip('"')
+        if "s9-audit" in t:
+            return os.path.normpath(t.replace("\\", os.sep)
+                                    if os.name == "nt" else t)
+    return ""
+
+
 def hooks_installed(root=None):
-    """이 설정 디렉토리에 이 워크스페이스의 section9 훅이 설치돼 있는가."""
+    """이 설정 디렉토리에 이 워크스페이스의 section9 훅이 **살아 있게** 있는가.
+
+    문자열 포함으로 보면 죽은 경로를 놓친다 (REQ-20260828-014). 실사고: 임시
+    워크트리에서 실행된 설치가 남긴 `<ROOT>/state/worktrees/probe/bin/s9-audit-*`
+    가 settings.json 에 남았고, 그 경로는 ROOT 를 부분문자열로 품는다 —
+    `ROOT in txt` 는 참이라 "설치됨"으로 읽혔다. 훅 명령은 `2>/dev/null || true`
+    라 없는 파일을 불러도 조용하다: SessionStart 가 바인딩을 안 써 대시보드가
+    살아 있는 세션을 못 보고, 프롬프트도 REQ 로 안 남는다. 재시작 뒤 사용자가
+    "세션이 꺼져있다"로 발견했다.
+
+    그래서 **적혀 있는가**가 아니라 **부를 수 있는가**로 본다. 죽은 훅이 하나라도
+    있으면 미설치로 친다 — 재설치가 이름으로 소유를 알아보고(owned_hook) 잔재까지
+    걷어가므로, 그 편이 한 번에 낫는 길이다.
+    """
+    root = root or ROOT
     sp = os.path.join(claude_home(), "settings.json")
     try:
         with open(sp, encoding="utf-8") as f:
-            txt = f.read()
-    except OSError:
+            settings = json.load(f)
+    except (OSError, ValueError):
         return False
-    return "s9-audit-prompt" in txt and (root or ROOT) in txt
+    mine = False
+    for entries in (settings.get("hooks") or {}).values():
+        for e in entries or []:
+            for h in (e or {}).get("hooks") or []:
+                path = hook_script_path(h.get("command", "") or "")
+                if not path:
+                    continue
+                if not os.path.exists(path):
+                    return False          # 죽은 훅 = 미설치 (조용한 no-op)
+                if os.path.dirname(path) == os.path.join(root, "bin"):
+                    mine = True
+    return mine
 
 
 # ---------------------------------------------- 비밀값 (REQ-20260827-035)

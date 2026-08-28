@@ -96,8 +96,19 @@ class TestCodeArgs(unittest.TestCase):
         # s9-install을 트리거하지 않게 한다
         cls.home = tempfile.mkdtemp(prefix="s9codehome-")
         os.makedirs(os.path.join(cls.home, ".claude"), exist_ok=True)
+        # 훅은 '적혀 있는가'가 아니라 '부를 수 있는가'로 판정된다
+        # (REQ-20260828-014) — 가짜 ROOT 에도 실제 스크립트를 세워 둔다.
+        os.makedirs(os.path.join(cls.tmp, "bin"), exist_ok=True)
+        for _n in ("s9-audit-prompt", "s9-audit-session"):
+            _p = os.path.join(cls.tmp, "bin", _n)
+            with open(_p, "w") as f:
+                f.write("#!/bin/sh\nexit 0\n")
+            os.chmod(_p, 0o755)
         with open(os.path.join(cls.home, ".claude", "settings.json"), "w") as f:
-            f.write(json.dumps({"note": f"s9-audit-prompt {cls.tmp}"}))
+            f.write(json.dumps({"hooks": {"UserPromptSubmit": [{"hooks": [
+                {"type": "command",
+                 "command": os.path.join(cls.tmp, "bin", "s9-audit-prompt")
+                            + " 2>/dev/null || true"}]}]}}))
         with open(os.path.join(cls.home, ".claude",
                                ".credentials.json"), "w") as f:
             f.write("{}")
