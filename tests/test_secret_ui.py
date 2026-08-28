@@ -51,8 +51,12 @@ class SecretUI(unittest.TestCase):
         # 줄 하나가 읽는 필드는 이름과 둔 곳뿐이다 — 그 밖의 필드를 읽으면 언젠가
         # 값이 딸려 온다
         row = fn[fn.index("d.keys.map"):fn.index('.join("")')]
-        self.assertEqual(sorted(set(re.findall(r"\bk\.(\w+)", row))), ["key", "where"],
-                         "줄이 이름·둔 곳 말고 다른 것을 읽는다")
+        # 가려짐(shadowed)이 붙었다 (REQ-20260828-017) — 밖에 넣은 값이 안의
+        # 같은 이름에 가려 안 쓰이는 사실은 줄이 직접 말해야 한다. 그래도 읽는
+        # 것은 여전히 셋뿐이다: 값을 그리는 길은 열리지 않는다.
+        self.assertEqual(sorted(set(re.findall(r"\bk\.(\w+)", row))),
+                         ["key", "shadowed", "where"],
+                         "줄이 이름·둔 곳·가려짐 말고 다른 것을 읽는다")
 
     # ---------- ② 값 칸은 password, 저장 뒤 비운다 ----------
 

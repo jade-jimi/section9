@@ -29,9 +29,15 @@ class SecretApi(unittest.TestCase):
     def setUpClass(cls):
         cls.src = open(S9, encoding="utf-8").read()
         i = cls.src.index('parsed.path == "/api/secrets"')
-        cls.listing = cls.src[i:i + 1200]
+        # 끝을 글자 수로 자르면 주석 한 줄에 계약이 슬라이스 밖으로 밀린다
+        cls.listing = cls.src[i:cls.src.index('parsed.path == "/api/users"')]
         j = cls.src.index('parsed.path == "/api/secret/set"')
         cls.setter = cls.src[j:cls.src.index('parsed.path == "/api/secret/rm"')]
+        # **쓰는 자리는 한 곳이다** (REQ-20260828-017) — 형식·권한·빈 값 규칙은
+        # 이제 secret_write() 안에 있고 API 도 CLI 도 그 함수를 지난다. 계약을
+        # 핸들러 본문에서 재면 "두 벌 중 한 벌만 고쳐진" 상태를 못 잡는다.
+        k = cls.src.index("def secret_write(")
+        cls.writer = cls.src[k:cls.src.index("def secret_remove(")]
 
     # N1. 목록은 키만 준다
     def test_n1_keys_only(self):
@@ -42,24 +48,45 @@ class SecretApi(unittest.TestCase):
     # B1. 경로도 주지 않는다 — 값이 아니어도 필요 없는 것은 흘리지 않는다
     def test_b1_no_paths(self):
         self.assertIn('"where"', self.listing)
+        # 가려진 이름도 함께 — 목록에 안 나오는 것이 "사라졌다"로 읽히면 안 된다
+        self.assertIn('"shadowed"', self.listing)
         self.assertNotIn("os.path.relpath(p0", self.listing)
         self.assertNotIn('"path"', self.listing)
 
     # N2. 넣을 때 값을 응답에 담지 않는다
     def test_n2_set_echoes_key_only(self):
-        m = re.search(r'self\._json\(\{"ok": True, "key": key\}\)', self.setter)
-        self.assertIsNotNone(m, "set 응답이 키만 담지 않는다")
+        # 돌려주는 것은 키·둔 곳·가려짐뿐이다 — 값은 어디에도 없다
+        m = re.search(r'self\._json\(\{"ok": True, "key": key, "where": where,',
+                      self.setter)
+        self.assertIsNotNone(m, "set 응답이 키·둔 곳만 담지 않는다")
         self.assertNotIn("val}", self.setter)
         self.assertNotIn('"value"', self.setter.split("self._json")[-1])
 
+    # N3. **쓰는 자리는 한 곳** — 화면과 CLI 가 같은 함수를 지난다
+    def test_n3_one_place_writes(self):
+        self.assertIn("secret_write(actor, key, val, where)", self.setter,
+                      "API 가 파일을 직접 쓴다 — CLI 와 두 벌이 된다")
+        self.assertNotIn("os.open(", self.setter, "핸들러가 파일을 직접 연다")
+        cli = self.src[self.src.index("def cmd_secret("):]
+        cli = cli[:cli.index("# ------------------------------------------- 대화")]
+        self.assertIn("secret_write(user, key, val, secret_where(args))", cli,
+                      "CLI 가 다른 길로 쓴다")
+
+    # N4. 바깥으로 못 쓸 때 **조용히 안으로 떨어뜨리지 않는다**
+    def test_n4_external_refusal_is_loud(self):
+        self.assertIn('if where == "external":', self.writer)
+        self.assertIn('if st != "ok":', self.writer)
+        self.assertIn("raise ValueError(SECRET_EXT_BLOCK", self.writer,
+                      "바깥을 못 쓰는데 막지 않는다")
+
     # B2. 파일 권한을 좁힌다 — 같은 머신의 다른 계정이 읽으면 안 된다
     def test_b2_permissions(self):
-        self.assertIn("0o700", self.setter)
-        self.assertIn("0o600", self.setter)
+        self.assertIn("0o700", self.writer)
+        self.assertIn("0o600", self.writer)
 
     # B3. 키 형식을 가린다 — 경로를 벗어나는 이름을 받지 않는다
     def test_b3_key_validated(self):
-        self.assertIn("SECRET_KEY_RE.fullmatch", self.setter)
+        self.assertIn("SECRET_KEY_RE.fullmatch", self.writer)
         import importlib.machinery, importlib.util
         spec = importlib.util.spec_from_loader(
             "s9_sec", importlib.machinery.SourceFileLoader("s9_sec", S9))
@@ -71,7 +98,7 @@ class SecretApi(unittest.TestCase):
 
     # F1. 빈 값은 넣지 않는다 — 빈 비밀은 "지워졌나 안 넣었나"를 흐린다
     def test_f1_empty_refused(self):
-        self.assertIn("빈 값은 넣지 않는다", self.setter)
+        self.assertIn("빈 값은 저장하지 않는다", self.writer)
 
 
 if __name__ == "__main__":

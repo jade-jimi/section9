@@ -6,7 +6,7 @@ role: admin
 emails: ["claude01.pfe@example.invalid"]
 github: nicehugepark
 os_accounts: ["sjpark1"]
-machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-28T14:47:34+09:00"}]
+machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-28T15:53:15+09:00"}]
 ---
 
 ## Notes
@@ -108,3 +108,4 @@ machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpar
 - 2026-08-28T14:35:04+09:00 config external_secrets_path=/home/sjpark1/.s9-extdbg-tmp (by nicehugepark via dashboard)
 - 2026-08-28T14:35:04+09:00 config external_secrets_path=/home/sjpark1/.s9-secrets-demo (by nicehugepark via dashboard)
 - 2026-08-28T14:35:46+09:00 config external_secrets_path=(삭제) (by nicehugepark via dashboard)
+- 2026-08-28T15:18:09+09:00 config external_secrets_path=/home/sjpark1/s9-secrets (by nicehugepark via dashboard)

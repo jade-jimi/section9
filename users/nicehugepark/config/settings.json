@@ -10,5 +10,6 @@
  "auto_resume_model": "claude-opus-5[1m]",
  "stream_mirror": "on",
  "auto_resume_gh": "on",
- "worker_worktree": "on"
+ "worker_worktree": "on",
+ "external_secrets_path": "/home/sjpark1/s9-secrets"
 }
