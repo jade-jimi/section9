@@ -701,31 +701,79 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    덧글자도 없다 — 터미널은 통째로 긁어 복사하는 자리라 원문에 글자를 더하지
    않는다). 무엇으로 읽었는지는 귀띔과 미리보기 머리가 말한다. */
 .ccterm a.doclink.guess{text-decoration-style:wavy;text-decoration-color:var(--cc-dim)}
-.ccpeek .pg{color:var(--cc-yellow);font-size:11px;margin-top:5px;line-height:1.6}
+.ccpeek .pg{color:var(--cc-yellow,#e6c15a);font-size:11px;margin-top:5px;line-height:1.6}
 .ccterm a.ccasset{color:var(--cc-cyan);text-decoration:underline;
   text-decoration-style:dotted;text-underline-offset:3px}
+/* 코드 파일 경로 손잡이 (REQ-20260828-028) — **새 얼굴을 만들지 않는다.**
+   바로 위 a.ccasset("눌러서 여는 파일")이 이미 쓰는 획 그대로다: 값의 시안 +
+   점선 밑줄. 그래서 이 화면에서 밑줄 = 열린다는 약속이 한 겹으로 유지된다.
+   열리지 않는 경로는 밑줄 없는 맨 .ccval 로 남는다 — 눌러도 안 열리는 밑줄은
+   REQ-20260828-021 이 없앤 죽은 링크와 같다.
+   .term(문서 안 스트림)에는 --cc-* 가 없으므로 fallback 을 붙인다. */
+.ccterm a.ccpath,.term a.ccpath{color:var(--cc-cyan,#56c8d8);font-size:inherit;
+  cursor:pointer;text-decoration:underline;text-decoration-style:dotted;
+  text-underline-offset:3px;text-decoration-color:var(--cc-faint,#5c6878)}
+.ccterm a.ccpath:hover,.term a.ccpath:hover{text-decoration-color:currentColor}
+/* 초점 링도 **터미널 자신의 색**이어야 한다 — 전역 규칙은 --text(판의 잉크)를
+   쓰는데, 종이 톤에서 그건 검은 선이라 검은 판 위에서 사라진다. 키보드로
+   짚은 자리가 안 보이는 것은 안 짚이는 것과 같다. */
+.ccterm a.ccpath:focus-visible,.term a.ccpath:focus-visible{
+  outline:1px solid var(--cc-text,#e8e8e4);outline-offset:2px}
 /* 카드는 언급된 그 줄 **바로 아래**에 편다 (REQ-20260827-072 의 터미널 판:
    자리를 옮기는 손짓이 화면을 통째로 갈아치우면 안 된다). 색면도 세로 띠도
    없다 — 위아래 규칙선과 글리프 칸(14px)+사이(9px)만큼의 들여쓰기로 "이 줄에
    딸린 것"을 말한다. */
 .ccterm .ccpeek{margin:-7px 0 14px 23px;padding:9px 0 10px;
   border-top:1px solid var(--cc-border);border-bottom:1px solid var(--cc-border)}
-.ccpeek .pk{color:var(--cc-faint);font-size:10.5px;letter-spacing:.02em}
-.ccpeek .pt{color:var(--cc-text);font-weight:700;font-size:13px;margin-top:3px}
-.ccpeek .ps{color:var(--cc-dim);font-size:12px;margin-top:3px;line-height:1.6}
+/* 같은 카드가 문서 안 스트림(.term)에도 뜬다 — 거기엔 --cc-* 가 없으므로
+   fallback 을 단 형제 규칙으로 따로 붙인다. */
+.term .ccpeek{margin:-7px 0 14px 23px;padding:9px 0 10px;
+  border-top:1px solid var(--cc-border,#3a4655);
+  border-bottom:1px solid var(--cc-border,#3a4655)}
+/* 이 카드는 이제 문서 안 스트림(.term)에도 뜬다 — 거기엔 --cc-* 가 정의돼
+   있지 않으므로 fallback 을 붙인다(안 붙이면 글자가 판 색으로 사라진다). */
+.ccpeek .pk{color:var(--cc-faint,#5c626c);font-size:10.5px;letter-spacing:.02em}
+.ccpeek .pt{color:var(--cc-text,#e8e8e4);font-weight:700;font-size:13px;margin-top:3px}
+.ccpeek .ps{color:var(--cc-dim,#8a8f98);font-size:12px;margin-top:3px;line-height:1.6}
 /* 본문 미리보기 — 들여쓰기만으로 인용을 말한다. 긴 문서는 여기서 자른다:
    접지 않고 자르는 이유는 접힌 글은 Ctrl+F 에 걸리지 않아서다. */
-.ccpeek .pb{color:var(--cc-dim);font-size:12px;line-height:1.65;margin-top:8px;
+.ccpeek .pb{color:var(--cc-dim,#8a8f98);font-size:12px;line-height:1.65;margin-top:8px;
   padding-left:14px;white-space:pre-wrap;word-break:break-word}
-.ccpeek .pb .pmore{color:var(--cc-faint);font-size:11px}
+/* "+ 더 보기" 는 이 판의 텍스트 버튼이다 — 브라우저 기본 테두리가 남아
+   있으면 계기판 어휘 안에서 혼자 물렁한 버튼이 된다. 문서 미리보기(.pb 안)와
+   코드 미리보기(카드 직속) 둘이 같은 글자를 쓰므로 선택자도 하나로 둔다. */
+.ccpeek .pmore{background:none;border:0;padding:0;font:inherit;font-size:11px;
+  color:var(--cc-faint,#5c6878);cursor:pointer}
+.ccpeek .pmore:hover{color:var(--cc-text,#e8e8e4);text-decoration:underline}
+.ccpeek > .pmore{display:block;margin-top:7px;padding-left:14px}
+/* 코드 창 (REQ-20260828-028). 본문 미리보기(.pb)와 **같은 들여쓰기·같은 크기**
+   — 다른 것은 줄 번호 칸 하나뿐이다. 그 줄만 잉크로 밝히고 나머지는 흐린
+   글자로 둔다: 색면도 세로 띠도 없다(위계는 밝기와 굵기로).
+   줄 번호는 선택에 끼지 않는다 — 긁어 복사한 코드 앞에 번호가 붙으면 그대로는
+   못 붙인다(.ccbcp 가 복사본에서 손잡이 글자를 걷어내는 것과 같은 규율).
+   긴 줄은 카드를 넓히지 않고 이 상자 안에서만 가로로 흐른다. */
+.ccpeek .pcode{margin-top:8px;padding-left:14px;overflow-x:auto;
+  font-size:12px;line-height:1.65}
+.ccpeek .pcode .cl{display:flex;gap:12px;white-space:pre;
+  width:max-content;min-width:100%}
+/* 줄 번호는 **읽는 글자**다 — "몇 번째 줄인가" 가 이 카드의 용건이라, 흐린
+   회색(--cc-faint, 이 판에서 2.8:1)으로 두면 정작 셀 수가 없다. 본문과 같은
+   --cc-dim(5.2:1)으로 두고, 칸은 색이 아니라 **오른쪽 정렬과 고정 폭**으로
+   나눈다(세로 띠·색면 없이). */
+.ccpeek .pcode .cn{flex:0 0 auto;min-width:3.6em;text-align:right;
+  color:var(--cc-dim,#8a8f98);font-variant-numeric:tabular-nums;
+  user-select:none;-webkit-user-select:none}
+.ccpeek .pcode .ct{color:var(--cc-dim,#8a8f98)}
+.ccpeek .pcode .cl.on .cn{color:var(--cc-text,#e8e8e4)}
+.ccpeek .pcode .cl.on .ct{color:var(--cc-text,#e8e8e4);font-weight:600}
 .ccpeek .pa{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-.ccpeek .pa button{background:none;border:1px solid var(--cc-border);
-  color:var(--cc-dim);font:inherit;font-size:11.5px;padding:3px 11px;cursor:pointer}
-.ccpeek .pa button:hover{border-color:var(--cc-text);color:var(--cc-text)}
+.ccpeek .pa button{background:none;border:1px solid var(--cc-border,#3a4655);
+  color:var(--cc-dim,#8a8f98);font:inherit;font-size:11.5px;padding:3px 11px;cursor:pointer}
+.ccpeek .pa button:hover{border-color:var(--cc-text,#e8e8e4);color:var(--cc-text,#e8e8e4)}
 /* 주 행동은 하나다 — 이 카드를 연 이유가 대개 "이걸 두고 말하려던 것" 이다.
    강조는 이 터미널이 이미 쓰는 인버스(.ccwake)와 같은 어휘로. */
-.ccpeek .pa button.pri{border-color:var(--cc-text);color:var(--cc-text)}
-.ccpeek .pa button.pri:hover{background:var(--cc-text);color:var(--cc-bg)}
+.ccpeek .pa button.pri{border-color:var(--cc-text,#e8e8e4);color:var(--cc-text,#e8e8e4)}
+.ccpeek .pa button.pri:hover{background:var(--cc-text,#e8e8e4);color:var(--cc-bg,#1b1c1e)}
 /* 터미널 안에 떠야 하는 것들(손잡이 등)의 기준면 */
 .ccterm{position:relative}
 /* ------- 바닥으로 내려가는 손잡이 (REQ-20260827-061) -------
@@ -4043,6 +4091,7 @@ async function boot(){
   setInterval(() => { if (!document.hidden) refreshUsage(); }, 60000);
   setTimeout(docPickDiag, 900);   // ?pick=<문서id> — 진단·헤드리스 캡처용 (셸이 선 뒤)
   shortRefDiag();  // ?shortref — 축약 풀기 계약을 이 화면에서 실제로 재 본다
+  codePeekDiag();  // ?codepeek — 코드 경로 손잡이 세 상태를 진짜 렌더러로 세운다
   anchorBind();    // 구간 메모 팝업 (REQ-20260827-072)
   anchorDiag();    // ?anchor — 진단·헤드리스 캡처용
   window.addEventListener("focus", () => refreshCatalog(true));
@@ -4132,6 +4181,61 @@ function shortRefDiag(){
     out.scrollTop = out.scrollHeight;
     const g = ln.querySelector("a.doclink.guess");
     if (g) setTimeout(() => ccPeek(g), 300);
+  };
+  setTimeout(plant, 600);
+}
+
+/* ?codepeek — 코드 경로 손잡이를 **눌러 보기 전에 세워 본다** (REQ-20260828-028).
+
+   눈으로 봐야 할 상태가 셋인데, 진짜 터미널 출력에 셋이 한 줄로 나오는 일은
+   드물다: ① 열리는 경로(밑줄이 서야 한다) ② 열리지 않는 경로 — `users/…` 처럼
+   애초에 내주지 않기로 한 것(밑줄이 서면 **안 된다**) ③ 모양은 맞는데 없는 경로
+   (한 번 눌리고, 그 뒤로 밑줄이 사라져야 한다).
+
+   화면을 속이지 않는다 — 진짜 렌더러(ccText)에 진짜 한 줄을 통과시키고, 진짜
+   터미널 판에 심고, 진짜로 카드를 연다.
+     ?codepeek        진단 상자만
+     ?codepeek=peek   열리는 경로의 카드를 연다
+     ?codepeek=fail   모양만 맞는 경로의 카드를 연다(못 여는 자리) */
+const CODE_DIAG = "web/index.html:4016 을 보라. "
+  + "users/nicehugepark/config/settings.json 은 내주지 않기로 한 자리다. "
+  + "tests/test_nope.py:12 는 모양만 맞다. `bin/s9` 와 README.md 도 열린다.";
+function codePeekDiag(){
+  if (!/[?&]codepeek/.test(location.search)) return;
+  const box0 = document.createElement("div");
+  box0.innerHTML = ccText(CODE_DIAG, new Date().toISOString());
+  const linked = [...box0.querySelectorAll("a.ccpath")];
+  const lines = ["[?codepeek] 코드 경로 손잡이", "  " + CODE_DIAG, "— 손잡이가 선 것 —"];
+  linked.forEach(a => lines.push(`  ${a.textContent} → ${a.dataset.tcode}`
+    + (a.dataset.tline ? ` :${a.dataset.tline}` : " (첫머리)")));
+  if (!linked.length) lines.push("  (없음)");
+  const said = linked.map(a => a.textContent);
+  lines.push("— 맨 글자로 남은 것 —");
+  ["users/nicehugepark/config/settings.json"].forEach(x =>
+    lines.push(`  ${x}${said.includes(x) ? "  ✗ 링크가 섰다" : "  ✓"}`));
+  const pre = document.createElement("pre");
+  pre.id = "codepeek-diag";
+  pre.style.cssText = "position:fixed;left:10px;top:10px;z-index:99;margin:0;"
+    + "padding:8px 12px;font:11px/1.6 ui-monospace,monospace;white-space:pre;"
+    + "background:var(--panel);border:1px solid var(--text);color:var(--text)";
+  pre.textContent = lines.join("\n");
+  document.body.appendChild(pre);
+  const want = /[?&]codepeek=(peek|fail)/.exec(location.search);
+  if (!want) return;
+  let tries = 0;
+  const plant = () => {
+    const out = document.querySelector("#ccout");
+    if (!out){ if (++tries < 40) setTimeout(plant, 250); return; }
+    const ln = document.createElement("div");
+    ln.className = "ln";
+    ln.innerHTML = `<span class="g" style="color:var(--cc-dim)">●</span>`
+      + `<span class="b">[?codepeek 진단] ` + ccText(CODE_DIAG, new Date().toISOString())
+      + `</span>`;
+    out.appendChild(ln);
+    out.scrollTop = out.scrollHeight;
+    const pick = [...ln.querySelectorAll("a.ccpath")].find(a =>
+      want[1] === "fail" ? /nope/.test(a.dataset.tcode) : /index\.html/.test(a.dataset.tcode));
+    if (pick) setTimeout(() => ccCodePeek(pick), 300);
   };
   setTimeout(plant, 600);
 }
@@ -6770,6 +6874,89 @@ const ccGuessLink = (raw, r) =>
 const ccDocs = escaped =>
   escaped.replace(DOC_ID_INLINE_RE, (m0, pre, id) => pre + ccDocLink(id));
 
+/* ---- 터미널에 나온 코드 파일 경로를 손잡이로 (REQ-20260828-028-62x6) ----
+
+   이 팀은 보고에 `web/index.html:4016` 처럼 **줄 번호까지 붙여** 쓴다. 그래서
+   여는 것은 파일이 아니라 **그 줄 언저리**다 — 파일 전체를 새 탭으로 여는 길은
+   만들지 않는다(security-engineer 판정 §6).
+
+   아래 세 이름은 서버(`bin/s9` 의 CODE_ROOTS·CODE_FILES·CODE_EXT)의 **사본**이다.
+   사본을 두는 이유는 하나뿐이다: **열리지 않는 경로를 링크로 세우지 않기 위해서.**
+   이것은 게이트가 아니다 — 막는 것은 오직 서버의 `code_visible` 하나이고, 여기
+   글자를 고쳐도 열리는 파일은 한 개도 늘지 않는다. 두 벌이 갈라지는 것을
+   막는 것은 시험이다(tests/test_code_peek_ui.py 가 두 벌을 맞대 본다). */
+const CODE_ROOTS = ["bin", "docs", "harness", "tests", "web"];
+const CODE_FILES = ["CLAUDE.md", "README.md", "pyproject.toml"];
+const CODE_EXT = [".py", ".md", ".html", ".css", ".js", ".json", ".toml",
+                  ".txt", ".sh", ".cmd", ".yml", ".yaml"];
+
+/* 서버 `_code_shape_ok` 의 사본 — 파일시스템을 만지지 않고 **모양만** 본다. */
+function codeShapeOk(rel){
+  if (!rel || rel.length > 512 || rel.indexOf("\0") >= 0) return false;
+  const segs = rel.split("/");
+  if (segs.some(x => x === "" || x === "." || x === ".." || x.startsWith(".")))
+    return false;                       // 빈 조각·상대참조·점파일(.git/.claude)
+  if (segs.length === 1) return CODE_FILES.includes(segs[0]);
+  if (!CODE_ROOTS.includes(segs[0])) return false;
+  const base = segs[segs.length - 1];
+  if (base.indexOf(".") < 0)            // 확장자 없는 것은 bin/ 바로 밑에서만
+    return segs[0] === "bin" && segs.length === 2;
+  return CODE_EXT.some(e => base.toLowerCase().endsWith(e));
+}
+
+/* 글자로 적힌 경로 → 서버가 받는 리포 상대경로. 못 만들면 "" (=링크 안 세움). */
+function codeRel(raw){
+  let q = String(raw || "").replace(/\\/g, "/").trim();
+  if (/^~?\//.test(q)){
+    /* 절대경로는 **워크스페이스 이름 뒤부터**만 읽는다. 서버는 리포 상대경로만
+       받는데 화면은 리포 뿌리를 모른다 — 그리고 알려 달라고 하지 않는다(경로도
+       값이다, REQ-20260828-012). 이미 손에 있는 whoami.workspace 로 자르고,
+       그 이름이 없으면 링크를 세우지 않는다: 짐작으로 잘라 **남의 리포 경로를
+       이 리포의 파일로 열어 보이는 것**이 못 여는 것보다 나쁘다. */
+    const ws = (window.__whoami || {}).workspace || "";
+    const i = ws ? q.lastIndexOf("/" + ws + "/") : -1;
+    if (i < 0) return "";
+    q = q.slice(i + ws.length + 2);
+  }
+  return codeShapeOk(q) ? q : "";
+}
+
+/* 한 번 눌러 열리지 않은 경로는 그 뒤로 링크로 세우지 않는다.
+   모양이 맞아도 안 열리는 경우가 남는다(지워졌거나, 심링크거나, 글자 파일이
+   아니거나). 그건 눌러 봐야 알고, 서버는 **왜인지 말하지 않기로** 했다. 그래서
+   딱 한 번만 눌리게 하고 그 뒤에는 밑줄을 거둔다 — 같은 자리를 두 번 세 번
+   눌러 보게 만드는 것이 죽은 링크의 정체다. */
+const ccCodeDead = new Set();
+
+/* 경로 한 조각을 값으로 그린다. 손잡이는 **열 수 있을 때만** 얹는다. */
+function ccPathSpan(shown){
+  let body = shown, tail = "";
+  while (body.endsWith(".")){ tail = "." + tail; body = body.slice(0, -1); }
+  const m = /^(.*?):(\d+)$/.exec(body);
+  const rel = codeRel(m ? m[1] : body);
+  if (!rel || ccCodeDead.has(rel))
+    return `<span class="ccval">${shown}</span>`;
+  // role="button" + tabindex 는 이 화면에 이미 있는 Enter/Space 핸들러가 받는
+  // 자리다 — 키보드 길을 새로 뚫지 않는다. href 는 주지 않는다: 이 손잡이가
+  // 여는 것은 페이지가 아니라 이 줄 아래의 카드다.
+  return `<a class="ccval ccpath" role="button" tabindex="0" draggable="false"`
+    + ` data-tcode="${esc(rel)}"${m ? ` data-tline="${m[2]}"` : ""}`
+    + ` title="${m ? "눌러서 이 자리에서 그 줄 앞뒤를 봅니다"
+                    : "눌러서 이 자리에서 파일 첫머리를 봅니다"}">${body}</a>` + tail;
+}
+
+/* 절대경로(~/ 포함)와 리포 상대경로 두 규칙. 상대경로 쪽은 **허용 뿌리로
+   시작하는 것만** 집는다 — 산문의 아무 낱말에 밑줄이 번지지 않고, `users/…`
+   처럼 애초에 열리지 않는 경로가 링크로 서지도 않는다. */
+const CODE_ABS_RE = /(^|[\s([])(~?\/[\w.@-]+(?:\/[\w.@-]+)+(?::\d+)?)/gm;
+const CODE_REL_RE = new RegExp(
+  "(^|[\\s([{'|·,;>])((?:(?:" + CODE_ROOTS.join("|") + ")(?:/[\\w.@+-]+)+"
+  + "|(?:" + CODE_FILES.map(f => f.replace(/\./g, "\\.")).join("|") + "))"
+  + "(?::\\d+)?)", "gm");
+const ccPathRules = (escaped, keep) => escaped
+  .replace(CODE_ABS_RE, (m0, a, q) => a + keep(ccPathSpan(q)))
+  .replace(CODE_REL_RE, (m0, a, q) => a + keep(ccPathSpan(q)));
+
 /* 코드 블록의 복사 손잡이 (REQ-20260828-023). 마크업은 블록 첫 자식으로 넣고
    위치는 CSS 가 잡는다 — 흐름에서 빠져 있어 줄 정렬을 흔들지 않는다.
    title 은 무엇이 복사되는지를 말한다(손잡이가 붙은 블록 하나). */
@@ -6807,7 +6994,13 @@ function ccText(raw, at){
   const md = s => {
     const ph = [];
     const keep = h => { ph.push(h); return `\x00${ph.length - 1}\x00`; };
-    const inline = esc(s)
+    /* 경로 규칙은 여기서 **함수로** 부른다 — 백틱 안(인라인 코드)에서도 같은
+       규칙을 써야 하는데 체인 안에 적어 두면 두 벌이 된다. 자리는 그대로다:
+       코드 블록·첨부 뒤, 문서 id 앞. 코드 블록은 이미 자리표시자로 빠져 있어
+       **블록 안 경로에는 손잡이가 붙지 않는다** — 블록의 내용은 읽을 것이 아니라
+       붙일 것이고, 앵커가 섞이면 드래그 선택이 링크 드래그가 된다
+       (REQ-20260828-023). */
+    const inline = ccPathRules(esc(s)
       .replace(/```\w*\n?([\s\S]*?)```/g, (m0, c) =>
         keep(`<span class="ccblk">${CCBCP}${c.replace(/\n$/, "")}</span>`))
       // 첨부 참조 강조 (REQ-20260825-012): CC처럼 시안 칩 — 경로는 파일명만 표시
@@ -6821,7 +7014,7 @@ function ccText(raw, at){
          블록은 읽을 것이 아니라 붙일 것이라 앵커가 섞이면 드래그 선택이
          링크 드래그가 된다 (REQ-20260828-023 designer 경고). */
       .replace(/`([^`\n]+)`/g, (m0, c) =>
-        keep(`<span class="cccode">${ccDocs(c)}</span>`))
+        keep(`<span class="cccode">${ccDocs(ccPathRules(c, keep))}</span>`))
       .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
       /* 문서 첨부 경로 — 이미 있는 게이트(/api/asset, 문서 가시성 상속)로만
          내준다. 저장소의 아무 파일이나 내주는 길은 만들지 않는다: 무엇을
@@ -6830,10 +7023,7 @@ function ccText(raw, at){
         (m0, full, did, fn) => keep(
           `<a class="ccasset" target="_blank" rel="noopener"`
           + ` href="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(fn)}"`
-          + ` title="새 탭에서 엽니다 — 문서 가시성을 그대로 따릅니다">${full}</a>`))
-      // 파일 경로(절대/~, :라인 허용) — CC처럼 값 자체를 시안으로
-      .replace(/(^|[\s([])(~?\/[\w.@-]+(?:\/[\w.@-]+)+(?::\d+)?)/gm,
-        (m0, a, p) => a + keep(`<span class="ccval">${p}</span>`))
+          + ` title="새 탭에서 엽니다 — 문서 가시성을 그대로 따릅니다">${full}</a>`)), keep)
       // 문서 id — 경로 규칙 **뒤**에 둔다. 절대경로 안의 id 는 이미 자리표시자로
       // 빠져 있어 링크가 겹치지 않는다.
       .replace(DOC_ID_INLINE_RE, (m0, pre, id) => pre + keep(ccDocLink(id)))
@@ -6847,7 +7037,14 @@ function ccText(raw, at){
       // 해시류(7~40자리 16진, 영문자 포함 필수 — 날짜 등 순수 숫자 제외)
       .replace(/\b(?=[0-9a-f]*[a-f])([0-9a-f]{7,40})\b/g,
         (m0, h) => keep(`<span class="ccval">${h}</span>`));
-    return ccBlocks(inline).replace(/\x00(\d+)\x00/g, (m0, i) => ph[+i]);
+    /* 자리표시자는 **한 겹이 아니다.** 백틱 안의 경로 손잡이처럼 자리표시자가
+       자리표시자 안에 담기는 자리가 생겼다(REQ-20260828-028) — 한 번만 풀면
+       \x00N\x00 이 글자 그대로 화면에 남는다. 안쪽이 늘 먼저 담기므로 번호가
+       줄어들며 끝나고, 그래도 되풀이에는 상한을 둔다. */
+    let out = ccBlocks(inline);
+    for (let g = 0; g < 4 && /\x00\d+\x00/.test(out); g++)
+      out = out.replace(/\x00(\d+)\x00/g, (m0, i) => ph[+i]);
+    return out;
   };
   let st = {fg:null, bg:null, b:false, d:false, i:false, u:false};
   const wrap = h => {
@@ -7962,6 +8159,174 @@ async function ccPeek(a){
   }catch(e){
     if (ccPeekEl === box) pb.textContent = "서버에 닿지 못했습니다 — 잠시 뒤 다시 눌러 주세요.";
   }
+}
+
+/* ---- 코드 파일의 그 줄 언저리를 같은 카드로 편다 (REQ-20260828-028) ----
+
+   **새 컴포넌트를 만들지 않는다.** 문서 미리보기(ccPeek)가 쓰는 그 카드,
+   그 자리(줄 바로 아래), 그 슬롯(ccPeekEl)을 그대로 나눠 쓴다 — 한 줄에 문서
+   id 와 파일 경로가 나란히 서는 자리라, 카드가 둘씩 열리면 무엇을 눌렀는지
+   알 수 없다. 하나가 열리면 다른 하나는 닫힌다.
+
+   카드의 세 칸도 문서 카드와 같은 쓰임이다:
+     .pk  = 무엇인가(문서 id ↔ 파일 경로)   .pt = 지금 보는 것(제목 ↔ 그 줄)
+     .pk  = 곁들이(상태·프로젝트 ↔ 보이는 구간·전체 줄 수)
+
+   서버에서 온 글자(`lines`·`path`)는 **textContent 로만** 넣는다. 이 경로의
+   출처는 터미널 원문, 곧 에이전트가 쓴 글자다 — 어떤 링크를 그릴지로는 막을 수
+   없다. innerHTML 을 여기에 쓰면 그 순간 남이 쓴 글이 마크업이 된다. */
+const CODE_CTX = 12, CODE_CTX_MORE = 60;
+/* 404 하나에 이유가 여럿이다 — 막힘·부재·이진을 서버가 **일부러** 바이트까지
+   같은 응답으로 만들었다(그 차이가 곧 목록이 된다). 화면이 그중 하나를 골라
+   말하면 서버가 지운 차이를 화면이 되살린다. 그래서 문구는 하나이고, 문서
+   미리보기의 '찾지 못했습니다' 카드와 같은 모양으로 적는다. */
+const CODE_FAIL = "지워졌거나, 코드 폴더 밖이거나, 글자로 읽을 수 없는 파일입니다.";
+const ccEl = (cls, txt) => {
+  const d = document.createElement("div");
+  d.className = cls;
+  d.textContent = txt == null ? "" : txt;
+  return d;
+};
+const ccBtn = (txt, attr, cls) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  if (cls) b.className = cls;
+  b.setAttribute(attr, "");
+  b.textContent = txt;
+  return b;
+};
+const ccNum = n => Number(n || 0).toLocaleString("ko-KR");
+
+/* 한 번 눌러 안 열린 경로는 밑줄을 거둔다 — 지금 화면에 떠 있는 것까지.
+   같은 자리를 두 번 세 번 눌러 보게 만드는 것이 죽은 링크의 정체다. */
+function ccCodeBury(rel){
+  ccCodeDead.add(rel);
+  document.querySelectorAll("a.ccpath[data-tcode]").forEach(a => {
+    if (a.dataset.tcode !== rel) return;
+    const sp = document.createElement("span");
+    sp.className = "ccval";
+    sp.textContent = a.textContent;
+    a.replaceWith(sp);
+  });
+}
+function ccCodeFail(box, rel){
+  box.textContent = "";
+  box.append(ccEl("pk", rel), ccEl("pt", "이 파일을 열지 못했습니다"),
+             ccEl("ps", CODE_FAIL));
+  const pa = document.createElement("div");
+  pa.className = "pa";
+  pa.appendChild(ccBtn("닫기", "data-pclose"));
+  box.appendChild(pa);
+  ccCodeBury(rel);
+  box.scrollIntoView({block: "nearest"});
+}
+function ccCodeDraw(box, d, ctx){
+  const from = d.from || 1, to = d.to || 0, total = d.total || 0;
+  const at = Number(d.line || 0);
+  box.textContent = "";
+  /* 줄 번호는 **주소**이고 전체 줄 수는 **개수**다 — 주소에 자릿점을 찍으면
+     코드 창의 번호(4016)와 머리(4,016)가 어긋난다. 개수에는 찍는다. */
+  box.append(ccEl("pk", d.path || ""),
+             ccEl("pt", at ? `${at}번째 줄` : "파일 첫머리"),
+             ccEl("pk", `${from}–${to} 보이는 중 · 전체 ${ccNum(total)}줄`));
+  const code = document.createElement("div");
+  code.className = "pcode";
+  (d.lines || []).forEach((t, i) => {
+    const n = from + i;
+    const row = document.createElement("div");
+    row.className = "cl" + (n === at ? " on" : "");
+    const cn = document.createElement("span");
+    cn.className = "cn";
+    cn.textContent = String(n);
+    const ct = document.createElement("span");
+    ct.className = "ct";
+    ct.textContent = t;                 // ← 남이 쓴 글자. 여기만은 textContent.
+    row.append(cn, ct);
+    code.appendChild(row);
+  });
+  if (!(d.lines || []).length){
+    const row = ccEl("cl", "(빈 파일입니다)");
+    code.appendChild(row);
+  }
+  box.appendChild(code);
+  // 앞뒤를 더 보는 길은 문서 카드의 `+ N줄 더 보기` 와 같은 글자·같은 어휘다.
+  if (ctx < CODE_CTX_MORE && (from > 1 || to < total))
+    box.appendChild(ccBtn("+ 앞뒤 더 보기", "data-cmore", "pmore"));
+  const pa = document.createElement("div");
+  pa.className = "pa";
+  pa.appendChild(ccBtn("닫기", "data-pclose"));
+  box.appendChild(pa);
+  box.dataset.crel = d.path || "";
+  box.dataset.cline = String(at);
+  box.dataset.cctx = String(ctx);
+  /* 카드가 화면 밖에 펴지면 아무 일도 안 일어난 것처럼 보인다 — 먼저 카드를
+     들인다. 그러고도 **찾던 줄**이 안 보이면(앞뒤를 더 폈을 때 121줄까지
+     자란다) 그 줄을 가운데로 들인다. 읽으려던 줄이 화면 밖에 있는 미리보기는
+     미리보기가 아니다. */
+  box.scrollIntoView({block: "nearest"});
+  const on = code.querySelector(".cl.on");
+  if (on){
+    const r = on.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight)
+      on.scrollIntoView({block: "center"});
+  }
+}
+async function ccCodeLoad(box, rel, line, ctx){
+  box.dataset.cctx = String(ctx);   // `다시 받기` 는 **방금 시도한 것**을 다시 한다
+  try{
+    const res = await fetch("/api/code?path=" + encodeURIComponent(rel)
+      + "&line=" + encodeURIComponent(line) + "&ctx=" + ctx);
+    if (ccPeekEl !== box) return;        // 그 사이 닫혔거나 다른 것을 열었다
+    if (!res.ok){ ccCodeFail(box, rel); return; }
+    const d = await res.json();
+    if (ccPeekEl !== box) return;
+    ccCodeDraw(box, d, ctx);
+  }catch(e){
+    /* 서버에 못 닿은 것은 **그 경로가 못 열린다는 뜻이 아니다** — 여기서
+       묻어 버리면 서버가 잠깐 죽은 사이에 본 줄들이 영영 링크를 잃는다. */
+    if (ccPeekEl !== box) return;
+    /* 문구만 두면 사용자가 할 일이 없다 — 이 화면이 이미 쓰는 어휘
+       (`data-retrans`·`data-resupply`: 못 받은 값을 그 자리에서 다시 받는다)
+       그대로 손잡이를 준다. */
+    const pk = [...box.querySelectorAll(".pk")].pop();   // 곁들이 줄(머리 아님)
+    if (pk) pk.textContent = "서버에 닿지 못했습니다.";
+    const mb = box.querySelector("[data-cmore]");
+    if (mb) mb.remove();               // "받는 중…" 으로 굳은 버튼을 남기지 않는다
+    const pa = box.querySelector(".pa");
+    if (pa){
+      pa.textContent = "";
+      pa.append(ccBtn("다시 받기", "data-cretry", "pri"),
+                ccBtn("닫기", "data-pclose"));
+    }
+  }
+}
+async function ccCodePeek(a){
+  const rel = a.dataset.tcode || "";
+  const line = parseInt(a.dataset.tline || "0", 10) || 0;
+  const key = "code:" + rel + ":" + line;
+  if (ccPeekId === key && ccPeekEl && ccPeekEl.isConnected){ ccPeekClose(); return; }
+  ccPeekClose();
+  const ln = a.closest(".ln");
+  if (!ln) return;
+  const box = document.createElement("div");
+  box.className = "ccpeek";
+  box.dataset.peek = key;
+  /* 나갈 길은 **여는 순간부터** 있어야 한다. 불러오는 동안이나 못 받았을 때
+     닫기가 없으면, 사용자는 잘못 누른 카드를 없애려고 같은 손잡이를 다시
+     찾아 눌러야 한다 — 그건 되돌리기가 아니라 수수께끼다. */
+  const pa0 = document.createElement("div");
+  pa0.className = "pa";
+  pa0.appendChild(ccBtn("닫기", "data-pclose"));
+  box.append(ccEl("pk", rel),
+             ccEl("pt", line ? `${line}번째 줄` : "파일 첫머리"),
+             ccEl("pk", "불러오는 중…"), pa0);
+  box.dataset.crel = rel;
+  box.dataset.cline = String(line);
+  box.dataset.cctx = String(CODE_CTX);
+  ln.insertAdjacentElement("afterend", box);
+  ccPeekEl = box; ccPeekId = key; ccPeekText = "";
+  box.scrollIntoView({block: "nearest"});
+  ccCodeLoad(box, rel, line, CODE_CTX);
 }
 function docClear(){
   docTarget = null;
@@ -11732,7 +12097,8 @@ document.addEventListener("click", e => {
      것은 읽던 자리를 지키는 것이다. 수식키·가운데클릭은 손대지 않는다:
      "새 탭에서 열기" 는 앵커의 href 가 그대로 맡는다. */
   const tp = e.target.closest(".ccpeek [data-ppick],.ccpeek [data-popen],"
-    + ".ccpeek [data-pclose],.ccpeek [data-pmore]");
+    + ".ccpeek [data-pclose],.ccpeek [data-pmore],.ccpeek [data-cmore],"
+    + ".ccpeek [data-cretry]");
   if (tp){
     e.stopPropagation();
     if (tp.dataset.ppick !== undefined){ ccPeekClose(); docPick(tp.dataset.ppick); }
@@ -11741,7 +12107,26 @@ document.addEventListener("click", e => {
       const pb = tp.closest(".ccpeek").querySelector("[data-pbody]");
       if (pb){ pb.innerHTML = ccPeekBody(ccPeekText, true); pb.scrollIntoView({block:"nearest"}); }
     }
+    /* 코드 카드의 앞뒤 더 보기 — 누르는 동안 버튼이 무슨 일인지 말한다
+       (문서 화면의 `data-retrans` 와 같은 어휘). */
+    else if (tp.dataset.cmore !== undefined || tp.dataset.cretry !== undefined){
+      const bx = tp.closest(".ccpeek");
+      tp.disabled = true; tp.textContent = "받는 중…";
+      ccCodeLoad(bx, bx.dataset.crel, +bx.dataset.cline || 0,
+                 tp.dataset.cmore !== undefined
+                   ? CODE_CTX_MORE : (+bx.dataset.cctx || CODE_CTX));
+    }
     else ccPeekClose();
+    return;
+  }
+  /* 터미널 안의 코드 파일 경로 (REQ-20260828-028). 문서 언급과 같은 자리·같은
+     카드라 바로 옆에 둔다. 수식키·가운데클릭은 손대지 않는다 — 이 손잡이에는
+     href 가 없으므로 브라우저가 알아서 아무 일도 하지 않는다. */
+  const cp = e.target.closest("[data-tcode]");
+  if (cp && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)){
+    e.preventDefault(); e.stopPropagation();
+    hideHover();
+    ccCodePeek(cp);
     return;
   }
   const td = e.target.closest("[data-tdoc]");

@@ -126,15 +126,18 @@ class TermMention(unittest.TestCase):
         자리가 링크 드래그로 망가진다.
         """
         md = self.code[self.code.find("  const md = s => {"):]
-        md = md[:md.find("return ccBlocks(inline)")]
+        md = md[:md.find("ccBlocks(inline)")]
         blk = md.find("```")
         doc = md.find("DOC_ID_INLINE_RE")
         self.assertGreater(blk, 0, "코드블록 규칙을 찾지 못했다")
         self.assertGreater(doc, 0, "터미널에서 문서 id 를 링크로 만들지 않는다")
         self.assertLess(blk, doc, "문서 id 규칙이 코드블록보다 먼저 돈다")
-        # 인라인 백틱 안에는 **명시적으로** 건다 — 순서를 바꾸지 않고
-        self.assertIn("ccDocs(c)", self.code,
-                      "인라인 코드 안의 문서 id 가 링크가 되지 않는다")
+        # 인라인 백틱 안에는 **명시적으로** 건다 — 순서를 바꾸지 않고.
+        # 감싸는 것이 하나 더 늘 수 있어(REQ-20260828-028 이 같은 자리에서 코드
+        # 경로 손잡이를 건다) 글자 하나가 아니라 **백틱 몸통에 ccDocs 가 걸리는
+        # 것**을 짚는다. 이 시험이 지키는 것은 호출의 모양이 아니라 그 사실이다.
+        self.assertRegex(self.code, r"ccDocs\([\w]*\(?c[,)]",
+                         "인라인 코드 안의 문서 id 가 링크가 되지 않는다")
 
     # ---------- ⑥ 파일은 이미 있는 게이트로만 ----------
 
