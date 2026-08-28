@@ -105,7 +105,7 @@ class JudgeDialog(unittest.TestCase):
 
     def test_every_judgement_path_uses_it(self):
         """반려·전이 메모·승인 메모·취소 확인·오류 알림이 모두 이것을 쓴다."""
-        for fn in ("rejectWithReason", "postStatus"):
+        for fn in ("judgeAct", "postStatus"):
             self.assertIn("s9dlg(", self._fn(fn), "%s 가 아직 쓰지 않는다" % fn)
         self.assertGreaterEqual(self.code.count("s9dlg({"), 6,
                                 "판정 경로 일부가 아직 옛 위젯 자리에 있다")
@@ -190,9 +190,13 @@ class JudgeDialog(unittest.TestCase):
         """비었으면 확인이 안 눌릴 뿐, 창을 다시 띄우지 않는다."""
         fn = self._fn("s9dlg")
         self.assertIn("disabled", fn, "빈 값일 때 확인을 막지 않는다")
-        rj = self._fn("rejectWithReason")
-        self.assertEqual(len(re.findall(r"s9dlg\(", rj)), 1,
-                         "사유를 두 번 묻는 흐름이 남아 있다 — 그건 벌주는 흐름이다")
+        # 판정이 judgeAct 한 곳으로 모이면서 세 갈래(승인·반려·상태 옮기기)가
+        # 한 함수에 있다. 그러니 세는 것은 호출 수가 아니라 **되묻는 고리**다.
+        ja = self._fn("judgeAct")
+        self.assertEqual(len(re.findall(r"required:\s*true", ja)), 1,
+                         "필수 입력을 여러 곳에서 요구한다")
+        self.assertNotRegex(ja, r"\b(while|for)\s*\(",
+                            "빈 값이면 다시 묻는 고리가 있다 — 그건 벌주는 흐름이다")
 
     # ---------- ⑤ 키보드 ----------
 
@@ -246,7 +250,7 @@ class JudgeDialog(unittest.TestCase):
         self.assertRegex(mk, r"t\.length > \d+", "긴 제목을 자르지 않는다")
         self.assertIn("…", mk, "잘렸다는 표시가 없다")
         # 판정·전이 넷이 모두 이것을 쓴다
-        for fn in ("rejectWithReason",):
+        for fn in ("judgeAct",):
             self.assertIn("dlgFor(", self._fn(fn), "%s 가 제목을 말하지 않는다" % fn)
         self.assertGreaterEqual(self.code.count("dlgFor("), 5,
                                 "판정 경로 일부가 아직 id 만 적는다")
@@ -320,7 +324,7 @@ class JudgeDialog(unittest.TestCase):
         self.assertIn('"→ " + to', self.code,
                       "상태 버튼이 식별자를 그대로 쓰지 않는다")
         # 승인/반려 창은 **어느 상태로 가는지**를 창 안 문장에서 말한다
-        rj = self._fn("rejectWithReason")
+        rj = self._fn("judgeAct")
         self.assertIn('stName("in-progress")', rj, "반려가 어디로 가는지 말하지 않는다")
         self.assertIn('stName("done")', self.code, "승인이 어디로 가는지 말하지 않는다")
         # 이름은 mono 로 선다
@@ -338,6 +342,51 @@ class JudgeDialog(unittest.TestCase):
         self.assertRegex(self.code, r'class="deed" data-reject', "보드 반려 버튼")
         self.assertIn('rv ? "deed" : ""', self.code,
                       "문서 본문에서 이름과 행위가 같은 옷을 입는다")
+
+    # ---------- ⑩ 한 행동, 한 창 ----------
+
+    def test_one_act_one_dialog_from_every_entry(self):
+        """같은 행동은 어디서 눌러도 같은 창이다 (REQ-20260828-007 3차 반려).
+
+        사용자: "보드 화면에서 승인을 할 때는 '승인하기'이고 문서에서 승인을
+        할 때에는 '상태옮기기' 라고 나온다. 판정 이 단계만 보거나, 국소적으로
+        판단하지말고, 전체적인 디자인, 흐름, 맥락을 다 챙기도록 해."
+
+        원인은 문구가 아니라 **길이 둘이었다는 것**이다. 보드 카드는
+        `data-approve` 로 승인 창을 열고, 문서 화면의 같은 `✓ 승인` 버튼은
+        `data-trans` 로 일반 상태 옮기기 창을 열었다. 반려만 두 길이 한 함수를
+        쓰고 있었고 승인은 갈라져 있었다 — 그래서 같은 버튼이 어느 화면에서
+        눌리느냐에 따라 다른 창을 띄웠다. **판정이 두 벌이면 한 벌만 고쳐진다.**
+
+        끌어 옮기기도 같은 길로 넣었다. 그 길만 창 없이 "drag 이동" 이라고
+        적혀서, 반려에 사유가 필수라는 규칙이 거기로만 비껴갔고 같은 행동이
+        History 에 세 가지 말로 남았다.
+        """
+        for anchor in ('judgeAct(ap.dataset.approve, "done", "review")',
+                       'judgeAct(rj.dataset.reject, "in-progress", "review")',
+                       "judgeAct(id, to, from)",
+                       "judgeAct(d.id, to, d.from)"):
+            self.assertIn(anchor, self.code,
+                          "진입점 하나가 아직 제 창을 짓는다: %s" % anchor)
+        # 창을 짓는 자리는 각각 하나뿐이다. `?dlg=` 진단 미리보기는 같은 모양을
+        # 헤드리스로 열어 보는 **붙박이 견본**이라 세지 않는다 — 그것까지 세면
+        # "직접 보고 고쳐라"는 규율과 이 계약이 서로를 막는다.
+        live = self.code.split("function dlgPreview(")[0]
+        for label in ('ok:"승인하기"', 'ok:"반려하기"', 'ok:"상태 옮기기"'):
+            self.assertEqual(live.count(label), 1,
+                             "%s 창이 여러 곳에서 지어진다" % label)
+
+    def test_labels_never_promise_a_road_that_is_closed(self):
+        """상태머신이 주지 않는 길을 이름으로 가리키지 않는다.
+
+        `review → blocked` 는 허용 전이가 아니라 `⏸ 보류` 라벨은 한 번도
+        그려진 적이 없었다. 없는 길을 가리키는 이름은 다음 사람이 그 길이
+        있다고 믿게 만든다.
+        """
+        m = re.search(r"const RVLABEL = \{([^}]*)\}", self.code)
+        self.assertIsNotNone(m, "review 버튼 이름표를 찾지 못했다")
+        self.assertNotIn("blocked", m.group(1),
+                         "review 에서 갈 수 없는 상태에 이름표가 붙어 있다")
 
     # ---------- helpers ----------
 

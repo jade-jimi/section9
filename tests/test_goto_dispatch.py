@@ -59,13 +59,28 @@ class GotoDispatch(unittest.TestCase):
         """본문에서의 review→in-progress 도 사유를 받는다 (보드와 같은 규율).
 
         사유 없는 반려는 재작업하는 쪽이 무엇을 고쳐야 할지 모른다.
+
+        REQ-20260828-007 3차 반려로 **보장하는 자리가 옮겨졌다.** 예전에는
+        디스패처가 `from === "review"` 를 보고 반려 함수로 갈랐는데, 그 갈래가
+        승인 쪽에는 없어서 같은 버튼이 화면마다 다른 창을 띄웠다. 이제 판정은
+        `judgeAct` 한 곳이고 디스패처는 **어디서 왔는지(from)를 넘길** 뿐이다.
+        계약도 그 자리로 옮긴다 — 지우지 않는다.
         """
         m = re.search(r'const gt = e\.target\.closest\("\[data-trans\]"\).*?'
                       r'\n\s*\}', self.src, re.S)
         self.assertIsNotNone(m)
         blk = m.group(0)
-        self.assertIn("rejectWithReason", blk)
-        self.assertIn('from === "review"', blk)
+        self.assertIn("judgeAct(id, to, from)", blk,
+                      "디스패처가 판정을 한 곳으로 넘기지 않는다")
+        self.assertIn("const [id, to, from]", blk,
+                      "어디서 왔는지를 넘기지 않으면 판정이 이름을 못 고른다")
+        ja = re.search(r"async function judgeAct\([^)]*\)\{[\s\S]*?\n\}", self.src)
+        self.assertIsNotNone(ja, "judgeAct() 를 찾지 못했다")
+        body = ja.group(0)
+        self.assertIn('judging && to === "in-progress"', body,
+                      "review 에서 되돌리는 갈래가 없다")
+        self.assertIn("required:true", body.replace(" ", ""),
+                      "반려에 사유를 요구하지 않는다")
 
 
 if __name__ == "__main__":
