@@ -8,6 +8,15 @@
 정렬 규칙은 `workOrder` 한 곳에 모여 있다는 것이 이 화면의 약속이다. 그래서
 변형도 **그 옆에** 두고, 목록 만드는 자리에서 `.sort()` 를 새로 부르지 않는다.
 
+**N2 를 다시 썼다** (REQ-20260828-009). 최근순이라는 뜻은 그대로지만, 목록이
+**매 렌더마다** 다시 정렬하면 안 된다. 이 저장소는 에이전트가 쉬지 않고 노트를
+붙여서 15초 폴링 때마다 여러 문서의 `updated` 가 바뀌고 목록 전체가 다시 섞였다 —
+사용자가 그것을 겪었다: "왼쪽 문서 목록이 거의 실시간으로 목록이 갱신이 되어버리니
+본문 제목을 캐치하기 어렵다." 그래서 `stableOrder` 를 통해 쓴다: **처음 한 번은
+recentOrder 로 순위를 매기고**, 그 뒤로는 그 순위를 얼려 둔다. 얼음을 깨는 것은
+사람이 조건을 바꾸거나 화면에 새로 들어올 때뿐이고, 새로 생긴 문서는 맨 위로 온다.
+"Docs 는 최근순"이라는 계약은 유지되고, "매번 다시 섞는다"만 빠졌다.
+
 **팔레트** — `/permissions` 처럼 대시보드에서 못 도는 CC 명령이 목록에 없으면,
 사용자가 친 그 줄이 **그냥 채팅 메시지로 전송된다.** 그러면 리드가 "그건 터미널에서만
 됩니다"라고 답하는 데서 끝난다 — 팔레트가 미리 말해 주는 편이 한 왕복 빠르다.
@@ -39,13 +48,20 @@ class DocsRecentOrder(unittest.TestCase):
         self.assertNotIn("prioOf", body,
                          "Docs 정렬에 우선순위가 섞였다 — 최근순이어야 한다")
 
-    # N2. Docs 목록이 그것을 쓴다
+    # N2. Docs 목록이 그것을 쓴다 — 다만 **얼려서** (REQ-20260828-009)
     def test_n2_docs_uses_it(self):
         m = re.search(r"async function renderDocs\(rows\)\{(.*?)\n\}\n",
                       self.src, re.S)
         self.assertIsNotNone(m)
-        self.assertIn("recentOrder(rows)", m.group(1),
-                      "Docs 목록이 최근순 정렬을 쓰지 않는다")
+        self.assertIn("stableOrder(rows,", m.group(1),
+                      "Docs 목록이 정해진 순서를 쓰지 않는다")
+        self.assertNotIn("recentOrder(rows)", m.group(1),
+                         "목록이 매 렌더마다 다시 정렬한다 — 15초마다 발밑이 흔들린다")
+        # 얼린 순서의 **뿌리**는 여전히 최근순이다
+        f = re.search(r"function stableOrder\([^)]*\)\{(.*?)\n\}\n", self.src, re.S)
+        self.assertIsNotNone(f, "stableOrder 를 찾지 못했다")
+        self.assertIn("recentOrder(rows)", f.group(1),
+                      "처음 순위가 최근순이 아니다")
 
     # B1. Board 는 그대로 우선순위 순이다 — 두 화면의 물음이 다르다
     def test_b1_board_keeps_priority(self):

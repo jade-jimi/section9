@@ -281,7 +281,14 @@ class Screen(unittest.TestCase):
         off = r.index("꺼져 있습니다")
         self.assertLess(off, r.index('"/api/streams"'))
         self.assertLess(off, r.index("훅이 턴 종료마다"))
-        self.assertIn("stream_mirror on", r)      # 되돌리는 법을 함께 적는다
+        # 되돌리는 법을 함께 준다. **적는 것에서 누르는 것으로 바뀌었다** —
+        # 전에는 "터미널에서 s9 user config … stream_mirror on" 이라고 적어 두었는데,
+        # 대시보드로 일하는 사람에게 터미널로 가라고 말하는 화면이라는 것이
+        # REQ-20260828-013 의 사유였다. 계약(되돌릴 길을 준다)은 그대로고 형태만
+        # 바뀌었으므로 여기서 확인하는 것도 바꾼다.
+        shown = r[off:r.index("return;", off)]   # 화면에 실제로 그리는 대목만
+        self.assertIn("설정에서 켜기", shown)
+        self.assertNotIn("s9 user config", shown)
 
     # 없는 자리로 안내하지 않는다 — 터미널의 줄 생략 안내가 Stream 탭을 가리킨다
     def test_trim_notice_no_dead_pointer(self):

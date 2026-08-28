@@ -65,8 +65,11 @@ class CompactSignal(unittest.TestCase):
     # N3. 훅이 시작/끝을 바인딩에 쓴다
     def test_n3_hook_writes_binding(self):
         root = tempfile.mkdtemp(prefix="s9cmp-")
+        # S9_PORT=1 — 세션 훅을 돌리는 테스트의 공통 격리(REQ-20260828-001).
+        # 지금 도는 이벤트(compact-*)는 서버를 띄우지 않지만, 훅에 이벤트가
+        # 하나 늘어나는 날 사용자 대시보드 포트를 뺏는 자리가 여기다.
         env = {**os.environ, "S9_ROOT": root, "S9_MACHINE": "testbox",
-               "S9_USER": "alice", "S9_SESSION": "abcd1234"}
+               "S9_USER": "alice", "S9_SESSION": "abcd1234", "S9_PORT": "1"}
         subprocess.run([S9, "init"], capture_output=True, env=env, timeout=30)
         subprocess.run([S9, "user", "add", "alice"], capture_output=True,
                        env=env, timeout=30)

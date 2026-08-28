@@ -281,11 +281,17 @@ class TestBoardScope(unittest.TestCase):
                       "다른 탭은 필터가 실제로 좁혔을 때만 건수를 보여야 한다")
         self.assertIn(".count:empty{display:none}", self.html)
 
-    # B6. 상태별 카운트(.stats)는 그대로 — 사용자가 지목한 건 문서 카운터 하나다
+    # B6. 이 요청이 손대는 것은 **문서 카운터 하나**다 — 상태별 건수는 건드리지
+    #     않는다. 그 계약은 유효하되, 건수가 서 있는 **자리**가 바뀌었다:
+    #     상단 상태 띠는 REQ-20260827-070 2차에서 내려갔고(같은 집합을 열 머리와
+    #     두 번 세고 있었다), 상태별 건수는 이제 열 머리 하나가 말한다.
+    #     그래서 검사 대상을 띠에서 열 머리로 옮겨 다시 쓴다 — 지키려던 것("이
+    #     작업이 상태 건수를 없애지 않았다")은 그대로다.
     def test_b6_status_counts_kept(self):
-        self.assertIn('class="stats"', self.html)
-        self.assertIn('data-statf=""', self.html)
-        self.assertIn("전체 요청", self.html)
+        self.assertIn('<span class="n">${live.length}</span>', self.html,
+                      "열 머리의 상태별 건수가 사라졌다")
+        self.assertNotIn('class="stats"', self.html,
+                         "내려간 상단 띠가 되살아났다")
 
 
 if __name__ == "__main__":
