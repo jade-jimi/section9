@@ -1,5 +1,4 @@
 {
- "timezone": "Asia/Seoul",
  "ui_skin": "calm",
  "ui_tone": "carbon",
  "auto_resume": "on",
@@ -11,5 +10,6 @@
  "stream_mirror": "on",
  "auto_resume_gh": "on",
  "worker_worktree": "on",
- "external_secrets_path": "/home/sjpark1/s9-secrets"
+ "external_secrets_path": "/home/sjpark1/s9-secrets",
+ "timezone": "Asia/Seoul"
 }

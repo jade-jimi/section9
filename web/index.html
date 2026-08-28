@@ -692,6 +692,12 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 .ccterm a.doclink{color:var(--cc-text);font-size:inherit;
   text-decoration-color:var(--cc-faint)}
 .ccterm a.doclink:hover{color:var(--cc-cyan);text-decoration-color:currentColor}
+/* 짐작으로 푼 축약 번호 (REQ-20260828-021) — 확실한 링크와 **같은 얼굴을 하면
+   안 된다.** 점선을 물결로 바꿔 "이건 추정" 이라고 밑줄 하나로 말한다(색면도
+   덧글자도 없다 — 터미널은 통째로 긁어 복사하는 자리라 원문에 글자를 더하지
+   않는다). 무엇으로 읽었는지는 귀띔과 미리보기 머리가 말한다. */
+.ccterm a.doclink.guess{text-decoration-style:wavy;text-decoration-color:var(--cc-dim)}
+.ccpeek .pg{color:var(--cc-yellow);font-size:11px;margin-top:5px;line-height:1.6}
 .ccterm a.ccasset{color:var(--cc-cyan);text-decoration:underline;
   text-decoration-style:dotted;text-underline-offset:3px}
 /* 카드는 언급된 그 줄 **바로 아래**에 편다 (REQ-20260827-072 의 터미널 판:
@@ -1883,6 +1889,52 @@ tr.rowoff td{opacity:.45}
 .cfg-h{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
   margin:26px 0 4px;font-weight:600;font-family:var(--mono);
   border-top:1px solid var(--border);padding-top:14px}
+/* ------- 시간대 고르기 (REQ-20260828-029) -------
+   한 줄에 적는 것은 **이름과 지금 몇 시인가** 둘뿐이다. 오프셋은 적지 않는다 —
+   손목시계에 +09:00 은 안 적혀 있고, 시각이 그것보다 정확하게 같은 말을 한다.
+   시각을 옆에 두는 이유는 장식이 아니다: `Etc/GMT+9` 는 POSIX 규약 탓에 실제로
+   UTC−9 라, 이름만 보면 한국인은 백이면 백 그걸 고른다. 옆의 시계가 고르기
+   전에 그 사실을 보여 준다.
+   어휘는 이 판이 이미 쓰는 것 그대로다 — 이름은 모노(식별자), 시각도 모노,
+   구획은 헤어라인, 고른 줄은 **색면이 아니라 잉크 inset 바 + 굵기**. */
+.tzline{display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap}
+.tzc{position:relative;width:min(330px,100%)}
+.tzin{width:100%;padding-right:24px;font-family:var(--mono);font-size:12.5px}
+.tzin::placeholder{color:var(--faint)}
+.tzcar{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  color:var(--faint);font-size:9px;pointer-events:none}
+/* 지금 몇 시인가 — 값이 바뀐 것을 이 자리에서 증명한다 */
+.tznow{font-family:var(--mono);font-size:12.5px;color:var(--text);white-space:nowrap}
+.tznow .w{color:var(--faint);margin-right:5px}
+/* 설정이 없거나 이름을 모를 때는 시계가 아니라 문장이다 — 모노를 벗는다 */
+.tznow.tzsub,.tznow.tzbad{font-family:inherit;font-size:12px;white-space:normal;
+  max-width:44ch;line-height:1.55;word-break:keep-all}
+.tznow.tzsub{color:var(--muted)}
+.tznow.tzbad{color:var(--c-inprogress)}
+/* 목록은 **판 밖(body)에 띄운다** — 설정 판은 안쪽 스크롤이 있고 glass 스킨은
+   .docs 를 overflow:hidden 으로 자른다. 판 안에 그리면 목록이 잘리거나 접힌
+   자리 아래로 숨는다. 테두리는 hovercard 와 같은 어휘(잉크 1px, 그림자 0). */
+.tzpop{position:fixed;z-index:99;background:var(--panel);border:1px solid var(--text);
+  overflow-y:auto;overscroll-behavior:contain;padding:2px 0}
+.tzpop .tzg{font-family:var(--mono);font-size:10.5px;color:var(--faint);
+  padding:9px 12px 4px;border-top:1px solid var(--hairline)}
+.tzpop .tzg:first-child{border-top:0;padding-top:6px}
+.tzpop .tzrow{display:flex;align-items:baseline;gap:12px;padding:7px 12px;
+  cursor:pointer;border-left:2px solid transparent}
+.tzpop .tzn{font-family:var(--mono);font-size:12px;color:var(--text);
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tzpop .tzt{font-family:var(--mono);font-size:11px;color:var(--muted);flex:none}
+.tzpop .tzt .w{color:var(--faint);margin-right:4px}
+.tzpop .tzrow:hover{background:var(--accent-soft)}
+.tzpop .tzrow.on{background:var(--accent-soft);border-left-color:var(--text)}
+.tzpop .tzrow.on .tzn{font-weight:600}
+/* 지우는 줄 — 이름이 아니라 상태라 모노를 벗고, 뒤따르는 말이 물러설 곳을 밝힌다 */
+.tzpop .tzoff .tzn{font-family:inherit;color:var(--muted)}
+.tzpop .tzoff .tzt{font-family:inherit;color:var(--faint);font-size:11px}
+.tzpop .tzrow.on.tzoff .tzn{color:var(--text)}
+/* 못 찾았을 때는 안내가 아니라 **다음 손**이다 */
+.tzpop .tzempty{padding:12px;color:var(--muted);font-size:12px;line-height:1.65}
+.tzpop .tzempty b{font-family:var(--mono);font-weight:400;color:var(--text)}
 /* 프로필 확장 (REQ-20260824-055 E7) — 미기재 신호는 앰버, 실패는 인라인 mono (팝업 금지) */
 .pbadge{font-family:var(--mono);font-size:11px;color:var(--c-inprogress);margin-left:5px}
 .reqhint{font-family:var(--mono);font-size:10px;color:var(--c-inprogress);
@@ -2883,6 +2935,49 @@ function catFind(id){         // 정확 일치 우선, 아니면 유일 prefix (
   const c = catalog.filter(x => x.id.startsWith(id + "-"));
   return c.length === 1 ? c[0] : null;
 }
+/* ---- 축약 번호(`REQ-028`) 풀기 (REQ-20260828-021) ----
+
+   사람은 대화에서 `REQ-028` 로 식별한다 — "가장 최근 날짜의 28번째" 라는 뜻을
+   암묵적으로 쓴다. 그 뜻을 코드로 옮길 때 기준시각을 **렌더하는 지금**으로
+   잡으면 안 된다: 이 저장소의 축약 언급에 그 규칙을 대 보면 셋 중 둘이 다른
+   문서로 풀린다. 하루에 29~91건씩 발번되므로 **스크롤백이 하루도 못 버틴다.**
+
+   그래서 기준시각은 **그 글이 쓰인 때**다. (종류, 날짜, 번호) 중복이 카탈로그에
+   0건이라 임의 시각 t 에 대해 "t 이전에 생긴 그 번호 중 최신"은 언제나
+   유일하고, **시간에 대해 고정된다** — 내일 새 문서가 생겨도 오늘 쓴 줄의
+   해석이 바뀌지 않는다.
+
+   `bin/s9` 의 `resolve_short()` 와 **같은 규칙**이다. 두 벌이 있는 것은
+   좋지 않아서, 아래 CC_SHORT_VECTORS 를 두 엔진이 함께 통과해야 하는
+   계약서로 박아 뒀다 (tests/test_short_ref.py 가 이 표를 읽어 서버를
+   검사하고, `?shortref` 가 같은 표로 화면을 검사한다). */
+const SHORT_REF_RE = /(^|[^"\w-])((?:REQ|DOC|SES|QST))-(\d{1,3})(?![\w-])/g;
+function resolveShortRef(kind, num, atMs){
+  if (!(atMs > 0)) return null;
+  const want = +num;
+  let best = null, bestT = -1;
+  for (const r of catalog){
+    const m = /^([A-Z]{3})-(\d{8})-(\d+)/.exec(r.id || "");
+    if (!m || m[1] !== kind || +m[3] !== want) continue;
+    const t = Date.parse(r.created || "");
+    // 그 줄이 쓰인 **뒤에** 생긴 문서는 그때 가리킬 수 없었던 문서다
+    if (!(t > 0) || t > atMs) continue;
+    if (t > bestT){ best = r; bestT = t; }
+  }
+  return best;
+}
+/* 두 엔진이 함께 통과해야 하는 표. 전부 **작성시각 이전**의 문서로 풀리므로
+   새 문서가 생겨도 답이 바뀌지 않는다 — 그 고정성 자체가 검사 대상이다. */
+const CC_SHORT_VECTORS = [
+  // [축약, 쓰인 때, 풀려야 하는 전체 id (null = 풀지 않는다)]
+  ["REQ-017", "2026-08-24T16:19:49+09:00", "REQ-20260824-017"],
+  ["REQ-023", "2026-08-25T17:28:20+09:00", "REQ-20260825-023"],
+  ["REQ-086", "2026-08-25T22:23:29+09:00", "REQ-20260825-086-62x6"],
+  ["REQ-020", "2026-08-27T10:45:11+09:00", "REQ-20260827-020-62x6"],
+  // 그때는 아직 없던 번호 — "최근 우선"이면 없는 문서를 지어내 링크한다
+  ["REQ-041", "2026-08-21T18:02:06+09:00", null],
+  ["DOC-012", "2026-08-26T19:49:47+09:00", null],
+];
 // 선행 의존은 수명이 있는 상태 축이다 (DOC-20260826-001 규칙 4): 선행이 끝나면
 // 엣지는 사라지고 근거는 History 에만 남는다. 서버(trigger_dependents·linkcheck)가
 // 청소하기 전 — 수동 편집, 아직 안 돈 카탈로그 — 에도 화면이 과거로 채워지지
@@ -2994,9 +3089,15 @@ function depSummaryHTML(rows){
       : (open && d.groups.length > DEP_ROWS ? `<button class="more" data-depmore>접기</button>` : "")}
     ${note}</aside>`;
 }
+/* 없는 문서에는 **링크를 걸지 않는다** (REQ-20260828-021). 지금까지는 id 모양이기만
+   하면 밑줄이 그어졌고, 누르면 빈 미리보기가 떴다 — 화면이 "이 문서가 있다"고
+   말해 놓고 없는 것이다. 카탈로그가 이미 화면에 있으니 물어보면 된다. 카탈로그가
+   아직 안 왔으면 전부 맨 글자가 된다: 죽은 링크보다 그 편이 낫다.
+   판정은 `catFind` 한 곳뿐이다 — 터미널(ccDocLink)도 같은 함수를 쓴다. */
 const linkifyIds = escaped => escaped.replace(
   DOC_ID_INLINE_RE,
-  (mm, pre, id) => `${pre}` + dlink(id, esc(shortId(id))));
+  (mm, pre, id) => { const r = catFind(id);
+    return pre + (r ? dlink(r.id, esc(shortId(id))) : esc(shortId(id))); });
 
 // 확인 포인트/대기 사유를 갈래로 끊어 렌더한다 (DOC-20260826-015).
 // 전이 note 는 대개 "① … ② … ③ …" 또는 "(1) … (2) …" 로 여러 갈래를 한
@@ -3612,6 +3713,7 @@ async function boot(){
   if (qp && [...$("#f-project").options].some(o => o.value === qp)) $("#f-project").value = qp;
   render();
   setTimeout(docPickDiag, 900);   // ?pick=<문서id> — 진단·헤드리스 캡처용 (셸이 선 뒤)
+  shortRefDiag();  // ?shortref — 축약 풀기 계약을 이 화면에서 실제로 재 본다
   anchorBind();    // 구간 메모 팝업 (REQ-20260827-072)
   anchorDiag();    // ?anchor — 진단·헤드리스 캡처용
   window.addEventListener("focus", () => refreshCatalog(true));
@@ -3627,6 +3729,82 @@ async function boot(){
   setInterval(() => { if (!document.hidden) checkGuard(); }, 20000);
   window.addEventListener("focus", checkGuard);
   window.addEventListener("popstate", () => applyRoute(location.hash, true));
+}
+
+/* ?shortref — **두 엔진이 같은 답을 내는지 이 화면에서 잰다** (REQ-20260828-021).
+   서버(`bin/s9`)와 화면에 같은 규칙이 두 벌 있다. 두 벌이 있는 것 자체가 위험이라,
+   계약표(CC_SHORT_VECTORS)를 서버 테스트(tests/test_short_ref.py)와 이 손잡이가
+   함께 읽는다 — 한쪽이 어긋나면 둘 중 하나는 반드시 빨갛게 뜬다.
+   덤으로 "최근 우선" 이 같은 표에서 무엇을 틀리는지도 같이 적는다. */
+function shortRefDiag(){
+  if (!/[?&]shortref/.test(location.search)) return;
+  const latest = (kind, num) => {
+    let b = null, bt = -1;
+    for (const r of catalog){
+      const m = /^([A-Z]{3})-(\d{8})-(\d+)/.exec(r.id || "");
+      if (!m || m[1] !== kind || +m[3] !== +num) continue;
+      const t = Date.parse(r.created || "");
+      if (t > bt){ b = r; bt = t; }
+    }
+    return b;
+  };
+  const lines = [`카탈로그 ${catalog.length}건 · 축약 계약 ${CC_SHORT_VECTORS.length}줄`];
+  let bad = 0, drift = 0;
+  for (const [ref, at, want] of CC_SHORT_VECTORS){
+    const [kind, num] = ref.split("-");
+    const got = resolveShortRef(kind, num, Date.parse(at));
+    const gid = got ? got.id : null;
+    const ok = gid === want;
+    if (!ok) bad++;
+    const now = latest(kind, num);
+    const nid = now ? now.id : null;
+    if (nid !== want) drift++;
+    lines.push(`${ok ? "✓" : "✗"} ${ref} @${at.slice(0, 10)} → ${gid || "(안 품)"}`
+      + (ok ? "" : `  기대 ${want || "(안 품)"}`)
+      + (nid !== want ? `   [최근우선이면 ${nid || "(안 품)"}]` : ""));
+  }
+  lines.push(bad ? `✗ ${bad}줄이 서버와 다르다` : "✓ 계약표 전부 일치",
+             `최근우선과 답이 갈리는 줄: ${drift}/${CC_SHORT_VECTORS.length}`);
+  /* 규칙이 맞는 것과 **글에 그렇게 그려지는 것**은 다른 일이다 — 진짜 터미널
+     렌더러(ccText)에 한 줄을 통과시켜 무엇이 링크가 되고 무엇이 맨 글자로
+     남는지 눈으로 본다. 없는 문서·있는 문서·축약을 한 줄에 섞어 둔다. */
+  const sample = "REQ-20260828-021-62x6 과 REQ-20260828-999 과 REQ-017 을 봤다";
+  const box0 = document.createElement("div");
+  box0.innerHTML = ccText(sample, "2026-08-24T16:19:49+09:00");
+  lines.push("— 실제 렌더 (쓰인 때 2026-08-24) —", `  ${sample}`);
+  box0.querySelectorAll("a.doclink").forEach(a => lines.push(
+    `  ${a.textContent} → ${a.dataset.doc}`
+    + (a.dataset.guess ? "  [짐작 · 물결밑줄 · 이어말하기 없음]" : "  [확정]")));
+  const plain = box0.textContent.match(/REQ-\d{8}-\d{3}(?:-[0-9a-z]{4})?/g) || [];
+  const linked = [...box0.querySelectorAll("a.doclink")].map(a => a.textContent);
+  lines.push(`  맨 글자로 남은 것: ${plain.filter(x => !linked.includes(x)).join(" ") || "(없음)"}`);
+  const box = document.createElement("pre");
+  box.id = "shortref-diag";
+  box.style.cssText = "position:fixed;left:10px;top:10px;z-index:99;margin:0;"
+    + "padding:8px 12px;font:11px/1.6 ui-monospace,monospace;white-space:pre;"
+    + "background:var(--panel);border:1px solid var(--text);color:var(--text)";
+  box.textContent = lines.join("\n");
+  document.body.appendChild(box);
+  /* ?shortref=peek — 규칙이 맞는 것과 **손에 잡히는 것**은 또 다른 일이다.
+     터미널에 그 한 줄을 실제로 심고 미리보기까지 열어 본다: 물결 밑줄이
+     보이는지, 카드가 무엇으로 읽었는지 말하는지, `이어 말하기` 가 정말 안
+     뜨는지. 심은 줄에는 표를 붙여 두어 무엇이 진단인지 헷갈리지 않게 한다. */
+  if (!/[?&]shortref=peek/.test(location.search)) return;
+  let tries = 0;
+  const plant = () => {
+    const out = document.querySelector("#ccout");
+    if (!out){ if (++tries < 40) setTimeout(plant, 250); return; }
+    const ln = document.createElement("div");
+    ln.className = "ln";
+    ln.innerHTML = `<span class="g" style="color:var(--cc-dim)">●</span>`
+      + `<span class="b">[?shortref 진단] ` + ccText(sample, "2026-08-24T16:19:49+09:00")
+      + `</span>`;
+    out.appendChild(ln);
+    out.scrollTop = out.scrollHeight;
+    const g = ln.querySelector("a.doclink.guess");
+    if (g) setTimeout(() => ccPeek(g), 300);
+  };
+  setTimeout(plant, 600);
 }
 
 const TABS = ["board","docs","graph","audit","stream","terminal","settings"];
@@ -6143,14 +6321,33 @@ function ccBlocks(rendered){
    실제로 뱉은 글의 사본이라, 화면이 원문을 고쳐 쓰면 복사한 것과 본 것이
    달라진다. `draggable=false` 는 앵커의 링크-드래그가 글 선택을 가로채는 것을
    막는다(터미널은 통째로 긁어 복사하는 자리다). */
-const ccDocLink = id =>
-  `<a class="doclink" href="#docs/${esc(id)}" data-doc="${esc(id)}"`
-  + ` data-tdoc="${esc(id)}" draggable="false"`
-  + ` title="눌러서 이 자리에서 미리보기 — Ctrl+클릭은 새 탭">${esc(id)}</a>`;
+const ccDocLink = id => {
+  // 없는 문서에는 링크를 걸지 않는다 (REQ-20260828-021) — 판정은 문서 화면과
+  // 같은 `catFind` 하나다. 열 때 쓰는 값은 카탈로그의 정식 id 이고, 보이는
+  // 글자는 원문 그대로다.
+  const r = catFind(id);
+  if (!r) return esc(id);
+  return `<a class="doclink" href="#docs/${esc(r.id)}" data-doc="${esc(r.id)}"`
+    + ` data-tdoc="${esc(r.id)}" draggable="false"`
+    + ` title="눌러서 이 자리에서 미리보기 — Ctrl+클릭은 새 탭">${esc(id)}</a>`;
+};
+/* 축약 번호 링크 — **짐작이다.** 그래서 셋을 함께 지킨다: 밑줄을 달리해 짐작임을
+   보이고, 귀띔에 풀린 전체 id 를 적고, 미리보기에서 `이어 말하기` 를 뜨지 않게
+   한다(data-guess). 마지막 것이 핵심이다 — 이어 말하기는 그 문서에 **영구 기록**을
+   남기고, 화면이 축약을 미리 접어 보내면 서버의 모호성 가드 앞에서 애매함이 이미
+   사라진 채 도착한다. 짐작은 읽기까지만 허용한다. */
+const ccGuessLink = (raw, r) =>
+  `<a class="doclink guess" href="#docs/${esc(r.id)}" data-doc="${esc(r.id)}"`
+  + ` data-tdoc="${esc(r.id)}" data-guess="1" draggable="false"`
+  + ` title="${esc(raw)} → ${esc(r.id)} · 이 줄을 쓴 때 기준으로 짐작한 것입니다`
+  + ` — 눌러서 미리보기">${esc(raw)}</a>`;
 const ccDocs = escaped =>
   escaped.replace(DOC_ID_INLINE_RE, (m0, pre, id) => pre + ccDocLink(id));
 
-function ccText(raw){
+/* `at` = 이 글이 **쓰인 때**(원본 UTC 시각). 축약 번호를 그 시점 기준으로 풀기
+   위해서만 쓴다 — 없으면 지금이다(지금 치고 있는 줄은 지금이 곧 쓰인 때다). */
+function ccText(raw, at){
+  const atMs = Date.parse(at || "") || Date.now();
   raw = String(raw ?? "")
     .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?/g, "")     // OSC 제거
     .replace(/\x1b\[[0-9;?]*[A-HJKSTfhilnsu]/g, "")          // 비-SGR CSI 제거
@@ -6191,6 +6388,13 @@ function ccText(raw){
       // 문서 id — 경로 규칙 **뒤**에 둔다. 절대경로 안의 id 는 이미 자리표시자로
       // 빠져 있어 링크가 겹치지 않는다.
       .replace(DOC_ID_INLINE_RE, (m0, pre, id) => pre + keep(ccDocLink(id)))
+      // 축약 번호(REQ-028) — 전체 id 규칙 **뒤**에 둔다. 앞의 것들은 이미
+      // 자리표시자로 빠져 있어 `REQ-20260828-021` 의 앞 세 자리를 다시 집지
+      // 않는다. 종류 접두와 하이픈이 붙은 형태만 — `#028`·판 번호에는 안 번진다.
+      .replace(SHORT_REF_RE, (m0, pre, kind, num) => {
+        const r = resolveShortRef(kind, num, atMs);
+        return pre + (r ? keep(ccGuessLink(`${kind}-${num}`, r)) : `${kind}-${num}`);
+      })
       // 해시류(7~40자리 16진, 영문자 포함 필수 — 날짜 등 순수 숫자 제외)
       .replace(/\b(?=[0-9a-f]*[a-f])([0-9a-f]{7,40})\b/g,
         (m0, h) => keep(`<span class="ccval">${h}</span>`));
@@ -6251,9 +6455,9 @@ function ccFold(preview, full){                 // 긴 본문은 CC처럼 접는
 }
 function ccChatLine(l){                          // /api/chat/log 한 줄
   if (l.kind === "chat")
-    return ccLine("❯", "var(--cc-dim)", ccText(l.text || ""));
+    return ccLine("❯", "var(--cc-dim)", ccText(l.text || "", l.at || l.ts));
   return ccLine("●", "var(--cc-faint)",          // 전이 통지 등 kind=event
-    ccText(l.text || "") +
+    ccText(l.text || "", l.at || l.ts) +
     ` <span style="color:var(--cc-faint)">· ${esc((l.ts || "").slice(11,16))}</span>`,
     "ccdim");
 }
@@ -6272,8 +6476,8 @@ function ccEvent(T, e){
     if (e.role === "result")
       return {k:"x", html: ccLine("⎿", null,
         ccStrip(t).length > 60
-          ? ccFold('<span style="color:var(--cc-dim)">agent result</span>', ccText(t))
-          : `<span style="color:var(--cc-dim)">${ccText(t)}</span>`, "sub ccagent")};
+          ? ccFold('<span style="color:var(--cc-dim)">agent result</span>', ccText(t, e.at))
+          : `<span style="color:var(--cc-dim)">${ccText(t, e.at)}</span>`, "sub ccagent")};
     const nm = e.role === "tool" ? `<b>${esc(e.name || "tool")}</b> ` : "";
     return {k:"x", html: ccLine("⚙", "var(--cc-faint)",
       `<span style="color:var(--cc-dim)">agent · ${nm}${esc(ccStrip(t).replace(/\s+/g," ").slice(0,110))}</span>`,
@@ -6291,18 +6495,18 @@ function ccEvent(T, e){
       if (T) termAgentDone(T);
       const id = (u.match(/<task-id>([^<]+)<\/task-id>/) || [])[1] || "";
       return {k:"x", role:"notif", html: ccLine("●", "var(--cc-faint)",
-        ccFold(`<span style="color:var(--cc-dim)">background task ${esc(id)} 완료 통지</span>`, ccText(u)),
+        ccFold(`<span style="color:var(--cc-dim)">background task ${esc(id)} 완료 통지</span>`, ccText(u, e.at)),
         "ccdim")};
     }
     if (/^<[a-z-]+>/.test(u)) return null;       // 기타 구조화 주입(command 등)
-    return {k:"x", role:"user", html: ccLine("❯", "var(--cc-dim)", ccText(u))};
+    return {k:"x", role:"user", html: ccLine("❯", "var(--cc-dim)", ccText(u, e.at))};
   }
   if (e.role === "assistant")
-    return {k:"x", role:"assistant", html: ccLine("●", "var(--cc-text)", ccText(t))};
+    return {k:"x", role:"assistant", html: ccLine("●", "var(--cc-text)", ccText(t, e.at))};
   if (e.role === "thinking"){
     const prev = esc(ccStrip(t).replace(/\s+/g, " ").slice(0, 80));
     return {k:"x", role:"thinking", html: ccLine("✻", "var(--cc-dim)",
-      ccFold(`<span style="font-style:italic">${prev}…</span>`, ccText(t)), "ccdim")};
+      ccFold(`<span style="font-style:italic">${prev}…</span>`, ccText(t, e.at)), "ccdim")};
   }
   if (e.role === "tool"){
     if (e.name === "Agent" || e.name === "Task"){ // L8 — 스폰 줄 + Backgrounded 라벨
@@ -6317,15 +6521,15 @@ function ccEvent(T, e){
     const nm = `<b>${esc(e.name || "tool")}</b>`;
     const sum = esc(ccToolSummary(e.name, t));
     const body = ccStrip(t).length > 130
-      ? ccFold(`${nm}<span style="color:var(--cc-dim)">(${sum}…)</span>`, ccText(t))
+      ? ccFold(`${nm}<span style="color:var(--cc-dim)">(${sum}…)</span>`, ccText(t, e.at))
       : `${nm}<span style="color:var(--cc-dim)">(${sum})</span>`;
     return {k: e.name === "Bash" ? "bash" : "x", role:"tool", name:e.name,
             html: ccLine("●", "var(--cc-text)", body)};
   }
   // result — ⎿ 연속줄, 길면 접힘, 에러는 분홍 ✗
   const body = t.length > 200
-    ? ccFold(esc(ccStrip(t).slice(0,140)) + "…", ccText(t))
-    : ccText(t);
+    ? ccFold(esc(ccStrip(t).slice(0,140)) + "…", ccText(t, e.at))
+    : ccText(t, e.at);
   return {k: T && T.lastToolName === "Bash" ? "bashres" : "x", role:"result",
     html: ccLine("⎿", null,
       e.error ? `<span style="color:var(--cc-red)">✗ ${body}</span>` : body, "sub")};
@@ -7054,18 +7258,18 @@ function termAgvLine(e){
   if (e.role === "thinking")
     return ccLine("✻", "var(--cc-dim)", ccFold(
       `<span style="color:var(--cc-faint)">${esc(t.slice(0, 90))}…</span>`,
-      ccText(t)), "ccdim");
+      ccText(t, e.at)), "ccdim");
   if (e.role === "tool")
     return ccLine("●", "var(--cc-faint)",
       `<b>${esc(e.name || "")}</b>(` + (t.length > 110
-        ? ccFold(esc(t.slice(0, 100)) + "…", ccText(t)) : esc(t)) + ")");
+        ? ccFold(esc(t.slice(0, 100)) + "…", ccText(t, e.at)) : esc(t)) + ")");
   if (e.role === "result")
     return ccLine("⎿", "var(--cc-faint)", t.length > 180
-      ? ccFold(esc(t.slice(0, 140)) + "…", ccText(t)) : ccText(t),
+      ? ccFold(esc(t.slice(0, 140)) + "…", ccText(t, e.at)) : ccText(t, e.at),
       e.error ? "" : "ccdim");
   if (e.role === "user")
-    return ccLine("❯", "var(--cc-dim)", ccText(t.slice(0, 3000)));
-  return ccLine("●", "", ccText(t.slice(0, 6000)));
+    return ccLine("❯", "var(--cc-dim)", ccText(t.slice(0, 3000), e.at));
+  return ccLine("●", "", ccText(t.slice(0, 6000), e.at));
 }
 
 function termMainRow(T){
@@ -7250,6 +7454,13 @@ function ccPeekBody(text, full){
 }
 async function ccPeek(a){
   const id = a.dataset.tdoc;
+  /* 축약을 짐작으로 푼 링크인가 (REQ-20260828-021). 그렇다면 이 카드는
+     **읽기 전용**이다: 무엇으로 읽었는지를 머리에 적고 `이어 말하기` 를 내지
+     않는다. 이어 말하기는 그 문서에 영구 기록을 남기는 길이고, 짐작이 틀렸을
+     때 남의 문서에 남은 글은 닫기 한 번으로 못 되돌린다. 전체 번호를 확인하고
+     `문서 열기` 로 옮겨 간 뒤에는 거기서 지금처럼 집을 수 있다. */
+  const guess = a.dataset.guess === "1";
+  const said = (a.textContent || "").trim();
   if (ccPeekId === id && ccPeekEl && ccPeekEl.isConnected){ ccPeekClose(); return; }
   ccPeekClose();
   const ln = a.closest(".ln");
@@ -7266,6 +7477,9 @@ async function ccPeek(a){
         + `<span style="color:${CCSTAT[r.status] || "var(--cc-dim)"}">●</span> `
         + `${esc(r.status || "")}${r.project ? " · " + esc(r.project) : ""}</div>`
         + (r.summary ? `<div class="ps">${esc(r.summary)}</div>` : "")
+        + (guess ? `<div class="pg">‘${esc(said)}’ 을 이 문서로 읽었습니다 —`
+                 + ` 그 줄을 쓴 때 그 번호의 가장 최근 문서입니다.`
+                 + ` 다른 문서였다면 전체 번호로 다시 말해 주세요.</div>` : "")
       // 없는 문서를 가리키는 언급도 있다 — 조용히 아무 일도 안 하면 눌린
       // 것인지 고장인지 알 수 없다.
       : `<div class="pk">${esc(id)}</div>`
@@ -7273,8 +7487,8 @@ async function ccPeek(a){
         + `<div class="ps">지워졌거나, 열 권한이 없거나, 아직 만들어지지 않은 문서입니다.</div>`)
     + `<div class="pb" data-pbody>본문을 불러오는 중…</div>`
     + `<div class="pa">`
-    + (r ? `<button class="pri" data-ppick="${esc(id)}">이어 말하기</button>`
-         + `<button data-popen="${esc(id)}">문서 열기</button>` : "")
+    + (r ? (guess ? "" : `<button class="pri" data-ppick="${esc(id)}">이어 말하기</button>`)
+         + `<button class="${guess ? "pri" : ""}" data-popen="${esc(id)}">문서 열기</button>` : "")
     + `<button data-pclose>닫기</button></div>`;
   ln.insertAdjacentElement("afterend", box);
   ccPeekEl = box; ccPeekId = id; ccPeekText = "";
@@ -8411,17 +8625,54 @@ async function renderGraph(rows){
     nodes.forEach(n => depthOf(n.id, new Set()));
     const layers = {};
     nodes.forEach(n => (layers[depth[n.id]] = layers[depth[n.id]] || []).push(n));
-    Object.entries(layers).forEach(([d, layer]) => {
+    /* 한 층이 판보다 넓으면 **접는다** (REQ-20260828-035).
+
+       전에는 `gap = min(170, (W-120)/인원)` 이 한 층을 반드시 한 줄에 우겨넣었다.
+       하한이 없으니 인원이 늘수록 간격이 0 으로 수렴한다 — 실측: 이 vault 의
+       depth 0 은 352건이고 간격이 **2.84px** 였다. 노드 지름이 10~42px 이므로
+       라벨을 전부 꺼도 **점 자체가 3.5겹**이다. 사용자가 본 흰 띠의 절반은
+       글자가 아니라 겹쳐 뭉개진 점이었다.
+
+       그래서 간격에 하한을 두고, 그 하한으로도 한 줄에 안 들어가면 다음 줄로
+       접는다. 층의 세로 위치는 고정(70 + d*105)이 아니라 **누적 오프셋**이다 —
+       접힌 줄 수만큼 다음 층이 아래로 밀려야 층끼리 포개지지 않는다.
+       판이 세로로 길어지므로 첫 화면은 전체 보기로 시작한다(아래 gFitTf 호출).
+
+       왜 여기까지 해야 하나: 라벨을 거르기만 하면 한 줄에 몰린 노드 위에서
+       라벨 자리가 한 줄분(판 폭/라벨 폭 ≈ 6줄)으로 천장을 치고, **확대해도
+       이름이 늘지 않는다.** 접으면 자리가 판 전체로 퍼져 확대가 보상을 준다. */
+    const DAG_GAP_MIN = 24;    // 점이 겹치지 않는 최소 가로 간격
+    const DAG_ROW_H   = 38;    // 접힌 줄 사이 높이 (지름 최대치보다 크게)
+    const DAG_LAYER_H = 105;   // 층과 층 사이 (기존 값 유지)
+    const DAGRAW = /[?&]gdagraw/.test(location.search);   // 진단: 접기 전 배치
+    let yCur = 70;
+    Object.keys(layers).map(Number).sort((a, b) => a - b).forEach(d => {
+      const layer = layers[d];
       // 부모 x 기준 정렬로 교차 최소화 (단순 barycenter)
       layer.sort((a, b) => {
         const px = id => { const p = parentOf[id]; return p && byId[p] ? byId[p].x || 0 : 0; };
         return px(a.id) - px(b.id);
       });
-      const gap = Math.min(170, (W - 120) / Math.max(layer.length, 1));
+      const avail = Math.max(DAG_GAP_MIN, W - 120);
+      /* 몇 명씩 끊을까. ㉠ 판 폭이 허락하는 만큼(하한 간격 기준). ㉡ 그래도 줄이
+         너무 많이 쌓이면 판보다 넓게 벌린다 — 판이 좁고 낮으면 ㉠ 만으로는 세로로
+         길쭉한 기둥이 되고, 전체 보기가 배율 하한(0.25)에 부딪혀 무리가 화면
+         가운데 작게 뭉친다. 판 비율에 맞춘 폭을 함께 계산해 큰 쪽을 쓴다 —
+         어차피 첫 화면은 전체 보기라 판보다 넓어도 다 보인다. */
+      const byW = Math.floor(avail / DAG_GAP_MIN);
+      const byAspect = Math.ceil(Math.sqrt(
+        layer.length * DAG_ROW_H * (W / Math.max(H, 1)) / DAG_GAP_MIN));
+      const cols = DAGRAW ? layer.length
+        : Math.max(1, Math.min(layer.length, Math.max(byW, byAspect)));
+      const gap = Math.min(170, avail / Math.max(cols, 1));
+      const rows = Math.ceil(layer.length / cols);
       layer.forEach((n, i) => {
-        n.x = W/2 + (i - (layer.length - 1) / 2) * gap;
-        n.y = 70 + d * 105;
+        const r = Math.floor(i / cols), c = i % cols;
+        const inRow = Math.min(cols, layer.length - r * cols);   // 마지막 줄은 가운데로
+        n.x = W/2 + (c - (inRow - 1) / 2) * gap;
+        n.y = DAGRAW ? 70 + d * DAG_LAYER_H : yCur + r * DAG_ROW_H;
       });
+      yCur += (rows - 1) * DAG_ROW_H + DAG_LAYER_H;
     });
     nodes.forEach(n => { n.vx = 0; n.vy = 0;
       n.r = 5 + Math.min(9, 2.2 * Math.sqrt(deg[n.id] || 0)); });
@@ -8482,7 +8733,10 @@ async function renderGraph(rows){
      실제로 하는 그 계산이다. 가만히 있을 때는 가운데를 중심으로 한 등방 확대라
      원은 원으로 남고, 팬 할 때는 깊이마다 다르게 흘러 시차는 그대로 산다.
      줌 k 는 전 깊이 공통이라 역변환도 여전히 한 줄이다. */
-  const pfOf = n => 0.72 + 0.52 * n.near;                    // 원경 0.72 ~ 전경 1.24
+  /* 깊이 시차는 force 무리에서만 쓴다. dag 는 **자리 자체가 뜻**이라(위=부모,
+     아래=파생, 같은 줄=같은 층) 노드마다 다른 배율을 먹이면 곧은 줄이 휘어
+     계층이 안 읽힌다. dag 에서 깊이는 크기·농도가 계속 전한다. */
+  const pfOf = n => graphLayout === "dag" ? 1 : 0.72 + 0.52 * n.near;   // 원경 0.72 ~ 전경 1.24
   /* ?praw — 고치기 전 투영(팬 오프셋에 깊이를 곱하던 것)을 그대로 남긴다.
      "뭐가 달라졌는지 모르겠다"에 그림 두 장으로 답할 수 있어야 한다는 이 요청의
      계약(⑩)이 여기에도 그대로 걸린다. */
@@ -8539,7 +8793,9 @@ async function renderGraph(rows){
                    draw(); },
     // 프레임 한 장을 손으로 그린다: 헤드리스 캡처는 rAF 가 거의 돌지 않아
     // (측정: 3초에 3장) 화면이 옛 상태로 남는다 — 눈으로 볼 수 있게 밀어 준다.
-    frame: () => { gFitStep(); draw(); gAwaySync(); } };
+    frame: () => { gFitStep(); draw(); gAwaySync(); },
+    // 라벨 계측 이음새 — ?gpan 이 프레임마다 교체 수를 합산한다
+    lab: () => ({shown: labPrev.size, churn: labChurnLast, ema: labChurn}) };
 
   function step(){
     const a = st.alpha;
@@ -8717,21 +8973,162 @@ async function renderGraph(rows){
           ctx.textBaseline = "alphabetic";
         }
       }
-      const showLabel = !faded && ((st.tf.k > 0.75 && n.near > 0.45) ||
-        (hov && (n.id === hov.id || nb.has(n.id))) || graphLayout === "dag");
-      if (showLabel){
-        ctx.font = `11px "Noto Sans KR",sans-serif`;
-        ctx.textAlign = "center";
-        ctx.fillStyle = dark ? `rgba(226,232,240,${.35 + .5 * n.near})`
-                             : `rgba(24,32,43,${.3 + .5 * n.near})`;
-        const t = n.title.length > 16 ? n.title.slice(0,16) + "…" : n.title;
-        ctx.fillText(t, px, py + rr + 13);
-      }
       ctx.globalAlpha = 1;
     }
     // 원경→전경 순서로: 가까운 노드가 먼 노드를 덮는다. hover는 최전면.
     for (const n of drawOrder) if (!hov || n.id !== hov.id) drawNode(n);
     if (hov) drawNode(hov);
+    /* 이름은 **점을 다 그린 뒤에** 얹는다. 전에는 노드마다 자기 이름을 그렸는데,
+       뒤에 그려지는 이웃 노드가 앞 사람의 이름을 덮었다 — 라벨을 40개로 줄이고도
+       그 40개가 점에 잘리면 소용이 없다. */
+    const picked = pickLabels(hov, nb);
+    for (const c of picked.acc) drawLabel(c, false);
+    // hover/이웃 이름은 예산과 무관하게, 채택 집합보다 **나중에 맨 위에**
+    for (const c of picked.hot) drawLabel(c, true);
+    if (GLAB) drawLabStat(picked);
+  }
+  /* ------- 이름은 몇 개까지 놓을 수 있나 (REQ-20260828-035) -------
+
+     실측: 라벨 사각형 476개의 글자 총면적이 판 넓이의 **1.58배**다. 어떤 배치를
+     쓰든 476개를 겹치지 않게 놓을 자리가 물리적으로 없다 — 거르는 것은 선택이
+     아니라 필수다. 전에는 `graphLayout === "dag"` 한 조각이 줌·깊이 게이트를
+     통째로 무효화해 매 프레임 477번 그렸고(노드 수와 정확히 같다), 그 결과가
+     사용자가 본 안개다. force 쪽도 대칭으로 실패했다: 전체 보기(k=0.362)를
+     누르면 `near > 0.45` 게이트에 전부 걸려 **이름이 한 개도 안 남았다.**
+
+     그래서 게이트를 없애고 **자리로 정한다** — 우선순위 순으로 겹치지 않는
+     것만 예산까지 채운다. 줌이 저절로 LOD 가 된다: 확대하면 화면에 남는 노드가
+     줄어 같은 예산 안에서 더 많은 이름이 뜬다(k=0.75 라는 절벽이 사라진다).
+
+     매 프레임 돌린다. 실측 0.07~0.12ms(프레임 예산 16.7ms 중)라 캐시를 둘 이유가
+     없고, 캐시는 "언제 무효화하나"(팬·줌·hover·물리·15초 갱신)라는 결함 표면을
+     새로 만든다. `measureText` 만 제목당 1회 기억한다 — 폰트가 고정이라 줌과
+     무관하게 같은 값이다. */
+  const LAB_FONT_N = `11px "Noto Sans KR",sans-serif`;
+  const LAB_FONT_B = `600 11px "Noto Sans KR",sans-serif`;
+  const LAB_BUDGET = 40;          // 판에 두는 이름의 정원 (실측 상한 45~57)
+  const LAB_PADX = 5, LAB_PADY = 3;
+  const GLAB = /[?&]glab/.test(location.search);        // 진단 손잡이 (?gshape 와 동형)
+  const LABRAW = /[?&]glabraw/.test(location.search);   // 진단: 거르기 전(전부 그림)
+  const LABNOHYS = /[?&]glabnohys/.test(location.search);   // 진단: 관성 없이(깜빡임 대조군)
+  const DAGRAW2 = /[?&]gdagraw/.test(location.search);  // 진단: 층 접기 전 (위 DAGRAW 와 같은 손잡이)
+  const labWCache = new Map();
+  const labText = n => n.title.length > 16 ? n.title.slice(0, 16) + "…" : n.title;
+  function labWidth(t, bold){
+    const key = (bold ? "b " : "n ") + t;
+    let w = labWCache.get(key);
+    if (w === undefined){
+      ctx.font = bold ? LAB_FONT_B : LAB_FONT_N;
+      w = ctx.measureText(t).width;
+      labWCache.set(key, w);
+    }
+    return w;
+  }
+  /* 우선순위 = **지금 손이 가야 할 것** 순이다. 전에 남던 이름은 `n.near` 가
+     정했는데 그건 문서 id 해시가 절반을 차지하는 임의값이다 — 병목이 우연히
+     원경이면 이름이 없었다. 이제 병목(미완료 파생) → 진행 중·막힘·검토 →
+     허브(연결 수) → 미완료 순이다. */
+  const LAB_ST = {blocked: 3, "in-progress": 3, review: 2.2};
+  const labPri = n => (n.waiting || 0) * 10
+    + (LAB_ST[n.status] || 0) * 6
+    + Math.sqrt(deg[n.id] || 0) * 1.2
+    + (n.status === "done" || n.status === "cancelled" ? 0 : 2);
+  let labPrev = new Set();        // 직전 프레임 채택 — 관성(히스테리시스)
+  let labChurn = 0;               // 프레임당 교체 수 (지수이동평균)
+  let labChurnLast = 0;           // 직전 프레임의 교체 수 (?gpan 이 프레임마다 합산)
+  function labBox(n, bold, dy){
+    const px = sxOf(n), py = syOf(n), rr = n.r * scOf(n) * (st.hover === n ? 1.12 : 1);
+    const w = labWidth(labText(n), bold), y0 = py + rr + 4 + (dy || 0);
+    return {n, bold, t: labText(n), px, ty: y0 + 9,
+            x0: px - w / 2, x1: px + w / 2, y0, y1: y0 + 13};
+  }
+  const labHits = (a, b) => a.x0 < b.x1 + LAB_PADX && a.x1 > b.x0 - LAB_PADX
+                         && a.y0 < b.y1 + LAB_PADY && a.y1 > b.y0 - LAB_PADY;
+  function pickLabels(hov, nb){
+    const hot = [];
+    if (hov){
+      /* 얹은 노드와 이웃은 예산과 무관하게 이름을 갖는다. 다만 **서로 포개지는
+         것까지 봐준 것은 아니다** — dag 는 이웃이 같은 줄에 나란히 서므로 이름이
+         그대로 쌓여 안개의 축소판이 된다(?glab 로 겹침쌍 3 을 봤다). 아래가
+         막히면 위로, 그다음 한 칸 아래로 자리를 옮겨 본다. 다섯 자리가 다 막히면
+         그 이름은 버린다 — 포갠 둘보다 읽히는 하나가 낫다. */
+      const near = nodes.filter(n => n.id === hov.id || nb.has(n.id))
+        .sort((a, b) => (a.id === hov.id ? -1 : b.id === hov.id ? 1 : labPri(b) - labPri(a)));
+      for (const n of near){
+        const rr = n.r * scOf(n) * (st.hover === n ? 1.12 : 1);
+        for (const dy of [0, -(2 * rr + 21), 15, -(2 * rr + 36), 30]){
+          const c = labBox(n, true, dy);
+          if (n.id === hov.id || !hot.some(a => labHits(a, c))){ hot.push(c); break; }
+        }
+      }
+    }
+    const cands = [];
+    // 얹은 동안에는 그 노드와 이웃만 이름을 갖는다 — 나머지는 이미 물러나 있고
+    // (비이웃 fade 0.12) 물러난 것에 이름을 남기면 강조가 흐려진다(기존 거동 유지).
+    for (const n of hov ? [] : nodes){
+      const b = labBox(n, false);
+      if (b.x1 < 0 || b.x0 > W || b.y1 < 0 || b.y0 > H) continue;   // 화면 밖 컬링
+      // 관성: 직전 프레임에 있던 이름을 맨 앞에. 없으면 팬 중 프레임당 3.19개가
+      // 깜빡여 읽히지 않고 고장으로 보인다(실측). 넣으면 0.81개로 떨어진다.
+      b.key = (!LABNOHYS && labPrev.has(n.id) ? 1e6 : 0) + labPri(n);
+      cands.push(b);
+    }
+    cands.sort((a, b) => b.key - a.key);
+    const acc = [], ids = new Set();
+    // hover 이름이 이미 차지한 자리는 채택 집합이 피한다 — 겹치면 hover 가 덮인다
+    const taken = hot.slice();
+    for (const c of cands){
+      if (!LABRAW && acc.length >= LAB_BUDGET) break;
+      let ok = true;
+      if (!LABRAW) for (const a of taken) if (labHits(a, c)){ ok = false; break; }
+      if (ok){ acc.push(c); taken.push(c); ids.add(c.n.id); }
+    }
+    let ch = 0;
+    for (const id of ids) if (!labPrev.has(id)) ch++;
+    labChurnLast = ch;
+    labChurn = labChurn * 0.85 + ch * 0.15;
+    labPrev = ids;
+    return {acc, hot, cands: cands.length};
+  }
+  /* 색은 면이 아니라 **글자**로 (계기판 언어): 병목=앰버, 진행 중·막힘·검토=잉크
+     600, 나머지=흐린 잉크. 배경색 획을 한 겹 깔아 계보선·점 위에서도 윤곽이
+     남는다 — 화살촉이 이미 쓰는 그 수법이다(색면 아님). */
+  function drawLabel(c, hot){
+    const n = c.n;
+    const sig = n.waiting > 0 ? (dark ? "217,149,55" : "180,83,9")
+      : LAB_ST[n.status] ? inkRGB.join(",") : null;
+    const a = hot ? 1 : sig ? 0.95 : 0.72 + 0.2 * n.near;
+    ctx.font = (hot || sig) ? LAB_FONT_B : LAB_FONT_N;
+    ctx.textAlign = "center";
+    ctx.lineWidth = 2.6; ctx.lineJoin = "round";
+    ctx.strokeStyle = bgColor;
+    ctx.strokeText(c.t, c.px, c.ty);
+    ctx.lineJoin = "miter";
+    ctx.fillStyle = `rgba(${sig || (dark ? "226,232,240" : "24,32,43")},${a.toFixed(2)})`;
+    ctx.fillText(c.t, c.px, c.ty);
+  }
+  /* ?glab — **캡처 한 장이 곧 증거가 되게** 잰 값을 판 위에 적는다(?gshape 와
+     동형). 겹침쌍은 그려진 이름들 사이의 실제 겹침 수다 — 0 이어야 한다.
+     ?glabraw(거르기 전) · ?gdagraw(접기 전) 와 함께 쓰면 같은 판에서 전후를
+     나란히 잴 수 있다. */
+  function drawLabStat(p){
+    const all = p.acc.concat(p.hot);
+    let pairs = 0;
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++){
+      const a = all[i], b = all[j];
+      if (a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0) pairs++;
+    }
+    const line = `라벨 ${all.length}/${nodes.length} · 후보 ${p.cands} · 겹침쌍 ${pairs}`
+      + ` · 교체/프레임 ${labChurn.toFixed(2)} · k${st.tf.k.toFixed(3)}`
+      + (LABRAW ? " · 거르기 전(?glabraw)" : "") + (DAGRAW2 ? " · 접기 전(?gdagraw)" : "");
+    ctx.font = `11px ui-monospace,monospace`;
+    ctx.textAlign = "left";
+    const w = ctx.measureText(line).width;
+    ctx.fillStyle = bgColor; ctx.fillRect(10, 10, w + 16, 24);
+    ctx.strokeStyle = `rgb(${inkRGB.join(",")})`; ctx.lineWidth = 1;
+    ctx.strokeRect(10.5, 10.5, w + 15, 23);
+    ctx.fillStyle = `rgb(${inkRGB.join(",")})`;
+    ctx.fillText(line, 18, 26);
   }
 
   /* ------- 전체 보기 (REQ-20260827-083) -------
@@ -9150,6 +9547,44 @@ async function renderGraph(rows){
       ]);
     }, 1800);
   }
+  /* ?gpan[=N] — **끄는 동안 이름이 깜빡이는지 잰다.** 매 프레임 겹침을 다시 재면
+     그리디는 끓는다: 관성 없이 재면 180px/s 로 끄는 동안 프레임당 3.19개가 갈린다
+     (실측). 10%가 깜빡이면 읽히지 않고 고장으로 보인다. 그래서 직전 프레임에 있던
+     이름을 우선순위 맨 앞에 두는데(관성), 그 효과를 눈이 아니라 숫자로 확인하는
+     자리다. ?glabnohys 와 함께 쓰면 관성을 끈 대조군이 나온다.
+     헤드리스는 rAF 가 거의 안 도므로 프레임을 손으로 민다 — 사람 손과 같은
+     이벤트(pointerdown → move × N → up)를 태우되 한 걸음마다 한 장 그린다. */
+  if (/[?&]gpan/.test(location.search) && !window.__gpanArmed){
+    window.__gpanArmed = 1;
+    setTimeout(() => {
+      const L = window.__gdbg, cv = $("#gcanvas"), r = cv.getBoundingClientRect();
+      const {W: LW, H: LH} = L.size();
+      const steps = Number((/[?&]gpan=(\d+)/.exec(location.search) || [])[1]) || 60;
+      const PX = 3;                       // 프레임당 3px = 60fps 에서 180px/s
+      const x0 = LW * 0.5, y0 = LH * 0.5;
+      const mk = (type, x) => new PointerEvent(type, {bubbles: true, cancelable: true,
+        clientX: r.left + x, clientY: r.top + y0, view: window,
+        pointerId: 1, pointerType: "mouse", isPrimary: true});
+      cv.dispatchEvent(mk("pointerdown", x0));
+      let sum = 0, shown = 0, mx = 0;
+      for (let i = 1; i <= steps; i++){
+        cv.dispatchEvent(mk("pointermove", x0 - PX * i));
+        L.frame();
+        const s = L.lab();
+        sum += s.churn; shown += s.shown; mx = Math.max(mx, s.churn);
+      }
+      cv.dispatchEvent(mk("pointerup", x0 - PX * steps));
+      L.frame();
+      gReport([
+        `끄는 동안 이름이 갈리는가   ${/[?&]glabnohys/.test(location.search)
+          ? "관성 없음(?glabnohys)" : "지금(관성 있음)"}`,
+        `180px/s 로 ${steps}프레임 (${PX * steps}px)`,
+        `교체/프레임  평균 ${(sum / steps).toFixed(2)}   최대 ${mx}`,
+        `표시 이름   평균 ${(shown / steps).toFixed(1)}개`,
+        `k${L.st.tf.k.toFixed(3)}`,
+      ]);
+    }, 2000);
+  }
   /* ?gdbl — **빈 곳 더블클릭을 실제로 해 본다.** 반려 사유가 "더블클릭하면 원복이
      안 된다"였는데, 앞선 검증은 gFit() 을 직접 불러 결과만 찍었다 — 그건 손이
      닿는 길을 건너뛴 것이라 이 결함을 잡을 수 없었다.
@@ -9245,10 +9680,20 @@ async function renderGraph(rows){
   }, { passive: false });
   canvas.addEventListener("pointerleave", () => { st.hover = null; });
 
+  /* dag 는 층을 접느라 판이 세로로 길어졌다 — 배율 1 로 시작하면 맨 윗층만
+     보이고 나머지는 화면 아래에 잠긴다. 처음 들어올 때(저장된 시야가 없을 때)만
+     전체 보기 자리로 놓는다. 물리가 꺼진 고정 배치라 첫 프레임이 곧 사용자
+     화면이므로 애니메이션 없이 그 자리에서 세운다. */
+  if (graphLayout === "dag" && !graphTf){
+    const t0 = gFitTf();
+    if (t0) st.tf = {...t0};
+  }
   stopGraph();
   ganim = { raf: 0, save(){
-    if (graphLayout !== "force") return;  // dag 배치를 force 저장본에 덮지 않음
-    nodes.forEach(n => graphPos[n.id] = {x: n.x, y: n.y});
+    // 시야(줌·팬)는 두 배치 모두 보존한다 — 15초 자동 갱신 때마다 전체 보기로
+    // 되돌아가면 들여다보던 자리를 잃는다. 배치 좌표는 force 만 저장한다
+    // (dag 는 매번 다시 계산하는 고정 배치라 저장본이 오히려 방해다).
+    if (graphLayout === "force") nodes.forEach(n => graphPos[n.id] = {x: n.x, y: n.y});
     graphTf = {...st.tf};
   }};
   loop();
@@ -9485,6 +9930,468 @@ function machineHistoryHTML(u){
     </tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+/* ================= 시간대 고르기 (REQ-20260828-029) =================
+
+   지금까지 이 칸은 빈 입력칸이었다. 이름을 외워서 쳐야 했고, 오타는 **조용히**
+   물러섰다 — 화면은 `Asia/Seuol` 을 저장했다고 보여 주는데 시각은 시스템
+   로컬이었다. 그 거짓말을 없애는 것이 이 자리의 전부다.
+
+   지키는 것 넷:
+     ① **목록의 출처는 서버다.** 브라우저의 `Intl.supportedValuesOf` 와 서버
+        zoneinfo 는 목록이 다르다 — 다르면 "화면에 없는데 저장은 되는 이름"이
+        생긴다. 저장을 판정하는 그 목록으로 고른다.
+     ② **한 줄에 이름과 지금 몇 시인가 둘뿐.** 오프셋은 적지 않고 검색어로만
+        받는다. 시각이 결정적인 이유는 `Etc/GMT+9` 가 실제로 UTC−9 이기
+        때문이다 — 이름만 보면 한국인은 그걸 고른다.
+     ③ **한국어는 화면이 아니라 검색어에 둔다.** 498개 중 한국어 이름을 댈 수
+        있는 것이 30개 남짓이라, 절반만 한국어인 목록은 미완성으로 읽힌다.
+     ④ **Tab 은 고르지 않고 닫힌다.** 콤보박스의 가장 흔한 결함이고, 시간대는
+        잘못 저장돼도 즉시 티가 안 나 피해가 오래간다. 확정은 Enter 하나뿐. */
+let tzData = null;      // {zones:[{name,off}], legacy:[…]} — 서버 목록(=저장 검증 목록)
+let tzFetchAt = 0;
+let tzState = null;     // 지금 화면에 있는 콤보 하나
+let tzTimer = null;
+let tzVisWired = false;
+
+/* 보이지 않는 검색어. **불완전해도 결함이 아니다** — 못 찾으면 IANA 이름으로
+   찾으면 된다. 화면에서 한국어를 뺀 대가를 여기서 치른다.
+   약어는 손으로 넣는다: Intl 은 미주·유럽엔 EST 를 주지만 아시아엔 GMT+9 를
+   줘서, 계산으로 얻으면 반쪽만 된다. */
+const TZ_ALIAS = {
+  "Asia/Seoul": "서울 부산 대구 인천 광주 대전 울산 제주 한국 대한민국 korea kst",
+  "Asia/Pyongyang": "평양 북한",
+  "Asia/Tokyo": "도쿄 동경 오사카 일본 japan jst",
+  "Asia/Shanghai": "상하이 상해 베이징 북경 중국 china cst",
+  "Asia/Hong_Kong": "홍콩 hkt",
+  "Asia/Taipei": "타이베이 대만 대북",
+  "Asia/Macau": "마카오",
+  "Asia/Singapore": "싱가포르 sgt",
+  "Asia/Bangkok": "방콕 태국 ict",
+  "Asia/Ho_Chi_Minh": "호치민 사이공 베트남",
+  "Asia/Jakarta": "자카르타 인도네시아 wib",
+  "Asia/Manila": "마닐라 필리핀 pht",
+  "Asia/Kuala_Lumpur": "쿠알라룸푸르 말레이시아",
+  "Asia/Kolkata": "콜카타 뭄바이 델리 인도 india ist",
+  "Asia/Karachi": "카라치 파키스탄",
+  "Asia/Dhaka": "다카 방글라데시",
+  "Asia/Kathmandu": "카트만두 네팔",
+  "Asia/Colombo": "콜롬보 스리랑카",
+  "Asia/Yangon": "양곤 미얀마",
+  "Asia/Ulaanbaatar": "울란바토르 몽골",
+  "Asia/Vladivostok": "블라디보스토크",
+  "Asia/Almaty": "알마티 카자흐스탄",
+  "Asia/Tashkent": "타슈켄트 우즈베키스탄",
+  "Asia/Dubai": "두바이 아부다비 아랍에미리트 uae",
+  "Asia/Riyadh": "리야드 사우디",
+  "Asia/Tehran": "테헤란 이란",
+  "Asia/Jerusalem": "예루살렘 텔아비브 이스라엘",
+  "Asia/Istanbul": "이스탄불 터키 튀르키예",
+  "Europe/London": "런던 영국 england uk gmt bst",
+  "Europe/Dublin": "더블린 아일랜드",
+  "Europe/Paris": "파리 프랑스 france cet",
+  "Europe/Berlin": "베를린 뮌헨 독일 germany cet",
+  "Europe/Amsterdam": "암스테르담 네덜란드",
+  "Europe/Brussels": "브뤼셀 벨기에",
+  "Europe/Zurich": "취리히 제네바 스위스",
+  "Europe/Vienna": "빈 비엔나 오스트리아",
+  "Europe/Rome": "로마 밀라노 이탈리아 italy",
+  "Europe/Madrid": "마드리드 바르셀로나 스페인 spain",
+  "Europe/Lisbon": "리스본 포르투갈",
+  "Europe/Stockholm": "스톡홀름 스웨덴",
+  "Europe/Oslo": "오슬로 노르웨이",
+  "Europe/Copenhagen": "코펜하겐 덴마크",
+  "Europe/Helsinki": "헬싱키 핀란드",
+  "Europe/Warsaw": "바르샤바 폴란드",
+  "Europe/Prague": "프라하 체코",
+  "Europe/Budapest": "부다페스트 헝가리",
+  "Europe/Athens": "아테네 그리스",
+  "Europe/Kyiv": "키이우 키예프 우크라이나",
+  "Europe/Moscow": "모스크바 러시아 russia msk",
+  "America/New_York": "뉴욕 워싱턴 보스턴 미국 usa est edt",
+  "America/Chicago": "시카고 댈러스 휴스턴 미국 usa cst cdt",
+  "America/Denver": "덴버 미국 usa mst mdt",
+  "America/Phoenix": "피닉스 애리조나",
+  "America/Los_Angeles": "로스앤젤레스 엘에이 샌프란시스코 시애틀 라스베이거스 미국 usa pst pdt",
+  "America/Anchorage": "앵커리지 알래스카",
+  "Pacific/Honolulu": "호놀룰루 하와이",
+  "America/Toronto": "토론토 오타와 캐나다 canada",
+  "America/Vancouver": "밴쿠버 캐나다 canada",
+  "America/Mexico_City": "멕시코시티 멕시코 mexico",
+  "America/Sao_Paulo": "상파울루 브라질 brazil brt",
+  "America/Argentina/Buenos_Aires": "부에노스아이레스 아르헨티나",
+  "America/Santiago": "산티아고 칠레",
+  "America/Lima": "리마 페루",
+  "America/Bogota": "보고타 콜롬비아",
+  "Australia/Sydney": "시드니 캔버라 호주 australia aest",
+  "Australia/Melbourne": "멜버른 호주 australia",
+  "Australia/Brisbane": "브리즈번 호주",
+  "Australia/Perth": "퍼스 호주",
+  "Pacific/Auckland": "오클랜드 뉴질랜드 nzst",
+  "Africa/Cairo": "카이로 이집트",
+  "Africa/Johannesburg": "요하네스버그 케이프타운 남아공",
+  "Africa/Nairobi": "나이로비 케냐",
+  "Africa/Lagos": "라고스 나이지리아",
+  "Africa/Casablanca": "카사블랑카 모로코",
+};
+
+const tzNorm = s => String(s || "").toLowerCase().replace(/_/g, " ").trim();
+/* 호환용 이름(`Etc/*` · `UTC` 같은 슬래시 없는 이름)은 훑는 목록에 넣지 않는다 */
+const tzLegacy = name => name.startsWith("Etc/") || !name.includes("/");
+/* 오프셋은 **부호가 있을 때만** 오프셋이다 — `9` 는 이름의 조각일 수 있다 */
+function tzOffQuery(q){
+  const m = /^([+-])(\d{1,2})(?::?([0-5]\d))?$/.exec(String(q).replace(/\s+/g, ""));
+  if (!m) return null;
+  const mins = (+m[2]) * 60 + (+(m[3] || 0));
+  return mins > 14 * 60 ? null : (m[1] === "-" ? -mins : mins);
+}
+/* 지금 몇 시인가. 날짜가 다르면 **그 사실을 함께** 적는다 — 시각만 적으면
+   12시간 차이가 30분 차이로 읽혀 시각을 적은 뜻이 사라진다. */
+function tzClock(off){
+  const d = new Date(Date.now() + off * 60000);
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  const me = new Date();
+  const dd = Math.round((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+    - Date.UTC(me.getFullYear(), me.getMonth(), me.getDate())) / 86400000);
+  const pre = dd === 0 ? "" : dd === -1 ? "어제 " : dd === 1 ? "내일 "
+            : `${d.getUTCMonth() + 1}/${d.getUTCDate()} `;
+  return pre + hh + ":" + mm;
+}
+async function tzLoad(){
+  if (tzData && Date.now() - tzFetchAt < 3600000) return tzData;
+  const d = await (await fetch("/api/timezones")).json();
+  if (!d || !Array.isArray(d.zones)) throw new Error("목록이 비어 있습니다");
+  tzData = d; tzFetchAt = Date.now();
+  return tzData;
+}
+const tzAll = () => tzData ? tzData.zones.concat(tzData.legacy || []) : [];
+const tzFind = name => tzAll().find(z => z.name === name) || null;
+
+/* 맞추는 것: 이름(대소문자·`_`↔공백 무시) · 한국어/약어 별칭 · 부호 있는 오프셋.
+   안 맞추는 것(못 박음): 오타 교정 — 시간대는 잘못 골라도 티가 안 나서,
+   어림짐작이 정답처럼 보이는 것이 오타보다 위험하다. */
+function tzFilter(raw){
+  const q = tzNorm(raw);
+  if (!q) return [];
+  const offq = tzOffQuery(q);
+  const out = [];
+  for (const z of tzAll()){
+    const legacy = tzLegacy(z.name);
+    let r = -1;
+    if (offq !== null){
+      // 오프셋으로 물었으면 오프셋으로만 답한다 — 이름에 `+9` 가 박힌
+      // `Etc/GMT+9`(실제 UTC−9)가 맨 위로 올라오면 그게 곧 함정이다
+      if (!legacy && z.off === offq) r = 0;
+    } else {
+      const n = tzNorm(z.name), seg = tzNorm(z.name.split("/").pop());
+      if (seg.startsWith(q)) r = 0;
+      else if (n.startsWith(q)) r = 1;
+      else if (n.includes(q)) r = 2;
+      else if (!legacy && tzNorm(TZ_ALIAS[z.name]).includes(q)) r = 3;
+    }
+    if (r >= 0) out.push({z, r});
+  }
+  out.sort((a, b) => a.r - b.r || a.z.name.localeCompare(b.z.name));
+  return out;
+}
+
+function tzNowRender(){
+  const el = document.getElementById("tz-now");
+  if (!el) return;
+  const saved = tzState ? tzState.saved : "";
+  if (!saved){
+    el.className = "tznow tzsub";
+    el.textContent = "이 컴퓨터의 시간대를 따릅니다.";
+    return;
+  }
+  const z = tzFind(saved);
+  if (!z){
+    // 목록이 아직 안 왔을 뿐인 것과, 서버가 모르는 이름인 것은 다른 사실이다
+    el.className = tzData ? "tznow tzbad" : "tznow";
+    el.textContent = tzData
+      ? "이 이름을 모릅니다 — 지금은 이 컴퓨터의 시간대로 적힙니다." : "";
+    return;
+  }
+  el.className = "tznow";
+  el.innerHTML = `<span class="w">지금</span>${esc(tzClock(z.off))}`;
+}
+function tzTick(){
+  const el = document.getElementById("tz-now");
+  if (!el || !document.contains(el)){ tzStop(); return; }   // 판이 닫혔다
+  if (document.hidden) return;                              // 안 보이면 멈춘다
+  tzNowRender();
+  const S = tzState;
+  if (S && S.open && S.pop)
+    S.pop.querySelectorAll(".tzt[data-off]").forEach(t => {
+      t.innerHTML = `<span class="w">지금</span>${esc(tzClock(+t.dataset.off))}`;
+    });
+}
+function tzPlace(){
+  const S = tzState;
+  if (!S || !S.open || !S.pop) return;
+  const r = S.input.getBoundingClientRect();
+  const below = window.innerHeight - r.bottom - 14, above = r.top - 14;
+  const up = below < 220 && above > below;
+  S.pop.style.left = Math.round(r.left) + "px";
+  S.pop.style.width = Math.round(r.width) + "px";
+  S.pop.style.maxHeight = Math.min(340, Math.max(140, up ? above : below)) + "px";
+  if (up){ S.pop.style.top = "auto"; S.pop.style.bottom = Math.round(window.innerHeight - r.top + 4) + "px"; }
+  else { S.pop.style.bottom = "auto"; S.pop.style.top = Math.round(r.bottom + 4) + "px"; }
+}
+function tzRowHTML(it, i, on){
+  const sel = on ? " on" : "";
+  return it.clear
+    ? `<div class="tzrow tzoff${sel}" id="tzo-${i}" role="option" aria-selected="${!!on}" data-i="${i}">
+         <span class="tzn">설정 안 함</span>
+         <span class="tzt">이 컴퓨터의 시간대를 따릅니다</span></div>`
+    : `<div class="tzrow${sel}" id="tzo-${i}" role="option" aria-selected="${!!on}" data-i="${i}">
+         <span class="tzn">${esc(it.name)}</span>
+         <span class="tzt" data-off="${it.off}"><span class="w">지금</span>${esc(tzClock(it.off))}</span></div>`;
+}
+function tzRender(){
+  const S = tzState;
+  if (!S || !S.open || !S.pop) return;
+  if (!tzData){ S.pop.innerHTML = `<div class="tzempty">목록을 불러오는 중…</div>`; return; }
+  // **손대지 않은 글자는 검색어가 아니다.** 칸에는 지금 값이 적혀 있으므로,
+  // 그것을 검색어로 치면 열자마자 목록이 한 줄로 줄어 고를 것이 없어 보인다.
+  const raw = S.input.value.trim();
+  const q = raw === S.saved ? "" : raw;
+  let items = [], groups = [];
+  if (!q){
+    // 처음 화면: 지금 쓰는 곳 → 전체. 전체는 **자르지 않는다** — 몇 개까지만
+    // 보여 주면 "내 도시가 없다"로 읽힌다.
+    const cur = S.saved ? tzFind(S.saved) : null;
+    if (cur) items.push({name: cur.name, off: cur.off});
+    items.push({clear: true});
+    groups = [{at: 0, label: "지금 쓰는 곳"},
+              {at: items.length, label: `전체 ${tzData.zones.length}개`}];
+    items = items.concat(tzData.zones.map(z => ({name: z.name, off: z.off})));
+  } else {
+    items = tzFilter(q).map(h => ({name: h.z.name, off: h.z.off}));
+  }
+  S.items = items;
+  S.idx = Math.max(0, Math.min(S.idx, items.length - 1));
+  let html = "";
+  items.forEach((it, i) => {
+    const g = groups.find(x => x.at === i);
+    if (g) html += `<div class="tzg">${esc(g.label)}</div>`;
+    html += tzRowHTML(it, i, i === S.idx);
+  });
+  if (!items.length)
+    html = `<div class="tzempty">‘${esc(q)}’에 맞는 시간대가 없습니다.<br>
+      도시 이름(<b>seoul</b> · <b>서울</b>)이나 지역(<b>Asia/</b>)으로 찾아보세요.</div>`;
+  S.pop.innerHTML = html;
+  tzCursor(false);
+}
+function tzCursor(scroll){
+  const S = tzState;
+  if (!S || !S.pop) return;
+  S.pop.querySelectorAll(".tzrow").forEach(el => {
+    const on = +el.dataset.i === S.idx;
+    el.classList.toggle("on", on);
+    el.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  const on = S.pop.querySelector(".tzrow.on");
+  if (on){
+    S.input.setAttribute("aria-activedescendant", on.id);
+    on.scrollIntoView({block: "nearest"});
+  } else S.input.removeAttribute("aria-activedescendant");
+  if (scroll) tzPlace();
+}
+function tzOpen(){
+  const S = tzState;
+  if (!S || S.open) return;
+  let pop = document.getElementById("tz-pop");
+  if (!pop){
+    // **판 밖(body)에 띄운다** — 설정 판은 안쪽 스크롤이 있고 glass 스킨은
+    // .docs 를 잘라서, 판 안에 그리면 목록이 접힌 자리 아래로 숨는다.
+    pop = document.createElement("div");
+    pop.id = "tz-pop"; pop.className = "tzpop"; pop.setAttribute("role", "listbox");
+    pop.addEventListener("mousedown", e => e.preventDefault());  // 눌러도 포커스 유지
+    pop.addEventListener("click", e => {
+      const row = e.target.closest(".tzrow");
+      if (row) tzPick(+row.dataset.i);
+    });
+    document.body.appendChild(pop);
+  }
+  S.pop = pop; S.open = true; S.idx = 0;
+  pop.hidden = false;
+  S.input.setAttribute("aria-expanded", "true");
+  // 치기 시작하면 지금 값이 지워지도록 — 지우고 치게 만들면 손이 한 번 더 간다
+  try{ S.input.select(); }catch(ex){}
+  tzRender();
+  tzPlace();
+  window.addEventListener("scroll", tzPlace, true);
+  window.addEventListener("resize", tzPlace);
+  if (!tzData)
+    tzLoad().then(() => { if (tzState === S && S.open){ tzRender(); tzPlace(); } tzNowRender(); })
+            .catch(() => { if (tzState === S && S.open && S.pop)
+              S.pop.innerHTML = `<div class="tzempty">목록을 받아오지 못했습니다 — 서버가 살아 있는지 보고 다시 열어 주세요.</div>`; });
+}
+function tzClose(restore){
+  const S = tzState;
+  if (!S || !S.open) return;
+  S.open = false;
+  S.input.setAttribute("aria-expanded", "false");
+  S.input.removeAttribute("aria-activedescendant");
+  if (S.pop){ S.pop.hidden = true; S.pop.innerHTML = ""; }
+  window.removeEventListener("scroll", tzPlace, true);
+  window.removeEventListener("resize", tzPlace);
+  // 고르지 않고 닫혔으면 친 글자는 남기지 않는다 — 저장된 값이 곧 이 칸의 값이다
+  if (restore) S.input.value = S.saved;
+}
+function tzStop(){
+  if (tzTimer){ clearInterval(tzTimer); tzTimer = null; }
+  if (tzState) tzClose(false);
+  const pop = document.getElementById("tz-pop");
+  if (pop) pop.remove();
+  tzState = null;
+}
+async function tzPick(i){
+  const S = tzState;
+  if (!S) return;
+  const it = S.items[i];
+  if (!it) return;
+  const val = it.clear ? "" : it.name;
+  tzClose(false);
+  if (val === S.saved){ S.input.value = S.saved; tzNowRender(); return; }
+  await tzSave(val);
+}
+/* 고른 즉시 저장한다(이 판의 다른 설정이 전부 그렇다). 알림이 약속하는 것은
+   **이 칸의 시계까지다** — 대화 기록·터미널 시각은 서버 기동 시 1회 계산된
+   값을 써서 따라오지 않는다(REQ-20260828-030). 넓게 쓰면 거짓이 된다. */
+async function tzSave(val){
+  const S = tzState;
+  const msg = document.getElementById("tz-msg");
+  const prev = S.saved;
+  S.input.value = val;
+  if (msg){ msg.className = "secmsg"; msg.textContent = "저장하는 중…"; }
+  const res = await postJSONRaw("/api/user/config",
+                                {name: S.user, key: "timezone", value: val});
+  if (tzState !== S) return;
+  if (!res.ok){
+    // 실패했는데 새 값이 남아 있으면 화면이 거짓말을 한다 — 보이는 것을 되돌린다
+    S.saved = prev; S.input.value = prev;
+    tzNowRender();
+    if (msg){ msg.className = "secmsg bad"; msg.textContent = "✕ " + res.error; }
+    return;
+  }
+  S.saved = val;
+  if (S.cfg){ if (val) S.cfg.timezone = val; else delete S.cfg.timezone; }
+  tzNowRender();
+  if (msg){
+    const z = tzFind(val);
+    msg.className = "secmsg";
+    msg.textContent = val
+      ? `저장했습니다 — 이제 ${val} 기준입니다.${z ? ` 지금 ${tzClock(z.off)}.` : ""}`
+      : "지웠습니다 — 이제 이 컴퓨터의 시간대를 따릅니다.";
+  }
+}
+function tzWire(host, u){
+  const inp = host.querySelector("#tz-in");
+  tzStop();                       // 앞 폼의 타이머·떠 있던 목록부터 거둔다
+  if (!inp) return;
+  const cfg = u.config || (u.config = {});
+  tzState = {input: inp, user: u.name, cfg, saved: cfg.timezone || "",
+             pop: null, items: [], idx: 0, open: false};
+  tzNowRender();
+  tzLoad().then(() => { tzNowRender(); if (tzState && tzState.open) tzRender(); })
+          .catch(() => {});
+  inp.addEventListener("mousedown", () => { if (!tzState.open) setTimeout(tzOpen, 0); });
+  inp.addEventListener("input", () => {
+    if (!tzState.open) tzOpen();
+    tzState.idx = 0;              // 타자 시 커서는 첫 행으로
+    tzRender(); tzPlace();
+  });
+  inp.addEventListener("blur", () => tzClose(true));   // Tab·바깥 클릭 = 고르지 않고 닫힘
+  inp.addEventListener("keydown", e => {
+    const S = tzState;
+    if (!S) return;
+    if (e.key === "ArrowDown"){
+      e.preventDefault();
+      if (!S.open){ tzOpen(); return; }
+      S.idx = Math.min(S.idx + 1, S.items.length - 1);   // 끝에서 멈춘다(순환 금지)
+      tzCursor(true);
+    } else if (e.key === "ArrowUp"){
+      e.preventDefault();
+      if (!S.open) return;
+      S.idx = Math.max(S.idx - 1, 0);
+      tzCursor(true);
+    } else if (e.key === "Enter"){
+      e.preventDefault();
+      if (!S.open){ tzOpen(); return; }
+      tzPick(S.idx);                                    // 확정은 Enter 하나뿐
+    } else if (e.key === "Escape"){
+      if (S.open){ e.preventDefault(); e.stopPropagation(); tzClose(true); }
+    } else if (e.key === "Tab"){
+      if (S.open) tzClose(true);
+    }
+  });
+  tzTimer = setInterval(tzTick, 30000);
+  if (!tzVisWired){
+    tzVisWired = true;
+    // 돌아온 순간의 시계는 30초를 기다릴 것 없이 지금 값이어야 한다
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) tzTick(); });
+  }
+  /* ?tz[=검색어] — 이 목록은 설정 판 **안쪽 스크롤 아래**에 있고 헤드리스
+     캡처는 스크롤을 못 한다(?secview 와 같은 사정). 눈으로 못 보면 못 고친다. */
+  /* ?tzdbg — **손 없이 눌러 본다.** 이 자리의 계약은 넷이다: 고르면 그 자리에서
+     저장된다 · 칸의 시계가 새 시간대로 바뀐다 · 알림은 이 칸까지만 약속한다 ·
+     **실패하면 보이는 값이 이전으로 돌아온다.** 목록이 그려졌다는 것만으로는
+     하나도 못 말한다. 건드린 값은 끝에서 원래대로 돌려놓는다. */
+  if (/[?&]tzdbg/.test(location.search) && !window.__tzdbgArmed){
+    window.__tzdbgArmed = 1;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const say = lines => {
+      const box = document.createElement("pre");
+      box.style.cssText = "position:fixed;left:10px;top:10px;z-index:99;margin:0;"
+        + "padding:8px 12px;font:11px/1.6 ui-monospace,monospace;white-space:pre;"
+        + "background:var(--panel);border:1px solid var(--text);color:var(--text)";
+      box.textContent = lines.join("\n");
+      document.body.appendChild(box);
+    };
+    const msg = () => (($("#tz-msg") || {}).textContent || "").trim();
+    const now = () => (($("#tz-now") || {}).textContent || "").trim();
+    const type = v => { inp.value = v; inp.dispatchEvent(new Event("input", {bubbles: true})); };
+    const key = k => inp.dispatchEvent(new KeyboardEvent("keydown",
+      {key: k, bubbles: true, cancelable: true}));
+    setTimeout(async () => {
+      const first = () => (tzState.items[tzState.idx] || {}).name || "(빈 줄)";
+      const out = [];
+      inp.focus(); tzOpen(); await wait(300);
+      out.push(`열면 첫 줄: ${first()} / 목록 ${tzState.items.length}줄`);
+      type("tokyo"); await wait(200);
+      out.push(`"tokyo" → ${first()} (${tzState.items.length}줄)`);
+      key("Enter"); await wait(900);
+      out.push(`Enter 뒤 칸: ${inp.value} · ${now()}`, `알림: ${msg()}`);
+      // Tab 은 고르지 않는다 — 다른 이름을 띄워 놓고 Tab 을 눌러 본다
+      inp.focus(); tzOpen(); await wait(200);
+      type("paris"); await wait(200);
+      key("Tab"); await wait(300);
+      out.push(`Tab 뒤 칸: ${inp.value} (안 바뀌어야 맞다)`);
+      // 저장이 실패할 때 — 서버가 모르는 이름을 일부러 보낸다(서버가 거절한다).
+      // 실패했는데 새 값이 남아 있으면 화면이 거짓말을 한다.
+      await tzSave("Mars/Olympus");
+      await wait(900);
+      out.push(`실패 뒤 칸: ${inp.value} · ${now()}`, `알림: ${msg()}`);
+      // 건드린 값은 원래대로
+      await tzSave("Asia/Seoul");
+      await wait(900);
+      out.push(`되돌린 뒤: ${inp.value} · ${now()}`);
+      say(out);
+    }, 700);
+  }
+  const m = /[?&]tz(?:=([^&]*))?/.exec(location.search);
+  if (m && !/[?&]tzdbg/.test(location.search)) setTimeout(async () => {
+    inp.scrollIntoView({block: "center"});
+    try{ await tzLoad(); }catch(ex){}
+    inp.focus();
+    if (m[1]) inp.value = decodeURIComponent(m[1].replace(/\+/g, " "));
+    tzOpen();
+    if (m[1]) tzRender();
+  }, 500);
+}
+
 // 프로필+config 편집 폼 (account 섹션: 본인 / users 섹션: admin이 타인 편집)
 function showUserForm(u, host, isAdminEdit){
   if (!host) return;
@@ -9523,12 +10430,24 @@ function showUserForm(u, host, isAdminEdit){
     ${machineHistoryHTML(u)}
     <div class="cfg-h">개인화 설정 — config/settings.json</div>
     <table class="metatbl">
-      <tr><td>timezone</td><td><input class="uf" id="cf-timezone" placeholder="Asia/Seoul" value="${esc(cfg.timezone||"")}"></td></tr>
       <tr><td>digest_budget</td><td><input class="uf" id="cf-digest_budget" placeholder="2500" value="${esc(cfg.digest_budget||"")}"></td></tr>
       <tr><td><input class="uf" id="cf-key" placeholder="임의 키" style="width:130px"></td>
           <td><input class="uf" id="cf-val" placeholder="값 (빈 값=삭제)"></td></tr>
     </table>
     <div class="acts"><button id="cf-save">설정 저장</button></div>
+    <div class="cfg-h">시간대</div>
+    <div class="path secnote">문서와 기록의 시각을 이 시간대로 적습니다 — config/settings.json 의 <b>timezone</b>. 이름을 쳐서 좁히고 골라 주세요. <b>고르면 바로 저장됩니다.</b></div>
+    <div class="tzline">
+      <div class="tzc">
+        <input class="uf tzin" id="tz-in" role="combobox" aria-expanded="false"
+               aria-controls="tz-pop" aria-autocomplete="list" aria-label="시간대"
+               autocomplete="off" spellcheck="false" placeholder="설정 안 함"
+               value="${esc(cfg.timezone || "")}">
+        <span class="tzcar" aria-hidden="true">▾</span>
+      </div>
+      <span class="tznow" id="tz-now" aria-live="polite"></span>
+    </div>
+    <div class="secmsg" id="tz-msg"></div>
     <div class="cfg-h">대화 기록 — Stream 탭</div>
     <div class="path secnote">세션 대화를 이 저장소에 남길지 정합니다. 끄면 Stream 탭과 문서 안의 대화 보기가 함께 사라지고, 이미 남은 기록은 지우지 않습니다. <b>바꾸면 바로 저장됩니다.</b></div>
     <table class="metatbl">
@@ -9616,8 +10535,10 @@ function showUserForm(u, host, isAdminEdit){
     renderSettings();
   });
   host.querySelector("#cf-save").addEventListener("click", async () => {
-    const sets = [["timezone", $("#cf-timezone").value.trim()],
-                  ["digest_budget", $("#cf-digest_budget").value.trim()]];
+    // timezone 은 여기서 저장하지 않는다 (REQ-20260828-029) — 자기 자리에서
+    // 고른 즉시 저장된다. 이 목록에 남겨 두면 **렌더 시점의 낡은 값**이
+    // 방금 고른 값을 덮어쓴다(이 폼은 재렌더 없이 살아 있다).
+    const sets = [["digest_budget", $("#cf-digest_budget").value.trim()]];
     const ck = $("#cf-key").value.trim();
     if (ck) sets.push([ck, $("#cf-val").value.trim()]);
     let ok = true;
@@ -9670,6 +10591,7 @@ function showUserForm(u, host, isAdminEdit){
                            : `${raw}일이 지난 기록부터 지웁니다.`);
     });
   }
+  tzWire(host, u);
   /* ------- 비밀 키 (REQ-20260828-012) -------
      **값을 그리지 않는다.** 목록은 키 이름과 어디에 있는지뿐이고, 넣은 값은 저장
      즉시 입력칸에서도 지운다 — 화면에 남아 있으면 캡처·화면 공유·어깨너머로

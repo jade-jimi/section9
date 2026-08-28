@@ -490,6 +490,63 @@ def resolve_id(doc_id):
     return [r for r in rows if r["id"].startswith(doc_id + "-")]
 
 
+SHORT_REF_RE = re.compile(r"(?<![\w-])((?:REQ|DOC|SES|QST))-(\d{1,3})(?![\w-])")
+
+
+def resolve_short(kind, num, at, rows=None):
+    """날짜 없는 축약(`REQ-028`)을 **그 줄이 쓰인 시점** 기준으로 푼다.
+
+    사람은 대화에서 `REQ-028` 로 식별한다 — "가장 최근 날짜의 28번째" 라는 뜻을
+    암묵적으로 쓴다. 그 뜻을 코드로 옮길 때 기준시각을 **렌더하는 지금**으로
+    잡으면 안 된다: 이 저장소의 축약 언급 327건에 그 규칙을 대 보면 243건
+    (74%)이 다른 문서로 풀린다. 하루에 29~91건씩 발번되므로 **스크롤백이
+    하루도 못 버틴다** (REQ-20260828-021 의 architect 실측).
+
+    그래서 기준시각은 `at` — 그 글이 **쓰인 때**다.
+      · 결정적이다: (종류, 날짜, 번호) 중복이 카탈로그에 0건이라, 임의 시각 t
+        에 대해 "t 이전에 생긴 그 번호 중 최신"은 언제나 유일하다.
+      · **시간에 대해 고정된다.** 내일 새 문서가 생겨도 오늘 쓴 줄의 해석이
+        바뀌지 않는다 — 기록이 나중에 다른 것을 가리키는 일이 없다.
+
+    못 찾으면 None. 짐작이 허용되는 것은 **읽기 전용일 때뿐이다** — 이것으로
+    푼 id 를 쓰기 경로(note·chat)에 그대로 넘기지 마라. `/api/note` 의 모호성
+    가드는 받은 문자열을 검사하는데, 여기서 미리 접어 보내면 애매함이 가드
+    앞에서 이미 사라진 채 도착한다.
+    """
+    rows = load_catalog() if rows is None else rows
+    at = _epoch(at)
+    if at is None:
+        return None
+    want, best, best_t = int(num), None, None
+    for r in rows:
+        m = re.match(r"^([A-Z]{3})-(\d{8})-(\d+)", r.get("id") or "")
+        if not m or m.group(1) != kind or int(m.group(3)) != want:
+            continue
+        t = _epoch(r.get("created"))
+        # 그 줄이 쓰인 **뒤에** 생긴 문서는 그때 가리킬 수 없었던 문서다
+        if t is None or t > at:
+            continue
+        if best_t is None or t > best_t:
+            best, best_t = r, t
+    return best
+
+
+def _epoch(v):
+    """ISO 문자열 / epoch 초 → epoch 초. 못 읽으면 None."""
+    if v is None or v == "":
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().replace(" ", "T")
+    for cut in (None, 19, 16, 10):
+        try:
+            return datetime.datetime.fromisoformat(
+                s if cut is None else s[:cut]).timestamp()
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
 def id_alias(rows=None):
     """짧은 id(uid 접미 없이 저장된 과거 값) → 카탈로그 정식 id 매핑.
 
@@ -5722,14 +5779,79 @@ def attach_tags(paths, text_of=None):
 
 
 def doc_asset_dir(doc_id, make=False):
-    """문서의 첨부 디렉토리 — <문서 디렉토리>/assets/<문서ID>/. 문서 없으면 ""."""
+    """문서의 첨부 디렉토리 — <문서 디렉토리>/assets/<**정식** 문서ID>/.
+
+    폴더 이름은 부른 사람이 넘긴 문자열이 아니라 **문서가 스스로 밝히는 정식
+    id** 다 (REQ-20260828-026). 전에는 인자를 그대로 썼다. `locate()` 는 짧은
+    id 도 alias 로 찾아 주므로 문서는 제대로 찾고 폴더만 짧은 이름으로
+    만들어졌고, 결과가 셋이었다:
+
+      ① 한 문서의 첨부가 두 폴더로 갈린다 (실제로 REQ-20260828-007 이 그랬다)
+      ② 정식 id 로 물으면 404 — 화면이 안 깨진 것은 프런트가 본문에 적힌
+         경로에서 id 를 그대로 떼어 쓰기 때문이지 폴더가 맞아서가 아니었다
+      ③ **접미사는 인스턴스 식별자다.** 짧은 이름은 그것을 버리므로 다른
+         인스턴스의 같은 번호 문서와 폴더가 겹친다 — 병합에서 실제 충돌.
+
+    문서 없으면 "".
+    """
     p = locate(doc_id)
     if not p:
         return ""
-    d = os.path.join(os.path.dirname(p), "assets", doc_id)
+    meta, _b = read_doc(p)
+    canon = meta.get("id") or doc_id
+    d = os.path.join(os.path.dirname(p), "assets", canon)
     if make:
         os.makedirs(d, exist_ok=True)
     return d
+
+
+def merge_legacy_asset_dirs(root=None):
+    """짧은 이름으로 만들어진 첨부 폴더를 정식 폴더로 합친다 (REQ-20260828-026).
+
+    **파일만 옮기고 본문 참조를 두면 화면이 깨진다** — 둘을 함께 한다.
+    이름이 겹치면 덮지 않고 `-2` 를 붙여 남긴다: 첨부가 사라지는 것이
+    폴더가 지저분한 것보다 나쁘다.
+    반환: 옮긴 (원본, 대상) 목록.
+    """
+    import glob as _glob
+    moved = []
+    base = root or ROOT
+    for p in walk_docs():
+        meta, body = read_doc(p)
+        canon = meta.get("id")
+        if not canon:
+            continue
+        adir = os.path.join(os.path.dirname(p), "assets")
+        if not os.path.isdir(adir):
+            continue
+        for legacy in sorted(_glob.glob(os.path.join(adir, "*"))):
+            name = os.path.basename(legacy)
+            if not os.path.isdir(legacy) or name == canon:
+                continue
+            # 이 문서의 짧은 형태인가 — 접미사만 다른 것만 손댄다
+            if not (canon.startswith(name + "-") and name.count("-") >= 2):
+                continue
+            dst_dir = os.path.join(adir, canon)
+            os.makedirs(dst_dir, exist_ok=True)
+            for fn in sorted(os.listdir(legacy)):
+                src, dst = os.path.join(legacy, fn), os.path.join(dst_dir, fn)
+                stem, ext = os.path.splitext(fn)
+                i = 2
+                while os.path.exists(dst):
+                    dst = os.path.join(dst_dir, f"{stem}-{i}{ext}")
+                    i += 1
+                shutil.move(src, dst)
+                if os.path.basename(dst) != fn:
+                    body = body.replace(f"assets/{name}/{fn}",
+                                        f"assets/{canon}/{os.path.basename(dst)}")
+                moved.append((src, dst))
+            body = body.replace(f"assets/{name}/", f"assets/{canon}/")
+            write_doc(p, meta, body)
+            try:
+                os.rmdir(legacy)
+            except OSError:
+                pass          # 비어 있지 않으면 남긴다 — 지우지 않는다
+    return moved
 
 
 # ---- 첨부 본문 사이드카 (REQ-20260826-020) ---------------------------------
@@ -6538,6 +6660,51 @@ def loose_requests(now=None):
         elif claims.get(rid):
             out.append({"id": rid, "title": title, "kind": "idle",
                         "fix": f"s9 status {rid} blocked --note '<못 하는 사유>'"})
+    out += undelivered_requests()
+    return out
+
+
+def undelivered_requests():
+    """끝났는데 **도착하지 않은** 일 (REQ-20260828-036).
+
+    판정 축이 둘뿐이었다 — "누가 붙어 있나"(catalog_with_live·delegated_live·
+    rework_claimed)와 "문서가 움직였나"(stalled_requests·loose_requests). 셋째
+    축인 **"산출물이 도착했나"** 가 없었다.
+
+    실사고 2026-08-28: 무인 작업자가 REQ-20260828-025 를 구현하고 문서에 완료
+    보고까지 적었는데 코드는 워크트리 안에만 있었다. 화면에는 39분째 "진행 중"
+    이었고 사용자가 "진짜 진행중인건가" 로 발견했다. 워크트리 넷이 전부 그랬다.
+    두 축은 아무리 정밀해도 이걸 못 잡는다 — 붙은 이도 없고 문서는 방금
+    움직였으니까.
+
+    그런데 그 사실은 **이미 계산되고 있었다**: `worktree_state().ahead` 를
+    `s9 worktree ls` 가 그대로 찍는다. 아무 판정 함수도 그것을 안 불렀을 뿐이다.
+    새 판정을 만들지 않고 이미 있는 사실을 이미 있는 통로에 꽂는다.
+    """
+    out = []
+    for w in worktree_list():
+        name = os.path.basename(w["path"].rstrip("/"))
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
+            continue
+        st = worktree_state(name)
+        if not (st["ahead"] or st["dirty"]):
+            continue
+        own = worktree_owner_read(name)
+        rid = own.get("doc") or ""
+        title = ""
+        if rid:
+            for r in load_catalog():
+                if r["id"] == canon_id(rid):
+                    title = r.get("title", "")
+                    break
+        what = []
+        if st["ahead"]:
+            what.append(f"안 합친 커밋 {st['ahead']}")
+        if st["dirty"]:
+            what.append("미커밋")
+        out.append({"id": rid or f"(워크트리 {name})", "title": title,
+                    "kind": "undelivered", "detail": " · ".join(what),
+                    "fix": f"s9 worktree merge {name}"})
     return out
 
 
@@ -6547,6 +6714,8 @@ def cmd_loose(args):
         return
     for r in rows:
         head = ("커밋됐는데 전이가 안 됐다" if r["kind"] == "committed"
+                else f"끝났는데 본 저장소에 안 왔다 ({r.get('detail', '')})"
+                if r["kind"] == "undelivered"
                 else "잡아만 놓고 착수하지 않았다")
         print(f"- {r['id']} {r['title']} — {head}\n    {r['fix']}")
 
@@ -7348,9 +7517,42 @@ def cmd_commit_note(args):
     "커밋은 됐는데 전이가 안 된 요청" 이라는 또렷한 상태가 생긴다.
     """
     import subprocess
+    # **커밋을 읽는 자리는 훅이 발화한 저장소다** (REQ-20260828-036).
+    # 워크트리에서 커밋하면 post-commit 이 거기서 뜨는데 `S9_ROOT` 는 본
+    # 저장소로 못박혀 있다(코드는 갈리고 데이터는 하나다). 그래서 cwd=ROOT 로
+    # `git log -1` 을 돌면 **본 저장소의 마지막 커밋 — 남의 것**을 읽는다.
+    # 결과가 둘이었다: 워커가 자기 REQ 에 아무 흔적도 못 남기고(→ loose 놓침),
+    # 남의 REQ 에 "커밋됐다" 가 붙는다(→ 거짓 완료). 이 함수가 docstring 에서
+    # 피하려 한 바로 그것이다. 쓰는 자리(ROOT)와 읽는 자리(cwd)를 가른다.
+    def _common(d):
+        try:
+            r = subprocess.run(["git", "rev-parse", "--path-format=absolute",
+                                "--git-common-dir"], capture_output=True,
+                               text=True, cwd=d, timeout=15)
+            return os.path.realpath(r.stdout.strip()) if r.returncode == 0 \
+                and r.stdout.strip() else ""
+        except (OSError, subprocess.SubprocessError):
+            return ""
+
+    where = ROOT
+    here = os.environ.get("PWD") or os.getcwd()
+    # **같은 저장소의 워크트리일 때만** 그 자리를 읽는다. 훅은 워크트리에서
+    # 발화하므로 거기 커밋을 읽어야 하지만, 전혀 다른 저장소 안에서 s9 를
+    # 부른 경우까지 따라가면 남의 커밋을 이 vault 에 적게 된다.
+    if here and os.path.isdir(here) and _common(here) and \
+       _common(here) == _common(ROOT):
+        try:
+            top = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                                 capture_output=True, text=True, cwd=here,
+                                 timeout=15)
+            if top.returncode == 0 and top.stdout.strip():
+                where = top.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
     try:
         r = subprocess.run(["git", "log", "-1", "--format=%H%n%s%n%b"],
-                           capture_output=True, text=True, cwd=ROOT, timeout=15)
+                           capture_output=True, text=True, cwd=where,
+                           timeout=15)
     except OSError:
         return
     if r.returncode != 0 or not r.stdout.strip():
@@ -7492,6 +7694,28 @@ def _discover_transcript(sid8):
     return max(cands, key=os.path.getmtime) if cands else ""
 
 
+TERMINAL_STATUSES = ("done", "cancelled")
+
+
+def doc_status(doc_id):
+    """문서의 지금 상태 — 못 찾으면 "". 카탈로그를 먼저 본다(파일 read 회피)."""
+    cid = canon_id(doc_id)
+    try:
+        for r in load_catalog():
+            if r.get("id") == cid:
+                return r.get("status", "")
+    except Exception:
+        pass
+    try:
+        p = locate(cid)
+        if p:
+            meta, _b = read_doc(p)
+            return meta.get("status", "")
+    except Exception:
+        pass
+    return ""
+
+
 def _claim_req(machine, session, doc_id, agent_transcript=""):
     """세션 바인딩에 REQ 실행 등록(active_reqs) + 문서 세션 승계 스탬프.
 
@@ -7499,6 +7723,13 @@ def _claim_req(machine, session, doc_id, agent_transcript=""):
     live 매칭과 클레임 판정이 깨지던 문제 (REQ-20260825-086). 이미 짧은
     형태로 들어 있던 기존 값도 이 참에 정규화한다. 반환: 정규화된 id."""
     doc_id = canon_id(doc_id)
+    # **끝난 문서는 다시 등록하지 않는다** (REQ-20260828-036).
+    # 실사고 2026-08-28: 13:35 에 done 된 REQ 가 훅의 클레임으로 되살아나
+    # 그 뒤 이 세션의 위임 네 건을 전부 빨아들였다. 화면은 끝난 문서를
+    # "에이전트 4명 작업 중" 으로, 정작 일하던 문서를 "아무도 없음" 으로
+    # 그렸다. `update_active_reqs` 가 done 전이 때 지운 것을 여기가 되살렸다.
+    if doc_status(doc_id) in TERMINAL_STATUSES:
+        return doc_id
     acquire_lock()
     try:
         b = read_binding(machine, session) or {
@@ -8120,6 +8351,15 @@ def do_user_config_set(name, key, value, actor=""):
     # 지워진 뒤 같은 경로로 다시 저장하면 되살아나야 한다.
     if key == "external_secrets_path" and value:
         value = ensure_external_secret_dir(value)
+    # 시간대는 **틀리면 그 자리에서 말한다** (REQ-20260828-029). 지금까지는
+    # `Asia/Seuol` 을 그대로 받아 두고 화면은 저장됐다고 보여 주는데 시각만
+    # 조용히 시스템 로컬로 물러섰다 — 화면이 거짓말을 하는 상태였다.
+    if key == "timezone" and value:
+        try:
+            import zoneinfo
+            zoneinfo.ZoneInfo(value)
+        except Exception:
+            raise ValueError(f"모르는 시간대입니다: {value} — 예: Asia/Seoul")
     cfg = user_config(name)
     if value == "" or value is None:
         if key not in cfg:
@@ -8142,6 +8382,40 @@ def do_user_config_set(name, key, value, actor=""):
         write_doc(ppath, meta, body)
     except OSError:
         pass
+
+
+def timezone_list():
+    """고를 수 있는 시간대 — **저장을 검증하는 그 목록 그대로** (REQ-20260828-029).
+
+    출처가 갈리면 "화면에 없는데 저장은 되는 이름" 이 생긴다. 브라우저의
+    `Intl.supportedValuesOf` 는 이 서버의 zoneinfo 와 목록이 다르므로 쓰지
+    않는다 — 저장을 판정하는 쪽(`do_user_config_set` 의 ZoneInfo)과 같은
+    출처여야 화면이 거짓말을 하지 않는다.
+
+    두 묶음으로 나눠 보낸다.
+      `zones`  — 지역/도시 이름 448개. 목록에 늘어놓고 훑는 자리.
+      `legacy` — `Etc/*` 와 `UTC`·`EST` 같은 호환용 이름 48개. **직접 칠 때만**
+                 나온다. `Etc/GMT+9` 는 POSIX 규약 탓에 실제로 UTC−9 라, 훑는
+                 목록에 섞어 두면 이름만 보고 고르는 사람을 속인다.
+    `Factory`·`localtime` 은 어느 쪽에도 넣지 않는다 — 시간대가 아니라 파일
+    시스템 부산물이라 고를 것이 못 된다.
+
+    `off` 는 **지금** 이 시간대의 UTC 오프셋(분)이다. 화면이 이것으로 각 줄의
+    시계를 그린다 — 이름 옆의 시각이 고르기 전에 틀린 것을 보여 주는 장치다.
+    """
+    import zoneinfo
+    now = datetime.datetime.now(datetime.timezone.utc)
+    zones, legacy = [], []
+    for name in sorted(zoneinfo.available_timezones()):
+        if name in ("Factory", "localtime"):
+            continue
+        try:
+            off = now.astimezone(zoneinfo.ZoneInfo(name)).utcoffset()
+        except Exception:
+            continue    # 이 서버가 해석 못 하는 이름은 고를 수 있는 이름이 아니다
+        row = {"name": name, "off": int(off.total_seconds() // 60)}
+        (legacy if (name.startswith("Etc/") or "/" not in name) else zones).append(row)
+    return {"zones": zones, "legacy": legacy}
 
 
 ACCOUNT_TOKEN = r"(?<![\w/\\.\-])%s(?![\w/\\.\-])"
@@ -10624,12 +10898,17 @@ def cmd_serve(args):
                     continue
                 t = o.get("type")
                 ts = local_ts(o.get("timestamp"))
+                # 화면이 이 줄의 축약 번호를 **쓰인 때** 기준으로 풀려면
+                # 표시용 문자열이 아니라 원본 UTC 시각이 필요하다 —
+                # 표시 시간대가 다르면 하루 경계에서 답이 갈린다
+                # (REQ-20260828-021).
+                at = str(o.get("timestamp") or "")
                 agent = bool(o.get("isSidechain"))  # 서브에이전트 실행분
                 if t == "user":
                     c = (o.get("message") or {}).get("content")
                     if isinstance(c, str):
                         if not o.get("isMeta"):
-                            events.append({"role": "user", "ts": ts,
+                            events.append({"role": "user", "ts": ts, "at": at,
                                            "agent": agent, "text": c[:4000]})
                     elif isinstance(c, list):
                         for b in c:
@@ -10638,7 +10917,7 @@ def cmd_serve(args):
                                 if isinstance(txt, list):
                                     txt = "\n".join(x.get("text", "") for x in txt
                                                     if isinstance(x, dict))
-                                events.append({"role": "result", "ts": ts,
+                                events.append({"role": "result", "ts": ts, "at": at,
                                                "agent": agent,
                                                "error": bool(b.get("is_error")),
                                                "text": str(txt or "")[:2000]})
@@ -10648,15 +10927,15 @@ def cmd_serve(args):
                             continue
                         bt = b.get("type")
                         if bt == "text" and b.get("text"):
-                            events.append({"role": "assistant", "ts": ts,
+                            events.append({"role": "assistant", "ts": ts, "at": at,
                                            "agent": agent, "text": b["text"][:6000]})
                         elif bt == "thinking" and b.get("thinking"):
-                            events.append({"role": "thinking", "ts": ts,
+                            events.append({"role": "thinking", "ts": ts, "at": at,
                                            "agent": agent,
                                            "text": b["thinking"][:1500]})
                         elif bt == "tool_use":
                             inp = json.dumps(b.get("input", {}), ensure_ascii=False)
-                            events.append({"role": "tool", "ts": ts,
+                            events.append({"role": "tool", "ts": ts, "at": at,
                                            "agent": agent,
                                            "name": b.get("name", ""),
                                            "text": inp[:1500]})
@@ -11169,6 +11448,11 @@ def cmd_serve(args):
                 # 비가시 문서도 같은 404 — 존재 여부를 누설하지 않는다
                 self._json(data if data else {"error": "no stream for doc"},
                            200 if data else 404)
+            elif parsed.path == "/api/timezones":
+                # 고를 수 있는 이름 = 저장이 받아 주는 이름 (REQ-20260828-029).
+                # 이름 목록은 tzdata 이고 누구의 것도 아니다 — 사용자 값은
+                # 여기에 실리지 않는다.
+                self._json(timezone_list())
             elif parsed.path == "/api/transitions":
                 self._json({k: sorted(v) for k, v in TRANSITIONS.items()})
             elif parsed.path == "/api/whoami":
@@ -11864,6 +12148,35 @@ def worktree_merge(name):
     return True, f"{name}: 합치고 거뒀다 (커밋 {st['ahead']}개)"
 
 
+def _worktree_autocommit(name, own=None):
+    """주인이 떠난 워크트리의 미커밋을 그 가지에 박는다 (REQ-20260828-025).
+
+    거두지 않고 남긴다 — 박은 뒤에는 "안 합친 커밋" 이 되어 리드가
+    `s9 worktree ls` 에서 보고 합친다. 실패해도 조용히 넘긴다: 못 박으면
+    그냥 미커밋으로 남고, 그건 지금까지와 같은 상태라 더 나빠지지 않는다.
+    """
+    import subprocess
+    path = os.path.join(WORKTREE_HOME, name)
+    doc = (own or {}).get("doc") or ""
+    msg = (f"워커 작업 자동 보존: {doc or name}\n\n"
+           "무인 작업자가 커밋하지 않고 끝나 리드 쪽 장치가 대신 박았다.\n"
+           "커밋 없는 워크트리는 소실 장치다 — 거두는 순간 사라진다.\n"
+           "합칠지는 리드가 판단한다: s9 worktree merge " + name)
+    env = {**os.environ, "S9_ALLOW_CONCURRENT": "1"}
+    try:
+        env.setdefault("S9_USER", resolve_user(None))
+    except Exception:
+        pass
+    try:
+        subprocess.run(["git", "add", "-A"], cwd=path, capture_output=True,
+                       timeout=60)
+        subprocess.run(["git", "commit", "-q", "-m", msg], cwd=path, env=env,
+                       capture_output=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    _auto_log(f"WT-AUTOCOMMIT {name} doc={doc or '?'}")
+
+
 def _worktree_forget(name):
     try:
         os.remove(worktree_owner_path(name))
@@ -11899,8 +12212,17 @@ def worktree_sweep(now=None):
         if nowt - float(own.get("created") or 0) < WORKTREE_MIN_AGE:
             continue                      # 갓 만든 것 — pid 가 아직 안 적혔을 수 있다
         st = worktree_state(name)
-        if st["dirty"] or st["ahead"]:
-            continue                      # 남길 것이 있다
+        if st["dirty"]:
+            # **커밋은 규율이 아니라 장치여야 한다** (REQ-20260828-025).
+            # 실사고 2026-08-28: 무인 작업자가 구현을 끝내고 문서에 완료 보고까지
+            # 적었는데 그 코드가 워크트리 안에만 있었다. 화면에는 39분째 "진행 중"
+            # 으로 떠 있었고 사용자가 발견했다. 워크트리 넷이 전부 그랬다.
+            # 그날 오전에 봉투에 git add·commit 을 이미 넣어 뒀는데도 안 했다 —
+            # 손을 쥐여 주는 것만으로는 안 된다. 주인이 떠났으면 리드가 대신 박는다.
+            _worktree_autocommit(name, own)
+            continue
+        if st["ahead"]:
+            continue                      # 합칠 것이 있다 — 리드 몫
         r = subprocess.run(["git", "worktree", "remove", st["path"]],
                            capture_output=True, text=True, cwd=ROOT, timeout=60)
         if r.returncode == 0:

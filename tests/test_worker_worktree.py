@@ -149,6 +149,83 @@ class WorkerWorktree(unittest.TestCase):
         self.assertTrue(os.path.isdir(cwd))
 
 
+class WorktreeAutoCommit(unittest.TestCase):
+    """B6·B7 — 워커가 커밋을 안 하고 끝나면 리드가 대신 박는다.
+
+    실사고 2026-08-28 16:16~17:56. 무인 작업자가 REQ-20260828-025 를 **구현까지
+    끝내고 문서에 완료 보고까지 적었는데**, 그 코드가 워크트리 안에만 있고
+    커밋되지 않아 본 저장소에는 한 줄도 없었다. 화면에는 39분째 "진행 중" 으로
+    떠 있었고 사용자가 "진짜 진행중인건가" 로 발견했다. 워크트리 네 개가 전부
+    그 상태였다.
+
+    그날 오전에 봉투(allowedTools)에 git add·commit 을 이미 넣어 뒀다. **손을
+    쥐여 줬는데도 안 했다** — 커밋이 규율로 남아 있는 한 이 실패는 반복된다.
+    그래서 장치로 바꾼다: 주인이 떠났는데 미커밋이 남아 있으면 거두기 전에
+    그 가지에 박는다. 박은 뒤에는 "안 합친 커밋" 이 되어 sweep 이 손대지 않고,
+    리드가 `s9 worktree ls` 에서 보고 합친다.
+    """
+
+    def setUp(self):
+        self._git_env = {k: v for k, v in os.environ.items()
+                         if k.startswith("GIT_")}
+        for k in self._git_env:
+            os.environ.pop(k, None)
+        self.root = tempfile.mkdtemp(prefix="s9wtac-")
+        _git(self.root, "init", "-q", "-b", "main")
+        _git(self.root, "config", "user.name", "t")
+        _git(self.root, "config", "user.email", "t@t")
+        with open(os.path.join(self.root, "a.txt"), "w") as f:
+            f.write("one\n")
+        _git(self.root, "add", "-A")
+        _git(self.root, "commit", "-qm", "init")
+        os.environ["S9_ROOT"] = self.root
+        spec = importlib.util.spec_from_loader(
+            "s9_wtac", importlib.machinery.SourceFileLoader("s9_wtac", S9))
+        self.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.m)
+
+    def tearDown(self):
+        os.environ.pop("S9_ROOT", None)
+        os.environ.update(self._git_env)
+        for w in (self.m.worktree_list() or []):
+            _git(self.root, "worktree", "remove", "--force", w["path"])
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _dead_owner_worktree(self, doc):
+        cwd, _e, name = self.m.worker_workspace(
+            doc, {"worker_worktree": True}, self.root)
+        self.m.worktree_owner_write(name, {"doc": doc, "pid": 999999,
+                                           "created": time.time() - 86400})
+        return cwd, name
+
+    def test_b6_unfinished_work_is_committed_not_lost(self):
+        cwd, name = self._dead_owner_worktree("REQ-lost")
+        with open(os.path.join(cwd, "worker.txt"), "w") as f:
+            f.write("워커가 만든 것\n")
+
+        self.assertEqual(self.m.worktree_sweep(), [],
+                         "미커밋이 있는데 거뒀다")
+        st = self.m.worktree_state(name)
+        self.assertFalse(st["dirty"], "커밋하지 않았다 — 거두면 사라진다")
+        self.assertEqual(st["ahead"], 1, "그 가지에 커밋이 안 남았다")
+        self.assertTrue(os.path.isdir(cwd), "합칠 것이 있는데 자리를 거뒀다")
+        msg = _git(self.root, "log", "-1", "--format=%s",
+                   f"wt/{name}").stdout
+        self.assertIn("REQ-lost", msg, "무엇의 작업인지 커밋이 말하지 않는다")
+
+    def test_b7_live_owner_is_left_alone(self):
+        cwd, _e, name = self.m.worker_workspace(
+            "REQ-busy", {"worker_worktree": True}, self.root)
+        self.m.worktree_owner_write(name, {"doc": "REQ-busy",
+                                           "pid": os.getpid(),
+                                           "created": time.time() - 86400})
+        with open(os.path.join(cwd, "wip.txt"), "w") as f:
+            f.write("아직 쓰는 중\n")
+        self.m.worktree_sweep()
+        self.assertTrue(self.m.worktree_state(name)["dirty"],
+                        "일하는 중인 워커의 작업을 커밋해 버렸다")
+
+
 class WorktreeEnvelope(unittest.TestCase):
     """B5 — 워크트리 워커는 자기 가지에 커밋할 수 있어야 한다.
 

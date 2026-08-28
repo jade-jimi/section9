@@ -55,12 +55,18 @@ class TermMention(unittest.TestCase):
     def test_the_mention_is_a_real_link(self):
         """href 와 data-doc 이 **같은 값**이어야 한다 — 갈라지면 새 탭만 다른
         문서를 연다 (REQ-20260827-013 이 dlink 주석에 적어 둔 그 이유)."""
-        m = re.search(r"const ccDocLink = id =>([\s\S]*?);\n", self.code)
+        m = re.search(r"const ccDocLink = id => \{([\s\S]*?)\n\};", self.code)
         self.assertIsNotNone(m, "터미널 문서 링크를 짓는 자리가 없다")
         fn = m.group(1)
-        self.assertIn('href="#docs/${esc(id)}"', fn, "href 가 없다 — 새 탭이 죽는다")
-        self.assertIn('data-doc="${esc(id)}"', fn, "얹기 카드가 무엇을 볼지 모른다")
-        self.assertIn('data-tdoc="${esc(id)}"', fn, "터미널이 먼저 가로챌 표식이 없다")
+        # 여는 값은 **카탈로그의 정식 id** 다 (REQ-20260828-021): 글에 적힌 짧은
+        # 형태로 열면 열리는 문서가 없거나 다른 문서가 된다. 보이는 글자는 원문
+        # 그대로이므로 "무엇을 여는가"와 "무엇이라 적혀 있는가"는 별개다.
+        parts = re.findall(
+            r'(href="#docs/|data-doc="|data-tdoc=")\$\{esc\(([\w.]+)\)\}', fn)
+        self.assertEqual(len(parts), 3,
+                         "href·data-doc·data-tdoc 셋이 다 있지는 않다: %s" % parts)
+        self.assertEqual(len({p[1] for p in parts}), 1,
+                         "href 와 data-doc 이 갈렸다 — 새 탭만 다른 문서를 연다")
 
     def test_the_terminal_paints_the_link_with_its_own_palette(self):
         """터미널은 tone 무관 상시 다크다 — 문서 화면의 잉크를 물려받으면

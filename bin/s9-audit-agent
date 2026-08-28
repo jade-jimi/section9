@@ -85,11 +85,21 @@ def target_req(env):
         b = json.loads(run(env, "bind").stdout or "{}")
     except ValueError:
         return ""
-    cands = [x for x in [(b.get("last_req") or "").strip(),
-                         *(b.get("active_reqs") or [])] if x]
+    # **끝난 문서는 후보가 아니다** (REQ-20260828-036). 소유만 보고 상태를 안
+    # 보던 탓에, 13:35 에 done 된 REQ 가 그 뒤 위임 네 건을 전부 빨아들였다 —
+    # 화면은 끝난 문서를 "에이전트 4명 작업 중" 으로 그렸고, 그 문서는
+    # agent_health 의 시야(in-progress) 밖이라 좀비 기여가 마감되지도 않았다.
+    # 그리고 **최근 클레임 우선**으로 고른다: last_req 를 먼저 보면 오래된
+    # 포인터가 새 위임을 계속 가로챈다. bin/s9 의 _capture_target 과 같은 순서다.
+    cands = [x for x in [*reversed(b.get("active_reqs") or []),
+                         (b.get("last_req") or "").strip()] if x]
     for rid in dict.fromkeys(cands):
-        if run(env, "last", "--owns", rid).stdout.strip() == rid:
-            return rid
+        if run(env, "last", "--owns", rid).stdout.strip() != rid:
+            continue
+        st = run(env, "show", rid, "--meta").stdout
+        if any(f"status: {t}" in st for t in ("done", "cancelled")):
+            continue
+        return rid
     return ""
 
 
