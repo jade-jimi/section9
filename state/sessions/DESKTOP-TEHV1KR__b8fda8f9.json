@@ -3,11 +3,8 @@
  "session": "b8fda8f9",
  "user": "",
  "history": [],
- "active_reqs": [
-  "REQ-20260828-041-62x6"
- ],
+ "active_reqs": [],
  "claim_at": {
-  "REQ-20260828-028-62x6": "2026-08-28T19:02:11+09:00",
   "REQ-20260828-041-62x6": "2026-08-28T21:07:33+09:00"
  },
  "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58.jsonl",
@@ -43,6 +40,7 @@
   "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a978bfd2ccb4bc91b.output",
   "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a30daab19f9804590.output",
   "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a0f852ddab00a27f7.output",
-  "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/ab64fee2fe18971af.output"
+  "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/ab64fee2fe18971af.output",
+  "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/ad036cb4bddbab35b.output"
  ]
 }

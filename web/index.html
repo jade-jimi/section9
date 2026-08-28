@@ -1240,6 +1240,23 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    뜻을 얹고, 그 자리는 바로 위 선행 대기 줄이 이미 쓴다. */
 .rvpt.stall{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rvpt.stall .rvcap{color:var(--c-inprogress)}
+/* 멈춘 것을 깨우는 손잡이 (REQ-20260828-041). **새 컴포넌트를 만들지 않는다** —
+   카드가 이미 쓰는 행동 줄(.acts)과 행위 버튼(.deed)을 그대로 입는다. 그래야
+   열 몇 벌의 스킨이 따라오고, 판정 버튼과 같은 손맛이 된다.
+   자리는 멈춤 줄 **바로 아래**다: 사실 한 줄 → 그 사실에 대해 할 수 있는 일
+   하나. 판정 카드(.judge)가 이미 쓰는 그 순서이고, 줄 안에 끼워 넣으면 긴
+   문장이 잘리는 자리(.rvpt.stall 은 ellipsis)와 버튼이 폭을 다툰다.
+   간격은 .acts 기본(8px)보다 좁힌다 — 위의 멈춤 줄과 한 덩어리로 읽혀야 한다. */
+.acts.wakerow{margin-top:5px}
+/* 도는 중에는 눌리지 않는다. 색면·붉은 실패로 그리지 않고, 잉크를 한 급 낮춰
+   "지금은 내 차례가 아니다"만 말한다. */
+.acts button.wake[disabled]{cursor:default;color:var(--muted);
+  border-color:var(--hairline);background:var(--panel)}
+.acts button.wake[disabled]:hover{background:var(--panel);color:var(--muted);
+  border-color:var(--hairline)}
+/* 키보드로 닿은 자리가 보여야 손이 간다 — 카드(.card:focus-visible)와 같은 잉크 링 */
+.card .acts button:focus-visible,.viewer .acts button:focus-visible{
+  outline:2px solid var(--text);outline-offset:1px}
 /* 판정 카드의 배경 한 줄 (DOC-20260826-015). 확인 포인트 "위에" 무엇에 대한
    건인지 먼저 놓는다 — 순서가 곧 읽는 순서다. 판정 카드에만 붙인다: 모든
    카드에 요약을 깔면 보드가 문장 벽이 된다.
@@ -2232,7 +2249,11 @@ tr.rowoff td{opacity:.45}
   line-height:1.45;letter-spacing:-.014em;color:var(--text)}
 [data-skin="calm"] .card .m{order:2;margin-top:9px;gap:9px;row-gap:5px;font-size:11px;
   align-items:center}
-[data-skin="calm"] .card .judge,[data-skin="calm"] .card>.rvpt{order:3}
+/* 깨우기 줄도 멈춤 줄과 같은 칸에 선다 (REQ-20260828-041). calm 은 카드를
+   order 로 다시 세우므로, 자리를 안 주면 order:0 이 되어 **제목보다 위로**
+   튀어 오른다 — 카드 맨 윗줄에 버튼이 서는 화면이 된다. */
+[data-skin="calm"] .card .judge,[data-skin="calm"] .card>.rvpt,
+[data-skin="calm"] .card>.acts{order:3}
 [data-skin="calm"] .card .id{order:4;margin-top:11px;display:flex;align-items:center;gap:2px;
   font-size:10px;color:var(--calm-quiet);letter-spacing:.03em}
 [data-skin="calm"] .card .elapsed{position:absolute;right:16px;bottom:12px;top:auto;
@@ -4620,6 +4641,92 @@ function render(){
 }
 
 /* ---------------- board ---------------- */
+
+/* 눌러 놓고 아직 카탈로그가 그 사실을 실어 오기 전의 짧은 공백을 메운다
+   (REQ-20260828-041). 이 표가 없으면 같은 카드를 연타할 수 있고, 두 번째
+   누름은 서버에서 `busy` 로 막히지만 사람에게는 "버튼이 두 번 먹혔다"로
+   읽힌다. 성공하면 곧 멈춤 줄 자체가 사라지므로(작업자가 붙으면 stalled_mins
+   가 없어진다) 이 표는 그때까지만 산다. 실패하면 즉시 지운다 — 못 깨운 것을
+   다시 못 누르게 막는 것은 벌주는 화면이다. */
+const wokeAt = new Map();          // REQ id → 누른 시각(ms)
+const WOKE_HOLD = 180000;          // 3분. 스폰이 조용히 죽어도 다시 누를 수 있게
+function wokePending(id){
+  const t = wokeAt.get(id);
+  if (t == null) return false;
+  if (Date.now() - t > WOKE_HOLD){ wokeAt.delete(id); return false; }
+  return true;
+}
+/* 멈춤 한 줄과 그 손잡이를 **한 함수**가 짓는다 (REQ-20260828-041).
+
+   보드 카드와 문서 화면이 각자 글자를 가지면 한쪽만 고쳐진다 — 판정 버튼이
+   그 이유로 세 번 반려됐다 (REQ-20260828-007). 같은 함수를 부르면 갈라질 자리가
+   없다.
+
+   화면은 **분을 다시 재지 않는다**: 서버가 실어 준 stalled_mins 를 문장으로
+   옮길 뿐이다 (REQ-20260828-036 이 세운 규칙). */
+function stallHTML(r){
+  // 마지막 시각을 못 읽으면 그 조각만 빠진다 — "· 마지막 " 로 끝나는 줄은 값이
+  // 있는데 못 그린 것처럼 보인다.
+  const last = fmtLast(r.updated || r.status_since);
+  const going = wokePending(r.id);
+  return `<div class="rvpt stall" title="이 문서가 마지막으로 바뀐 뒤로 `
+    + `${r.stalled_mins}분 — 그동안 이 문서에 아무것도 적히지 않았다">`
+    + `<span class="rvcap">멈춤</span>${fmtStall(r.stalled_mins)} 진전 없음`
+    + (last ? ` · 마지막 ${esc(last)}` : "") + `</div>`
+    + `<div class="acts wakerow"><button type="button" class="deed wake"`
+    + ` data-wake="${esc(r.id)}"${going ? " disabled" : ""}`
+    + ` title="무인 작업자가 이 요청을 이어받아 계속한다">`
+    + `${going ? "깨우는 중…" : "깨우기"}</button></div>`;
+}
+/* 눌린 순간 화면이 먼저 답한다 — 서버 왕복(수백 ms)과 다음 폴링을 기다리면
+   사람은 버튼이 죽은 줄 안다. 카드와 문서 화면에 같은 id 가 동시에 떠 있을 수
+   있으므로 전부 고친다. */
+function paintWake(id){
+  const going = wokePending(id);
+  document.querySelectorAll(`[data-wake="${CSS.escape(id)}"]`).forEach(b => {
+    b.disabled = going;
+    b.textContent = going ? "깨우는 중…" : "깨우기";
+  });
+}
+/* 멈춘 요청 하나를 사람이 눌러 다시 굴린다 (REQ-20260828-041).
+
+   **화면은 이유를 짓지 않는다.** 서버가 준 `message` 를 그대로 옮긴다 —
+   `action` 으로 문구를 갈라 쓰면 같은 말이 서버와 화면 두 벌이 되고, 그때부터
+   한 벌만 고쳐진다. 화면이 읽는 것은 `ok` 와 `message` 둘뿐이다.
+
+   `ok=false` 는 **오류가 아니라 설명**이다. `capped`(한도 소진)·`busy`(이미
+   붙어 있음)·`moving`(아직 멈춘 게 아님)은 전부 정상적인 답이라, 붉은 실패로
+   그리지 않는다(창머리 잉크를 .stop 으로 올리지 않는다). */
+async function wakeDoc(id){
+  if (wokePending(id)) return;              // 연타 — 이미 도는 중이다
+  wokeAt.set(id, Date.now());
+  paintWake(id);
+  let d = null, reached = false;
+  try{
+    const r = await fetch("/api/wake", {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(withAs({id}))});  // actor는 서버 whoami 파생
+    reached = true;
+    d = await r.json();
+  }catch(e){}
+  if (!d || !d.message){
+    wokeAt.delete(id); paintWake(id);
+    // 서버가 답을 못 준 경우다 — 이유가 없으니 화면이 전송을 말한다(요청의
+    // 사정을 지어내는 것과 다르다). 옛 서버에는 이 손잡이가 아직 없다.
+    s9dlg({kind: "alert", cap: "연결", stop: true,
+      title: reached ? "서버가 깨우기를 알지 못합니다"
+                     : "서버에 닿지 못했습니다",
+      desc: reached ? "s9 serve 를 다시 띄우면 이 손잡이가 붙습니다."
+                    : "잠시 뒤 다시 시도해 주세요. 서버가 재기동 중일 수 있습니다.",
+      ok: "닫기"});
+    return;
+  }
+  if (!d.ok){ wokeAt.delete(id); paintWake(id); }
+  s9dlg({kind: "alert", cap: d.ok ? "깨움" : "깨우지 않음", stop: false,
+    doc: shortId(id), title: d.message, ok: "닫기"});
+  if (d.ok) refreshCatalog(true);
+}
+
 function cardHTML(r){
   const isReq = r.type === "request";
   // "무엇을 기다리는가" 한 줄 (REQ-20260826-009). blocked 전용이 아니다 —
@@ -4651,15 +4758,9 @@ function cardHTML(r){
      말하지 않는다는 기존 규칙(DOC-20260826-001 규칙 7)을 그대로 따른다: 선행이
      안 끝나 못 나가는 것과 아무도 안 붙어 조용한 것은, 카드에서는 "지금 안
      움직인다" 한 가지 사실로 읽힌다. 원인을 짚어 주는 쪽(선행)이 더 쓸모 있다. */
-  // 마지막 시각을 못 읽으면 그 조각만 빠진다 — "· 마지막 " 로 끝나는 줄은 값이
-  // 있는데 못 그린 것처럼 보인다.
-  const stallLast = stalled ? fmtLast(r.updated || r.status_since) : "";
-  const stall = (stalled && !bl.length)
-    ? `<div class="rvpt stall" title="이 문서가 마지막으로 바뀐 뒤로 ${r.stalled_mins}분 — `
-      + `그동안 이 문서에 아무것도 적히지 않았다">`
-      + `<span class="rvcap">멈춤</span>${fmtStall(r.stalled_mins)} 진전 없음`
-      + (stallLast ? ` · 마지막 ${esc(stallLast)}` : "") + `</div>`
-    : "";
+  // 글자와 손잡이는 stallHTML 한 곳에서 짓는다 — 문서 화면이 같은 함수를
+  // 부른다 (REQ-20260828-041).
+  const stall = (stalled && !bl.length) ? stallHTML(r) : "";
   /* 점의 사다리. **멈춤이 초록보다 먼저 걸린다** (REQ-20260828-036).
      전에는 r.live 가 맨 위에 있어서, 문서가 한 시간째 안 움직인 요청도 그것을
      잡아 둔 세션이 살아 있기만 하면 초록으로 뛰었다 — 점이 재던 것은 "이
@@ -5291,6 +5392,20 @@ async function loadDoc(id, bg){
         return `<button class="deed" data-trans="${esc(m.id)}|${to}|${esc(m.status)}"`
           + ` title="${esc(tip)}">${actLabel(to, judging)}</button>`;
       }).join("")) + pickAct + `</div>`;
+  /* 문서 화면에도 **같은 손잡이**를 둔다 (REQ-20260828-041).
+
+     사용자가 물은 것은 "in-progress 중인 카드**나 문서**에 상태체크 기능을
+     만들고 굳이 프롬프트로 물어보지 않고 진행할 수 있게" 였다. 그리고 이
+     저장소가 이미 비싸게 배운 것: 같은 행동이 두 화면에 각자 글자를 가지면
+     한쪽만 고쳐진다 (REQ-20260828-007 이 그 이유로 세 번 반려됐다). 그래서
+     보드 카드가 부르는 그 함수를 그대로 부른다.
+
+     판정은 여기서 다시 하지 않는다 — 서버가 카탈로그 행에 실어 준 stalled_mins
+     를 읽을 뿐이다. 색인에 그 행이 없으면 줄도 없다: 화면이 스스로 분을 재기
+     시작하면 CLI 와 다른 말을 하게 된다 (REQ-20260828-036). */
+  const srow = catFind(m.id);
+  const stallRow = (m.type === "request" && m.status === "in-progress"
+                    && srow && srow.stalled_mins != null) ? stallHTML(srow) : "";
   // review/blocked 문서: 판단 근거(전이 --note)가 본문 최하단 History에 묻힌다
   // (REQ-20260825-006 반려) — 현재 회차의 note를 상단 callout으로, 과거 회차
   // (이전 확인 포인트·반려 사유)는 접힘 이력으로 (REQ-20260825-011 반려:
@@ -5362,7 +5477,7 @@ async function loadDoc(id, bg){
     <h1 class="dtitle">${esc(m.title)}
       <span class="did" title="${esc(m.id)}">${esc(shortId(m.id))}</span>
       <span class="dst" style="--sc:${SCOLOR[m.status] || "var(--muted)"}">${esc(statusLabel(m))}</span>
-    </h1>${reviewActs}${gate}
+    </h1>${reviewActs}${stallRow}${gate}
     <table class="metatbl">${fields.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td></tr>`).join("")}</table>
     <div class="md">${md2html(d.body)}</div>${streamSec}
     <div class="backlinks" id="backlinks"></div>`;
@@ -5564,7 +5679,12 @@ function s9dlg(o){
   if (kind === "choose") return s9choose(o);
   const back = document.activeElement;   // 닫으면 여기로 돌려보낸다
   dlg.innerHTML = `<div class="dlghead">`
-    + `<span class="dlgcap${kind === "alert" ? " stop" : ""}">${esc(o.cap || "확인")}</span>`
+    /* 눈썹 잉크는 **알림이라서** 붉은 것이 아니라 **막힌 일이라서** 붉다
+       (REQ-20260828-041). 종전엔 kind 로만 정해서, 한 창짜리 알림이면 무엇이든
+       빨강이 됐다 — 깨우기의 `busy`·`capped`·`moving` 은 오류가 아니라 설명인데
+       그 옷을 입으면 사람은 고장으로 읽는다. 기본은 그대로(알림=막힘)고,
+       설명하는 알림만 stop:false 로 물러선다. */
+    + `<span class="dlgcap${(o.stop === undefined ? kind === "alert" : o.stop) ? " stop" : ""}">${esc(o.cap || "확인")}</span>`
     // 무엇을 판정하는지는 **제목**이 말하고(본문), 주소는 머리에 둔다
     // (REQ-20260828-007). 카드의 `.id` 와 같은 어휘 — mono 소형 흐린 글자.
     + (o.doc ? `<span class="dlgdoc">${esc(o.doc)}</span>` : "")
@@ -8652,13 +8772,24 @@ function termClearLocal(T){                      // L7 — Ctrl+L (로컬 클리
    진짜 <button> 은 이걸 공짜로 준다 — 흉내 낸 자리에는 손으로 달아 줘야 한다.
    닿기만 하고 눌리지 않는 컨트롤은 포커스만 삼키므로 아예 못 닿는 것보다 나쁘다.
    결과는 클릭과 같은 한 경로(위임 핸들러)로 흘려보낸다 — 두 갈래로 갈라 두면
-   한쪽만 고쳐지는 날이 온다. */
+   한쪽만 고쳐지는 날이 온다.
+
+   **흉내 낸 자리에만 달아 준다** (REQ-20260828-041 에서 발견). 보드 카드는
+   role="button" 인 판이고 그 **안에** 진짜 <button> 이 산다 — 승인·반려·
+   이어 말하기, 그리고 이번의 깨우기. 그 버튼에 포커스를 두고 Enter 를 치면
+   여기서 closest() 가 판(카드)을 집어 올려 네이티브 활성화를 preventDefault
+   로 막고 **카드를 눌렀다** — 눌린 것은 손잡이가 아니라 문서 열기였다.
+   마우스로는 되고 키보드로만 다른 일이 일어나는, 눈에 잘 안 띄는 고장이다
+   (실측: Tab 두 번으로 깨우기에 닿아 Enter 를 치면 문서가 열리고 요청은
+   깨어나지 않았다). 네이티브가 Enter/Space 를 아는 것들은 그들에게 맡긴다 —
+   그 클릭도 같은 위임 핸들러로 들어오므로 경로는 여전히 하나다. */
 document.addEventListener("keydown", e => {
   if (e.key !== "Enter" && e.key !== " ") return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const t = e.target;
   if (!t || !t.closest) return;
   if (t.closest("input,textarea,select,[contenteditable]")) return;
+  if (t.closest("button,a[href],summary")) return;   // 네이티브가 이미 안다
   const b = t.closest('[role="button"]');
   if (!b || b.tabIndex < 0) return;
   e.preventDefault();     // Space 가 페이지를 같이 스크롤하지 않도록
@@ -12031,6 +12162,10 @@ document.addEventListener("click", e => {
   if (rj){ judgeAct(rj.dataset.reject, "in-progress", "review"); return; }
   // 상단 계정 칩 — 얹으면 한도를 펴고, 누르면 계정을 바꾼다 (REQ-20260827-079)
   if (e.target.closest("#usage-chip")){ hideHover(); claudeAccountSwitch(); return; }
+  // 깨우기도 카드(문서 열기)보다 먼저 잡는다 — 카드 안의 손잡이는 카드가
+  // 아니다 (REQ-20260828-041). 보드 카드와 문서 화면이 같은 길로 들어온다.
+  const wk = e.target.closest("[data-wake]");
+  if (wk){ e.stopPropagation(); wakeDoc(wk.dataset.wake); return; }
   // 문서 집기 손잡이는 카드(문서 열기)보다 **먼저** 잡는다 (REQ-20260827-064)
   const pk = e.target.closest("[data-pick]");
   if (pk){ e.stopPropagation(); docPick(pk.dataset.pick); return; }

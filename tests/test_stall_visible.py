@@ -183,6 +183,11 @@ class StallOnScreen(unittest.TestCase):
         cls.card = _grab(cls.src, "cardHTML")
         cls.col = _grab(cls.src, "colHTML")
         cls.board = _grab(cls.src, "renderBoard")
+        # 멈춤 줄의 글자는 stallHTML 로 옮겨 갔다 (REQ-20260828-041): 보드 카드와
+        # 문서 화면이 **한 함수**로 그 줄을 짓게 하려는 것이고, 계약은 그대로다.
+        # 그래서 검사는 "카드가 그리는 것" 이 아니라 "카드가 부르는 자리까지"
+        # 본다.
+        cls.stall = _grab(cls.src, "stallHTML")
 
     # C1. 꺼진 점은 속 빈 링이다 (대비 2.98:1 → 기준 통과)
     def test_c1_off_dot_is_a_ring(self):
@@ -207,9 +212,10 @@ class StallOnScreen(unittest.TestCase):
 
     # C3. 멈춤은 기존 한 줄 문법(.rvpt)으로 말한다 — 새 배지·색면 없음
     def test_c3_one_line_reuses_rvpt(self):
-        self.assertIn('rvpt stall', self.card, "멈춤 줄이 .rvpt 형제가 아니다")
-        self.assertIn("진전 없음", self.card)
-        self.assertIn("마지막", self.card)
+        self.assertIn("stallHTML(r)", self.card, "카드가 멈춤 줄을 짓는 자리를 안 부른다")
+        self.assertIn('rvpt stall', self.stall, "멈춤 줄이 .rvpt 형제가 아니다")
+        self.assertIn("진전 없음", self.stall)
+        self.assertIn("마지막", self.stall)
 
     # C4. 선행 대기 줄이 있으면 그쪽이 이긴다 (같은 사실을 두 줄로 말하지 않는다)
     def test_c4_dep_wins(self):

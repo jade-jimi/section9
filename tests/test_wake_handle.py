@@ -1,0 +1,207 @@
+"""멈춘 것을 사람이 깨우는 손잡이 — 화면 몫 (REQ-20260828-041-62x6).
+
+사용자(18:04): "in-progress 중인 카드나 문서에 상태체크 기능을 만들고 **굳이
+프롬프트로 물어보지 않고 진행할 수 있게** 하는건 어때?"
+
+REQ-20260828-036 은 그 물음의 **보여주기 절반**만 냈다 — 점의 근거를 고치고,
+멈춤 줄을 세우고, 열 머리에 수를 붙였다. 화면은 "멈췄다"고 말할 수 있게 됐지만
+사람이 거기서 할 수 있는 일은 없었다. 그래서 사용자는 하루에 다섯 번 리드에게
+"이거 진짜 도는 거냐"를 물어야 했다. 이 파일은 나머지 절반의 계약이다.
+
+계약은 여섯이다.
+
+  ① **손잡이는 멈춤 줄에만.** 멈춘 카드가 아니면 뜨지 않는다. 판정은 화면이
+     다시 하지 않는다 — 서버가 행에 실어 준 `stalled_mins` 를 읽을 뿐이다
+     (REQ-20260828-036 이 세운 규칙: 두 벌이면 한 벌만 고쳐진다).
+  ② **보드와 문서가 한 함수로 짓는다.** 같은 행동이 두 화면에 각자 글자를
+     가지면 한쪽만 고쳐진다 — REQ-20260828-007 이 그 이유로 세 번 반려됐다.
+  ③ **화면이 이유를 짓지 않는다.** 서버가 준 `message` 를 그대로 띄운다.
+     `action` 으로 문구를 갈라 쓰는 순간 같은 말이 서버와 화면 두 벌이 된다.
+  ④ **`ok=false` 는 오류가 아니라 설명이다.** `capped`(한도 소진)·`busy`(이미
+     붙어 있음)·`moving`(아직 멈춘 게 아님)은 정상적인 답이다 — 붉은 실패의
+     옷을 입히면 사람은 고장으로 읽고 다시 누르지 않는다.
+  ⑤ **연타는 막고 실패는 다시 누를 수 있다.** 도는 중에는 눌리지 않지만, 못
+     깨운 것을 다시 못 누르게 잠그는 것은 벌주는 화면이다.
+  ⑥ **새 층을 만들지 않는다.** 색면 하이라이트·세로 띠·새 경고 배지 없이,
+     카드가 이미 쓰는 행동 줄(.acts)과 행위 버튼(.deed)을 그대로 입는다.
+
+실행: python3 tests/ wake_handle
+"""
+import os
+import re
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+INDEX = os.path.join(HERE, "..", "web", "index.html")
+
+# 서버가 돌려주는 action 값 전부 (bin/s9 wake_request 의 계약). 화면은 이 낱말
+# 중 **어느 것도** 알아서는 안 된다 — 알기 시작하면 문구가 두 벌이 된다.
+ACTIONS = ("spawned", "busy", "moving", "capped", "off", "disabled",
+           "elsewhere", "no-cli", "not-request", "not-in-progress")
+
+
+def _grab(src, name):
+    m = re.search(r"function %s\([^)]*\)\{[\s\S]*?\n\}" % name, src)
+    assert m, name
+    return m.group(0)
+
+
+class WakeHandle(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with open(INDEX, encoding="utf-8") as f:
+            cls.src = f.read()
+        cls.stall = _grab(cls.src, "stallHTML")
+        cls.wake = _grab(cls.src, "wakeDoc")
+        cls.card = _grab(cls.src, "cardHTML")
+        cls.doc = _grab(cls.src, "openDoc") if "function openDoc(" in cls.src \
+            else cls.src
+
+    # ---------- ① 손잡이는 멈춤 줄에만 ----------
+
+    def test_the_handle_lives_on_the_stall_line(self):
+        """깨우기는 멈춤 줄을 짓는 그 함수 안에서만 그려진다."""
+        self.assertIn("data-wake=", self.stall, "멈춤 줄에 손잡이가 없다")
+        # 그리는 자리는 하나뿐이다 (paintWake 의 `[data-wake="…"]` 는 이미
+        # 그려진 것을 **찾는** 자리라 세지 않는다).
+        self.assertEqual(len(re.findall(r'data-wake="\$\{esc\(', self.src)), 1,
+                         "손잡이를 그리는 자리가 여럿이다 — 한 벌만 고쳐진다")
+        self.assertIn("깨우기", self.stall)
+
+    def test_a_card_that_is_not_stalled_has_no_handle(self):
+        """멈춘 카드가 아니면 그 함수 자체가 안 불린다."""
+        m = re.search(r"const stall\s*=([\s\S]{0,200}?);\n", self.card)
+        self.assertIsNotNone(m, "카드가 멈춤 줄을 다는 자리가 없다")
+        self.assertIn("stalled", m.group(1), "멈춤이 아닌 카드에도 손잡이가 붙는다")
+        self.assertIn("stallHTML", m.group(1))
+
+    def test_the_screen_never_measures_the_minutes_itself(self):
+        """분은 서버가 잰다 — 화면이 다시 재면 CLI 와 다른 말을 하게 된다."""
+        self.assertIn("r.stalled_mins", self.stall, "서버가 준 분을 안 읽는다")
+        for banned in ("Date.now() -", "getTime()", "fromisoformat"):
+            self.assertNotIn(banned, self.stall,
+                             "멈춤 줄이 나이를 스스로 재고 있다: %s" % banned)
+
+    # ---------- ② 보드와 문서가 한 함수 ----------
+
+    def test_board_and_document_say_the_same_word(self):
+        """두 화면이 stallHTML 을 부른다 — 갈라질 자리가 없다."""
+        calls = re.findall(r"stallHTML\(", self.src)
+        self.assertGreaterEqual(len(calls), 3,
+                                "짓는 자리(1) + 부르는 자리(보드·문서)가 없다")
+        self.assertIn("stallHTML(r)", self.card, "보드 카드가 안 부른다")
+        self.assertIn("stallHTML(srow)", self.src, "문서 화면이 안 부른다")
+        # 문서 화면도 같은 근거(서버가 실은 행)를 읽는다
+        self.assertIn("srow.stalled_mins != null", self.src,
+                      "문서 화면이 다른 근거로 멈춤을 판정한다")
+        self.assertIn("${reviewActs}${stallRow}", self.src,
+                      "문서 화면에 멈춤 줄이 실제로 놓이지 않는다")
+
+    # ---------- ③ 화면이 이유를 짓지 않는다 ----------
+
+    def test_the_screen_shows_the_server_sentence_verbatim(self):
+        self.assertIn("d.message", self.wake, "서버 문장을 안 쓴다")
+        self.assertIn('title: d.message', self.wake,
+                      "서버 문장이 창의 본문에 서지 않는다")
+
+    def test_the_screen_does_not_branch_on_action(self):
+        """`action` 으로 문구를 갈라 쓰면 서버와 화면 두 벌이 된다."""
+        self.assertNotIn("d.action", self.wake, "화면이 action 을 읽는다")
+        for a in ACTIONS:
+            self.assertNotIn('"%s"' % a, self.wake,
+                             "화면이 서버의 사유 낱말을 알고 있다: %s" % a)
+
+    # ---------- ④ 거절은 오류가 아니다 ----------
+
+    def test_a_refusal_is_not_painted_as_a_failure(self):
+        """`ok=false` 도 설명이다 — 창머리 잉크를 붉게 올리지 않는다."""
+        self.assertIn("stop: false", self.wake, "거절이 실패의 옷을 입는다")
+        self.assertNotIn('cap: "실패"', self.wake)
+        # 눈썹 잉크는 kind 가 아니라 stop 이 정한다
+        cap = re.search(r'<span class="dlgcap\$\{([^}]*)\}', self.src)
+        self.assertIsNotNone(cap, "창머리 잉크를 정하는 자리를 못 찾았다")
+        self.assertIn("o.stop", cap.group(1),
+                      "알림이면 무엇이든 붉어진다 — 설명도 고장으로 읽힌다")
+
+    # ---------- ⑤ 연타는 막고 실패는 다시 ----------
+
+    def test_no_double_press_but_a_failure_can_be_pressed_again(self):
+        self.assertIn("if (wokePending(id)) return;", self.wake,
+                      "같은 카드를 연타할 수 있다")
+        self.assertIn("wokeAt.set(id, Date.now())", self.wake)
+        # 실패·거절이면 표식을 지운다 = 다시 누를 수 있다
+        self.assertEqual(len(re.findall(r"wokeAt\.delete\(id\)", self.wake)), 2,
+                         "못 깨운 뒤에 다시 누를 수 없다")
+        self.assertIn("if (!d.ok){ wokeAt.delete(id); paintWake(id); }",
+                      self.wake, "거절 뒤 손잡이가 잠긴 채로 남는다")
+        # 도는 중 표시는 서버 왕복을 기다리지 않는다
+        self.assertIn("paintWake(id);\n  let d", self.wake,
+                      "누른 순간 화면이 답하지 않는다")
+        # 영영 잠기지 않는다 — 스폰이 조용히 죽어도 풀린다
+        self.assertIn("WOKE_HOLD", self.src, "표식이 만료되지 않는다")
+
+    def test_the_running_state_says_it_is_running(self):
+        self.assertIn("깨우는 중…", self.stall)
+        self.assertIn("깨우는 중…", self.src)
+        self.assertIn("disabled", self.stall,
+                      "다시 그려도 도는 중인 손잡이가 되살아난다")
+
+    # ---------- ⑥ 새 층 없음 ----------
+
+    def test_it_reuses_the_button_the_card_already_has(self):
+        """.acts/.deed 를 그대로 입는다 — 그래야 스킨이 따라온다."""
+        self.assertIn('class="acts wakerow"', self.stall)
+        self.assertIn('class="deed wake"', self.stall)
+        # 새 배지·색면·띠를 만들지 않는다
+        m = re.search(r"\.acts\.wakerow\{([^}]*)\}", self.src)
+        self.assertIsNotNone(m, ".acts.wakerow 규칙이 없다")
+        for banned in ("background", "animation", "border-left"):
+            self.assertNotIn(banned, m.group(1),
+                             "깨우기 줄이 %s 로 새 층을 만든다" % banned)
+        self.assertNotIn("wakebanner", self.src)
+
+    def test_calm_skin_does_not_lose_the_row(self):
+        """calm 은 카드를 order 로 다시 세운다 — 자리를 안 주면 제목 위로 튄다."""
+        self.assertRegex(
+            self.src,
+            r'\[data-skin="calm"\] \.card>\.acts\{order:3\}',
+            "calm 스킨에서 깨우기 줄이 카드 맨 위로 올라간다")
+
+    # ---------- 배선 ----------
+
+    def test_one_road_to_the_server(self):
+        self.assertEqual(len(re.findall(r'"/api/wake"', self.src)), 1,
+                         "깨우기를 부르는 자리가 여럿이다")
+        self.assertIn('method: "POST"', self.wake)
+        self.assertIn("withAs({id})", self.wake, "대리 사용자가 안 실린다")
+
+    def test_enter_presses_the_handle_not_the_card(self):
+        """카드 안의 **진짜 버튼**은 Enter 를 제 것으로 받는다.
+
+        실측으로 잡은 결함이다 (REQ-20260828-041). 보드 카드는 role="button" 인
+        판이고 그 안에 진짜 <button> 이 산다 — 승인·반려·이어 말하기, 그리고
+        깨우기. role="button" 컨트롤을 Enter 로 누르는 전역 핸들러가
+        `closest('[role="button"]')` 로 **판**을 집어 올려, 손잡이의 네이티브
+        활성화를 preventDefault 로 막고 카드를 눌렀다. 마우스로는 깨우기가,
+        키보드로는 문서 열기가 일어났다 — 같은 자리에서 다른 일이 일어나는
+        종류의 고장이라 눈에 잘 안 띈다.
+        """
+        m = re.search(r'addEventListener\("keydown", e => \{[\s\S]{0,700}?'
+                      r'closest\(\'\[role="button"\]\'\)', self.src)
+        self.assertIsNotNone(m, "role=button 컨트롤의 Enter 핸들러를 못 찾았다")
+        self.assertIn('t.closest("button,a[href],summary")', m.group(0),
+                      "카드 안의 진짜 버튼이 Enter 를 빼앗긴다 — "
+                      "키보드로는 손잡이 대신 문서가 열린다")
+
+    def test_the_handle_is_not_the_card(self):
+        """카드 안의 손잡이는 카드가 아니다 — 눌러도 문서가 열리지 않는다."""
+        m = re.search(r'closest\("\[data-wake\]"\);\n\s*if \(wk\)\{([^\n]*)',
+                      self.src)
+        self.assertIsNotNone(m, "깨우기 클릭을 잡는 자리가 없다")
+        self.assertIn("stopPropagation", m.group(1),
+                      "깨우기를 누르면 문서까지 열린다")
+        self.assertIn("wakeDoc(wk.dataset.wake)", m.group(1))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
