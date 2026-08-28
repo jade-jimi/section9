@@ -433,11 +433,14 @@ main{padding:18px 22px}
 .typebar .tb b{margin-left:4px;color:var(--faint);font-weight:600;
   font-variant-numeric:tabular-nums}
 .typebar .tb.on b{color:var(--text)}
-/* 질문만 두 번째 숫자를 갖는다 — 답 없이 남은 장수(REQ-20260826-019). 총량은
-   회색으로 물러나 있는데 이 숫자는 타입색 잉크로 서서, 훑는 눈에 걸린다.
-   면(배경)이 아니라 글자색과 무게로만 세운다. */
-.typebar .tb .unans{margin-left:5px;font-style:normal;font-weight:700;
-  color:var(--t-question);font-variant-numeric:tabular-nums}
+/* 질문만 두 수를 갖는다 — **답한 장수 / 전체** (REQ-20260826-019 → 20260828-018).
+   처음에는 총량 옆에 '미답 3' 을 따로 뽑았는데, 같은 한 종류를 두 칸이 나눠
+   세는 꼴이라 눈이 둘을 이어 붙여야 했다. 한 덩이(43/46)로 합치고 아직 남았을
+   때만 질문 잉크로 세운다 — 옆 칸들의 회색 숫자 사이에서 이 한 덩이만 색을
+   갖는 것이 곧 강조다(면이 아니라 글자). 색을 잃어도 43 ≠ 46 이 "남았다"를
+   그대로 말한다. 빗금은 두 수를 잇는 이음매라 한 급 물러나 있는다. */
+.typebar .tb b.qf span{font-weight:400;opacity:.55;margin:0 1px}
+.typebar .tb b.qf.left{color:var(--t-question);font-weight:700}
 /* 그룹 헤더는 목록 맨 위에 붙는다. **문턱은 0이 기본이다** — sticky는 문턱보다
    위에 있는 상자를 아래로 밀어내면서 자리는 비워 두지 않으므로, 위에 아무것도
    없는 목록에서 양수 문턱을 주면 머리가 내려앉아 첫 항목의 제목 줄을 제 배경으로
@@ -1244,10 +1247,11 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
 [data-skin="terminal"] .typebar .tb.on{background:var(--text);color:var(--bg);
   border-bottom-color:transparent}
 /* 선택 상태는 배경이 잉크로 반전된다 — 그 위에서 타입색 잉크는 대비를 잃는다.
-   미답은 색을 잃어도 '미답'이라는 글자가 뜻을 그대로 나른다(색 없이도 구분되는
-   것이 원칙이다) — 가독성을 택한다. 색 강조는 비선택 상태에서 일한다. */
+   43/46 은 색을 잃어도 두 수가 다르다는 것으로 "남았다"를 그대로 나른다(색
+   없이도 구분되는 것이 원칙이다) — 가독성을 택한다. 색 강조는 비선택 상태에서
+   일한다. */
 [data-skin="terminal"] .typebar .tb.on b,
-[data-skin="terminal"] .typebar .tb.on .unans{color:var(--bg)}
+[data-skin="terminal"] .typebar .tb.on b.qf.left{color:var(--bg)}
 [data-skin="terminal"] .doclist .row.sel{background:var(--text);box-shadow:none}
 [data-skin="terminal"] .doclist .row.sel *{color:var(--bg) !important}
 /* 반전된 행 위에서는 링도 반전한다 — 잉크 배경에 잉크 링은 없는 것과 같다.
@@ -1768,6 +1772,21 @@ tr.rowoff td{opacity:.45}
 .secempty{border-top:1px solid var(--hairline);margin-top:12px;padding-top:12px;
   color:var(--muted);font-size:12.5px;max-width:62ch}
 .secmsg.bad{color:var(--c-blocked)}
+/* 바깥 폴더 (REQ-20260828-017) — 같은 판 안의 작은 단락이다. 섹션을 하나 더
+   떼면 "비밀 키"와 "그 비밀을 어디서 더 읽나"가 남남처럼 읽힌다. 헤어라인 한
+   줄로 가르고 제목은 섹션 제목(.cfg-h)보다 한 급 낮춘다. */
+.secsub{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:600;
+  border-top:1px solid var(--hairline);margin:22px 0 6px;padding-top:14px}
+/* 지금 그 경로가 쓰이는지 — **색만으로 말하지 않는다.** 앞의 낱말이 먼저 답하고
+   색은 그 낱말을 거들 뿐이다(색면 없음, 잉크와 상태색 글자만). */
+.secstate{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:9px;
+  max-width:62ch;line-height:1.55}
+.secstate .sm{font-weight:700;letter-spacing:.06em;white-space:nowrap;
+  margin-right:7px;color:var(--muted)}
+.secstate.on .sm{color:var(--c-done)}
+.secstate.warn .sm{color:var(--c-inprogress)}
+.secstate.bad .sm{color:var(--c-blocked)}
 .cfg-h{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
   margin:26px 0 4px;font-weight:600;font-family:var(--mono);
   border-top:1px solid var(--border);padding-top:14px}
@@ -2114,7 +2133,7 @@ tr.rowoff td{opacity:.45}
   margin:0;letter-spacing:.03em}
 [data-skin="calm"] .typebar .tb.on{background:var(--text);color:var(--bg)}
 [data-skin="calm"] .typebar .tb.on b,
-[data-skin="calm"] .typebar .tb.on .unans{color:var(--bg)}
+[data-skin="calm"] .typebar .tb.on b.qf.left{color:var(--bg)}
 [data-skin="calm"] .doclist .row{border-bottom:1px solid var(--hairline);padding:11px 16px}
 [data-skin="calm"] .doclist .row:last-child{border-bottom:0}
 [data-skin="calm"] .doclist .row:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
@@ -4127,16 +4146,34 @@ async function renderDocs(rows){
   if (matchMap) pool = pool.filter(r => matchMap[r.id]);
   const tcount = {};
   pool.forEach(r => tcount[r.type] = (tcount[r.type]||0)+1);
-  // 답 없이 남은 질문 수 — 이 타입을 만든 이유가 여기 있다. "질문이 몇 장인가"와
-  // "그중 몇 장이 답이 없나"는 다른 질문이고, 총량만 보이면 뒤엣것을 아무도 묻지
-  // 않는다 (REQ-20260826-019). 판정은 목록 행과 같은 함수를 쓴다.
+  // "질문이 몇 장인가"와 "그중 몇 장이 답이 없나"는 다른 질문이고, 총량만 보이면
+  // 뒤엣것을 아무도 묻지 않는다 (REQ-20260826-019). 판정은 목록 행과 같은 함수를
+  // 쓴다. 판정은 3상이라(답함·미답·모름) 답한 장수를 "전체 빼기 미답"으로
+  // 어림잡지 않고 따로 센다 — 모르는 것을 답한 것으로 세면 분수가 거짓말한다.
   const qUnanswered = pool.filter(r => isAnswered(r) === false).length;
+  const qAnswered = pool.filter(r => r.type === "question"
+                                  && isAnswered(r) === true).length;
   const bar = TYPE_ORDER.filter(t => tcount[t] || t === curType).map(t => {
-    // 0이면 붙이지 않는다 — 없는 신호를 자리만 채워 두면 있는 신호가 안 읽힌다.
-    const un = t === "question" ? qUnanswered : 0;
+    const n = tcount[t] || 0;
+    /* 질문만 두 수를 갖는다 — **답한 장수 / 전체** (REQ-20260828-018).
+       전에는 `QUESTION 46` 옆에 `미답 3` 을 따로 뽑았는데, 같은 한 종류를 두
+       칸이 나눠 세는 꼴이라 눈이 둘을 이어 붙여야 했다("거슬린다"). 한 덩이로
+       합치고, 아직 남았을 때만 질문 잉크로 세운다 — 색을 잃어도 43 ≠ 46 이
+       "남았다"를 그대로 말하고, 다 차면(46/46) 저절로 물러난다.
+       질문이 0장이면 분수를 그리지 않는다: 0/0 은 뜻이 없다. */
+    const frac = t === "question" && n > 0;
+    const left = frac ? qUnanswered : 0;
+    const num = frac
+      ? `<b class="qf${left ? " left" : ""}">${qAnswered}<span>/</span>${n}</b>`
+      : `<b>${n}</b>`;
+    // 분수는 눈으로는 한 덩이지만 소리로는 "43 슬래시 46" 이다 — 읽어 줄 말을
+    // 따로 준다. 다른 타입도 같은 규칙으로 이름을 갖는다.
+    const tip = `${t} 문서만 보기 (다시 누르면 전체)` + (frac
+      ? ` · ${n}장 중 ${qAnswered}장 답함`
+        + (left ? ` · ${left}장 남음` : " · 남은 것 없음")
+      : ` · ${n}장`);
     return `<button class="tb${curType===t?" on":""}" data-typef="${t}"
-      title="${t} 문서만 보기 (다시 누르면 전체)${un ? ` · 답 없는 질문 ${un}장` : ""}"
-      >${t}<b>${tcount[t]||0}</b>${un ? `<i class="unans">미답 ${un}</i>` : ""}</button>`;
+      title="${tip}" aria-label="${tip}">${t}${num}</button>`;
   }).join("");
   /* 목록 행은 한 곳에서 짓는다 — 못 박은 줄과 그룹 안의 줄이 **같은 재료**여야
      한다 (REQ-20260828-009). 두 벌로 만들면 한 벌만 고쳐진다. */
@@ -9101,7 +9138,8 @@ function showUserForm(u, host, isAdminEdit){
   const prefs = Object.entries(cfg).filter(([k]) => k.startsWith("pref_"));
   const extraCfg = Object.entries(cfg).filter(([k]) =>
     !["timezone","digest_budget","ui_skin","ui_tone","ui_density",
-      "stream_mirror","stream_keep_days"].includes(k) && !k.startsWith("pref_"));
+      "stream_mirror","stream_keep_days",
+      "external_secrets_path"].includes(k) && !k.startsWith("pref_"));
   // 비밀은 **내 계정 판에서만** 다룬다. 서버의 /api/secrets 는 admin 대리(as)를
   // 받지 않아 내 키를 주는데, 넣고 지우는 쪽은 대리를 받는다 — 남의 이름표를 달고
   // 내 키 목록을 보여 주면 그 화면은 거짓말이다. 그럴 바엔 자리를 내지 않는다.
@@ -9162,7 +9200,16 @@ function showUserForm(u, host, isAdminEdit){
              aria-label="값" placeholder="값 — 저장 뒤 다시 볼 수 없습니다">
       <button type="button" id="sec-add">＋ 넣기</button>
     </div>
-    <div class="secmsg" id="sec-msg"></div>` : ""}
+    <div class="secmsg" id="sec-msg"></div>
+    <div class="secsub">바깥 폴더 — 저장소 밖에 둔 비밀도 함께 읽습니다</div>
+    <div class="path secnote">저장소는 다른 사람과 공유됩니다. 그래서 저장소 밖 폴더 하나를 더 읽게 해 둘 수 있습니다 — <b>없는 폴더는 저장할 때 만들어 드립니다</b>(나만 읽을 수 있게). <b>s9 는 이 폴더를 읽기만 합니다</b>: 위의 ＋넣기도 <code>s9 secret set</code> 도 언제나 저장소 안에 씁니다. 밖에 둘 값은 그 폴더에 직접 파일로 넣어 주세요 — <b>파일 이름이 곧 키 이름</b>입니다.</div>
+    <div class="secform">
+      <input class="uf" id="sec-ext" style="width:330px" autocomplete="off" spellcheck="false"
+             aria-label="바깥 폴더 경로" placeholder="예: ~/.s9-secrets (비우면 쓰지 않습니다)"
+             value="${esc(cfg.external_secrets_path || "")}">
+      <button type="button" id="sec-ext-save">경로 저장</button>
+    </div>
+    <div class="secstate" id="sec-ext-state" aria-live="polite">불러오는 중…</div>` : ""}
     <div class="cfg-h">개인 선호 — 리드 에이전트의 말투·작업 방식 (매 턴 자동 반영, REQ-20260824-006)</div>
     <table class="metatbl" id="pf-table">
       ${prefs.map(([k, v]) => `<tr data-pref="${esc(k)}">
@@ -9261,10 +9308,48 @@ function showUserForm(u, host, isAdminEdit){
      따라간다. 서버도 값을 응답에 담지 않으므로 화면이 다시 보여 줄 방법 자체가
      없다. 그래서 "잊었으면 덮어쓰세요"라고 미리 말해 둔다. */
   const secList = host.querySelector("#sec-list");
+  /* ------- 바깥 폴더 (REQ-20260828-017) -------
+     `external_secret_dir()` 은 폴더가 없으면 **아무 말 없이** "" 로 떨어진다.
+     경로만 적어 두고 폴더를 안 만든 사람에게는 "적었는데 아무 일도 안 일어난다"
+     로만 보인다 — 그 침묵을 이 한 줄이 깬다.
+     **판정은 서버가 한다.** 브라우저는 폴더가 있는지 볼 수 없고, 둘이 따로 재면
+     언젠가 답이 갈린다. 화면은 서버가 준 낱말 하나를 사람 말로 옮길 뿐이다. */
+  const extIn = host.querySelector("#sec-ext");
+  const extState = host.querySelector("#sec-ext-state");
+  const EXTSAY = {
+    ok:      ["on",   "읽는 중",
+              "이 폴더의 파일도 비밀로 함께 읽고 있습니다."],
+    missing: ["warn", "폴더 없음",
+              "지워졌거나 연결이 끊긴 것 같습니다. 지금은 저장소 안의 비밀만 씁니다 — 경로 저장을 다시 누르면 만듭니다."],
+    inrepo:  ["bad",  "쓰면 안 됩니다",
+              "이 저장소 안의 폴더입니다. 저장소는 다른 사람과 공유되니 밖에 두는 뜻이 없습니다 — 저장소 밖 경로로 바꿔 주세요."],
+    unset:   ["",     "정하지 않음",
+              "저장소 안에 둔 비밀만 씁니다."],
+    unknown: ["",     "확인 못 함",
+              "지금 이 폴더를 읽고 있는지 알아내지 못했습니다."],
+  };
+  function extSay(state, saved){
+    if (!extState) return;
+    if (!state){ extState.className = "secstate"; extState.textContent = "확인하는 중…"; return; }
+    const [cls, mark, why] = EXTSAY[state] || EXTSAY.unset;
+    extState.className = "secstate" + (cls ? " " + cls : "");
+    // 손잡이를 더 두지 않는다 — 폴더가 사라졌을 때 할 일도 '경로 저장' 하나다
+    // (다시 만들고, 만든 뒤 판정을 다시 받는 것까지 그 버튼이 한다).
+    extState.innerHTML = `<span class="sm">${mark}</span>${why}`;
+    // 저장된 값이 화면의 진실이다 — 손이 칸에 올라가 있을 때만 건드리지 않는다
+    if (extIn && saved !== undefined && document.activeElement !== extIn)
+      extIn.value = saved;
+  }
+  function extBad(msg){
+    if (!extState) return;
+    extState.className = "secstate bad";
+    extState.innerHTML = `<span class="sm">저장 못 함</span>${esc(msg)}`;
+  }
   async function loadSecrets(){
     if (!secList) return;
     secList.className = "secempty";
     secList.textContent = "불러오는 중…";
+    extSay(null);
     let d = null;
     try{ d = await (await fetch("/api/secrets")).json(); }catch(e){}
     if (!d || !Array.isArray(d.keys)){
@@ -9273,8 +9358,12 @@ function showUserForm(u, host, isAdminEdit){
         <button type="button" class="gefix" id="sec-retry">다시 불러오기</button>`;
       const rt = host.querySelector("#sec-retry");
       if (rt) rt.addEventListener("click", loadSecrets);
+      extSay("unknown");
       return;
     }
+    // 바깥 폴더 칸은 목록과 한 호흡이다 — 목록이 갱신될 때마다 그 판정도 같이
+    // 새로 받는다. 빈 목록에서 먼저 return 하기 전에 그린다.
+    extSay(d.external_state || "unset", d.external_path || "");
     if (!d.keys.length){
       secList.className = "secempty";
       secList.textContent = "아직 넣은 비밀이 없습니다 — 아래에 키 이름과 값을 넣으면 여기에 줄이 쌓입니다.";
@@ -9290,7 +9379,7 @@ function showUserForm(u, host, isAdminEdit){
       </tr>`).join("")}
     </table>
     <div class="path">저장소 안 = <code>${esc(d.internal || "")}</code>${
-      d.external ? " · 저장소 밖에 둔 것은 경로를 알려주지 않습니다." : ""}</div>`;
+      d.external ? " · 저장소 밖 = 아래 <b>바깥 폴더</b>에 적어 둔 경로" : ""}</div>`;
   }
   const secMsg = host.querySelector("#sec-msg");
   function secSay(text, bad){
@@ -9323,6 +9412,28 @@ function showUserForm(u, host, isAdminEdit){
     [kIn, vIn].forEach(el => el.addEventListener("keydown", e => {
       if (e.key === "Enter"){ e.preventDefault(); addBtn.click(); }
     }));
+    /* 바깥 폴더 경로 저장 — 값이 아니라 **경로**다. 다른 설정과 같은 길
+       (/api/user/config)로 보내고, 저장 뒤에는 목록까지 다시 받는다: 경로가
+       살아나면 그 폴더의 키들이 목록에 새로 나타나야 하고, 죽으면 사라져야
+       한다. 저장만 하고 목록을 그대로 두면 화면이 옛말을 한다.
+       비우고 저장하면 설정이 지워진다 — 서버가 빈 값을 삭제로 받는다. */
+    const extBtn = host.querySelector("#sec-ext-save");
+    if (extBtn && extIn){
+      const saveExt = async () => {
+        extBtn.disabled = true;
+        extState.className = "secstate";
+        extState.textContent = "저장하는 중…";
+        const res = await postJSONRaw("/api/user/config",
+          {name: u.name, key: "external_secrets_path", value: extIn.value.trim()});
+        extBtn.disabled = false;
+        if (!res.ok){ extBad(res.error); return; }
+        loadSecrets();
+      };
+      extBtn.addEventListener("click", saveExt);
+      extIn.addEventListener("keydown", e => {
+        if (e.key === "Enter"){ e.preventDefault(); saveExt(); }
+      });
+    }
     /* 지우기는 **되돌릴 수 없다** — 값이 어디에도 남지 않으므로 "실행 취소"를 줄
        방법이 없다. 되돌릴 수 없을 때만 확인 창을 쓴다는 규칙이 정확히 이 자리다. */
     secList.addEventListener("click", async e => {
@@ -9423,6 +9534,40 @@ function showUserForm(u, host, isAdminEdit){
       }
       say(out);
     }, 600);
+  }
+  /* ?extdbg — **바깥 폴더 칸을 손 없이 눌러 본다** (REQ-20260828-017).
+     이 자리의 계약은 셋이다: 화면에서 경로를 정할 수 있다 · 없는 폴더는 저장할
+     때 만들어진다 · 만들지 못하면 그 사유가 화면에 뜬다. 칸에 글자가 들어 있는
+     것만으로는 셋 다 못 말한다 — 실제로 눌러 봐야 한다.
+     끝나면 원래 값으로 되돌린다 — 진단이 사용자의 설정을 바꿔 놓고 끝나면 안 된다.
+     (만들어 본 폴더는 비어 있고, 지우는 것은 사람 몫이다 — 화면에는 폴더를
+     지우는 손잡이가 없고, 진단이 몰래 지우게 만들 이유는 더 없다.) */
+  if (extIn && /[?&]extdbg/.test(location.search) && !window.__extdbgArmed){
+    window.__extdbgArmed = 1;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const verdict = () => (extState.textContent || "").trim();
+    const save = async v => { extIn.value = v;
+      host.querySelector("#sec-ext-save").click(); await wait(1300); };
+    setTimeout(async () => {
+      const was = extIn.value;
+      const line = [`처음 "${was || "(비어 있음)"}" · ${verdict()}`];
+      // ① 만들 수 없는 자리 — 사유가 화면에 떠야 한다
+      await save("/nope/s9-extdbg/deeper");
+      line.push(`못 만드는 경로 → ${verdict()}`,
+                `사유가 떴나: ${verdict().startsWith("저장 못 함") ? "예" : "아니오 ✕"}`);
+      // ② 만들 수 있는 자리 — 저장만으로 폴더가 생겨 바로 읽히는 상태가 된다
+      await save("~/.s9-extdbg-tmp");
+      line.push(`없던 폴더 → "${extIn.value}" · ${verdict()}`,
+                `저장만으로 만들어졌나: ${verdict().startsWith("읽는 중") ? "예" : "아니오 ✕"}`);
+      await save(was);
+      line.push(`되돌림 "${extIn.value}" · ${verdict()}`);
+      const box = document.createElement("pre");
+      box.style.cssText = "position:fixed;left:10px;top:10px;z-index:99;margin:0;"
+        + "padding:8px 12px;font:11px/1.6 ui-monospace,monospace;white-space:pre;"
+        + "background:var(--panel);border:1px solid var(--text);color:var(--text)";
+      box.textContent = line.join("\n");
+      document.body.appendChild(box);
+    }, 700);
   }
   host.querySelector("#pf-save").addEventListener("click", async () => {
     const sets = [];
@@ -9679,6 +9824,24 @@ document.addEventListener("click", e => {
     gLastOn = null;   // 조건이 바뀌면 직전 클릭에 대한 인정은 무효다
     render();
   }));
+/* ?qdbg=<검색어> · ?qdbg-on — 머리 띠의 질문 칸을 **다른 상태로 세워 본다**
+   (REQ-20260828-018). 눈으로 봐야 할 상태가 셋인데 지금 저장소 데이터로 나오는
+   것은 하나뿐이다: 답이 다 찬 칸(46/46)은 표본을 좁혀야 나오고, 판을 잉크로
+   반전하는 스킨(terminal·calm)의 활성 칸은 눌러 봐야 나온다.
+   화면을 속이지 않는다 — 진짜 검색 칸에 진짜 글자를 넣고 진짜 버튼을 눌러,
+   그 표본의 진짜 숫자를 그린다. */
+if (/[?&]qdbg/.test(location.search)) setTimeout(() => {
+  const m = /[?&]qdbg=([^&]*)/.exec(location.search);
+  const el = $("#q");
+  if (m && el){
+    el.value = decodeURIComponent(m[1]);
+    el.dispatchEvent(new Event("input", {bubbles: true}));
+  }
+  if (/[?&]qdbg-on/.test(location.search)) setTimeout(() => {
+    const b = document.querySelector('[data-typef="question"]');
+    if (b && !b.classList.contains("on")) b.click();
+  }, 250);
+}, 400);
 // '내 것만' 토글 — 필터 변경으로 취급: 저장(s9mine) + 드롭다운 재스코핑 + 목록 제한 리셋.
 // URL 해시에는 넣지 않는다(기기 로컬 정체성 — DOC-20260823-006 명시적 결정).
 $("#f-mine").addEventListener("change", e => {

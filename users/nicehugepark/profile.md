@@ -6,7 +6,7 @@ role: admin
 emails: ["claude01.pfe@example.invalid"]
 github: nicehugepark
 os_accounts: ["sjpark1"]
-machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-28T13:05:31+09:00"}]
+machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-28T14:47:34+09:00"}]
 ---
 
 ## Notes
@@ -100,3 +100,11 @@ machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpar
 - 2026-08-28T13:11:25+09:00 config stream_mirror=on (by nicehugepark via dashboard)
 - 2026-08-28T13:11:58+09:00 config stream_mirror=off (by nicehugepark via dashboard)
 - 2026-08-28T13:12:01+09:00 config stream_mirror=on (by nicehugepark via dashboard)
+- 2026-08-28T13:47:33+09:00 config stream_mirror=off (by nicehugepark via dashboard)
+- 2026-08-28T13:47:35+09:00 config stream_mirror=on (by nicehugepark via dashboard)
+- 2026-08-28T14:28:12+09:00 config external_secrets_path=~/.s9-secrets-nope (by nicehugepark via dashboard)
+- 2026-08-28T14:29:33+09:00 config external_secrets_path=/home/sjpark1/section9/users (by nicehugepark via dashboard)
+- 2026-08-28T14:30:42+09:00 config external_secrets_path=~/.s9-secrets-demo (by nicehugepark via dashboard)
+- 2026-08-28T14:35:04+09:00 config external_secrets_path=/home/sjpark1/.s9-extdbg-tmp (by nicehugepark via dashboard)
+- 2026-08-28T14:35:04+09:00 config external_secrets_path=/home/sjpark1/.s9-secrets-demo (by nicehugepark via dashboard)
+- 2026-08-28T14:35:46+09:00 config external_secrets_path=(삭제) (by nicehugepark via dashboard)

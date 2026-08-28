@@ -9,5 +9,6 @@
  "s9code_args": "--permission-mode auto --model claude-opus-5[1m]",
  "auto_resume_model": "claude-opus-5[1m]",
  "stream_mirror": "on",
- "auto_resume_gh": "on"
+ "auto_resume_gh": "on",
+ "worker_worktree": "on"
 }

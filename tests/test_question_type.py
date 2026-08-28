@@ -218,32 +218,48 @@ class TestQuestionOnScreen(unittest.TestCase):
         self.assertIn("--t-question", sc.group(1))
         self.assertIn("isAnswered(r)", sc.group(1))
 
-    # V11. 답 없는 질문 수가 타입바에 선다 (REQ-20260826-019 반려 대응).
-    #      "질문이 몇 장인가"만 보이면 "그중 몇 장이 답이 없나"를 아무도 묻지 않는다.
-    def test_v11_typebar_shows_unanswered_count(self):
+    # V11. 질문 칸은 **답한 장수 / 전체** 한 덩이다 (REQ-20260826-019 →
+    #      20260828-018). 처음에는 `QUESTION 46` 옆에 `미답 3` 을 따로 뽑았는데,
+    #      같은 한 종류를 두 칸이 나눠 세는 꼴이라 눈이 둘을 이어 붙여야 했다
+    #      ("거슬린다"). 합치되 "그중 몇 장이 답이 없나"는 잃지 않는다 —
+    #      43 ≠ 46 이 그 말을 하고, 색이 그 위에 얹힌다.
+    def test_v11_typebar_shows_answered_over_total(self):
         m = re.search(r"const qUnanswered = ([^\n;]+);", self.web)
         self.assertIsNotNone(m, "타입바가 미답 건수를 세지 않는다")
         self.assertIn("isAnswered(r) === false", m.group(1),
                       "미답 판정이 목록·뷰어와 다른 규칙을 쓴다")
-        # question 에만 붙고, 0이면 붙지 않는다
-        bar = re.search(r'const un = t === "question" \? qUnanswered : 0;',
-                        self.web)
-        self.assertIsNotNone(bar, "미답 숫자가 question 외 타입에도 붙는다")
-        self.assertIn('un ? `<i class="unans">', self.web,
-                      "미답 0건일 때도 빈 신호를 그린다")
-        # 색은 면이 아니라 글자다 (s9-design: 색면 하이라이트 금지)
-        css = re.search(r"\.typebar \.tb \.unans\{([^}]+)\}", self.web)
-        self.assertIsNotNone(css, "미답 숫자의 스타일이 없다")
+        a = re.search(r"const qAnswered = ([\s\S]{0,120}?);", self.web)
+        self.assertIsNotNone(a, "답한 장수를 세지 않는다")
+        self.assertIn("isAnswered(r) === true", a.group(1),
+                      "답한 장수를 '전체 빼기 미답'으로 어림잡는다 — "
+                      "판정이 3상(답함·미답·모름)이라 그 뺄셈은 틀린다")
+        # 따로 뽑은 칸은 사라졌다
+        self.assertNotIn('class="unans"', self.web, "미답 칸이 아직 따로 서 있다")
+        # 한 덩이로 그린다: 질문에만, 0장이면 분수 없음(0/0 은 뜻이 없다)
+        self.assertIn('const frac = t === "question" && n > 0;', self.web,
+                      "분수가 question 외 타입에도 붙거나 0장에도 붙는다")
+        self.assertIn('`<b class="qf${left ? " left" : ""}">'
+                      '${qAnswered}<span>/</span>${n}</b>`', self.web,
+                      "답한 장수 / 전체 꼴이 아니다")
+        # 소리로는 "43 슬래시 46" 이다 — 읽어 줄 말을 따로 준다
+        self.assertIn('aria-label="${tip}"', self.web,
+                      "분수를 읽어 줄 이름이 없다")
+        self.assertIn("장 남음", self.web, "몇 장 남았는지 말해 주지 않는다")
+        # 강조는 면이 아니라 글자다 (s9-design: 색면 하이라이트 금지).
+        # 그리고 다 찼을 때(46/46)는 색을 거두어 저절로 물러난다.
+        css = re.search(r"\.typebar \.tb b\.qf\.left\{([^}]+)\}", self.web)
+        self.assertIsNotNone(css, "남은 것이 있을 때의 강조 스타일이 없다")
         self.assertIn("color:var(--t-question)", css.group(1))
         self.assertNotIn("background", css.group(1))
-        # 선택 상태에서 판을 잉크로 반전하는 스킨은 그 위의 타입색이 대비를 잃는다 —
-        # 총량(b)을 반전시킨 스킨은 미답도 함께 반전시켜야 글자가 배경에 묻히지 않는다.
+        self.assertNotRegex(self.web, r"\.typebar \.tb b\.qf\{[^}]*background",
+                            "분수에 색면을 깐다")
+        # 선택 상태에서 판을 잉크로 반전하는 스킨은 그 위의 타입색이 대비를 잃는다.
         for skin in ("terminal", "calm"):
             inv = re.search(r'\[data-skin="%s"\] \.typebar \.tb\.on b,\s*\n?\s*'
-                            r'\[data-skin="%s"\] \.typebar \.tb\.on \.unans\{'
+                            r'\[data-skin="%s"\] \.typebar \.tb\.on b\.qf\.left\{'
                             % (skin, skin), self.web)
             self.assertIsNotNone(
-                inv, f"{skin} 스킨 선택 상태에서 미답 숫자가 배경에 묻힌다")
+                inv, f"{skin} 스킨 선택 상태에서 분수가 배경에 묻힌다")
 
     # V12. 질문이 아닌 문서는 이 축 자체가 없다. 카탈로그가 비질문 행에도
     #      answered 키를 빈 문자열로 실어 보내므로 타입을 안 보면 `!!""` 가
