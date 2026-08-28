@@ -305,11 +305,17 @@ def _argv_port(argv):
     return None
 
 
+# 시스템 임시 디렉토리를 **불러올 때 한 번** 못박는다 (REQ-20260829-003).
+# 러너가 실행 전용 임시 루트로 tempfile.tempdir 을 돌리는데, 회수 판정의 기준은
+# 그 루트가 아니라 /tmp 전체여야 한다 — 옛 실행이 남긴 서버는 그 밖에 있다.
+SYS_TMP = os.path.realpath(tempfile.gettempdir())
+
+
 def _under_tmp(path):
     if not path:
         return False
     path = path.replace(" (deleted)", "")
-    tmp = os.path.realpath(tempfile.gettempdir())
+    tmp = SYS_TMP
     try:
         real = os.path.realpath(path)
     except OSError:

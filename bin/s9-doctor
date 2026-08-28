@@ -538,6 +538,7 @@ BOOT_WARN, BOOT_CRIT = 10.0, 30.0
 TMP_WARN, TMP_CRIT = 2000, 20000
 TMP_DIR_GROWN = 1 << 20   # ext4 디렉터리는 한 번 커지면 줄지 않는다
 TMP_OURS = ("s9gate-", "s9shot-", "cdp-prof-", "claude-")
+TMP_STALE_AGE = 3600      # 테스트 실행이 한 시간을 넘지는 않는다
 DISK_WARN, DISK_CRIT = 90.0, 95.0
 SERVE_SLOW = 2.0
 S9_HOOK_EVENTS = ("UserPromptSubmit", "SessionStart", "Stop", "SessionEnd",
@@ -821,6 +822,59 @@ def hooks_info():
                 os.path.join(hd, "pre-commit"))}
 
 
+TMP_RUN_RE = re.compile(r"^s9run-(\d+)-")
+# 우리 접두어지만 실행 사이에 공유하는 자리 — 테스트 포트 락. 지우면 두 실행이
+# 같은 포트를 제 것이라 믿는다 (tests/tmproot.py 의 KEEP 과 같은 목록이어야 한다).
+TMP_KEEP = ("s9-portpool",)
+
+
+def sweep_stale_tmp(base="/tmp", now=None, age=TMP_STALE_AGE):
+    """테스트가 /tmp 에 흘린 임시 자리를 거둔다 (REQ-20260829-003).
+
+    러너(tests/__main__.py)가 실행 전용 루트로 문을 닫았지만, 옛 체크아웃과
+    워크트리의 러너 사본은 그대로 흘린다. 이 회수는 캡처 회수와 같은 틱에서
+    돌아 시간축에서도 닫는다.
+
+    규칙은 캡처 회수와 같다 — **우리 표식이 있는 것만**. 이름이 s9 로 시작하지
+    않는 것(claude-*, snap-private-tmp, systemd-private-*, .X11-unix)은
+    아무리 오래돼도 건드리지 않는다. 살아 있는 실행 루트(s9run-<pid>-)도
+    남긴다: 지금 도는 다른 러너의 자리를 지우면 그 실행이 깨진다.
+    """
+    now = time.time() if now is None else now
+    gone, freed = 0, 0
+    try:
+        names = os.listdir(base)
+    except OSError:
+        return {"dirs": 0, "bytes": 0}
+    for name in names:
+        if not name.startswith("s9") or name in TMP_KEEP:
+            continue
+        m = TMP_RUN_RE.match(name)
+        if m and owner_alive(int(m.group(1))):
+            continue
+        path = os.path.join(base, name)
+        try:
+            if now - os.path.getmtime(path) < age:
+                continue
+            size = 0
+            if os.path.isdir(path) and not os.path.islink(path):
+                for dirpath, _d, files in os.walk(path):
+                    for f in files:
+                        try:
+                            size += os.path.getsize(os.path.join(dirpath, f))
+                        except OSError:
+                            pass
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                size = os.path.getsize(path)
+                os.remove(path)
+        except OSError:
+            continue
+        gone += 1
+        freed += size
+    return {"dirs": gone, "bytes": freed}
+
+
 def repo_info():
     def g(*args):
         try:
@@ -1015,12 +1069,15 @@ def main():
         # 생략해 싸게 끝낸다. 조용히 실행하고 회수한 게 있을 때만 한 줄 남긴다.
         sw = sweep_stale_shots()
         sw["servers"] = reap_orphan_servers()
+        sw["tmp"] = sweep_stale_tmp()
         if args.json:
             print(json.dumps(sw, ensure_ascii=False))
-        elif sw["procs"] or sw["profiles"] or sw["servers"]:
+        elif (sw["procs"] or sw["profiles"] or sw["servers"]
+              or sw["tmp"]["dirs"]):
             print(f"회수: 고아 캡처 브라우저 {sw['procs']}개 · "
                   f"프로필 {sw['profiles']}개 · "
-                  f"고아 테스트 서버 {sw['servers']}개")
+                  f"고아 테스트 서버 {sw['servers']}개 · "
+                  f"임시 자리 {sw['tmp']['dirs']}개")
         return 0
 
     d, orphans, chromes = diagnose()
@@ -1055,6 +1112,7 @@ def main():
         d["fixed"] = [{"kind": k, "pid": p, "age": a}
                       for k, p, a in fix(orphans, chromes)]
         d["swept"] = sweep_stale_shots()
+        d["swept_tmp"] = sweep_stale_tmp()
         pruned_n, pruned_b = prune_shot_files()
         d["pruned_shots"] = {"files": pruned_n, "bytes": pruned_b}
         d["shots_bytes"] = scratch_bytes()
@@ -1099,6 +1157,10 @@ def main():
     if sw and (sw["procs"] or sw["profiles"]):
         print(f"  회수: 고아 캡처 브라우저 {sw['procs']}개 · "
               f"프로필 {sw['profiles']}개")
+    st = d.get("swept_tmp")
+    if st and st["dirs"]:
+        print(f"  회수: 테스트가 흘린 임시 자리 {st['dirs']}개 "
+              f"({human(st['bytes'])})")
     pr = d.get("pruned_shots")
     if pr and pr["files"]:
         print(f"  정리: 오래된 캡처 산출물 {pr['files']}개 ({human(pr['bytes'])})")
