@@ -726,9 +726,31 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    라이트 tone에서 항상-다크 터미널 배경과 구분 불가 — 터미널 인버스 비디오로 재정의 */
 .ccterm::selection,.ccterm ::selection{background:var(--cc-text);color:var(--cc-bg)}
 .term::selection,.term ::selection{background:#cfd8e3;color:#101418}
-.ccterm .cccode{background:rgba(255,255,255,.09);padding:0 4px;color:var(--cc-cyan)}
-.ccterm .ccblk{display:block;background:rgba(255,255,255,.06);border-left:2px solid var(--cc-border);
-  padding:6px 10px;margin:5px 0;white-space:pre-wrap;color:var(--cc-cyan)}
+/* ------- 코드 — 인라인 · 블록 (REQ-20260828-023).
+   여기 있던 것은 회색 색면 + 왼쪽 세로 띠였다. 이 판이 쓰지 않기로 한 정확히
+   그 두 가지라, 대답 하나에 회색 조각이 여섯 개 흩어지면 무엇이 강조인지가
+   사라졌다. 구분은 표·헤딩이 이미 쓰는 어휘로 바꾼다 — 위아래 헤어라인과
+   왼쪽 들여쓰기. 색은 면이 아니라 글자에 남긴다.
+   접지는 않는다: 실측한 43개 블록 중 11줄을 넘는 것이 하나도 없었고, 그것들은
+   곁다리가 아니라 붙여 실행할 명령·수치·결론이었다. 접으면 대답이 결론을 잃고
+   접힌 글자는 Ctrl+F 에도 안 걸린다.
+   스트림(.term)에도 같은 규칙을 준다 — 같은 ccText 출력을 그리는데 그쪽에서만
+   맨 글자로 흘렀다. .term 에는 --cc-* 가 없으므로 fallback 을 반드시 붙인다. */
+.ccterm .cccode,.term .cccode{color:var(--cc-cyan,#56c8d8)}
+.ccterm .ccblk,.term .ccblk{position:relative;display:block;white-space:pre-wrap;
+  color:var(--cc-cyan,#56c8d8);margin:9px 0;padding:7px 0 7px 14px;
+  border-top:1px solid var(--cc-border,#3a4655);
+  border-bottom:1px solid var(--cc-border,#3a4655)}
+/* 이 블록들의 절반은 붙여 실행할 명령이다 — 복사 손잡이는 평소 숨고 포인터나
+   키보드 초점이 올 때만 선다. 바탕은 강조가 아니라 터미널 바닥색 그대로다
+   (첫 줄이 길 때 글자 위에 겹쳐 읽히지 않게). 선택에는 끼지 않는다 —
+   드래그해 복사한 명령 첫 줄이 "⧉ 복사" 로 시작하면 그 자체가 결함이다. */
+.ccblk .ccbcp{position:absolute;top:-9px;right:0;opacity:0;
+  font:inherit;font-size:.9em;line-height:1.4;border:0;padding:0 4px;
+  background:var(--cc-bg,#101418);color:var(--cc-dim,#8a8f98);
+  cursor:pointer;user-select:none;-webkit-user-select:none}
+.ccblk:hover .ccbcp,.ccblk .ccbcp:focus-visible{opacity:1}
+.ccblk .ccbcp:hover{color:var(--cc-text,#e8e8e4)}
 .ccterm .ccval{color:var(--cc-cyan)}
 
 /* ------- 터미널 블록 마크다운 (REQ-20260826-029) — 표·헤딩.
@@ -6008,6 +6030,29 @@ function ccBlocks(rendered){
     (k && !x.b && !keepers[k - 1].b ? "\n" : "") + x.h).join("");
 }
 
+/* 코드 블록의 복사 손잡이 (REQ-20260828-023). 마크업은 블록 첫 자식으로 넣고
+   위치는 CSS 가 잡는다 — 흐름에서 빠져 있어 줄 정렬을 흔들지 않는다.
+   title 은 무엇이 복사되는지를 말한다(손잡이가 붙은 블록 하나). */
+const CCBCP = '<button class="ccbcp" type="button" ' +
+  'title="이 블록을 클립보드로 복사합니다">⧉ 복사</button>';
+
+/* 복사본에서 손잡이 글자를 걷어낸 뒤 준다 — 안 걷으면 붙여넣은 명령 첫 줄이
+   "⧉ 복사" 로 시작한다. 실행은 화면의 몫이 아니다: 복사까지가 끝이다. */
+function ccBlockCopy(btn){
+  const blk = btn.closest(".ccblk");
+  if (!blk) return;
+  const cl = blk.cloneNode(true);
+  cl.querySelectorAll(".ccbcp").forEach(b => b.remove());
+  const say = ok => {
+    btn.textContent = ok ? "복사됨" : "복사 실패";
+    setTimeout(() => { btn.textContent = "⧉ 복사"; }, 1400);
+  };
+  try{
+    navigator.clipboard.writeText(cl.textContent).then(() => say(true),
+      () => say(false));
+  }catch(err){ say(false); }
+}
+
 function ccText(raw){
   raw = String(raw ?? "")
     .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?/g, "")     // OSC 제거
@@ -6021,7 +6066,7 @@ function ccText(raw){
     const keep = h => { ph.push(h); return `\x00${ph.length - 1}\x00`; };
     const inline = esc(s)
       .replace(/```\w*\n?([\s\S]*?)```/g, (m0, c) =>
-        keep(`<span class="ccblk">${c.replace(/\n$/, "")}</span>`))
+        keep(`<span class="ccblk">${CCBCP}${c.replace(/\n$/, "")}</span>`))
       // 첨부 참조 강조 (REQ-20260825-012): CC처럼 시안 칩 — 경로는 파일명만 표시
       .replace(/\[(Image|File): ([^\]\n]+)\]/g, (m0, k, p) =>
         keep(`<span class="ccatt" title="${p}">${k === "Image" ? "🖼" : "📎"} ${p.split(/[\\/]/).pop()}</span>`))
@@ -9905,6 +9950,11 @@ document.addEventListener("drop", e => {
 
 /* ---------------- events ---------------- */
 document.addEventListener("click", e => {
+  /* 코드 블록 복사 (REQ-20260828-023). 터미널·스트림은 통째로 다시 그려지므로
+     리스너는 손잡이마다가 아니라 여기 위임 하나로 둔다 — 붙이면 재렌더마다
+     죽는다. */
+  const cbc = e.target.closest(".ccbcp");
+  if (cbc){ e.preventDefault(); ccBlockCopy(cbc); return; }
   /* 구간 ↔ 메모 오가기 (REQ-20260827-072 반려). 본문의 ⌖ 는 그 구간에 달린
      메모로, 메모의 "⌖ 그 구간" 은 본문의 그 자리로 데려간다. 위임을 여기서
      하는 이유는 anchorMark 주석에 적어 뒀다 — 리스너가 쌓이지 않게. */
