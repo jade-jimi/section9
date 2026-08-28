@@ -1171,14 +1171,53 @@ def _title_is_raw(title, body):
     return bool(first) and first.startswith(t)
 
 
+# 판정 문구는 **서버가 짓는다** (REQ-20260828-007).
+#
+# 앞서는 화면이 `"승인: " + memo` 로 의미를 문자열에 실어 보내고 `approvals_unseen`
+# 이 그 한글 두 글자를 파싱했다. 화면 낱말 하나를 고치면 승인 메모 인계가 소리
+# 없이 죽는 결합이다 — 게다가 그 계약을 지키는 테스트가 없었다.
+#
+# 접두어를 정하는 근거는 화면에 없고 `(from, to)` 에 있다. 그 쌍을 아는 쪽은
+# 서버뿐이므로 짓는 일도 서버가 한다. 화면은 사람이 쓴 메모 원문만 보낸다.
+JUDGE_VERB = {"done": "승인", "in-progress": "반려"}   # review 에서 나가는 두 길
+JUDGE_NOMEMO = "(메모 없음)"
+
+
+def judge_note(old, new_status, memo):
+    """review 에서 나가는 전이의 History 문구. 그 밖의 전이는 메모 그대로."""
+    verb = JUDGE_VERB.get(new_status) if old == "review" else None
+    if not verb:
+        return memo or ""
+    memo = (memo or "").strip()
+    return f"{verb}: {memo}" if memo else f"{verb} {JUDGE_NOMEMO}"
+
+
+def judge_memo(note):
+    """judge_note 가 지은 문구에서 사람이 쓴 메모 원문만 되찾는다.
+
+    메모가 없던 판정은 빈 문자열이다 — 예전 화면이 남긴 `대시보드 승인` 도
+    같다("대시보드" 는 장소이지 내용이 아니다). vault 에 이미 박힌 옛 기록을
+    새 기록과 같은 뜻으로 읽기 위해 여기서만 옛 꼴을 안다.
+    """
+    t = re.sub(r"\s*\[via dashboard\]\s*", " ", note or "").strip()
+    for verb in JUDGE_VERB.values():
+        if t == f"{verb} {JUDGE_NOMEMO}" or t == f"대시보드 {verb}":
+            return ""
+        if t.startswith(f"{verb}:"):
+            return t[len(verb) + 1:].strip(" :")
+    return t
+
+
 def do_transition(doc_id, new_status, note="", user=None, force=False, auto=False,
-                  judge=False):
+                  judge=False, via=""):
     """상태 전이의 단일 코드 경로 — CLI(cmd_status)와 웹 서버(POST /api/status)가
     공유한다. 검증/History 기록/인덱스 갱신을 우회하는 쓰기 경로는 없다.
     auto=True면 History note에 [auto] 마커 (자동 스폰 무한루프 차단 근거).
     judge=True는 대시보드의 사람 판정 경로 (REQ-20260825-030): review→done
-    승인에 한해 goal/TDD 게이트를 면제한다 — 게이트는 에이전트의 자의적
-    완료를 막는 장치지 사용자의 승인을 막는 장치가 아니다."""
+    승인에 한해 goal/TDD 게이트를 면제하고, review 에서 나가는 전이의 History
+    문구(`승인: …`·`반려: …`)를 여기서 짓는다 (REQ-20260828-007).
+    via='dashboard' 면 History 에 `[via dashboard]` 표식을 붙인다 — 화면이
+    문자열을 조립해 보내던 것을 쓰기 경로 한 곳으로 모은 것이다."""
     path = locate(doc_id)
     if not path:
         raise ValueError(f"document not found: {doc_id}")
@@ -1243,8 +1282,13 @@ def do_transition(doc_id, new_status, note="", user=None, force=False, auto=Fals
     note = re.sub(r"\s+", " ", note).strip() if note else ""
     if note:
         note, _ = normalize_ids(note)  # short REQ-id → full-id (trigger_dependents 매칭 보장)
+    if judge:
+        # 접두어는 (from, to) 가 정한다 — 화면이 아니라 (REQ-20260828-007)
+        note = judge_note(old, new_status, note)
     if auto:
         note = ("[auto] " + note).strip()  # 자동 스폰 유발 전이 마커
+    if via:
+        note = (note + f" [via {via}]").strip()
     suffix = f" — {note}" if note else ""
     entry = f"- {ts} status: {old} -> {new_status} (by {user}){suffix}\n"
     if "## History" in body:
@@ -6634,10 +6678,10 @@ def approvals_unseen(consume=False, days=2):
         lt = _last_transition(body)
         if not lt or (lt[1], lt[2]) != ("review", "done"):
             continue
-        memo = (lt[3] or "").replace("[via dashboard]", "").strip()
-        if not memo.startswith("승인:"):
-            continue
-        memo = memo[3:].strip(" :")
+        # 바로 윗줄이 이미 (review, done) 을 확인했다 — 여기서 다시 한글
+        # 접두어를 파싱할 이유가 없다 (REQ-20260828-007). 남은 질문은 하나뿐:
+        # 사람이 쓴 메모가 있는가.
+        memo = judge_memo(lt[3] or "")
         if not memo:
             continue  # 메모 없는 승인 — 전달할 내용 없음
         out.append({"id": r["id"], "title": r["title"], "memo": memo,
@@ -11320,10 +11364,11 @@ def cmd_serve(args):
                     tid, tto = str(req.get("id", "")), str(req.get("to", ""))
                     # judge=True: 대시보드 전이는 사람의 행위 — review→done
                     # 승인에 한해 goal/TDD 게이트 면제 (REQ-20260825-030)
-                    old = do_transition(
-                        tid, tto,
-                        note=(note + (" " if note else "") + "[via dashboard]"),
-                        user=actor, judge=True)
+                    # note 는 사람이 쓴 메모 **원문**이다 — 판정 접두어와
+                    # [via dashboard] 표식은 do_transition 이 붙인다
+                    # (REQ-20260828-007: 화면이 의미를 문자열에 싣지 않는다)
+                    old = do_transition(tid, tto, note=note, user=actor,
+                                        judge=True, via="dashboard")
                     try:
                         update_active_reqs(tid, tto)
                     except Exception:

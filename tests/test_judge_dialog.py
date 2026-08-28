@@ -65,12 +65,25 @@ REQ-20260827-056 과 정확히 같은 실패다 — 네이티브 위젯. `prompt
 
 실행: python3 tests/ judge_dialog
 """
+import glob
+import importlib.machinery
+import importlib.util
 import os
 import re
+import subprocess
+import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.path.join(HERE, "..", "web", "index.html")
+S9 = os.path.join(HERE, "..", "bin", "s9")
+
+# 이름표가 상태머신을 벗어나지 않는지 보려면 상태머신 원본을 봐야 한다
+_spec = importlib.util.spec_from_loader(
+    "s9judge", importlib.machinery.SourceFileLoader("s9judge", S9))
+s9 = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(s9)
 
 # 판정 경로에서 네이티브 위젯이 사라져야 하는 자리
 NATIVE = re.compile(r"(?<![.\w])(?:window\.)?(prompt|confirm|alert)\s*\(")
@@ -321,7 +334,7 @@ class JudgeDialog(unittest.TestCase):
         # 상태를 **이름의 자리에** 그릴 때는 식별자를 그대로 쓴다. (낱말 자체를
         # 금할 수는 없다 — "하루 안에 완료된 요청 없음" 같은 문장에서 그 낱말은
         # 상태의 이름이 아니라 우리말 서술어다. 금하는 것은 이름 자리의 번역이다.)
-        self.assertIn('"→ " + to', self.code,
+        self.assertIn('<span class="stn">${esc(to)}</span>', self.code,
                       "상태 버튼이 식별자를 그대로 쓰지 않는다")
         # 승인/반려 창은 **어느 상태로 가는지**를 창 안 문장에서 말한다
         rj = self._fn("judgeAct")
@@ -340,7 +353,8 @@ class JudgeDialog(unittest.TestCase):
         # 보드 판정 카드·문서 본문 둘 다 그 옷을 입는다
         self.assertRegex(self.code, r'class="deed" data-approve', "보드 승인 버튼")
         self.assertRegex(self.code, r'class="deed" data-reject', "보드 반려 버튼")
-        self.assertIn('rv ? "deed" : ""', self.code,
+        # 5차: 옮기기 버튼도 같은 옷을 입는다 — 행위 칸의 기호와 낱말만 다르다
+        self.assertIn('`<button class="deed" data-trans=', self.code,
                       "문서 본문에서 이름과 행위가 같은 옷을 입는다")
 
     # ---------- ⑩ 한 행동, 한 창 ----------
@@ -377,18 +391,134 @@ class JudgeDialog(unittest.TestCase):
                              "%s 창이 여러 곳에서 지어진다" % label)
 
     def test_labels_never_promise_a_road_that_is_closed(self):
-        """상태머신이 주지 않는 길을 이름으로 가리키지 않는다.
+        """판정 이름표는 상태머신이 실제로 주는 길에만 붙는다.
 
-        `review → blocked` 는 허용 전이가 아니라 `⏸ 보류` 라벨은 한 번도
-        그려진 적이 없었다. 없는 길을 가리키는 이름은 다음 사람이 그 길이
-        있다고 믿게 만든다.
+        `review → blocked` 는 허용 전이가 아닌데 `⏸ 보류` 라벨이 달려 있었다 —
+        한 번도 그려진 적 없는 이름이다. 없는 길을 가리키는 이름은 다음 사람이
+        그 길이 있다고 믿게 만든다.
+
+        레지스트리를 세우는 대신 이 한 줄로 잠근다 (REQ-20260828-007 4차):
+        읽는 쪽이 하나뿐인 표는 단일 출처가 아니라 간접층이다.
         """
-        m = re.search(r"const RVLABEL = \{([^}]*)\}", self.code)
-        self.assertIsNotNone(m, "review 버튼 이름표를 찾지 못했다")
-        self.assertNotIn("blocked", m.group(1),
-                         "review 에서 갈 수 없는 상태에 이름표가 붙어 있다")
+        keys = set(self._rvdeed())
+        self.assertTrue(keys, "판정 버튼 이름표를 찾지 못했다")
+        self.assertLessEqual(keys, set(s9.TRANSITIONS["review"]),
+                             "review 에서 갈 수 없는 상태에 이름표가 붙어 있다: %s"
+                             % sorted(keys - set(s9.TRANSITIONS["review"])))
+
+    # ---------- ⑪ 두 화면이 같은 글자 ----------
+
+    def test_one_grammar_for_every_state(self):
+        """다섯 상태의 버튼 줄이 **한 문법**이다 (REQ-20260828-007 5차).
+
+        사용자: "다른 상태의 카드에 대한 상태 전이도 고려해서 판단한게 맞나?"
+        4차는 판정 버튼에만 도착지 이름을 붙였고, 그래서 같은 것(상태의 이름)이
+        두 크기로 그려졌다 — `open` 문서의 `→ in-progress` 와 review 문서의
+        `반려 in-progress` 는 목적지가 같은데 글자가 달랐다.
+
+        규칙: 옮기는 버튼은 전부 [행위][도착지]. 행위 칸에 기호가 서면 그냥
+        이동, 낱말이 서면 판정. 이름의 얼굴은 하나뿐이다.
+        """
+        # 라벨을 짓는 함수가 하나다 — 판정도 옮기기도 같은 틀을 통과한다
+        self.assertIn("const actLabel = (to, judging)", self.code,
+                      "옮기기와 판정이 각자 라벨을 짓는다")
+        self.assertIn("actLabel(to, judging)", self.code,
+                      "문서 화면의 전이 버튼이 그 틀을 쓰지 않는다")
+        # 이름을 그리는 규칙도 하나다 — 크기·자간이 갈리면 5차 지적이 되풀이된다
+        self.assertEqual(len(re.findall(r"\.acts \.stn\{", self.src)), 1,
+                         "도착지 이름의 규칙이 여러 벌이다")
+        # 옮기기 버튼도 판정 버튼과 같은 옷(.deed)을 입는다
+        self.assertIn('`<button class="deed" data-trans=', self.code,
+                      "옮기기 버튼만 다른 옷을 입는다")
+
+    def test_board_and_document_say_the_same_word(self):
+        """보드 판정 카드와 문서 화면의 버튼은 **한 함수**가 짓는다.
+
+        3차까지 두 화면이 각자 글자를 갖고 있었고, 그래서 매번 한쪽만 고쳐졌다
+        (REQ-20260828-007 4차). 같은 함수를 부르면 갈라질 수 없다.
+        """
+        self.assertIn('${rvLabel("done")}', self.code, "보드 승인 버튼이 제 글자를 짓는다")
+        self.assertIn('${rvLabel("in-progress")}', self.code, "보드 반려 버튼이 제 글자를 짓는다")
+        self.assertIn("actLabel(to, judging)", self.code,
+                      "문서 화면이 같은 함수를 쓰지 않는다")
+        self.assertNotIn("RVLABEL", self.code, "옛 이름표가 남아 두 벌이 됐다")
+
+    def test_the_deed_carries_the_name_of_where_it_goes(self):
+        """행위 옆에 **도착지의 이름**이 선다 — 글꼴은 갈라진 채로.
+
+        사용자(4차): "review 문서만 버튼이 한국어라 다른 상태의 영어 이름과
+        섞인다." 원인은 낱말이 아니라 `→ done` 에는 도착지 이름이 있는데
+        `승인` 에는 없다는 것이었다. 이름을 붙이되 이름은 mono, 행위는 본문체 —
+        한 줄에 두 얼굴이 서는 그 규칙이 곧 무게 차이다.
+        """
+        self.assertIn('<span class="stn">${esc(to)}</span>', self.code,
+                      "행위 버튼이 도착지 이름을 달지 않는다")
+        m = re.search(r"\.acts \.stn\{([^}]*)\}", self.src)
+        self.assertIsNotNone(m, ".stn 규칙을 찾지 못했다")
+        decl = m.group(1)
+        self.assertIn("var(--mono)", decl, "도착지 이름이 이름처럼 보이지 않는다")
+        # 반전(hover)에서 muted 잉크는 배경에 묻힌다 — 색을 물려받아야 읽힌다
+        self.assertIn("color:inherit", decl,
+                      "버튼 반전에서 도착지 이름이 묻힌다")
+        # 축약은 쓰지 않는다 — 어디에도 없는 글자를 만드는 순간 전제가 무너진다
+        self.assertNotIn("in-prog\"", self.code)
+
+    def test_the_arrow_means_one_thing_on_a_row(self):
+        """`→` 는 "이 상태로 옮김" 하나만 뜻한다.
+
+        같은 줄에서 `→ blocked` 의 화살표는 도착 상태를 가리키는데
+        `→ 이어 말하기` 의 화살표는 "저기로 감" 이었다 — 이어 말하기가 다섯
+        번째 목적지로 위장했다 (REQ-20260828-007 4차).
+        """
+        self.assertNotIn("→ 이어 말하기", self.code, "화살표가 두 뜻으로 갈린다")
+        self.assertIn(">이어 말하기</button>", self.code, "집기 손잡이가 사라졌다")
+
+    def test_the_josa_is_computed_not_hedged(self):
+        """`을(를)` 은 서식 편지투다 — 받침으로 계산한다."""
+        self.assertNotIn("을(를)", self.code, "서식 편지투가 화면에 남았다")
+        fn = self._fn("josa")
+        self.assertIn("0xAC00", fn, "한글 음절 범위를 보지 않는다")
+        self.assertIn("% 28", fn, "받침 유무를 세지 않는다")
+        # 한글이 아니면 물러선다 — 읽는 법이 글자에 없는 것을 지어내지 않는다
+        self.assertIn('`${withT}(${withoutT})`', fn, "한글이 아닐 때의 폴백이 없다")
+
+    def test_the_cap_says_where_the_act_came_from(self):
+        """창 머리는 어디서 왔는가로 정해진다 — review 에서 나가야 `판정`."""
+        ja = self._fn("judgeAct")
+        judging = ja.split("// 판정이 아닌 이동")[0] if "// 판정이 아닌 이동" in ja else ja
+        self.assertEqual(judging.count('cap:"판정"'), 2,
+                         "승인·반려만 판정이어야 한다")
+        self.assertIn('cap:"상태 옮기기"', ja, "그 밖의 이동이 아직 판정을 자칭한다")
+        # 서버가 전이를 못 받은 것은 사람의 거절이 아니다
+        self.assertNotIn('cap:"거부"', self.code, "실패 알림이 사람의 거절로 읽힌다")
+        self.assertIn('cap:"실패"', self.code, "전이 실패 알림의 머리가 없다")
+
+    # ---------- ⑫ 의미를 문자열에 싣지 않는다 ----------
+
+    def test_the_screen_sends_the_memo_not_the_meaning(self):
+        """화면은 사람이 쓴 **원문만** 보낸다 (REQ-20260828-007 4차).
+
+        `"승인: " + memo` 로 의미를 문자열에 실어 보내고 서버가 그 한글 두
+        글자를 파싱했다 — 화면 낱말 하나를 고치면 승인 메모 인계가 소리 없이
+        죽는 결합이다. 접두어를 정하는 근거는 화면에 없고 `(from, to)` 에 있다.
+        """
+        ja = self._fn("judgeAct")
+        self.assertNotIn('"승인: "', ja, "화면이 아직 접두어를 짓는다")
+        self.assertNotIn('"반려: "', ja, "화면이 아직 접두어를 짓는다")
+        self.assertNotIn("대시보드 승인", self.code, "장소를 내용인 양 적는다")
+        self.assertIn('postStatus(id, "done", memo)', ja)
+        self.assertIn('postStatus(id, "in-progress", why)', ja)
+
 
     # ---------- helpers ----------
+
+    def _rvdeed(self):
+        """화면이 쓰는 판정 이름표의 키 — 상태 이름 그대로여야 한다."""
+        m = re.search(r"const RVDEED = \{([^}]*)\}", self.code)
+        if not m:
+            return []
+        return re.findall(r'(?:"([^"]+)"|([a-z-]+))\s*:', m.group(1)) and [
+            (a or b) for a, b in re.findall(r'(?:"([^"]+)"|([a-z-]+))\s*:', m.group(1))]
 
     def _fn(self, name):
         m = re.search(r"(?:async )?function %s\([^)]*\)\{[\s\S]*?\n\}" % name, self.src)
@@ -407,6 +537,90 @@ class JudgeDialog(unittest.TestCase):
         self.assertIsNotNone(m, "판정 대화상자 CSS 블록을 찾지 못했다")
         return m.group(1)
 
+
+class JudgeNoteContract(unittest.TestCase):
+    """History 문구를 짓는 쪽과 되읽는 쪽이 한 쌍인가 (REQ-20260828-007 4차).
+
+    이 계약이 없어서 `web/index.html` 의 `"승인: " + memo` 와 `bin/s9` 의
+    `memo.startswith("승인:")` 가 아무 표시 없이 마주 보고 있었다.
+    """
+
+    def test_only_review_exits_get_a_verb(self):
+        self.assertEqual(s9.judge_note("review", "done", "잘 됐다"), "승인: 잘 됐다")
+        self.assertEqual(s9.judge_note("review", "in-progress", "부족"), "반려: 부족")
+        # 판정이 아닌 이동은 메모 그대로 — 여기에 동사를 붙이면 거짓말이다
+        self.assertEqual(s9.judge_note("in-progress", "done", "끝냄"), "끝냄")
+        self.assertEqual(s9.judge_note("open", "cancelled", ""), "")
+
+    def test_no_memo_is_said_so_and_is_not_a_memo(self):
+        """메모 없는 승인은 그렇게 적고, 되읽으면 빈 값이다."""
+        n = s9.judge_note("review", "done", "")
+        self.assertEqual(n, "승인 (메모 없음)")
+        self.assertFalse(n.startswith("승인:"),
+                         "메모 없는 승인이 메모 있는 승인으로 읽힌다")
+        self.assertEqual(s9.judge_memo(n), "")
+
+    def test_the_pair_round_trips(self):
+        for memo in ("한 줄", "콜론: 이 들어간 메모", "  앞뒤 공백  "):
+            for to in ("done", "in-progress"):
+                note = s9.judge_note("review", to, memo)
+                self.assertEqual(s9.judge_memo(note + " [via dashboard]"),
+                                 memo.strip(),
+                                 "%r 가 왕복에서 달라진다" % memo)
+
+    def test_old_records_still_read_the_same(self):
+        """vault 에 이미 박힌 옛 꼴도 같은 뜻으로 읽힌다."""
+        self.assertEqual(s9.judge_memo("대시보드 승인 [via dashboard]"), "")
+        self.assertEqual(s9.judge_memo("승인: 이전 기록 [via dashboard]"), "이전 기록")
+        self.assertEqual(s9.judge_memo("반려: 사유 [via dashboard]"), "사유")
+
+    def test_the_write_path_composes_it_end_to_end(self):
+        """화면이 원문만 보내도 History 에는 판정 문구가 남는다.
+
+        단위 계약만으로는 부족하다 — 끊어야 했던 것은 화면과 서버 **사이**의
+        결합이므로, 실제 쓰기 경로가 그 문구를 짓는지까지 본다.
+        """
+        tmp = tempfile.mkdtemp(prefix="s9judge-")
+        env = {**os.environ, "S9_ROOT": tmp, "S9_MACHINE": "testbox",
+               "S9_USER": "tester"}
+        env.pop("S9_SESSION", None)
+
+        def cli(*argv):
+            r = subprocess.run([S9, *argv], capture_output=True, text=True,
+                               env=env, timeout=20, stdin=subprocess.DEVNULL)
+            self.assertEqual(r.returncode, 0,
+                             "s9 %s: %s%s" % (" ".join(argv), r.stdout, r.stderr))
+            return r
+
+        cli("init")
+        cli("user", "add", "tester")
+        cli("new", "request", "--title", "판정 문구 계약", "--summary", "s",
+            "--size", "S", "--goal", "g", "--body", "b")
+        doc = glob.glob(os.path.join(tmp, "vault", "requests", "**", "REQ-*.md"),
+                        recursive=True)[0]
+        rid = os.path.splitext(os.path.basename(doc))[0]
+        cli("status", rid, "in-progress", "--note", "착수")
+        cli("status", rid, "review", "--note", "확인 포인트")
+
+        # 대시보드가 하는 그대로 — 메모 **원문만** 넘긴다
+        script = ("import os,sys;"
+                  "import importlib.machinery as m, importlib.util as u;"
+                  "sp=u.spec_from_loader('s9x', m.SourceFileLoader('s9x', %r));"
+                  "mod=u.module_from_spec(sp); sp.loader.exec_module(mod);"
+                  "mod.do_transition(%r, 'done', note='이대로 갑시다',"
+                  " user='tester', judge=True, via='dashboard')" % (S9, rid))
+        r = subprocess.run([sys.executable, "-c", script], env=env,
+                           capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+        with open(doc, encoding="utf-8") as f:
+            last = [ln for ln in f.read().split("\n") if " status: " in ln][-1]
+        self.assertIn("review -> done", last)
+        self.assertIn("— 승인: 이대로 갑시다 [via dashboard]", last,
+                      "쓰기 경로가 판정 문구를 짓지 않는다: %s" % last)
+        # 그리고 읽는 쪽이 그것을 메모로 되찾는다
+        note = last.split(" — ", 1)[1]
+        self.assertEqual(s9.judge_memo(note), "이대로 갑시다")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
