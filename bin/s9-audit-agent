@@ -17,6 +17,12 @@ PostToolUse 시점을 고르는 이유: PreToolUse 에는 agentId·output_file �
 agentId/output_file 을 돌려준다 — 즉 이 훅은 종료가 아니라 기동 시점에 돈다.
 종료 시점의 마감(result=done)은 SubagentStop 훅(s9-audit-subagent)이 맡는다.
 
+귀속 대상은 **위임을 띄운 쪽이 지명한 REQ** 를 먼저 본다 (REQ-20260828-041).
+세션 클레임만 보던 종전 규칙은 리드가 자기가 클레임하지 않은 문서에 위임하면
+그 위임을 엉뚱한 REQ 에 붙였다 — 2026-08-28 21:10 designer 는 039 를 작업 중인데
+기록은 028 로 갔고, 039 는 화면에서 "69분째 진전 없음" 이 됐다. 지명이 없거나
+유일하지 않으면 종전 경로(클레임)로 물러난다.
+
 원칙: 실패 시 조용히 exit 0. 문서를 건드릴 근거가 없으면 아무것도 하지 않는다.
 비활성화: S9_AUDIT=off
 """
@@ -76,11 +82,71 @@ def actor_for(agent_type, agent_id):
     return "sub:%s:%s" % (t, (agent_id or "")[:8]) if agent_id else "sub:%s" % t
 
 
-def target_req(env):
-    """이 위임을 귀속할 REQ — 세션이 실행 등록한 것 중 소유 확인을 통과한 것.
+REQ_RE = re.compile(r"\bREQ-\d{8}-\d{1,5}(?:-[0-9a-z]{2,8})?\b")
+NAME_SCAN_MAX = 8       # 지명 후보 조회 상한 — 훅은 툴 호출마다 돈다
 
-    언급 기반 추측은 하지 않는다: 위임 시점엔 아직 보고 본문이 없고, 추측으로
-    남의 문서에 running 을 심으면 그 문서가 영원히 '진행 중'으로 보인다."""
+
+def named_reqs(inp):
+    """위임을 띄운 쪽이 **지명한** REQ id — 등장 순, 중복 제거.
+
+    description 을 먼저 보는 이유: 리드가 대상을 명시적으로 적는 자리이고,
+    프롬프트에는 배경으로 언급되는 다른 id 가 섞이기 쉽다."""
+    inp = inp or {}
+    text = "\n".join(str(inp.get(k) or "") for k in ("description", "prompt"))
+    return list(dict.fromkeys(REQ_RE.findall(text)))[:NAME_SCAN_MAX]
+
+
+def doc_meta(env, rid):
+    """(정식 id, status). 문서가 없으면 ("", "").
+
+    짧은 id 지명도 정식 id 로 돌려준다 — 클레임·기여가 짧은 형태로 저장되면
+    live 매칭과 클레임 판정이 깨진다 (REQ-20260825-086)."""
+    r = run(env, "show", rid, "--meta")
+    if r.returncode != 0:
+        return "", ""
+    cid = status = ""
+    for line in (r.stdout or "").splitlines():
+        if line.startswith("id:") and not cid:
+            cid = line.split(":", 1)[1].strip()
+        elif line.startswith("status:") and not status:
+            status = line.split(":", 1)[1].strip()
+    return cid, status
+
+
+def named_target(env, inp):
+    """지명된 것 중 **살아 있는 하나** — 없거나 여럿이면 "" (고르지 않는다).
+
+    위임을 띄우는 쪽은 대상을 알고 있다. 그 값을 읽는 것이 세션 클레임에서
+    추측하는 것보다 언제나 낫다 — 리드가 자기가 클레임하지 않은 문서에 위임하는
+    일이 흔하고(실사고 2026-08-28 21:10: designer 는 039 를 하는데 기록은 028 에
+    붙었다), 그러면 도는 요청이 화면에서 '멈춤' 이 된다.
+
+    **유일하지 않으면 고르지 않는다.** 프롬프트에는 배경 설명으로 다른 REQ 가
+    함께 실린다 — 그중 하나를 골라 running 을 심으면 남의 문서가 영원히
+    '진행 중'으로 보인다. 여럿이면 세션 클레임 경로로 물러난다."""
+    live = []
+    for rid in named_reqs(inp):
+        cid, status = doc_meta(env, rid)
+        if cid and status not in ("done", "cancelled") and cid not in live:
+            live.append(cid)
+    return live[0] if len(live) == 1 else ""
+
+
+def target_req(env, inp=None, out=None):
+    """이 위임을 귀속할 REQ — ① 지명된 것 ② 세션이 실행 등록한 것 순.
+
+    ②에서 언급 기반 추측은 하지 않는다: 위임 시점엔 아직 보고 본문이 없고,
+    추측으로 남의 문서에 running 을 심으면 그 문서가 영원히 '진행 중'으로 보인다.
+    ①은 추측이 아니다 — 위임을 띄운 리드가 대상을 적은 값이다.
+    out: 넘기면 어느 경로로 골랐는지 담는다(로그용) — 오귀속을 사후에 추적하려면
+    "무엇에 붙였나" 만으로는 부족하고 "왜 그것이었나" 가 있어야 한다."""
+    if out is None:
+        out = {}
+    named = named_target(env, inp)
+    if named:
+        out["src"] = "지명"
+        return named
+    out["src"] = "클레임"
     try:
         b = json.loads(run(env, "bind").stdout or "{}")
     except ValueError:
@@ -116,18 +182,21 @@ def main():
 
     env = dict(os.environ)
     env["S9_SESSION"] = (data.get("session_id") or "unknown")[:8]
-    req = target_req(env)
+    inp = data.get("tool_input") or {}
+    pick = {}
+    req = target_req(env, inp, pick)
     if not req:
-        run(env, "log", f"위임 등록 보류: 클레임된 REQ 없음 (agent {aid[:8]})")
+        run(env, "log", f"위임 등록 보류: 대상 REQ 없음 (agent {aid[:8]})")
         return
 
-    inp = data.get("tool_input") or {}
     run(env, "claim", req, "--agent-transcript", out)
     run(env, "contrib", req,
         "--actor", actor_for(inp.get("subagent_type"), aid),
         "--item", (inp.get("description") or "")[:120],
         "--result", "running", "--transcript", out)
-    run(env, "log", f"위임 등록: {req} ← {actor_for(inp.get('subagent_type'), aid)}")
+    run(env, "log", f"위임 등록: {req} ← "
+                    f"{actor_for(inp.get('subagent_type'), aid)} "
+                    f"({pick.get('src', '?')})")
 
 
 if __name__ == "__main__":
