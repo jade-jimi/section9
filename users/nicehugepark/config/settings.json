@@ -10,6 +10,5 @@
  "stream_mirror": "on",
  "auto_resume_gh": "on",
  "worker_worktree": "on",
- "external_secrets_path": "/home/sjpark1/s9-secrets",
  "timezone": "Asia/Seoul"
 }

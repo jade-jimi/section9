@@ -250,14 +250,37 @@ def registered_users():
                   if os.path.isdir(os.path.join(USERS, d)))
 
 
-def user_config(name):
-    """users/<name>/config/settings.json (없으면 빈 dict)."""
+# 비밀이 **어디 있는지**도 리포에 싣지 않는다 (REQ-20260828-028 부수 발견).
+# REQ-20260828-012 가 화면에서 "값도 경로도 주지 않는다" 고 정했는데, 그 경로를
+# 담는 settings.json 은 git 이 추적한다. 이 저장소의 origin 은 PUBLIC 이고
+# 그 파일은 이미 올라가 있다 — 다행히 키가 생긴 뒤로 push 를 안 해 공개된 판에는
+# 없지만, **다음 push 한 번이면 공개된다.** DOC-20260827-006 의 기준으로 이 키는
+# `permissions` 와 같은 칸이다: 그 자체가 능력을 여는 것은 리포에 싣지 않는다.
+SECRET_LOCATION_KEYS = ("external_secrets_path",)
+
+
+def user_config_local_path(name):
+    """추적되지 않는 개인 설정 자리 — .gitignore 가 막는다."""
+    return os.path.join(USERS, name, "config", "local.json")
+
+
+def _read_json(path):
     try:
-        with open(os.path.join(USERS, name, "config", "settings.json"),
-                  encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except (OSError, ValueError):
         return {}
+
+
+def user_config(name):
+    """users/<name>/config/ 의 설정 — settings.json 위에 local.json 을 겹친다.
+
+    쓰는 자리는 갈려도(추적/비추적) **읽는 값은 하나**다. 갈린 것을 읽는 쪽까지
+    알게 하면 부르는 자리마다 둘을 합치는 코드가 생기고, 한 곳이 빠지는 날이 온다.
+    """
+    cfg = _read_json(os.path.join(USERS, name, "config", "settings.json"))
+    cfg.update(_read_json(user_config_local_path(name)))
+    return cfg
 
 
 def user_profile(name):
@@ -2842,8 +2865,21 @@ def secret_leak(staged_paths, blob, root=None, user=None):
     """
     hits = []
     for p in staged_paths or []:
-        if re.search(r"(^|/)users/[^/]+/secrets(/|$)", p.replace("\\", "/")):
+        q = p.replace("\\", "/")
+        if re.search(r"(^|/)users/[^/]+/secrets(/|$)", q):
             hits.append(f"비밀 경로가 커밋에 들어 있다: {p}")
+        # 값이 아니라 **위치**가 새는 길 (REQ-20260828-028 부수 발견).
+        # 규율이 아니라 장치다 — 어디에 두라고 적어 두는 것만으로는 언젠가 샌다.
+        if re.search(r"(^|/)users/[^/]+/config/settings\.json$", q):
+            try:
+                cfg = _read_json(os.path.join(root or ROOT, q))
+            except Exception:
+                cfg = {}
+            for k in SECRET_LOCATION_KEYS:
+                if cfg.get(k):
+                    hits.append(
+                        f"비밀이 있는 자리가 커밋에 들어 있다: {p} 의 {k} — "
+                        f"이 값은 config/local.json(비추적)으로 가야 한다")
     users = [user] if user else []
     if not users:
         base = os.path.join(root or ROOT, "users")
@@ -6555,6 +6591,39 @@ STALLED_WIN = 900       # 이만큼 진전이 없으면 "멈췄다" (초)
 STALLED_SHOW = 3        # 매 턴 주입되므로 이만큼만 보이고 나머지는 숫자로
 
 
+def stall_mins(r, now, win):
+    """이 행이 **얼마나 조용한가** — 멈췄으면 분(minutes), 아니면 None.
+
+    판정이 사는 유일한 자리다 (REQ-20260828-036). 전에는 CLI(`stalled_requests`)
+    만 이 판정을 갖고 화면(`catalog_with_live`)은 옛 축("세션이 살아 있나")에
+    남아, 같은 요청을 두고 CLI 는 "멈췄다", 화면은 초록 점으로 "돈다"고 말했다.
+    사용자가 하루에 세 번 물은 것이 그 어긋남이다. 그래서 함수 하나를 두고
+    화면·CLI 가 모두 여기를 지난다.
+
+    진전의 시계는 **문서가 마지막으로 바뀐 때**다(updated) — 노트·전이·수정이
+    거기 다 찍힌다. "그 세션이 살아 있나"가 아니다: 리드 세션은 늘 살아 있고
+    요청을 여럿 한꺼번에 잡으므로, 그걸 증거로 치면 손 뗀 것을 하나도 못 잡는다
+    (REQ-20260827-074).
+    """
+    if r.get("status") != "in-progress":
+        return None
+    # 무인 워커가 **이 요청을 위해** 돌고 있으면 직접 증거다 — 넘어간다.
+    if r.get("live_kind") == "spawned":
+        return None
+    # 서브에이전트에게 맡겨 그쪽이 붙어 있는 것도 같다 (REQ-20260828-003).
+    # 판정을 두 벌 만들지 않는다 — 워처가 쓰는 그 함수를 그대로 쓴다.
+    if delegated_live(r["id"], now=now):
+        return None
+    try:
+        age = now - datetime.datetime.fromisoformat(
+            r.get("updated") or r.get("status_since") or "").timestamp()
+    except (ValueError, TypeError):
+        age = None
+    if age is not None and age < win:
+        return None                    # 방금 착수한 것 — 아직 멈춘 게 아니다
+    return int((age or 0) // 60)
+
+
 def stalled_requests(win=None):
     """클레임해 놓고 진전이 멈춘 in-progress 요청 (REQ-20260827-046).
 
@@ -6567,44 +6636,20 @@ def stalled_requests(win=None):
     프롬프트로 주입된다. **표식만으로는 약하고 주입해야 실제 장치가 된다**
     (REQ-20260825-062). 그 자리에 이것을 하나 더 놓는다.
 
-    판정은 대시보드와 **같은 함수**(`catalog_with_live`)를 쓴다 — 두 벌이면 한
-    벌만 고쳐진다. 여기서는 그 결과를 읽어 거를 뿐이다:
-      live(직접 증거) 도 아니고 · 세션이 활동 중(간접)도 아니고 ·
-      무인 워커가 기동 중(spawned)도 아닌 in-progress.
+    판정은 대시보드와 **같은 함수**(`stall_mins`, `catalog_with_live` 가 행마다
+    실어 준다)를 쓴다 — 두 벌이면 한 벌만 고쳐진다. 실제로 그렇게 됐다:
+    2026-08-27 에 여기만 고치고 화면을 두고 가서, 같은 요청을 CLI 는 "멈췄다"
+    화면은 초록 점으로 "돈다"고 말했다 (REQ-20260828-036). 여기서는 그 결과를
+    읽어 거를 뿐이다 — 나이를 다시 재지 않는다.
     """
-    import time as _time
     win = STALLED_WIN if win is None else win
-    now = _time.time()
     out = []
-    for r in catalog_with_live():
-        if r.get("status") != "in-progress":
+    for r in catalog_with_live(stall_win=win):
+        mins = r.get("stalled_mins")
+        if mins is None:
             continue
-        # 무인 워커가 **이 요청을 위해** 돌고 있으면 직접 증거다 — 넘어간다.
-        if r.get("live_kind") == "spawned":
-            continue
-        # 서브에이전트에게 맡겨 그쪽이 붙어 있는 것도 같다 (REQ-20260828-003).
-        # 판정을 두 벌 만들지 않는다 — 워처가 쓰는 그 함수를 그대로 쓴다.
-        if delegated_live(r["id"], now=now):
-            continue
-        # 세션이 살아 있다는 것은 **이 요청의** 증거가 아니다 (REQ-20260827-074).
-        # 리드 세션은 늘 살아 있고 여러 요청을 한꺼번에 클레임한다. 그래서
-        # 예전 판정은 리드가 잡아 놓고 손을 뗀 경우를 하나도 못 잡았다 —
-        # 그게 이 장치(REQ-20260827-046)가 겨냥한 바로 그 상황인데도.
-        # 사용자가 화면을 보고 먼저 알아챘다: "지금 멈춘 작업들이 있는 것 같은데
-        # 진도가 나가고 있는게 맞나?" 그때 이 명령은 "없음"이라고 답했다.
-        #
-        # 물어야 할 것은 "그 세션이 살아 있나"가 아니라 **"그 요청에 진전이 있나"**다.
-        # 진전의 흔적은 문서가 바뀐 때(updated)다 — 노트·전이·수정이 모두 찍힌다.
-        age = None
-        try:
-            age = now - datetime.datetime.fromisoformat(
-                r.get("updated") or r.get("status_since") or "").timestamp()
-        except (ValueError, TypeError):
-            age = None
-        if age is not None and age < win:
-            continue                       # 방금 착수한 것 — 아직 멈춘 게 아니다
         out.append({"id": r["id"], "title": r.get("title", ""),
-                    "user": r.get("user", ""), "mins": int((age or 0) // 60),
+                    "user": r.get("user", ""), "mins": mins,
                     "reason": r.get("live_reason", "")})
     out.sort(key=lambda x: -x["mins"])
     return out
@@ -8421,18 +8466,39 @@ def do_user_config_set(name, key, value, actor=""):
         except Exception:
             raise ValueError(f"모르는 시간대입니다: {value} — 예: Asia/Seoul")
     cfg = user_config(name)
+    changed = True
     if value == "" or value is None:
         if key not in cfg:
-            return
-        cfg.pop(key)
+            changed = False
+        else:
+            cfg.pop(key)
     else:
         if cfg.get(key) == value:
-            return
-        cfg[key] = value
-    cpath = os.path.join(USERS, name, "config", "settings.json")
-    os.makedirs(os.path.dirname(cpath), exist_ok=True)
-    with open(cpath, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=1)
+            changed = False
+        else:
+            cfg[key] = value
+    # 값이 그대로여도 **자리는 다시 가른다** — 이 갈래가 생기기 전에 저장된
+    # 값이 추적 파일에 남아 있으면, 값을 안 바꾸는 한 영영 그 자리에 있다.
+    # 이전(migration)을 위한 별도 명령을 만들지 않으려면 여기가 그 자리다.
+    # 비밀 위치 키는 **추적되지 않는 자리**로 간다 (REQ-20260828-028 부수 발견).
+    cdir = os.path.join(USERS, name, "config")
+    os.makedirs(cdir, exist_ok=True)
+    tracked = {k: v for k, v in cfg.items() if k not in SECRET_LOCATION_KEYS}
+    local = {k: v for k, v in cfg.items() if k in SECRET_LOCATION_KEYS}
+    with open(os.path.join(cdir, "settings.json"), "w", encoding="utf-8") as f:
+        json.dump(tracked, f, ensure_ascii=False, indent=1)
+    lpath = user_config_local_path(name)
+    if local:
+        fd = os.open(lpath, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(local, f, ensure_ascii=False, indent=1)
+    else:
+        try:
+            os.remove(lpath)
+        except OSError:
+            pass
+    if not changed:
+        return          # 자리 정리는 마쳤다 — 바뀐 것이 없으니 audit 은 남기지 않는다
     ppath = os.path.join(USERS, name, "profile.md")
     try:
         with open(ppath, encoding="utf-8") as f:
@@ -10543,7 +10609,7 @@ def _guard_detach(port, host="127.0.0.1", root=None):
 
 
 
-def catalog_with_live():
+def catalog_with_live(stall_win=None):
     """catalog + 실제 LLM 동작 신호(live). 문서 상태 in-progress와 별개로,
     live(녹색 점멸)는 **세션의 명시 실행 등록**이 있을 때만 (REQ-20260823-080/082):
     어떤 세션이 last_req 또는 active_reqs(in-progress 전이 시 자동 등록)로
@@ -10552,7 +10618,12 @@ def catalog_with_live():
     직접 증거로 치지 않는다 — 반려 직후 가짜 점멸의 원인이었다 (REQ-20260823-082).
     세션만 활발하고 실행 등록이 없는 in-progress는 live_kind='session'(간접) —
     병행 작업의 존재는 알리되 실동작과 구분한다 (REQ-20260823-079).
-    둘 다 아니면 idle(좀비 in-progress 의심)."""
+    둘 다 아니면 idle(좀비 in-progress 의심).
+
+    그리고 행마다 **`stalled_mins`** 를 싣는다 (REQ-20260828-036). live 가 답하는
+    질문("누가 붙어 있나")과 멈춤이 답하는 질문("이 요청에 진전이 있나")은 다른
+    축이고, 리드 세션은 늘 살아 있으므로 둘은 자주 어긋난다 — 잡아만 두고 손을
+    뗀 요청이 그 어긋남이다. 판정은 CLI 와 같은 `stall_mins()` 하나를 지난다."""
     import glob as _glob, time as _time
     rows = load_catalog()
     LIVE_WIN = 120
@@ -10643,7 +10714,51 @@ def catalog_with_live():
                                   else "stalled")
                 r["live_reason"] = (ag.get("reason")
                                     or f"{ag.get('actor', '')} 정지")
+    # 멈춤은 live 판정이 다 선 뒤에 잰다 — spawned(기동 중)를 읽어야 하기 때문.
+    win = STALLED_WIN if stall_win is None else stall_win
+    for r in rows:
+        m = stall_mins(r, now, win)
+        if m is not None:
+            r["stalled_mins"] = m
     return rows
+
+
+def display_tz(user=None):
+    """표시 시간대 — $S9_TZ > 사용자 설정 timezone > 시스템 로컬 (REQ-20260828-030).
+
+    전에는 `cmd_serve` 안에서 **기동 시 한 번** 계산해 들고 돌았다. 그래서
+    개인 설정을 바꿔도 Stream·터미널의 타임스탬프가 재기동 전까지 옛 시간대로
+    남았다 — 설정을 바꾼 사람은 화면이 따라올 것이라 믿고, 안 따라오면 설정이
+    안 먹었다고 읽는다. 그걸 "서버를 다시 시작하면 반영됩니다" 로 덮으면
+    결함에 자막을 다는 것이다.
+
+    그래서 부를 때마다 해석한다. 설정 파일 한 줄을 읽는 값이고 zoneinfo 는
+    자체 캐시가 있다 — "재기동 전까지 틀린 시각을 보여 준다" 는 대가보다 훨씬 싸다.
+    """
+    name = os.environ.get("S9_TZ") or ""
+    if not name:
+        try:
+            name = (user_config(user or resolve_user()) or {}).get("timezone") or ""
+        except Exception:
+            name = ""
+    if name:
+        try:
+            import zoneinfo
+            return zoneinfo.ZoneInfo(name)
+        except Exception:
+            pass
+    return None      # astimezone() 기본 = 시스템 로컬
+
+
+def local_ts(raw, user=None):
+    """UTC 타임스탬프 → 표시 시간대의 벽시계. 못 읽으면 원문 앞부분."""
+    if not raw:
+        return ""
+    try:
+        dt = datetime.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        return dt.astimezone(display_tz(user)).strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return str(raw)[:19].replace("T", " ")
 
 
 def cmd_serve(args):
@@ -10870,28 +10985,6 @@ def cmd_serve(args):
         out.sort(key=lambda s: s["mtime"], reverse=True)
         return {"streams": out}
 
-    # 시간대: $S9_TZ > 서버 기동 사용자의 config(timezone) > 시스템 로컬(KST 등)
-    def display_tz():
-        name = os.environ.get("S9_TZ") or user_config(resolve_user()).get("timezone")
-        if name:
-            try:
-                import zoneinfo
-                return zoneinfo.ZoneInfo(name)
-            except Exception:
-                pass
-        return None  # astimezone() 기본 = 시스템 로컬
-
-    TZ = display_tz()
-
-    # UTC transcript timestamp → 표시 시간대로 변환
-    def local_ts(raw):
-        if not raw:
-            return ""
-        try:
-            dt = datetime.datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            return dt.astimezone(TZ).strftime("%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            return raw[:19].replace("T", " ")
 
     # live 우선 해석: 바인딩의 원본 transcript가 이 머신에 있으면 그것을 직접 읽는다
     # (턴 진행 중에도 실시간 append됨 — 복사 비용 0). 없으면 mirror(streams/).

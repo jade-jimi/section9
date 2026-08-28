@@ -29,3 +29,6 @@ scratchpad/
 __pycache__/
 *.pyc
 nul
+
+# 비밀이 어디 있는지도 리포에 싣지 않는다 (REQ-20260828-028)
+users/*/config/local.json

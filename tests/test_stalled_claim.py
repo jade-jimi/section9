@@ -140,10 +140,13 @@ class StalledClaim(unittest.TestCase):
     #     리드 세션은 늘 살아 있고 여러 요청을 한꺼번에 클레임한다 — 그걸
     #     증거로 쳤더니 리드가 잡아 놓고 손을 뗀 경우를 하나도 못 잡았다.
     #     그게 이 장치가 겨냥한 바로 그 상황이었다.
+    #     판정이 사는 자리는 2026-08-28 에 `stall_mins()` 하나로 옮겨졌다
+    #     (REQ-20260828-036) — 화면이 옛 축에 남아 CLI 와 다른 말을 했기
+    #     때문이다. 그래서 여기서 보는 곳도 그 자리다.
     def test_b4_live_session_is_not_evidence(self):
         src = open(S9, encoding="utf-8").read()
-        i = src.index("def stalled_requests(")
-        seg = src[i:i + 2500]
+        i = src.index("def stall_mins(")
+        seg = src[i:src.index("\ndef ", i + 10)]
         self.assertNotIn('r.get("live_kind") in ("session"', seg,
                          "세션 생존을 그 요청의 진전으로 치고 있다")
         self.assertIn('r.get("updated")', seg,

@@ -132,11 +132,30 @@ class ExternalPathCreate(unittest.TestCase):
         return r.stdout + r.stderr
 
     def saved_cfg(self):
+        """읽는 값은 하나다 — 추적 파일 위에 비추적 local.json 을 겹친다.
+
+        비밀이 **어디 있는지**도 리포에 싣지 않기로 해서(REQ-20260828-028 부수
+        발견) 이 키는 `config/local.json`(gitignore)에 저장된다. 읽는 쪽은
+        갈린 것을 몰라야 하므로 여기서도 합쳐서 본다.
+        """
+        d = os.path.join(self.root, "users", "alice", "config")
+        cfg = {}
+        for fn in ("settings.json", "local.json"):
+            try:
+                with open(os.path.join(d, fn), encoding="utf-8") as f:
+                    cfg.update(json.load(f))
+            except (OSError, ValueError):
+                pass
+        return cfg
+
+    def tracked_cfg(self):
+        """git 이 추적하는 쪽만 — 비밀 위치가 여기 있으면 안 된다."""
         p = os.path.join(self.root, "users", "alice", "config", "settings.json")
-        if not os.path.exists(p):
+        try:
+            with open(p, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
             return {}
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
 
     def setpath(self, value, expect=0):
         return self.cli("user", "config", "alice", "external_secrets_path",
@@ -163,6 +182,9 @@ class ExternalPathCreate(unittest.TestCase):
         saved = self.saved_cfg()["external_secrets_path"]
         self.assertEqual(saved, os.path.join(self.home, "kk"))
         self.assertTrue(os.path.isdir(saved))
+        # 그리고 그 값은 **추적되는 파일에 없어야 한다** (REQ-20260828-028 부수
+        # 발견): 이 리포의 origin 은 공개이고 이 파일은 거기 올라간다.
+        self.assertNotIn("external_secrets_path", self.tracked_cfg())
 
     # B1. 못 만들면 **성공으로 치지 않는다** — 여기서 조용하면 "설정했는데
     #     안 먹는다"가 그대로 되돌아온다

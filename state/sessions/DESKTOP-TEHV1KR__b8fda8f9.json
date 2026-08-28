@@ -4,13 +4,17 @@
  "user": "",
  "history": [],
  "active_reqs": [
-  "REQ-20260828-016-62x6"
+  "REQ-20260828-016-62x6",
+  "REQ-20260828-030-62x6",
+  "REQ-20260828-028-62x6"
  ],
  "claim_at": {
   "REQ-20260828-016-62x6": "2026-08-28T14:18:33+09:00",
-  "REQ-20260828-026-62x6": "2026-08-28T16:32:26+09:00",
-  "REQ-20260828-021-62x6": "2026-08-28T17:12:25+09:00",
-  "REQ-20260828-035-62x6": "2026-08-28T17:43:58+09:00"
+  "REQ-20260828-036-62x6": "2026-08-28T19:02:10+09:00",
+  "REQ-20260828-027-62x6": "2026-08-28T19:02:11+09:00",
+  "REQ-20260828-030-62x6": "2026-08-28T19:02:11+09:00",
+  "REQ-20260828-028-62x6": "2026-08-28T19:02:11+09:00",
+  "REQ-20260828-037-62x6": "2026-08-28T19:38:17+09:00"
  },
  "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58.jsonl",
  "cwd": "/home/sjpark1/section9",
@@ -20,7 +24,7 @@
  "attach_pid": "908",
  "ended": "",
  "last_req": "REQ-20260828-016-62x6",
- "capture_paused": false,
+ "capture_paused": true,
  "agent_transcript_path": [
   "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a20a492838c78a7cc.output",
   "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a0aa5d9962793df61.output",
@@ -40,6 +44,8 @@
   "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a54c5c1a6c388985a.output",
   "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a992b2d5e2c875907.output",
   "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a0b7582cce6179f49.output",
-  "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/aeaee0ab6dcaf1ba2.output"
+  "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/aeaee0ab6dcaf1ba2.output",
+  "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a5fb47b53d09d4b99.output",
+  "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a526959beaed57cd1.output"
  ]
 }
