@@ -3857,6 +3857,8 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False):
         return False
     b = read_binding(meta.get("machine", ""), meta.get("session", "")) or {}
     cwd = b.get("cwd", "") if os.path.isdir(b.get("cwd", "") or "") else ROOT
+    # 코드는 갈리고 데이터는 하나다 (REQ-20260828-011 2단계) — 켠 계정만.
+    cwd, wt_env, wt_name = worker_workspace(doc_id, cfg, cwd)
     s9bin = os.path.join(ROOT, "bin", "s9")
     # 봉투: 기본 = DOC-20260823-003 심사 준수 allowlist(읽기 + s9).
     # 옵트인 적용 모드 = 편집 자동승인 + 검증 명령 허용 (캡·킬스위치 유지).
@@ -3879,17 +3881,31 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False):
     # 실사고 2026-08-26: 워커가 남의 미커밋 편집 위에 덮어써 테스트 파일 하나가
     # 디스크에서 사라졌고(커밋 전이라 git 복구 불가), 다른 건에서는 리드의
     # 커밋에 워커의 진행 중 편집이 섞여 반쪽 상태가 됐다 (REQ-20260826-021).
-    prompt = prompt + (
-        "\n\n[동시 작업 규율] 이 워크스페이스에는 다른 주체(리드·서브에이전트·"
-        "다른 워커)가 동시에 붙어 있을 수 있다. ① 파일을 고치기 전에 "
-        f"`{ROOT}` 에서 `git status --short <그 파일>` 로 "
-        "남의 미커밋 변경이 있는지 확인하라. 있으면 **덮어쓰지 말고 물러나** "
-        f"`{s9bin} note {doc_id} --label conflict` 로 그 사실과 네가 하려던 "
-        "변경을 남겨라. ② 새 파일을 만들 때 같은 경로가 이미 있으면 Write 로 "
-        "덮지 말고 다른 이름을 쓰거나 물러나라 — 남의 작업이 흔적 없이 사라진다. "
-        "③ `git checkout`·`git stash`·`git reset` 은 쓰지 마라: 남의 미커밋 "
-        "작업을 지운다. ④ 커밋은 하지 마라(리드 몫).")
+    if wt_name:
+        # 워크트리 모드에서는 규율이 뒤집힌다: 남의 것을 볼 수 없으니 피할 것도
+        # 없고, 대신 **커밋을 해야** 리드가 합칠 수 있다 (3단계). 커밋을 막으면
+        # 워커의 일이 그 자리를 거둘 때 함께 사라진다.
+        prompt = prompt + (
+            f"\n\n[작업 자리] 너는 이 요청 전용 워크트리에서 돈다 — 코드 파일은 "
+            f"여기 사본이고 남의 미커밋 편집은 보이지도 닿지도 않는다. 문서·상태는 "
+            f"본 저장소 하나를 함께 쓴다(S9_ROOT 가 그리로 못박혀 있다). "
+            f"① 일이 끝나면 **이 워크트리의 가지(wt/{wt_name})에 커밋하라** — "
+            f"커밋하지 않은 것은 이 자리를 거둘 때 사라진다. ② 본 저장소로 합치는 "
+            f"것은 리드 몫이다(`s9 worktree merge {wt_name}`) — 직접 합치지 마라. "
+            f"③ `git checkout`·`git stash`·`git reset` 은 여기서도 쓰지 마라.")
+    else:
+        prompt = prompt + (
+            "\n\n[동시 작업 규율] 이 워크스페이스에는 다른 주체(리드·서브에이전트·"
+            "다른 워커)가 동시에 붙어 있을 수 있다. ① 파일을 고치기 전에 "
+            f"`{ROOT}` 에서 `git status --short <그 파일>` 로 "
+            "남의 미커밋 변경이 있는지 확인하라. 있으면 **덮어쓰지 말고 물러나** "
+            f"`{s9bin} note {doc_id} --label conflict` 로 그 사실과 네가 하려던 "
+            "변경을 남겨라. ② 새 파일을 만들 때 같은 경로가 이미 있으면 Write 로 "
+            "덮지 말고 다른 이름을 쓰거나 물러나라 — 남의 작업이 흔적 없이 사라진다. "
+            "③ `git checkout`·`git stash`·`git reset` 은 쓰지 마라: 남의 미커밋 "
+            "작업을 지운다. ④ 커밋은 하지 마라(리드 몫).")
     env = dict(os.environ)
+    env.update(wt_env)
     env["S9_AUTO_RESUME"] = "1"
     env["S9_USER"] = owner
     env.pop("S9_SESSION", None)
@@ -3922,6 +3938,11 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False):
                               stdin=subprocess.DEVNULL, stdout=lf, stderr=lf,
                               start_new_session=True)
         _auto_mark_pid(doc_id, wp)   # 생존 확인 근거 (REQ-20260825-086)
+        if wt_name:
+            # 주인을 적어 둔다 — 안 적으면 sweep 이 일하는 중인 자리를 거둔다.
+            own = worktree_owner_read(wt_name)
+            own["pid"] = wp.pid
+            worktree_owner_write(wt_name, own)
         # 로그 토큰(SPAWN(resume)/SPAWN(fresh))은 그대로 둔다 — 운영 중 grep과
         # 기존 테스트가 이 형태를 읽는다. 사유는 뒤에 덧붙인다.
         _auto_log(f"SPAWN({'resume' if sid else 'fresh'}) {doc_id} "
@@ -11192,6 +11213,12 @@ def cmd_serve(args):
                 # 같은 틱에 미커밋 변경을 떠 둔다 (REQ-20260826-021). 규율에
                 # 기대지 않는 유일한 장치 — 누가 무엇으로 덮든 원본은 이미
                 # 딴 데 있다. 실패해도 워처는 계속 돈다.
+                # 주인이 떠난 빈 워크트리를 같은 틱에 거둔다 (REQ-011 2단계).
+                # 남길 것이 있는 자리는 건드리지 않는다.
+                try:
+                    worktree_sweep()
+                except Exception:
+                    pass
                 try:
                     snapshot_dirty()
                 except Exception:
@@ -11305,6 +11332,205 @@ def worktree_list():
             if os.path.realpath(w["path"]) != os.path.realpath(ROOT)]
 
 
+WORKTREE_OWNERS = os.path.join(ROOT, "state", "worktree_owners")
+WORKTREE_MIN_AGE = 600      # 주인을 모르는 워크트리는 이만큼 지나야 거둔다
+
+
+def worktree_owner_path(name):
+    return os.path.join(WORKTREE_OWNERS, safe_name(name) + ".json")
+
+
+def worktree_owner_write(name, info):
+    """이 워크트리가 누구 것인가 — 거둘 때 살아 있는 주인을 지우지 않으려고 쓴다."""
+    try:
+        os.makedirs(WORKTREE_OWNERS, exist_ok=True)
+        with open(worktree_owner_path(name), "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def worktree_owner_read(name):
+    try:
+        with open(worktree_owner_path(name), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def main_branch():
+    """본 저장소가 지금 서 있는 가지 — 합치는 자리이자 '이미 있는 것'의 기준."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                           capture_output=True, text=True, cwd=ROOT, timeout=15)
+        return (r.stdout or "").strip() or "main"
+    except (OSError, subprocess.SubprocessError):
+        return "main"
+
+
+def worktree_state(name):
+    """거둬도 되는가를 판정할 사실들 — {"path","branch","dirty","ahead"}.
+
+    dirty: 미커밋 변경이 있다 · ahead: 본 가지에 없는 커밋이 있다.
+    둘 중 하나라도 참이면 거두는 것은 **이 기능이 막으려던 그 소실**이다.
+    """
+    import subprocess
+    path = os.path.join(WORKTREE_HOME, name)
+    branch = f"wt/{name}"
+    st = {"path": path, "branch": branch, "dirty": False, "ahead": 0}
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", name or ""):
+        st["dirty"] = True                # 모르는 자리는 손대지 않는다
+        return st
+    if not os.path.isdir(path):
+        return st
+    try:
+        r = subprocess.run(["git", "status", "--porcelain"], cwd=path,
+                           capture_output=True, text=True, timeout=30)
+        st["dirty"] = bool((r.stdout or "").strip())
+        r2 = subprocess.run(["git", "rev-list", "--count", branch,
+                             "--not", main_branch()], cwd=ROOT,
+                            capture_output=True, text=True, timeout=30)
+        st["ahead"] = int((r2.stdout or "0").strip() or 0)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        st["dirty"] = True      # 모르면 남긴다
+    return st
+
+
+def worktree_add(name, owner=None):
+    """워크트리 하나를 세우고 주인을 적는다. 반환: (경로, 가지) 또는 (None, "")."""
+    import subprocess
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", name or ""):
+        return None, ""
+    path = os.path.join(WORKTREE_HOME, name)
+    if os.path.exists(path):
+        return None, ""
+    try:
+        os.makedirs(WORKTREE_HOME, exist_ok=True)
+        r = subprocess.run(["git", "worktree", "add", "-b", f"wt/{name}", path],
+                           capture_output=True, text=True, cwd=ROOT, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None, ""
+    if r.returncode != 0:
+        return None, ""
+    if owner is not None:
+        worktree_owner_write(name, owner)
+    return path, f"wt/{name}"
+
+
+def worker_worktree_name(doc_id):
+    import time as _time
+    return f"w-{safe_name(doc_id)[-12:]}-{int(_time.time())}"
+
+
+def worker_workspace(doc_id, cfg, cwd):
+    """워커가 일할 자리 (REQ-20260828-011 2단계).
+
+    기본은 지금까지와 같다 — 담당 세션의 작업 디렉터리(본 저장소). 계정 설정
+    `worker_worktree` 를 켜면 워커마다 자기 워크트리를 준다. 그러면 남의 미커밋
+    편집을 **볼 수도 덮을 수도 없고**, 겹치면 합칠 때 충돌로 드러난다 — 이
+    저장소가 네 번 겪은 조용한 소실이 보이는 충돌로 바뀐다.
+
+    `S9_ROOT` 는 언제나 본 저장소로 못박는다. 데이터까지 갈리면 워커가 남긴
+    노트를 대시보드가 못 보고 클레임·live 판정이 서로 다른 상태를 본다 —
+    코드를 가르려다 진실을 가르는 짓이다.
+
+    못 만들면 조용히 원래 자리로 물러난다. 갈라 주는 것은 편의지 전제가 아니다.
+    반환: (cwd, env 추가분, 워크트리 이름).
+    """
+    if not (cfg or {}).get("worker_worktree"):
+        return cwd, {}, ""
+    import time as _time
+    name = worker_worktree_name(doc_id)
+    path, _branch = worktree_add(name, owner={"doc": doc_id, "pid": 0,
+                                              "created": _time.time()})
+    if not path:
+        return cwd, {}, ""
+    return path, {"S9_ROOT": ROOT}, name
+
+
+def worktree_merge(name):
+    """워커의 가지를 본 저장소로 들여오고 워크트리를 거둔다 (3단계).
+
+    합치는 것은 리드 몫이다 — 워커는 자기 가지에 커밋만 한다. 충돌하면 git 이
+    막는다. **그게 이득이다**: 지금은 그 자리에서 남의 것이 사라진다.
+    반환: (성공?, 사람이 읽을 한 줄).
+    """
+    import subprocess
+    st = worktree_state(name)
+    if not os.path.isdir(st["path"]):
+        return False, f"그런 워크트리가 없다: {name}"
+    if st["dirty"]:
+        return False, (f"{name}: 미커밋 변경이 남아 있다 — 그 가지에 먼저 "
+                       f"커밋하라. 확인 없이 지우지 않는다.")
+    if not st["ahead"]:
+        r = subprocess.run(["git", "worktree", "remove", st["path"]],
+                           capture_output=True, text=True, cwd=ROOT, timeout=60)
+        if r.returncode != 0:
+            return False, f"{name}: 거두지 못했다 — {(r.stderr or r.stdout).strip()}"
+        _worktree_forget(name)
+        return True, f"{name}: 합칠 커밋이 없어 그대로 거뒀다"
+    r = subprocess.run(["git", "merge", "--no-ff", st["branch"], "-m",
+                        f"워크트리 합치기: {name}"],
+                       capture_output=True, text=True, cwd=ROOT, timeout=120)
+    if r.returncode != 0:
+        return False, (f"{name}: 합치지 못했다 — {(r.stderr or r.stdout).strip()}\n"
+                       f"  충돌은 숨겨진 소실보다 낫다. 풀고 다시 불러라.")
+    subprocess.run(["git", "worktree", "remove", st["path"]],
+                   capture_output=True, text=True, cwd=ROOT, timeout=60)
+    subprocess.run(["git", "branch", "-D", st["branch"]],
+                   capture_output=True, text=True, cwd=ROOT, timeout=60)
+    _worktree_forget(name)
+    return True, f"{name}: 합치고 거뒀다 (커밋 {st['ahead']}개)"
+
+
+def _worktree_forget(name):
+    try:
+        os.remove(worktree_owner_path(name))
+    except OSError:
+        pass
+
+
+def worktree_sweep(now=None):
+    """주인이 떠난 빈 워크트리를 거둔다 — **남길 것이 있으면 남긴다**.
+
+    안 거두면 쌓인다. 그리고 그 잔재는 조용하다: 지워진 워크트리 경로를 가리키는
+    훅 8개가 아무 소리 없이 죽어 있었다 (REQ-20260828-014). 그렇다고 미커밋
+    변경이나 안 합친 커밋을 지우면 이 기능이 막으려던 바로 그 소실이 된다.
+    반환: 거둔 이름들.
+    """
+    import subprocess
+    import time as _time
+    nowt = now or _time.time()
+    reaped = []
+    for w in worktree_list():
+        name = os.path.basename(w["path"].rstrip("/"))
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
+            continue                      # 이름 없는 자리는 우리 것이 아니다
+        if os.path.dirname(os.path.realpath(w["path"])) != \
+           os.path.realpath(WORKTREE_HOME):
+            continue                      # 우리가 만든 자리만 손댄다
+        own = worktree_owner_read(name)
+        if not own:
+            continue                      # 주인을 모르면 사람 것으로 본다
+        pid = own.get("pid") or 0
+        if pid and os.path.exists(f"/proc/{pid}"):
+            continue                      # 아직 일하는 중
+        if nowt - float(own.get("created") or 0) < WORKTREE_MIN_AGE:
+            continue                      # 갓 만든 것 — pid 가 아직 안 적혔을 수 있다
+        st = worktree_state(name)
+        if st["dirty"] or st["ahead"]:
+            continue                      # 남길 것이 있다
+        r = subprocess.run(["git", "worktree", "remove", st["path"]],
+                           capture_output=True, text=True, cwd=ROOT, timeout=60)
+        if r.returncode == 0:
+            subprocess.run(["git", "branch", "-D", st["branch"]],
+                           capture_output=True, text=True, cwd=ROOT, timeout=60)
+            _worktree_forget(name)
+            reaped.append(name)
+    return reaped
+
+
 def cmd_worktree(args):
     """코드는 갈리고 데이터는 하나다 (REQ-20260828-011).
 
@@ -11323,7 +11549,25 @@ def cmd_worktree(args):
             print("(없음)")
             return
         for w in rows:
-            print(f"{w['branch'] or '(분리)'}\t{w['path']}")
+            st = worktree_state(os.path.basename(w["path"]))
+            # 무엇이 남아 있는지 안 보이면 거둘지 합칠지 판단할 수 없다.
+            mark = (["미커밋"] if st["dirty"] else []) + \
+                   ([f"안 합친 커밋 {st['ahead']}"] if st["ahead"] else [])
+            tail = ("  ← " + " · ".join(mark)) if mark else ""
+            print(f"{w['branch'] or '(분리)'}\t{w['path']}{tail}")
+        return
+    if act == "merge":
+        if not (args.name or "").strip():
+            die("usage: s9 worktree merge <이름>")
+        ok, msg = worktree_merge(args.name.strip())
+        print(msg)
+        if not ok:
+            sys.exit(1)
+        return
+    if act == "sweep":
+        got = worktree_sweep()
+        print(("거뒀다: " + ", ".join(got)) if got
+              else "(거둘 것 없음 — 남길 것이 있는 자리는 그대로 둔다)")
         return
     name = (args.name or "").strip()
     if act in ("add", "rm") and not name:
@@ -11750,7 +11994,7 @@ def main():
 
     wt = sub.add_parser("worktree",
                         help="코드만 갈라 작업할 자리 (데이터는 본 저장소 하나)")
-    wt.add_argument("action", choices=["add", "ls", "rm"])
+    wt.add_argument("action", choices=["add", "ls", "rm", "merge", "sweep"])
     wt.add_argument("name", nargs="?")
     wt.set_defaults(fn=cmd_worktree)
 
