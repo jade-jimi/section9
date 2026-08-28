@@ -6185,6 +6185,65 @@ def cmd_stalled(args):
         print("(멈춘 작업 없음)")
 
 
+def next_pickup(user=None, all_users=False):
+    """지금 이어받아야 할 in-progress 1건 (REQ-20260828-015).
+
+    사용자: "왜 알아서 시작을 안하지? inprogress 요청들. 세션 시작하면 뻔하잖아"
+    재부팅 뒤 미완 4건이 4시간 넘게 그대로 있었다. **아는 능력은 이미 있었다** —
+    `stalled_requests` 가 "누가 실제로 붙어 있나"를 대시보드와 같은 함수로 판정한다.
+    없던 것은 집으라는 지시와, 무엇을 집을지 고르는 이 한 줄이다.
+
+    고르는 기준은 대기열 순서(work_order)다. 오래 멈춘 순으로 고르면 우선순위가
+    낮아 뒤로 밀어 둔 것이 늘 먼저 온다 — 그건 대기열이 아니라 역순이다.
+    """
+    # 판정을 새로 만들지 않는다 — 이미 두 벌이 각자 답을 갖고 있다:
+    #   stalled_requests : 무인 워커·위임 에이전트가 붙어 있나 (진전 판정)
+    #   rework_claimed   : 살아 있는 세션이 이 REQ 를 등록해 뒀나 (클레임 판정)
+    # 워처가 무인 스폰 전에 보는 그 함수를 그대로 본다. 다르게 보면 워처와
+    # 기동 세션이 같은 문서를 동시에 집는다.
+    rows = [r for r in stalled_requests(win=0) if not rework_claimed(r["id"])]
+    if not all_users:
+        u = user or resolve_user(None)
+        rows = [r for r in rows if (r.get("user") or u) == u]
+    if not rows:
+        return None
+    stall = {r["id"]: r for r in rows}
+    cands = [r for r in load_catalog() if r["id"] in stall]
+    if not cands:
+        return None
+    top = work_order(cands)[0]
+    note = ""
+    path = locate(top["id"])
+    if path:
+        _meta, body = read_doc(path)
+        lt = _last_transition(body)
+        note = (lt[3] if lt else "") or ""
+    st = stall[top["id"]]
+    return {"id": top["id"], "title": top.get("title", ""),
+            "user": top.get("user", ""), "priority": doc_priority(top),
+            "mins": st["mins"], "reason": st.get("reason", ""), "note": note}
+
+
+def cmd_next(args):
+    """`s9 next` — 아무도 붙어 있지 않은 미완 중 다음에 집을 것 한 건.
+
+    집지는 않는다. 조회와 착수를 한 명령에 묶으면 목록을 보려던 손이 작업을
+    시작시킨다 — 클레임은 `s9 claim` 이 하던 대로 따로 한다."""
+    p = next_pickup(user=getattr(args, "user", None),
+                    all_users=getattr(args, "all", False))
+    if getattr(args, "json", False):
+        print(json.dumps(p or {"id": None}, ensure_ascii=False))
+        return
+    if not p:
+        print("(이어받을 작업 없음)")
+        return
+    extra = f" · {p['reason']}" if p["reason"] else ""
+    print(f"{p['id']} {p['title']} — {p['mins']}분째 진전 없음{extra}")
+    if p["note"]:
+        print(f"  마지막 전이 메모: {p['note']}")
+    print(f"  이어받기: s9 claim {p['id']}")
+
+
 def cmd_reopened(args):
     rows = reopened_requests()
     for r in rows:
@@ -8684,14 +8743,23 @@ CODE_BOOTSTRAP_MARK = "[section9 bootstrap]"
 #
 # 그래서 기동 시 위치 인자로 이 한 줄을 붙여 첫 턴을 돌게 한다. 사용자의 말이
 # 아니므로 audit 훅은 이 마커를 보고 카드도 서문도 만들지 않는다.
+#
+# 처음에는 "그 밖의 작업은 시작하지 마라"를 함께 넣었다. 기동 턴을 싸게 유지하려는
+# 안전선이었는데, 재부팅처럼 **아무도 안 남은 자리**에서는 그 안전선이 곧 정지였다
+# (REQ-20260828-015): 미완 4건이 4시간 넘게 그대로 있었고 사용자가 "왜 알아서
+# 시작을 안 하지, 세션 시작하면 뻔하잖아"로 발견했다. 이제 인계를 지시한다 —
+# 무엇을 집을지는 `s9 next` 가 클레임 판정으로 고르므로 남의 작업을 뺏지 않는다.
 CODE_BOOTSTRAP = (
     CODE_BOOTSTRAP_MARK + " 세션 기동 — 사람이 친 말이 아니라 `s9 code` 가 넣은 줄이다.\n"
     "이 턴에서 할 일은 하나다: 대시보드 채팅 수신함(state/terminal/inbox-<이 세션>.jsonl)의 "
     "Monitor tail 을 arm 해 이 세션을 수신 대기 상태로 만들어라. 그래야 대시보드 "
     "터미널이 idle 이 아니라 live 가 되고, 거기서 보낸 말이 곧바로 닿는다.\n"
-    "그 밖의 작업은 시작하지 마라 — 반려·확인 대기 건이 보여도 사람이 말할 때까지 "
-    "손대지 않는다.\n"
-    "답은 규약대로 시각 한 줄 뒤에, 준비됐다는 한 문장으로 끝내라."
+    "arm 이 끝나면 `s9 next` 를 실행하라. 이어받을 것이 나오면 `s9 claim <id>` 로 "
+    "집고 그 작업을 이어서 하라 — 아무도 붙어 있지 않은 미완이 세션이 새로 떴다는 "
+    "이유만으로 계속 멈춰 있을 이유는 없다. 한 번에 한 건만 집는다.\n"
+    "review(확인 대기) 건은 건드리지 마라 — 사람의 판정을 기다리는 자리다.\n"
+    "답은 규약대로 시각 한 줄 뒤에: 집은 것이 있으면 무엇을 이어받는지 한 문장, "
+    "없으면 준비됐다는 한 문장."
 )
 
 
@@ -11442,6 +11510,11 @@ def main():
     av.add_argument("--quiet", action="store_true")
     av.set_defaults(fn=cmd_approvals)
 
+    nx = sub.add_parser("next", help="아무도 붙어 있지 않은 미완 중 다음에 집을 것 1건")
+    nx.add_argument("--json", action="store_true")
+    nx.add_argument("--user", help="이 사용자의 것만 (기본: 현재 사용자)")
+    nx.add_argument("--all", action="store_true", help="모든 사용자 대상")
+    nx.set_defaults(fn=cmd_next)
     ib = sub.add_parser("inbox", help="수신함 미처리 줄 + 죽은 세션 고아 줄 (JSON)")
     ib.add_argument("--sid", help="내 세션 id8 (기본: S9_SESSION)")
     ib.add_argument("--window", type=int, default=INBOX_ADOPT_WINDOW_SEC,
