@@ -99,9 +99,22 @@ def install_git_hooks():
     # 남기는 "커밋 기록" 노트가 **워크트리 사본의 vault/** 에 쓰였다. 본
     # 저장소 문서에는 흔적이 없었고, 대시보드는 그 일이 없었던 것처럼 보였다.
     # `--show-toplevel` 은 워크트리에서 워크트리를 가리킨다.
+    #
+    # 그리고 GIT_DIR 은 문 앞에서 벗긴다 (REQ-20260829-005). git 은 훅에
+    # GIT_DIR 을 넘기고, 워크트리 커밋에서는 그 값이
+    # `<repo>/.git/worktrees/<이름>` 이다. 이 환경을 물려받은 자식이 `git init`
+    # 을 부르면 `-C <다른 경로>` 를 이기고 그 자리를 다시 init 하며 **공용
+    # .git/config 에 core.bare=true** 를 박는다 — 그 순간 본 체크아웃에서
+    # status·add·commit 이 전부 거부된다. 실제로 2026-08-29 에 serve 의 워크트리
+    # 자동 보존 커밋이 매분 이 경로를 밟아 main 을 못 쓰게 만들었다.
+    #
+    # GIT_INDEX_FILE 은 남긴다 — pre-commit 가드가 '지금 담기는 것'을 보려면
+    # 그 값이 필요하다(부분 커밋에서는 임시 인덱스를 가리킨다). 파괴적인 것은
+    # GIT_DIR 쪽이다. 두 rev-parse 는 벗기기 전에 끝난다.
     where = ('TOP="$(git rev-parse --show-toplevel)"\n'
              'MAIN="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" '
-             '&& pwd)"\n')
+             '&& pwd)"\n'
+             'unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_PREFIX\n')
     sync = ('#!/bin/sh\n' + py + where +
             'S9_ROOT="$MAIN" "$PY" "$TOP/bin/s9" index rebuild '
             '>/dev/null 2>&1 || true\n'

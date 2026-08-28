@@ -32,8 +32,24 @@ STOP_HOOK = os.path.join(ROOT, "bin", "s9-audit-response")
 GITIGNORE = os.path.join(ROOT, ".gitignore")
 
 
+# 훅 아래에서 돌 때 물려받는 GIT_DIR 을 벗긴다 (REQ-20260829-005). `-C <경로>`
+# 는 GIT_DIR 을 이기지 못한다 — 벗기지 않으면 임시 리포에 하려던 `git init` 이
+# 본 저장소의 공용 config 를 bare 로 뒤집는다.
+GIT_ENV_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
+                "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                "GIT_COMMON_DIR", "GIT_PREFIX", "GIT_INDEX_VERSION",
+                "GIT_QUARANTINE_PATH")
+
+
+def clean_git_env():
+    e = dict(os.environ)
+    for k in GIT_ENV_VARS:
+        e.pop(k, None)
+    return e
+
+
 def git(*argv, cwd=ROOT):
-    return subprocess.run(["git", "-C", cwd, *argv],
+    return subprocess.run(["git", "-C", cwd, *argv], env=clean_git_env(),
                           capture_output=True, text=True, timeout=30)
 
 

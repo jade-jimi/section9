@@ -513,6 +513,351 @@ def human(n):
     return f"{n:.0f}TB"
 
 
+# ---------------------------------------------------------------------------
+# 시스템 전반 점검 (REQ-20260829-004)
+#
+# 2026-08-29 재부팅 직후 대시보드가 안 열리고 새 서버가 안 떴다. 이미 떠 있던
+# 것은 멀쩡했다 — DOC-20260826-008 이 '고갈의 지문'이라 못박은 그 비대칭이다.
+# 그런데 원인은 포트가 아니라 부트였다: systemd-tmpfiles 가 sysinit 을 73초
+# 붙잡아 그동안 아무것도 리슨하지 못했다(REQ-20260829-003). 그때 doctor 는
+# '정상' 한 줄만 냈다 — 원인이 시야 밖이었다.
+#
+# 지문이 겹치는 원인이 여럿이면 진단은 그 전부를 봐야 한다. 그래서 포트 밖의
+# 자리(부트·/tmp·디스크·서버 응답·훅·도구)를 함께 본다. 판정은 순수 함수로,
+# 수집은 따로 둔다 — 등급이 실제 시스템 상태에 기대지 않아야 시험할 수 있다.
+
+# ok < unknown < warn < critical. '모른다'는 경고보다 약하다 — 못 읽은 것을
+# 이유로 사람을 깨우지는 않는다.
+LEVEL_ORDER = {"ok": 0, "unknown": 1, "warn": 2, "critical": 3}
+LEVEL_MARK = {"ok": "✓", "unknown": "?", "warn": "△", "critical": "✗"}
+
+# 부트: WSL 은 사용자 세션을 10초만 기다린다. 그 창을 넘기면 세션이 없는 채로
+# 뜨고, 30초를 넘으면 서버 기동을 기다리는 코드가 줄줄이 깨진다.
+BOOT_WARN, BOOT_CRIT = 10.0, 30.0
+# /tmp: 부트마다 통째로 지워지는 자리라 쌓인 만큼 그대로 기동 비용이 된다.
+TMP_WARN, TMP_CRIT = 2000, 20000
+TMP_DIR_GROWN = 1 << 20   # ext4 디렉터리는 한 번 커지면 줄지 않는다
+TMP_OURS = ("s9gate-", "s9shot-", "cdp-prof-", "claude-")
+DISK_WARN, DISK_CRIT = 90.0, 95.0
+SERVE_SLOW = 2.0
+S9_HOOK_EVENTS = ("UserPromptSubmit", "SessionStart", "Stop", "SessionEnd",
+                  "SubagentStop", "PostToolUse", "PreCompact", "PostCompact")
+CHROME_CANDIDATES = (
+    "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
+    "/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+)
+
+
+def worst_level(levels):
+    return max(levels, key=lambda x: LEVEL_ORDER.get(x, 0), default="ok")
+
+
+def _v(key, label, level, line, advice=None):
+    return {"key": key, "label": label, "level": level, "line": line,
+            "advice": advice}
+
+
+# --- 판정 (순수 함수) ---------------------------------------------------------
+
+def boot_verdict(b):
+    init = (b.get("init") or "").strip()
+    if init != "systemd":
+        return _v("boot", "부트", "ok",
+                  f"부트: systemd 미사용({init or '알 수 없음'}) — 기동 지연 없음")
+    sec = b.get("userspace_sec")
+    tail = f" (userspace {sec:.1f}초)" if sec is not None else ""
+    if b.get("user_session_failed"):
+        return _v("boot", "부트", "critical",
+                  f"부트: systemd 사용자 세션이 서지 못했다{tail} — "
+                  f"/run/user 가 없어 systemctl --user 가 버스에 못 붙는다",
+                  "부트가 WSL 의 사용자 세션 대기 창(10초)을 놓쳤다. "
+                  "`systemd-analyze blame` 으로 sysinit 을 붙잡는 유닛을 찾아라. "
+                  "고칠 생각이 없으면 /etc/wsl.conf 에서 systemd=false 로 끈다.")
+    if sec is None:
+        return _v("boot", "부트", "unknown", "부트: 기동 시간을 읽지 못했다")
+    level = ("critical" if sec >= BOOT_CRIT
+             else "warn" if sec >= BOOT_WARN else "ok")
+    advice = None
+    if level != "ok":
+        advice = (f"부트가 {sec:.0f}초 걸린다 — 그동안 아무것도 리슨하지 못한다. "
+                  f"재부팅 직후라면 대시보드가 안 열리고 새 서버만 안 뜨는, "
+                  f"포트 고갈과 똑같은 모습이 된다. `systemd-analyze blame` 으로 "
+                  f"sysinit 을 붙잡는 유닛을 찾아라.")
+    return _v("boot", "부트", level, f"부트: userspace {sec:.1f}초", advice)
+
+
+def tmp_verdict(t):
+    n = int(t.get("entries") or 0)
+    ours = int(t.get("ours") or 0)
+    dir_bytes = int(t.get("dir_bytes") or 0)
+    level = "critical" if n > TMP_CRIT else "warn" if n > TMP_WARN else "ok"
+    line = f"/tmp: 최상위 {n}개"
+    if ours:
+        line += f" (우리 것 {ours}개)"
+    advice = []
+    if dir_bytes > TMP_DIR_GROWN:
+        line += f" · 디렉터리 {human(dir_bytes)} — 과거 누적의 흔적"
+        advice.append("/tmp 디렉터리가 한때 수만 개를 담았다(ext4 디렉터리는 "
+                      "줄지 않는다). 부트마다 이 자리를 통째로 지우므로 그만큼 "
+                      "기동이 느려진다 — 임시 디렉터리를 만들고 안 지우는 쪽을 "
+                      "찾아라.")
+    if level != "ok":
+        advice.append(f"지금도 {n}개가 쌓여 있다.")
+    return _v("tmp", "/tmp", level, line, " ".join(advice) or None)
+
+
+def disk_verdict(rows):
+    if not rows:
+        return _v("disk", "디스크", "unknown", "디스크: 읽지 못했다")
+    worst = max(rows, key=lambda r: r["used_pct"])
+    p = worst["used_pct"]
+    level = ("critical" if p >= DISK_CRIT
+             else "warn" if p >= DISK_WARN else "ok")
+    line = "디스크: " + " · ".join(
+        f"{r['path']} {r['used_pct']:.0f}%" for r in rows)
+    advice = None
+    if level != "ok":
+        advice = (f"{worst['path']} 가 {p:.0f}% 찼다 — s9 는 쓰기부터 죽는다. "
+                  f"state/shots · state/snapshots 부터 비워라.")
+    return _v("disk", "디스크", level, line, advice)
+
+
+def serve_verdict(s):
+    port = s.get("port")
+    if not s.get("listening"):
+        return _v("serve", "s9 serve", "warn",
+                  f"s9 serve: 포트 {port} 에 리스너가 없다 — 서버가 안 떠 있다",
+                  "`s9 serve` 로 띄워라. 일부러 내린 것이면 무시해도 된다.")
+    if not s.get("responds"):
+        return _v("serve", "s9 serve", "critical",
+                  f"s9 serve: 포트 {port} 는 열려 있는데 응답이 없다",
+                  "리슨만 하고 답하지 않는 서버가 가장 헷갈린다 — 포트 점검은 "
+                  "통과하기 때문이다. `s9 serve stop` 후 다시 띄워라.")
+    lat = s.get("latency")
+    slow = lat is not None and lat >= SERVE_SLOW
+    line = f"s9 serve: 포트 {port} 응답" + (f" ({lat:.2f}초)" if lat is not None
+                                          else "")
+    return _v("serve", "s9 serve", "warn" if slow else "ok", line,
+              "응답이 느리다 — 스트림이 몰렸거나 디스크가 밀리는 중이다."
+              if slow else None)
+
+
+def hooks_verdict(h):
+    missing = list(h.get("claude_missing") or [])
+    parts, advice = [], []
+    if missing:
+        parts.append(f"claude 훅 {len(missing)}개 없음({', '.join(missing)})")
+        advice.append("`s9-install` 로 훅을 다시 깔아라 — 훅이 빠지면 감사 "
+                      "기록이 조용히 끊긴다.")
+    if not h.get("git_hook"):
+        parts.append("git pre-commit 없음")
+        advice.append("커밋 게이트가 없다 — `s9-install` 이 훅 자리를 git 에게 "
+                      "물어 설치한다.")
+    if not parts:
+        return _v("hooks", "훅", "ok", "훅: claude 훅 · git pre-commit 모두 설치됨")
+    return _v("hooks", "훅", "warn", "훅: " + " · ".join(parts),
+              " ".join(advice))
+
+
+def repo_verdict(r):
+    """s9 는 자기 저장소 안에서 돈다 — 그 자리가 커밋을 받을 수 있어야 한다.
+
+    2026-08-29 실제로 main 디렉토리의 core.bare 가 true 로 뒤집혀 status·add·
+    commit 이 전부 'must be run in a work tree' 로 거부됐다. 파일은 멀쩡해서
+    아무 증상 없이 커밋 시점에야 드러난다."""
+    if r.get("is_bare"):
+        return _v("repo", "저장소", "critical",
+                  "저장소: core.bare=true 로 표시돼 있다 — 이 자리에서는 "
+                  "status·add·commit 이 전부 거부된다",
+                  "작업 트리가 실제로 있는데 bare 로 표시돼 있다. "
+                  "`git config core.bare false` 로 되돌려라.")
+    if not r.get("worktree_ok"):
+        return _v("repo", "저장소", "critical",
+                  "저장소: 작업 트리를 찾지 못했다",
+                  "이 자리가 git 저장소가 맞는지 확인하라 — 커밋 게이트도 "
+                  "감사 기록도 여기에 기댄다.")
+    return _v("repo", "저장소", "ok",
+              f"저장소: {r.get('branch') or '?'} · "
+              f"워크트리 {r.get('worktrees') or 0}개")
+
+
+def deps_verdict(x):
+    req = list(x.get("missing_required") or [])
+    opt = list(x.get("missing_optional") or [])
+    if req:
+        return _v("deps", "도구", "critical",
+                  f"도구: 필수 없음 — {', '.join(req)}",
+                  "이게 없으면 s9 자체가 돌지 않는다.")
+    if opt:
+        return _v("deps", "도구", "warn",
+                  f"도구: 선택 없음 — {', '.join(opt)}",
+                  "그 기능만 죽는다(캡처·윈도우 포트 조회).")
+    return _v("deps", "도구", "ok", "도구: 필요한 것이 모두 있다")
+
+
+# --- 수집 -------------------------------------------------------------------
+
+def git_hooks_dir(cwd):
+    """훅 자리는 경로를 짓지 말고 git 에게 묻는다.
+
+    워크트리의 .git 은 디렉토리가 아니라 파일이라 <repo>/.git/hooks 를 지어내면
+    없는 자리를 가리킨다 — 그러면 '설치 안 됨'을 '저장소 아님'으로 오판한다
+    (REQ-20260829-001 이 게이트 시험 쪽에서 만난 그 함정)."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "--git-path", "hooks"],
+                           cwd=cwd, capture_output=True, text=True, timeout=10)
+    except Exception:
+        return ""
+    if r.returncode != 0 or not r.stdout.strip():
+        return ""
+    p = r.stdout.strip()
+    return p if os.path.isabs(p) else os.path.abspath(os.path.join(cwd, p))
+
+
+def boot_info():
+    init = ""
+    try:
+        with open("/proc/1/comm") as f:
+            init = f.read().strip()
+    except OSError:
+        pass
+    out = {"init": init, "userspace_sec": None, "user_session_failed": False}
+    if init != "systemd":
+        return out
+    try:
+        r = subprocess.run(["systemctl", "show",
+                            "-p", "UserspaceTimestampMonotonic",
+                            "-p", "FinishTimestampMonotonic"],
+                           capture_output=True, text=True, timeout=10)
+        vals = dict(l.split("=", 1) for l in r.stdout.splitlines() if "=" in l)
+        u = int(vals.get("UserspaceTimestampMonotonic") or 0)
+        fin = int(vals.get("FinishTimestampMonotonic") or 0)
+        if fin > u:
+            out["userspace_sec"] = (fin - u) / 1e6
+    except Exception:
+        pass
+    # 세션이 실제로 섰는지는 XDG 런타임 자리로 본다 — WSL 이 10초 안에 세션을
+    # 못 받으면 이 디렉토리가 아예 생기지 않는다.
+    out["user_session_failed"] = not os.path.isdir(f"/run/user/{os.getuid()}")
+    return out
+
+
+def tmp_info(path="/tmp"):
+    try:
+        names = os.listdir(path)
+        dir_bytes = os.stat(path).st_size
+    except OSError:
+        return {"entries": 0, "dir_bytes": 0, "ours": 0}
+    return {"entries": len(names), "dir_bytes": dir_bytes,
+            "ours": sum(1 for n in names if n.startswith(TMP_OURS))}
+
+
+def disk_info():
+    rows, seen = [], set()
+    for path in ("/", ROOT):
+        try:
+            st = os.statvfs(path)
+        except OSError:
+            continue
+        key = (st.f_blocks, st.f_fsid)
+        if key in seen:
+            continue
+        seen.add(key)
+        total = st.f_blocks * st.f_frsize
+        free = st.f_bavail * st.f_frsize
+        if not total:
+            continue
+        rows.append({"path": path, "used_pct": 100.0 * (total - free) / total})
+    return rows
+
+
+def serve_info():
+    port = 9909
+    try:
+        with open(os.path.join(ROOT, "state", "serve-code.json")) as f:
+            port = int((json.load(f) or {}).get("port") or port)
+    except Exception:
+        pass
+    out = {"port": port, "listening": False, "responds": False,
+           "latency": None}
+    try:
+        with socket.socket() as s:
+            s.settimeout(1.0)
+            out["listening"] = s.connect_ex(("127.0.0.1", port)) == 0
+    except OSError:
+        return out
+    if not out["listening"]:
+        return out
+    import urllib.error
+    import urllib.request
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/api/serveinfo", timeout=8) as r:
+            r.read(256)
+            out["responds"] = True
+    except urllib.error.HTTPError:
+        out["responds"] = True   # 답은 했다 — 살아 있다는 뜻이다
+    except Exception:
+        out["responds"] = False
+    out["latency"] = round(time.time() - t0, 2)
+    return out
+
+
+def hooks_info():
+    missing = []
+    try:
+        with open(os.path.expanduser("~/.claude/settings.json")) as f:
+            hooks = (json.load(f) or {}).get("hooks") or {}
+    except Exception:
+        hooks = {}
+    for ev in S9_HOOK_EVENTS:
+        blob = json.dumps(hooks.get(ev) or [], ensure_ascii=False)
+        if "s9-audit" not in blob:
+            missing.append(ev)
+    hd = git_hooks_dir(ROOT)
+    return {"claude_missing": missing, "hooks_dir": hd,
+            "git_hook": bool(hd) and os.path.exists(
+                os.path.join(hd, "pre-commit"))}
+
+
+def repo_info():
+    def g(*args):
+        try:
+            r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True,
+                               text=True, timeout=10)
+        except Exception:
+            return None
+        return r.stdout.strip() if r.returncode == 0 else None
+    wl = g("worktree", "list") or ""
+    return {"is_bare": g("rev-parse", "--is-bare-repository") == "true",
+            "worktree_ok": g("rev-parse", "--is-inside-work-tree") == "true",
+            "branch": g("rev-parse", "--abbrev-ref", "HEAD") or "",
+            "worktrees": len([l for l in wl.splitlines() if l.strip()])}
+
+
+def deps_info():
+    missing_req = [b for b in ("python3", "git") if not shutil.which(b)]
+    missing_opt = []
+    if not (any(os.path.exists(p) for p in CHROME_CANDIDATES)
+            or any(shutil.which(b) for b in
+                   ("google-chrome", "chromium", "chromium-browser"))):
+        missing_opt.append("chrome(캡처)")
+    if not shutil.which("powershell.exe"):
+        missing_opt.append("powershell.exe(윈도우 포트 조회)")
+    return {"missing_required": missing_req, "missing_optional": missing_opt}
+
+
+def system_checks():
+    return [boot_verdict(boot_info()),
+            tmp_verdict(tmp_info()),
+            disk_verdict(disk_info()),
+            serve_verdict(serve_info()),
+            repo_verdict(repo_info()),
+            hooks_verdict(hooks_info()),
+            deps_verdict(deps_info())]
+
+
 def diagnose():
     rows = ps_rows()
     serves, orphans, chromes = scan(rows)
@@ -528,6 +873,7 @@ def diagnose():
         "headless_chrome": [{"pid": p, "age": a} for p, a, _ in chromes],
         "shots_bytes": scratch_bytes(),
         "windows_ports": windows_ports(),
+        "system": system_checks(),
     }
     return d, orphans, chromes
 
@@ -604,6 +950,7 @@ def advise(d):
         steps.append("마지막 수단이 `wsl --shutdown` 이다(실행 중인 "
                      "세션·에이전트가 함께 죽는다).")
         out += [f"{i}) {t}" for i, t in enumerate(steps, 1)]
+        out += system_advice(d)
         return out
 
     if lat is not None and lat >= 3:
@@ -611,13 +958,43 @@ def advise(d):
                    f"5초 안팎인 코드는 이 상태에서 실패한다.")
         out.append("동시 캡처·테스트 수를 줄이고, 서버 기동 대기 시간을 "
                    "넉넉히(20초 이상) 잡아라.")
+        out += system_advice(d)
         return out
 
-    out.append(f"정상 — 새 포트 공개까지 {lat if lat is not None else 0}초.")
+    sys_out = system_advice(d)
+    if sys_out:
+        # 포트가 멀쩡해도 시스템이 아프면 '정상'이라 말하지 않는다 — 그 한 줄
+        # 때문에 사용자가 원인을 못 찾고 재부팅으로 갔다(REQ-20260829-004).
+        out.append(f"네트워크는 정상이다(공개 지연 "
+                   f"{lat if lat is not None else 0}초). 걸린 것은 다른 데 있다:")
+        out += sys_out
+    else:
+        out.append(f"정상 — 새 포트 공개까지 {lat if lat is not None else 0}초.")
     if d["orphan_test_servers"]:
         out.append(f"고아 테스트 서버 {len(d['orphan_test_servers'])}개가 남아 "
                    f"있다 — `s9-doctor --fix` 로 회수하라.")
     return out
+
+
+def system_advice(d):
+    """시스템 점검 중 ok 가 아닌 것만, 나쁜 순서로."""
+    rows = [r for r in (d.get("system") or []) if r["level"] != "ok"]
+    rows.sort(key=lambda r: -LEVEL_ORDER.get(r["level"], 0))
+    out = []
+    for r in rows:
+        out.append(f"{LEVEL_MARK.get(r['level'], '·')} {r['line']}")
+        if r.get("advice"):
+            out.append(f"   {r['advice']}")
+    return out
+
+
+def exit_code(d):
+    """포트가 멀쩡해도 시스템에 critical 이 있으면 실패로 끝낸다 — 무인 호출이
+    종료코드만 보고 '괜찮다'고 넘기지 않도록."""
+    if d.get("degraded"):
+        return 1
+    levels = [r["level"] for r in (d.get("system") or [])]
+    return 1 if worst_level(levels) == "critical" else 0
 
 
 def main():
@@ -688,7 +1065,7 @@ def main():
 
     if args.json:
         print(json.dumps(d, ensure_ascii=False, indent=1))
-        return 0 if not d["degraded"] else 1
+        return exit_code(d)
 
     lat = (d.get("probe") or {}).get("latency")
     mark = ("✗ degraded" if d["degraded"]
@@ -728,10 +1105,12 @@ def main():
     if "probe_after_fix" in d:
         print("회수 후 프로브: "
               + ("✓ 정상" if d["probe_after_fix"]["ok"] else "✗ 여전히 degraded"))
+    for r in d.get("system", []):
+        print(f"{LEVEL_MARK.get(r['level'], '·')} {r['line']}")
     print()
     for line in d["advice"]:
         print(line)
-    return 0 if not d["degraded"] else 1
+    return exit_code(d)
 
 
 if __name__ == "__main__":
