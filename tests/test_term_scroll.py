@@ -35,9 +35,10 @@ overflow-y:auto` 로 고쳐졌는데, 바로 옆 `.term` 은 같이 고쳐지지
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 # 세로 흐름을 막는 선언들. overflow 축약형은 한 값이면 세로에도 걸린다.
 KILLERS = ("hidden", "clip", "scroll")

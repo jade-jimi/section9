@@ -27,9 +27,10 @@ recentOrder 로 순위를 매기고**, 그 뒤로는 그 순위를 얼려 둔다
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 
 class DocsRecentOrder(unittest.TestCase):

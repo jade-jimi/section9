@@ -30,9 +30,10 @@ REQ-20260828-036 은 그 물음의 **보여주기 절반**만 냈다 — 점의 
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 # 서버가 돌려주는 action 값 전부 (bin/s9 wake_request 의 계약). 화면은 이 낱말
 # 중 **어느 것도** 알아서는 안 된다 — 알기 시작하면 문구가 두 벌이 된다.

@@ -15,6 +15,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
@@ -157,7 +158,7 @@ class DashboardStopLightTest(unittest.TestCase):
     """H10: 상태 표시 영역이 정지 상태를 그리는 분기를 갖는가 (정적 검사)."""
 
     def test_h10_markup_has_failed_and_stalled_branch(self):
-        html = open(os.path.join(HERE, "..", "web", "index.html"),
+        html = open(index_path(),
                     encoding="utf-8").read()
         self.assertIn("spawn_failed", html)
         self.assertIn("stalled", html,

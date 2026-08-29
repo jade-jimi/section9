@@ -24,6 +24,7 @@ PNG = (b"\x89PNG\r\n\x1a\n" + b"\x00" * 40)   # 최소 더미 바이트
 
 # 임시 포트를 뽑지 않는다 — 고정 풀에서 돌려쓴다 (REQ-20260825-100, portpool 참조)
 from portpool import free_port, wait_server  # noqa: E402
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 
 class TestAssets(unittest.TestCase):
@@ -141,7 +142,7 @@ class TestInlineRenderContract(unittest.TestCase):
     """문서 뷰 렌더 계약 (REQ-20260825-023): 첨부 HTML은 자리표시자로 보호돼
     linkifyIds가 src/href 속성 안 문서 id를 건드려 태그를 깨뜨리지 않는다."""
     def setUp(self):
-        with open(os.path.join(HERE, "..", "web", "index.html"),
+        with open(index_path(),
                   encoding="utf-8") as f:
             self.html = f.read()
 

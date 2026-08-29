@@ -35,9 +35,10 @@ import re
 import shutil
 import subprocess
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 DAY = 24 * 60 * 60 * 1000
 

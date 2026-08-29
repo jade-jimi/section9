@@ -1,0 +1,294 @@
+/* docs.css — Docs 목록 · 문서 뷰어 · 판정 근거 · 본문 표 · 첨부 · Audit · backlinks */
+/* ------- docs ------- */
+.docs{display:flex;gap:0;align-items:flex-start;border:1px solid var(--border);background:var(--panel)}
+/* 목록 높이 = 판이 시작되는 지점부터 화면 바닥까지(--docsh, renderDocs가 실측).
+   150px 고정값은 헤더 높이가 다른 skin/density에서 판을 화면 밖으로 밀어냈다. */
+.doclist{width:330px;flex:none;border-right:1px solid var(--border);
+  max-height:var(--docsh,calc(100vh - 150px));overflow-y:auto}
+/* 타입 진입점 (REQ-20260825-084) — Board의 knowledge/session 컬럼을 없앤 자리를
+   Docs가 받는다. 목록 맨 위 붙박이 줄: 타입 이름 + 건수, 누르면 그 타입만.
+   계기판 언어 그대로 — 배경 pill 없음, mono 소문자 대문자화, 활성은 잉크 밑줄. */
+.typebar{position:sticky;top:0;z-index:3;display:flex;flex-wrap:wrap;align-items:center;
+  gap:0;min-height:30px;box-sizing:border-box;background:var(--panel);padding:0 6px;
+  border-bottom:1px solid var(--border)}
+/* 건수는 이 줄의 존재 이유다 — 좁아지면 잘라내지 말고 줄을 접는다. 폭이 모자랄
+   때 ellipsis로 "REQUEST 2…"가 되어 숫자가 통째로 사라졌다 (REQ-20260825-084 검증). */
+.typebar .tb{border:0;background:none;color:var(--muted);cursor:pointer;
+  font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;
+  padding:7px 6px;line-height:1;border-bottom:2px solid transparent;margin-bottom:-1px;
+  white-space:nowrap;flex:none}
+.typebar .tb:hover{color:var(--text)}
+.typebar .tb.on{color:var(--text);border-bottom-color:var(--text);font-weight:600}
+.typebar .tb b{margin-left:4px;color:var(--faint);font-weight:600;
+  font-variant-numeric:tabular-nums}
+.typebar .tb.on b{color:var(--text)}
+/* 질문만 두 수를 갖는다 — **답한 장수 / 전체** (REQ-20260826-019 → 20260828-018).
+   처음에는 총량 옆에 '미답 3' 을 따로 뽑았는데, 같은 한 종류를 두 칸이 나눠
+   세는 꼴이라 눈이 둘을 이어 붙여야 했다. 한 덩이(43/46)로 합치고 아직 남았을
+   때만 질문 잉크로 세운다 — 옆 칸들의 회색 숫자 사이에서 이 한 덩이만 색을
+   갖는 것이 곧 강조다(면이 아니라 글자). 색을 잃어도 43 ≠ 46 이 "남았다"를
+   그대로 말한다. 빗금은 두 수를 잇는 이음매라 한 급 물러나 있는다. */
+.typebar .tb b.qf span{font-weight:400;opacity:.55;margin:0 1px}
+.typebar .tb b.qf.left{color:var(--t-question);font-weight:700}
+/* 그룹 헤더는 목록 맨 위에 붙는다. **문턱은 0이 기본이다** — sticky는 문턱보다
+   위에 있는 상자를 아래로 밀어내면서 자리는 비워 두지 않으므로, 위에 아무것도
+   없는 목록에서 양수 문턱을 주면 머리가 내려앉아 첫 항목의 제목 줄을 제 배경으로
+   덮는다 (REQ-20260827-041 — Settings 첫 항목 `디스플레이`가 스킨 10종에서
+   19~24px 가려졌다. Stream 빈 상태 줄도 같은 자리였다). */
+.doclist .grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  padding:13px 14px 6px;font-weight:600;position:sticky;top:0;background:var(--panel);
+  font-family:var(--mono);border-bottom:1px solid var(--hairline)}
+/* 타입바가 **실제로 앞에 있을 때만** 그 아래로 내려 붙는다 — 두 sticky가 겹치면
+   머리가 타입바 뒤에 숨는다. 조건을 선택자에 적어 두면 이 위젯을 타입바 없이
+   재사용하는 자리(Settings·Stream)가 JS가 --tbh를 채워 주기를 기다리지 않고도
+   스스로 옳게 선다. --tbh는 renderDocs가 렌더 직후 실측해 넣는다(줄이 접히면
+   높이가 달라진다). */
+.doclist .typebar ~ .grp{top:var(--tbh,30px)}
+.doclist .row{padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--hairline)}
+.doclist .row:hover{background:var(--accent-soft)}
+/* 지금 보는 문서 (REQ-20260828-009). 전에는 **색면 + 왼쪽 세로 띠**였다 — 이
+   화면이 금하는 두 가지다. 그리고 정작 사용자가 겪은 것은 표시가 약한 것이
+   아니라 **그 줄이 목록에 아예 없던 것**이었다(15초마다 순서가 뒤섞여 아래로
+   묻혔다). 그래서 표시는 잉크로 바꾸고, 자리는 renderDocs 가 맨 위에 못 박는다.
+   ● 는 이 저장소가 이미 "지금 이것"에 쓰는 표식이다(고르는 창의 .dlgopt). */
+.doclist .row.sel{background:none}
+.doclist .row.sel .id::before{content:"●";margin-right:6px;font-size:7px;
+  vertical-align:2px;color:var(--text)}
+.doclist .row.sel>div:nth-child(3){font-weight:650}
+/* 못 박은 줄과 그 아래 목록 사이의 경계 — 그룹 헤어라인보다 한 급 진하게 해
+   "여기까지가 지금 보는 것"을 말한다. 색면도 띠도 아닌 선 하나다. */
+.doclist .grp.pinhead + .row.sel{border-bottom:1px solid var(--border)}
+/* **못 박은 줄은 목록의 1번이 아니다** (REQ-20260829-012).
+
+   사용자: "docs 탭에서 문서 목록이나 문서 선택이 내 의도와 다른 것 같다.
+   그리고 선택한 문서를 취소할 수도 있게 해줘."
+
+   Docs 에 다시 들어가니 예전에 열어 둔 문서가 REQUEST 머리글 **위**에 이름 없이
+   홀로 서 있었다 — 지금 고른 적이 없는데 목록의 첫 줄로 읽힌다. 이 목록의
+   덩어리는 전부 머리글을 갖는데(REQUEST·ARTICLE·KNOWLEDGE…) 이 줄만 없었다.
+
+   못 박기 자체는 옳다(REQ-20260828-009) — 묻히면 못 찾는다. 다시 그은 것은
+   그 줄의 **정체**다: 못 박기는 "내가 고른 것"의 표시가 아니라 **"지금 오른쪽에
+   열려 있는 것"**의 표시다. 그래서 되살아난 선택도 여전히 맨 위에 선다(오른쪽
+   판이 실제로 그것을 그리고 있으니 목록이 숨기면 두 판이 다른 말을 한다) —
+   대신 그 줄이 스스로를 밝히고, 바로 그 자리에서 풀린다.
+
+   새 컴포넌트는 만들지 않는다: 이 목록이 이미 쓰는 머리글(.grp) 그대로다. */
+/* 자간은 라틴 대문자용 .1em 을 쓰지 않는다 — 한글에 그대로 걸면 "지 금  보 는
+   문 서" 로 벌어져 낱말이 흩어진다. 잉크는 --faint 에서 한 급 올린다: 이 줄은
+   구획 표시가 아니라 **라벨**이다. */
+.doclist .grp.pinhead{display:flex;align-items:baseline;gap:8px;
+  color:var(--muted);letter-spacing:.02em;text-transform:none}
+/* 푸는 손잡이. 색면·테두리 없는 잉크 글자에 hover 밑줄 — `+ N개 더 보기`·
+   `전문 보기` 와 같은 어휘다. 자리는 푸는 대상 바로 위: 오른쪽 문서 판에 두면
+   그 판이 이미 쓰는 문서 행위(승인·반려·이어 말하기) 옆에 서서 "문서를 닫는다"가
+   아니라 "문서를 취소한다"로 읽힌다. */
+.doclist .pinoff{margin-left:auto;background:none;border:0;padding:0;cursor:pointer;
+  font-family:var(--mono);font-size:10px;letter-spacing:.02em;
+  /* 잉크는 **머리글에서 물려받는다**. 값을 박으면 머리글을 잉크로 뒤집는
+     스킨(grid)에서 글자가 배경에 묻힌다 — 물려받으면 그 스킨의 대비를 그대로
+     쓴다. hover 표시는 색이 아니라 밑줄이 맡는다(이 화면의 기존 어휘). */
+  color:inherit}
+.doclist .pinoff:hover{text-decoration:underline;text-underline-offset:3px}
+.doclist .pinoff:focus-visible{outline:1px solid currentColor;outline-offset:2px}
+/* 점선 = 여기를 누르세요 / 실선 = 지금 여기 있습니다 (REQ-20260827-007 어휘).
+   행은 아래 테두리로 맞닿아 있으므로 링을 안쪽으로 물려 이웃 행을 덮지 않게 한다. */
+.doclist .row:focus-visible,.backlinks .bl:focus-visible{
+  outline:1px solid var(--text);outline-offset:-1px}
+.doclist .row .id{font-family:var(--mono);font-size:10px;color:var(--faint)}
+.doclist .row .st{float:right;font-size:10px;color:var(--sc,var(--muted));
+  font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em}
+.doclist .row>div:nth-child(3){font-size:13px;margin-top:1px}
+/* 위 여백은 판이 아니라 **제목 줄**이 가진다 (REQ-20260828-009). 스크롤 컨테이너에
+   윗 패딩이 남아 있으면 붙박이 제목 위에 본문이 스쳐 지나가는 띠가 생긴다. */
+.viewer{--vpad:34px;flex:1;padding:0 var(--vpad) 24px;min-height:300px;
+  max-height:var(--docsh,calc(100vh - 150px));overflow-y:auto}
+/* 스트림 판은 붙박이 제목이 없다 — 윗 여백을 제자리에 돌려준다 */
+#sview{padding-top:24px}
+.viewer .empty{color:var(--faint);font-family:var(--mono);font-size:12px;padding-top:24px}
+.viewer h1{letter-spacing:-.015em;font-size:21px}
+/* **읽는 동안 제목을 잃지 않는다** (REQ-20260828-009).
+
+   사용자: "문서 본문 보기를 할 때 화면 스크롤을 해서 내용을 보다보면, 본문의
+   제목을 잊어버린다. 무슨 내용을 보고 있었는지." 메타 표까지 내려가면 제목이
+   화면 어디에도 없었다.
+
+   어휘는 새로 만들지 않는다 — 이 목록이 이미 쓰는 붙박이(.typebar·.doclist .grp)
+   그대로다: sticky top:0 · 판 배경 · 아래 헤어라인 한 줄. **한 줄을 넘기지
+   않는다**(읽으려고 연 화면이다) — 파일 경로는 위에 남아 함께 올라가 사라지고,
+   붙는 것은 제목·번호·상태 한 줄뿐이다. 좌우 음수 여백으로 판 끝까지 늘려
+   본문이 옆으로 새어 보이지 않게 한다. */
+.viewer .dtitle{position:sticky;top:0;z-index:5;
+  margin:2px calc(-1 * var(--vpad)) 2px;padding:8px var(--vpad) 9px;
+  background:var(--panel);border-bottom:1px solid var(--hairline);
+  display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.viewer .dtitle .did{font-family:var(--mono);font-size:12px;color:var(--faint);
+  font-weight:400;letter-spacing:.02em}
+/* 상태는 목록 행과 같은 재료다 — mono 소문자 식별자에 상태 잉크. 면 없음. */
+.viewer .dtitle .dst{margin-left:auto;font-family:var(--mono);font-size:11px;
+  font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--sc)}
+.viewer .dpath{padding-top:22px}
+/* review/blocked 판단 근거 callout — 본문 최하단 History에 묻히는 전이 사유(확인
+   포인트/대기 사유)를 뷰어 상단으로 끌어올린다 (REQ-20260825-006 반려 재작업).
+   계기판 언어: 라운드 0·그림자 0, 1px 보더 + mono 캡션. */
+.gate{border:1px solid var(--border);margin:14px 0 0;padding:10px 12px;background:var(--panel)}
+.gate-k{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--muted);display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.gate-k .cdot{width:7px;height:7px;flex:none}
+.gate-k .path{margin-left:auto}
+/* 배경 한 줄 (DOC-20260826-015): 판단 요구보다 "무엇에 대한 건인가"가 먼저다.
+   요약은 메타 표 안(callout 아래)에 있었고, 거기까지 내려가야 한다면 판정
+   화면은 이미 실패다. .gate 와 같은 계기판 언어 — 라운드·그림자 없이 하단
+   헤어라인 하나로 배경과 판단 요구를 가른다. 잉크는 --muted 로 본문(--text)
+   보다 한 단 낮춰, 가장 큰 소리가 확인 포인트 쪽에 남게 한다. */
+.gate-w{font-size:12px;line-height:1.5;color:var(--muted);
+  margin:0 0 8px;padding-bottom:8px;border-bottom:1px solid var(--hairline)}
+.gate-wk{font-family:var(--mono);font-size:10px;text-transform:uppercase;
+  letter-spacing:.09em;color:var(--muted);margin-right:8px}
+.gate-b{font-size:12.5px;line-height:1.55}
+/* 확인 포인트 갈래 (gateNote). 원문은 손대지 않고 번호 앞에서만 끊는다 —
+   8px 은 갈래 사이 간격(≈27px 베이스라인)이 갈래 안 줄간(≈19px)과 확실히
+   구분되는 최소값이다. 불릿·번호 치환 없음: 원문의 ①/(1) 이 그대로 마커다. */
+.gate-p{margin-top:8px}
+.gate-p:first-child{margin-top:0}
+.gate-h{margin-top:8px;border-top:1px solid var(--hairline);padding-top:6px}
+.gate-h summary{cursor:pointer;font-family:var(--mono);font-size:10px;
+  color:var(--faint);text-transform:uppercase;letter-spacing:.05em;list-style:none}
+.gate-h summary::before{content:"▸ "}
+.gate-h[open] summary::before{content:"▾ "}
+.gate-r{margin:7px 0 0;font-size:12px;line-height:1.5}
+.gate-r .path{display:block;margin-bottom:2px}
+/* ── 문서 본문 표 (REQ-20260827-008) ───────────────────────────────────────
+   표를 읽는 규칙은 터미널 뷰와 같은 함수(mdTable) 하나에 있지만, **스타일은
+   나눠야 한다**: 터미널은 테마와 무관하게 늘 어두운 자체 팔레트(--cc-*)로
+   그리고, 문서 본문은 tone 을 따라가는 문서 토큰으로 그린다. 문서 뷰어에서
+   --cc-* 를 빌려 쓰면 그 토큰이 없어 어두운 fallback 으로 떨어지고, 밝은
+   tone 에서 글자가 배경에 묻힌다.
+   계기판 언어 그대로: 얼룩말 색면 없이 헤어라인으로만 나누고, 숫자는 자릿수를
+   세로로 맞춘다. 넓은 표는 본문을 밀지 않고 자기 안에서 가로로 스크롤한다. */
+.mdtblw{display:block;max-width:100%;overflow-x:auto;margin:12px 0}
+.mdtbl{border-collapse:collapse;font-size:12.5px;line-height:1.6;
+  font-variant-numeric:tabular-nums;
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.mdtbl th,.mdtbl td{padding:5px 16px;vertical-align:top;text-align:left;
+  word-break:break-word;border-left:1px solid var(--hairline)}
+.mdtbl th:first-child,.mdtbl td:first-child{padding-left:0;border-left:0}
+.mdtbl th:last-child,.mdtbl td:last-child{padding-right:0}
+.mdtbl th{font-weight:600;color:var(--text);border-bottom:1px solid var(--border)}
+.mdtbl td{color:var(--text)}
+.mdtbl tbody tr + tr td{border-top:1px solid var(--hairline)}
+.mdtbl code{font-family:var(--mono);font-size:11.5px}
+
+/* 문서 뷰 첨부 (REQ-20260825-023) — 계기판 언어: 라운드 0, 1px 보더 */
+.attimg{max-width:min(100%,760px);display:block;margin:8px 0;border:1px solid var(--border)}
+.attlink{display:inline-block;text-decoration:none}
+/* 그림 한 장이 서는 자리 (REQ-20260829-019). 그림과 **못 받았을 때의 자리**가
+   한 덩이여야 둘을 갈아 끼울 때 문단이 흔들리지 않는다. */
+.attbox{display:block}
+/* `hidden` 이 이기게 해 둔다 — `.attlink{display:inline-block}` 과
+   `.attmiss{display:flex}` 가 UA 의 `[hidden]{display:none}` 보다 특이도가 높아,
+   감췄다고 믿은 것이 그대로 남는다(깨진 그림 아이콘이 자리 위에 겹쳐 섰다). */
+.attbox [hidden]{display:none}
+/* 아직 안 온 그림의 자리. 점선은 "자리는 있는데 아직 내용이 없다"는 뜻이고,
+   색면도 경고색도 쓰지 않는다 — 그림이 늦게 오는 것은 고장이 아니다.
+   브라우저의 깨진 그림 아이콘 대신 **파일 이름과 다시 부를 손잡이**를 준다. */
+.attmiss{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin:8px 0;padding:11px 13px;border:1px dashed var(--border);
+  max-width:min(100%,760px);box-sizing:border-box}
+.attmiss .attf{font-family:var(--mono);font-size:11.5px;color:var(--text);
+  word-break:break-all}
+.attmiss .attw{font-size:11.5px;line-height:1.6;color:var(--muted);flex:1 1 200px}
+/* 손잡이는 "더 보기"가 쓰는 그 텍스트 버튼 어휘 — 목록의 줄과 헷갈리지 않는다 */
+.attmiss .attr{background:none;border:1px solid var(--border);padding:3px 11px;
+  font:inherit;font-size:11.5px;color:var(--text);cursor:pointer}
+.attmiss .attr:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+.attmiss .attr:focus-visible{outline:1px solid var(--text);outline-offset:2px}
+.attmiss .atta{display:flex;align-items:center;gap:11px;flex:0 0 auto}
+.attmiss .atto{font-size:11px;color:var(--muted);text-decoration:underline;
+  text-decoration-style:dotted;text-underline-offset:3px;white-space:nowrap}
+/* 재는 자리 (?attstat) — 진단용. 화면 위에 얹히되 아무것도 가리지 않는다. */
+.attstat{position:fixed;right:10px;top:52px;z-index:90;font-family:var(--mono);
+  font-size:11px;letter-spacing:.03em;color:var(--text);background:var(--panel);
+  border:1px solid var(--text);padding:6px 10px;white-space:pre}
+.attfile{font-family:var(--mono);font-size:12px;color:var(--text);
+  border:1px solid var(--border);padding:2px 8px;text-decoration:none;
+  display:inline-block;margin:4px 0}
+.attfile:hover{background:var(--text);color:var(--bg)}
+/* 첨부 본문 발췌 (REQ-20260827-005) — 계기판 언어 그대로: 라운드 0, 그림자 0,
+   구획은 얇은 보더 하나. 좌측 세로 띠·색면 하이라이트 없음. 위계는 크기와
+   글자색으로만 만들고, 찾던 문구는 배경이 아니라 잉크 굵기로 짚는다. */
+.attext{border:1px solid var(--border);padding:8px 11px 9px;margin:6px 0 13px}
+.atthd{font-family:var(--mono);font-size:10px;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--faint);display:flex;gap:11px;flex-wrap:wrap;
+  align-items:baseline;margin-bottom:7px}
+/* 파일 이름은 데이터지 라벨이 아니다 — 대문자로 눌러 쓰면 실제 이름과 달라진다 */
+.atthd .attn{color:var(--muted);text-transform:none}
+.atthd .atthit{color:var(--text)}
+.attx{font-family:var(--mono);font-size:11.5px;line-height:1.75;color:var(--muted);
+  white-space:pre-wrap;word-break:break-word}
+.attx b{color:var(--text);font-weight:700}
+.attx.open{max-height:min(52vh,420px);overflow:auto;padding-right:6px}
+.attx.open:focus-visible{outline:1px solid var(--text);outline-offset:2px}
+.attcut{margin-top:10px;color:var(--faint);font-size:10.5px;line-height:1.6}
+.attmore{margin-top:8px;background:none;border:0;padding:0;cursor:pointer;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted)}
+.attmore:hover{color:var(--text);text-decoration:underline}
+.attchip{font-family:var(--mono);font-size:11px;color:var(--muted);
+  border:1px solid var(--hairline);padding:1px 6px}
+.metatbl{width:100%;border-collapse:collapse;margin:16px 0 24px;font-size:12.5px;
+  border-top:1px solid var(--border)}
+.metatbl td{border-bottom:1px solid var(--hairline);padding:7px 10px 7px 0;vertical-align:top}
+.metatbl td:first-child{color:var(--faint);width:150px;white-space:nowrap;
+  font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);
+  padding-top:9px}
+.md h2{border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:30px;
+  font-size:15px;text-transform:uppercase;letter-spacing:.05em}
+.md h3{font-size:13px;color:var(--muted);margin-top:20px;font-family:var(--mono)}
+.md pre{background:var(--accent-soft);border-left:2px solid var(--border);
+  padding:11px 14px;overflow-x:auto;font-size:12px}
+.md code{background:var(--accent-soft);padding:1px 5px;font-family:var(--mono);font-size:12px}
+.md pre code{background:none;padding:0}
+.md a{color:var(--text)}
+.md li{margin:3px 0}
+a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
+  text-decoration-style:dotted;text-underline-offset:3px;font-family:var(--mono);font-size:.92em}
+.path{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.snip{font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  padding:2px 0 2px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.snip b{color:var(--text);font-weight:700;background:var(--accent-soft)}
+/* 이 줄이 첨부에서 왔다는 표시 — 줄 번호가 문서 본문의 줄로 읽히지 않게 */
+.snipf{color:var(--faint);margin-right:6px}
+.reqstream summary{cursor:pointer;font-weight:600;font-size:11px;color:var(--muted);
+  border-top:1px solid var(--border);padding:14px 0 8px;margin-top:28px;list-style:none;
+  text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono)}
+.reqstream summary::before{content:"▸ ";color:var(--faint)}
+.reqstream[open] summary::before{content:"▾ "}
+.reqstream .term{max-height:440px;margin-top:8px}
+
+/* ------- audit: 레저 테이블 ------- */
+.audit{border:1px solid var(--border);background:var(--panel)}
+.audit .cap{padding:10px 16px;border-bottom:1px solid var(--border);font-size:11.5px;
+  color:var(--muted)}
+.audit .tblwrap{overflow-x:auto}
+.audit table{width:100%;border-collapse:collapse;font-size:12.5px}
+.audit th{text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);padding:9px 14px;border-bottom:1px solid var(--border);
+  white-space:nowrap;font-family:var(--mono);font-weight:600}
+.audit td{padding:7px 14px;border-bottom:1px solid var(--hairline);vertical-align:top}
+.audit tr:hover td{background:var(--accent-soft)}
+.audit td.ts{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap}
+.kind{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:600;
+  white-space:nowrap;color:var(--kc);font-family:var(--mono);text-transform:uppercase;
+  letter-spacing:.06em}
+.kind::before{content:"";width:6px;height:6px;background:var(--kc);display:inline-block}
+.audit .more{padding:10px 14px}
+
+/* ------- backlinks ------- */
+.backlinks{border-top:1px solid var(--border);margin-top:28px;padding-top:14px}
+.backlinks h4{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 8px;font-weight:600;font-family:var(--mono)}
+.backlinks .bl{padding:6px 0;cursor:pointer;font-size:13px;border-bottom:1px solid var(--hairline)}
+.backlinks .bl:hover{background:var(--accent-soft)}
+.backlinks .bl .id{font-family:var(--mono);font-size:10px;color:var(--faint);margin-right:10px}
+

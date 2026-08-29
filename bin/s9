@@ -2266,6 +2266,7 @@ def live_agents(fresh=AGENT_FRESH_SEC):
             continue
         if not isinstance(b, dict) or b.get("ended"):
             continue
+        amap = b.get("agent_req") if isinstance(b.get("agent_req"), dict) else {}
         for tp in (b.get("agent_transcript_path") or []):
             try:
                 age = now - os.path.getmtime(tp)
@@ -2273,8 +2274,84 @@ def live_agents(fresh=AGENT_FRESH_SEC):
                 continue
             if age < fresh:
                 rows.append({"session": b.get("session", ""),
-                             "path": tp, "age": int(age)})
+                             "path": tp, "age": int(age),
+                             # 이 손이 **어느 문서**를 맡았는지 (REQ-20260829-036).
+                             # 빈 값 = 미상. 확정과 추정을 구별하지 않으면
+                             # 추정이 확정처럼 굳어 남의 문서를 영원히 '작업 중'
+                             # 으로 만든다 — 그것이 20:09 designer 사고다.
+                             #
+                             # 세 값을 구별한다: 정식 id(확정) · ""(추정) ·
+                             # None(이 바인딩에 기록 자체가 없음 — 이 필드가
+                             # 생기기 전에 붙은 손). 셋을 둘로 뭉치면 옛 손을
+                             # 되짚을 길이 없어진다.
+                             "req": amap.get(tp)})
     return rows
+
+
+def _attributed_transcripts():
+    """기여가 가리키는 transcript 들 — **이 손이 어디 있는지 문서가 안다.**
+
+    바인딩의 `agent_req` 가 생기기 전에 붙은 손을 되짚는 폴백이다. 문서 쪽
+    증거가 더 오래됐고 더 단단하지만 **먼저 보지는 않는다**: 추정으로 붙인
+    기여도 문서에는 똑같이 적히므로, 이것만 보면 추정과 확정이 한 덩어리가
+    되어 `--guess` 가 아무 뜻도 없어진다.
+
+    **결과(running/stalled/done)는 보지 않는다.** 여기서 묻는 것은 "이 손이
+    살아 있나"가 아니라 "이 손이 **어디** 있나" 뿐이고, 살아있음은 손의
+    신선도가 따로 답한다. 실측 2026-08-29 21:31: 긴 시험 스위트를 도느라
+    조용해진 서브에이전트의 기여가 `agent_health` 에 stalled 로 닫혔는데,
+    그 손은 여전히 도는 중이었다 — 결과까지 보면 그 순간 행선지를 잃고
+    다른 요청들이 전부 '미상'이 된다. 일하느라 바쁜 쪽이 손해 보는 판정은
+    이 저장소가 `rework_claimed` 에서 이미 한 번 뒤집은 방향이다.
+    """
+    out = set()
+    for r in load_catalog():
+        if r.get("type") != "request" or r.get("status") != "in-progress":
+            continue
+        try:
+            meta, _body = read_doc(os.path.join(ROOT, r.get("path") or ""))
+        except (OSError, ValueError):
+            continue
+        for c in (meta.get("contributions") or []):
+            if isinstance(c, dict) and c.get("transcript"):
+                out.add(str(c["transcript"]))
+    return out
+
+
+def unassigned_hands(now=None, fresh=AGENT_FRESH_SEC):
+    """지금 붙어 있는데 **어느 문서인지 모르는** 서브에이전트들 (REQ-20260829-036).
+
+    실사고 2026-08-29 20:09~20:34. 리드가 designer 에게 `030·031 화면 몫` 을
+    맡겼는데 위임 등록은 REQ-029 로 갔다(훅이 정식 id 정규식만 봐서 지명이 하나도
+    안 풀렸고, 세션 클레임 중 최근 것을 추측했다). 결과가 둘이다: 030 은 손이
+    안 보여 25분째 '멈춤' 이 됐고 20:34 의 깨우기가 designer 가 `web/index.html`
+    을 쓰는 중에 무인 작업자를 하나 더 띄웠다. 029 는 없는 손이 보여 진짜 멈춤이
+    가려졌다.
+
+    지명 해석은 그 자리에서 고치지만(`delegation_targets`), **못 푸는 경로는
+    반드시 남는다** — 훅이 못 파싱하는 응답, 번호가 없는 description. 그때
+    추측을 확정처럼 적으면 같은 사고가 다시 난다. 그래서 추측으로 붙인 위임은
+    바인딩에 `agent_req[transcript] = ""` 로 남고, 그 손이 여기 실린다.
+
+    쓰는 곳은 둘이고 쓰임이 다르다:
+      · 판정(`stall_verdict`) — '멈춤' 대신 '미상' 이라 말한다. 감추지 않는다:
+        조용한 시간(`quiet_mins`)은 그대로 실린다.
+      · 스폰(`_spawn_worker`) — 겹쳐 띄우지 않는다. 거부가 아니라 대기다.
+
+    **한도는 손의 신선도 하나뿐이다.** 2분간 아무것도 안 쓰면 그 손은 없는
+    것으로 본다 — 천장 없는 보호는 교착의 다른 이름이고, 이 저장소가
+    `delegated_running`·`worker_running` 에서 두 번 배운 것이다.
+    """
+    unknown = [h for h in live_agents(fresh=fresh) if not h.get("req")]
+    legacy = [h for h in unknown if h.get("req") is None]
+    if legacy:
+        # 기록 자체가 없는 옛 손만 문서로 되짚는다 (`--guess` 로 빈 값이 적힌
+        # 손은 그대로 미상이다 — 추정을 문서 증거로 확정으로 바꿔 버리면
+        # 이 장치가 통째로 무의미해진다).
+        seen = _attributed_transcripts()
+        unknown = [h for h in unknown
+                   if h.get("req") is not None or h.get("path") not in seen]
+    return unknown
 
 
 def live_workers():
@@ -2333,7 +2410,7 @@ def _stop_note(doc_id, text):
 
 
 def worker_stop(doc_id, session="", why="", claims=None, kill=None,
-                alive=None, wait=None, note=None, grace=5.0):
+                alive=None, wait=None, note=None, grace=5.0, owner=False):
     """리드가 무인 작업자를 세운다 (REQ-20260829-021-62x6).
 
     여는 것은 "아무 프로세스나 죽이는 권한"이 아니라 **문 하나**다. 그래서
@@ -2341,6 +2418,12 @@ def worker_stop(doc_id, session="", why="", claims=None, kill=None,
     지금 집은 세션만 세울 수 있고, 이유가 없으면 거부한다(이유 없는 중단은
     나중에 아무도 판정할 수 없다). 없는 작업자를 세우는 것은 오류가 아니다.
     반환: {"ok","stopped","reason","pid","message"}.
+
+    `owner=True` 는 **사람이 화면에서 누른 것**이다 (REQ-20260829-024). 클레임
+    게이트는 세션끼리 남의 작업자를 지나가다 끄지 못하게 하는 규칙이지, 그
+    작업자를 띄운 주인에게 물을 것이 아니다 — 대시보드에는 세션이 없어서
+    클레임을 요구하면 아무도 못 세운다. 소유가 클레임을 대신하되 **이유는
+    면제하지 않는다**: 화면이 누른 사람의 이름을 실은 사유를 함께 보낸다.
     """
     import signal as _sig
     import time as _t
@@ -2357,7 +2440,7 @@ def worker_stop(doc_id, session="", why="", claims=None, kill=None,
     if not (why or "").strip():
         return no("이유가 없다", "왜 세우는지 적어라 — `--why '<이유>'`. "
                                 "이유 없는 중단은 나중에 판정할 수 없다.")
-    if not claims(doc_id, session):
+    if not owner and not claims(doc_id, session):
         return no("클레임 없음", f"{doc_id} 를 집지 않은 세션은 그 작업자를 "
                                 f"세울 수 없다 — 먼저 `s9 last {doc_id} --add` "
                                 f"로 집어라.")
@@ -2382,10 +2465,13 @@ def worker_stop(doc_id, session="", why="", claims=None, kill=None,
     except OSError:
         pass
     lease_release(doc_id)
-    _auto_log(f"STOP {doc_id} pid={pid} by={session or '?'} "
+    # 누가 세웠는지가 기록의 절반이다 — 사람이 화면에서 세운 것과 세션이 세운
+    # 것은 다음 사람이 되짚을 때 완전히 다른 사실이다.
+    kind = "사람" if owner else "세션"
+    _auto_log(f"STOP {doc_id} pid={pid} by={kind}:{session or '?'} "
               f"why={' '.join(str(why).split())[:120]}")
     try:
-        note(doc_id, f"무인 작업자를 세웠다 (pid {pid}, 세션 "
+        note(doc_id, f"무인 작업자를 세웠다 (pid {pid}, {kind} "
                      f"{session or '?'}) — {why}")
     except Exception:
         pass
@@ -2400,6 +2486,16 @@ def _when(sec):
 
 
 def cmd_workers(args):
+    if getattr(args, "stop_all", False):
+        # 계정·모델을 바꾸기 전에 판을 비우는 자리 (REQ-20260829-024). 여기도
+        # 죽이는 것은 worker_stop 한 곳뿐이다 — 명령이 자기 손으로 죽이면
+        # 게이트가 두 벌이 된다.
+        res = stop_all_workers(actor=(os.environ.get("S9_SESSION") or ""),
+                               why=(getattr(args, "why", "") or ""))
+        print(res.get("message") or "")
+        if not res.get("ok"):
+            sys.exit(1)
+        return
     if (getattr(args, "stop", "") or "").strip():
         # 죽이는 자리는 하나다 — 명령이 자기 손으로 죽이면 게이트가 두 벌이
         # 되고, 한 벌만 고쳐지는 사고가 시간 문제다 (REQ-20260829-021 W8).
@@ -2478,6 +2574,93 @@ def _binding_activity_paths(b):
         paths += streams_glob(safe_name(sid8) + "*.jsonl",
                               b.get("user") or None)
     return paths
+
+
+DELEGATE_TARGET_MAX = 3     # 한 위임이 붙을 수 있는 문서 수의 천장
+# 리드가 대상을 적는 두 형태. 정식 id 와 **문서 번호 세 자리**다 —
+# 실제로 리드가 description 에 치는 것은 "030·031 화면 몫" 이지 정식 id 가
+# 아니다(REQ-20260829-036). 앞뒤로 숫자나 하이픈이 붙은 것은 번호가 아니다:
+# 날짜(2026-08-29)·포트(9909)·정식 id 안쪽을 잡으면 오귀속이 늘어난다.
+DELEGATE_ID_RE = re.compile(r"\bREQ-\d{8}-\d{1,5}(?:-[0-9a-z]{2,8})?\b")
+DELEGATE_NUM_RE = re.compile(r"(?<![\d-])(\d{3})(?![\d-])")
+
+
+def delegation_targets(description="", prompt="", session=""):
+    """이 위임이 붙을 요청들 — **귀속 판정이 사는 유일한 자리** (REQ-20260829-036).
+
+    실사고 2026-08-29 20:09:58. 리드가 designer 에게 `030·031 화면 몫` 을
+    맡겼는데 위임 등록은 REQ-029 로 갔다. 훅이 정식 id 정규식만 봐서 지명이
+    하나도 안 풀렸고, prompt 에 배경으로 실린 정식 id 는 여럿이라 "유일하지
+    않으면 고르지 않는다" 규칙에 걸려 세션 클레임 중 최근 것을 추측했다.
+
+    **한 오귀속이 사고 둘을 낳는다.** 030 은 손이 안 보여 25분째 '멈춤' 이 됐고
+    20:34 의 깨우기가 designer 가 `web/index.html` 을 쓰는 중에 무인 작업자를
+    하나 더 띄웠다. 029 는 없는 손이 보여 진짜 멈춤이 가려졌다.
+
+    규칙 셋:
+      ① description 을 먼저 본다 — 리드가 **대상을 적는 자리**다. 정식 id 와
+         문서 번호(세 자리) 둘 다 푼다. 여기서 여럿이 나오면 **여럿 다** 낸다:
+         "030·031 화면 몫"은 실제로 둘을 맡긴 것이고, 그중 하나를 고르면 나머지
+         하나가 정확히 이 사고의 피해자가 된다.
+      ② prompt 는 배경으로 다른 id 가 섞이므로 **유일할 때만** 받는다.
+      ③ 둘 다 비면 세션 클레임에서 고른다 — 그러나 그것은 **추측이다.**
+         `src` 로 그 사실을 함께 낸다: 추측으로 붙인 손은 바인딩에 '미상'으로
+         남아야 (`s9 claim --guess`) 그 손이 어디 있는지 모른다는 사실이
+         멈춤 판정과 스폰 게이트에 전달된다.
+
+    반환: {"reqs": [정식 id…], "src": "지명"|"클레임"|""}
+    """
+    rows = load_catalog()
+    live = {}
+    for r in rows:
+        if r.get("type") == "request" \
+                and r.get("status") not in TERMINAL_STATUSES:
+            live[r["id"]] = r
+    alias = id_alias(rows)
+    by_num = {}
+    for i in live:
+        parts = i.split("-")
+        if len(parts) >= 3 and parts[2].isdigit():
+            by_num.setdefault(str(int(parts[2])), []).append(i)
+
+    def pick(text):
+        out = []
+        for tok in DELEGATE_ID_RE.findall(text or ""):
+            cid = canon_id(tok, alias)
+            if cid in live and cid not in out:
+                out.append(cid)
+        for n in DELEGATE_NUM_RE.findall(text or ""):
+            hit = by_num.get(str(int(n)) if n.isdigit() else n) or []
+            # 같은 번호가 살아 있는 문서 둘에 걸리면 **고르지 않는다** —
+            # 엉뚱한 데 붙이는 것보다 아무 데도 안 붙이는 편이 낫다.
+            if len(hit) == 1 and hit[0] not in out:
+                out.append(hit[0])
+        return out[:DELEGATE_TARGET_MAX]
+
+    named = pick(description)
+    if named:
+        return {"reqs": named, "src": "지명"}
+    from_prompt = pick(prompt)
+    if len(from_prompt) == 1:
+        return {"reqs": from_prompt, "src": "지명"}
+    b = read_binding(current_machine(), (session or "")[:8]) if session else None
+    if not b:
+        return {"reqs": [], "src": ""}
+    cands = [x for x in [*reversed(b.get("active_reqs") or []),
+                         (b.get("last_req") or "").strip()] if x]
+    for rid in dict.fromkeys(cands):
+        cid = canon_id(rid, alias)
+        if cid in live and _session_owns(cid, session):
+            return {"reqs": [cid], "src": "클레임"}
+    return {"reqs": [], "src": ""}
+
+
+def cmd_delegate_target(args):
+    print(json.dumps(delegation_targets(
+        getattr(args, "description", "") or "",
+        getattr(args, "prompt", "") or "",
+        getattr(args, "session", "") or os.environ.get("S9_SESSION") or ""),
+        ensure_ascii=False))
 
 
 DELEGATE_WIN = 3600     # 위임을 클레임으로 인정하는 한도
@@ -4519,10 +4702,16 @@ def session_rows(limit=12):
     return rows[:limit]
 
 
-def restart_session(sid8, model="", effort="", account=""):
+def restart_session(sid8, model="", effort="", account="", stop_workers=False):
     """유휴 세션을 같은 대화로 재기동 요청. 래퍼(s9 code 루프) 세션이면 마커+
     SIGTERM으로 자동(mode=wrapper), 아니면 사용자가 세션 터미널에서 실행할
-    명령을 돌려준다(mode=manual). 모든 거부는 사유와 함께 ok=False."""
+    명령을 돌려준다(mode=manual). 모든 거부는 사유와 함께 ok=False.
+
+    `stop_workers=True` 는 계정·모델 변경과 세우기를 **한 걸음으로** 묶는다
+    (REQ-20260829-024). 재기동은 이 창 하나를 바꿀 뿐이라, 백그라운드의 무인
+    작업자는 옛 계정·옛 모델로 계속 돈다 — 요금도 권한도 갈린다. 세우는 것은
+    **모든 거부 갈래를 지난 뒤**다: 바꾸지도 못하면서 돌던 일만 죽이면 사람이
+    잃기만 한다."""
     import time as _time
     import signal as _signal
     try:
@@ -4560,6 +4749,15 @@ def restart_session(sid8, model="", effort="", account=""):
         if account and account != ACCOUNT_HOME_KEY:
             manual = (f"CLAUDE_CONFIG_DIR=~/.claude-profiles/"
                       f"{safe_name(account)} " + manual)
+        # 여기서부터는 바꾸는 것이 확정이다 — 그러니 옛 계정·옛 모델로 도는
+        # 무인 작업자를 여기서 세운다 (REQ-20260829-024). 거부 갈래를 다 지난
+        # 뒤인 이유는 하나다: 못 바꾸면서 돌던 일만 죽이면 잃기만 한다.
+        stopped = {}
+        if stop_workers:
+            stopped = stop_all_workers(
+                actor=(b.get("user") or ""),
+                why=f"계정·모델 변경으로 세운다 "
+                    f"({model or effort or account})")
         # 래퍼 감지: claude의 부모 cmdline에 s9 + code (재시작 루프 보유 여부)
         wrapper = 0
         try:
@@ -4576,7 +4774,8 @@ def restart_session(sid8, model="", effort="", account=""):
             wrapper = 0
         if not wrapper:
             return {"ok": True, "mode": "manual", "cmd": manual,
-                    "saved": saved, "reason":
+                    "saved": saved, "stopped": stopped.get("count", 0),
+                    "reason":
                     "재시작 루프(s9 code 신버전) 밖의 세션 — 세션 터미널에서 위 명령 실행"}
         mp = _restart_marker_path(sid)
         os.makedirs(os.path.dirname(mp), exist_ok=True)
@@ -4585,7 +4784,8 @@ def restart_session(sid8, model="", effort="", account=""):
                        "effort": effort, "account": account,
                        "ts": _time.time()}, f, ensure_ascii=False)
         os.kill(pid, _signal.SIGTERM)
-        return {"ok": True, "mode": "wrapper", "cmd": manual, "saved": saved}
+        return {"ok": True, "mode": "wrapper", "cmd": manual, "saved": saved,
+                "stopped": stopped.get("count", 0)}
     except Exception as ex:
         return {"ok": False, "reason": f"오류: {ex}"}
 
@@ -5153,10 +5353,22 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
     # 그 함수는 통과하면 일일·시간 카운터를 올린다. 뒤에 두면 대기 한 번마다
     # 예산이 깎여 30분을 기다린 끝에 띄울 슬롯이 없다 — 기다림이 곧 굶주림이
     # 되는 설계다. 계약 L6 이 이 순서를 붙잡는다.
+    # 어느 문서인지 모르는 손이 붙어 있으면 **아무 데도 띄우지 않는다**
+    # (REQ-20260829-036). 리드가 Agent 로 띄운 서브에이전트가 어느 요청을
+    # 맡았는지 훅이 못 푼 경우다 — 그것이 이 요청일 수 있다. 2026-08-29 20:34
+    # 에 정확히 그 일이 났다: designer 가 `web/index.html` 을 쓰는 중에 그
+    # 요청의 깨우기가 무인 작업자를 하나 더 띄웠다.
+    #
+    # **거부가 아니라 대기다** — 아래 천장(LEASE_WAIT_MAX_SEC)을 그대로 받는다.
+    # 손이 조용해지면 다음 틱에 저절로 뜬다.
+    wait = None
+    hands = unassigned_hands()
+    if hands:
+        wait = ("hands", f"어느 문서인지 모르는 서브에이전트 {len(hands)}이 "
+                         f"세션 {hands[0].get('session') or '?'} 에서 도는 중이다")
     dec = workspace_decision(doc_id, cfg)
     scope = dec.get("scope") or set()
-    wait = None
-    if dec["kind"] == "main":
+    if wait is None and dec["kind"] == "main":
         # 워크트리를 안 쓰면 격리가 사라진다. 대체물은 둘이다 — 동시에 도는
         # 작업자 수의 천장과, 같은 파일에 두 손이 붙는 것을 막는 리스.
         cap = int(cfg.get("auto_resume_max_inflight", 2) or 2)
@@ -5451,6 +5663,21 @@ def _wake_refusal(cid, row, win, updated, now):
     # 사람은 15분을 기다렸다가 또 안 되는 것을 본다 (라운드1).
     if (row or {}).get("live_kind") in ("stalled", "spawn_failed"):
         win = min(win, STALLED_DEAD_WIN)
+    # 새 상태 둘은 판정이 이미 낸 문장을 그대로 쓴다 (REQ-20260829-036) —
+    # 여기서 문장을 다시 지으면 화면이 카드에 적은 이유와 버튼이 말하는 이유가
+    # 갈린다. 그 어긋남이 "멈췄다고 적혔는데 못 누른다"의 뿌리였다.
+    state = (row or {}).get("stall_state") or ""
+    if state == "waiting":
+        return {"ok": False, "id": cid, "action": "waiting", "mins": None,
+                "message": f"{(row or {}).get('stall_why') or '차례를 기다린다'}"
+                           f" — 앞 작업자가 끝나면 저절로 뜬다. 겹쳐 띄우면 "
+                           f"같은 파일에 두 번째 손이 붙는다."}
+    if state == "unknown":
+        return {"ok": False, "id": cid, "action": "unknown", "mins": None,
+                "message": f"{(row or {}).get('stall_why') or '붙은 손이 있다'}"
+                           f" — 그것이 이 요청일 수 있어 띄우지 않는다. "
+                           f"`s9 workers` 로 누가 도는지 보고, 이 요청이 "
+                           f"아니면 잠시 뒤 다시 눌러라."}
     c = delegated_running(cid, now=now)
     if c:
         try:
@@ -5551,7 +5778,10 @@ def wake_request(doc_id, actor="", win=None):
                 if r.get("id") == cid), None)
     if row is None:      # 색인에 아직 안 들어온 문서 — 판정만 직접 돌린다
         row = {"id": cid, "status": st, "updated": meta.get("updated", "")}
-        row["stalled_mins"] = stall_mins(row, now, win)
+        v = stall_verdict(row, now, win)
+        row["stall_state"], row["stall_why"] = v["state"], v["why"]
+        if v["mins"] is not None:
+            row["stalled_mins"] = v["mins"]
     mins = row.get("stalled_mins")
     if mins is None:
         return _wake_audit(
@@ -5573,6 +5803,95 @@ def wake_request(doc_id, actor="", win=None):
         {"ok": False, "id": cid, "action": out.get("blocked") or "blocked",
          "mins": mins,
          "message": out.get("why") or "무인 작업자를 띄우지 못했다."}, actor)
+
+
+def stop_request(doc_id, actor="", why=""):
+    """진행 중인 작업 하나를 사람이 화면에서 세운다 (REQ-20260829-024).
+
+    깨우기의 반대편이다. 사용자(16:48): "의도하지 않게 멈춘 작업들을 깨우려는
+    건데, 반대로 진행 중인 작업들을 강제로 중단하는 기능도 만들어라. 그래야
+    계정을 변경하거나 모델을 바꿀 때 그 기능을 같이 섞어서 사용할 수 있다."
+
+    021 의 `worker_stop()` 이 이미 문이다. 이 함수는 그 문을 **화면 쪽에서**
+    여는 손잡이일 뿐이라 자기 손으로는 아무것도 죽이지 않는다 — 죽이는 자리가
+    둘이 되면 한 벌만 게이트를 지키는 사고가 시간 문제다. 여기가 더하는 것은
+    셋이다: ① 사람의 근거는 클레임이 아니라 소유라는 것(owner), ② 버튼에는
+    이유를 칠 자리가 없으니 누가 눌렀는지를 실은 기본 사유, ③ 깨우기와 **같은
+    모양의 답**(화면은 ok·action·message 셋만 읽는다).
+
+    반환: {"ok","id","action","message"}
+      action: stopped(세웠다) · none(도는 것이 없었다) · missing · not-request
+              · error
+    """
+    def out(ok, action, message, cid=None):
+        # 누른 것도 거부도 남긴다 — 깨우기와 같은 이유다(다음 반려 때 '버튼이
+        # 없던 것'인지 '눌렀는데 안 된 것'인지 짐작하지 않기 위해).
+        try:
+            _auto_log(f"STOP-PRESS {cid or doc_id} by={actor or '?'} "
+                      f"action={action}")
+        except Exception:
+            pass
+        return {"ok": ok, "id": cid or doc_id, "action": action,
+                "message": message}
+
+    path = locate(doc_id) or locate(canon_id(doc_id))
+    if not path:
+        return out(False, "missing", f"그런 문서가 없다: {doc_id}")
+    try:
+        meta, _body = read_doc(path)
+    except (OSError, ValueError) as e:
+        return out(False, "error", f"문서를 읽지 못했다: {e}")
+    cid = meta.get("id") or canon_id(doc_id)
+    if meta.get("type") != "request":
+        return out(False, "not-request",
+                   f"세우는 것은 요청 문서뿐이다 "
+                   f"({meta.get('type') or '타입 미상'}).", cid)
+    reason = (why or "").strip() or \
+        f"{actor or '사람'} 가 화면에서 세웠다 (계정·모델 변경 등)"
+    res = worker_stop(cid, session=actor, why=reason, owner=True)
+    if not res.get("ok"):
+        return out(False, "error",
+                   res.get("message") or res.get("reason") or
+                   "무인 작업자를 세우지 못했다.", cid)
+    if not res.get("pid"):
+        # 이미 끝난 것을 오류로 만들지 않는다 — 두 번 눌러도 안전해야 손이 편하다.
+        return out(True, "none", f"{cid} 에 도는 무인 작업자가 없다.", cid)
+    return out(True, "stopped", res.get("message") or
+               f"{cid} 의 무인 작업자를 세웠다.", cid)
+
+
+def stop_all_workers(actor="", why="", ids=None):
+    """도는 무인 작업자를 한 번에 세운다 (REQ-20260829-024).
+
+    계정·모델을 바꾸기 **전에** 놓는 걸음이다. 옛 계정으로 도는 작업자를 남긴
+    채 바꾸면 요금도 권한도 갈린다 — 사람은 창에서 계정을 바꿨는데 백그라운드는
+    어제 계정으로 계속 돈다. 여기서도 죽이는 것은 `worker_stop` 한 곳뿐이다.
+
+    반환: {"ok","ids","count","failed","message"}
+    """
+    rows = live_workers() if ids is None else [{"id": i} for i in (ids or [])]
+    reason = (why or "").strip() or \
+        f"{actor or '사람'} 가 화면에서 전부 세웠다 (계정·모델 변경)"
+    done, failed = [], []
+    for r in rows:
+        rid = r.get("id") or ""
+        if not rid:
+            continue
+        res = worker_stop(rid, session=actor, why=reason, owner=True)
+        (done if res.get("ok") else failed).append(rid)
+    try:
+        _auto_log(f"STOP-ALL by={actor or '?'} stopped={len(done)} "
+                  f"failed={len(failed)}")
+    except Exception:
+        pass
+    if not done and not failed:
+        msg = "도는 무인 작업자가 없다 — 세울 것이 없었다."
+    else:
+        msg = f"무인 작업자 {len(done)}건을 세웠다."
+        if failed:
+            msg += f" {len(failed)}건은 세우지 못했다: {', '.join(failed)}"
+    return {"ok": not failed, "ids": done, "count": len(done),
+            "failed": failed, "message": msg}
 
 
 def rework_watch_tick(grace=None, now=None):
@@ -7840,25 +8159,47 @@ STALLED_DEAD_WIN = 180
 STALLED_SHOW = 3        # 매 턴 주입되므로 이만큼만 보이고 나머지는 숫자로
 
 
-def stall_mins(r, now, win):
-    """이 행이 **얼마나 조용한가** — 멈췄으면 분(minutes), 아니면 None.
+def stall_verdict(r, now, win, hands=None):
+    """이 요청의 멈춤 판정 — **판정이 사는 유일한 자리** (REQ-20260829-036).
 
-    판정이 사는 유일한 자리다 (REQ-20260828-036). 전에는 CLI(`stalled_requests`)
-    만 이 판정을 갖고 화면(`catalog_with_live`)은 옛 축("세션이 살아 있나")에
-    남아, 같은 요청을 두고 CLI 는 "멈췄다", 화면은 초록 점으로 "돈다"고 말했다.
-    사용자가 하루에 세 번 물은 것이 그 어긋남이다. 그래서 함수 하나를 두고
-    화면·CLI 가 모두 여기를 지난다.
+    사용자(2026-08-29 20:33): "멈춤으로 나오는건 진짜인가? 신뢰경험이
+    아직인것같다." 아니었다. 세 가지가 한 이름 아래 뭉쳐 있었기 때문이다:
 
-    진전의 시계는 **문서가 마지막으로 바뀐 때**다(updated) — 노트·전이·수정이
-    거기 다 찍힌다. "그 세션이 살아 있나"가 아니다: 리드 세션은 늘 살아 있고
-    요청을 여럿 한꺼번에 잡으므로, 그걸 증거로 치면 손 뗀 것을 하나도 못 잡는다
-    (REQ-20260827-074).
+      · 진짜 멈춘 것          — 아무도 안 붙어 있고 문서가 조용하다
+      · 차례를 기다리는 것     — 앞 작업자가 그 파일을 쥐고 있어 대기 중이다
+      · 누가 붙었는지 모르는 것 — 리드의 서브에이전트가 도는데 어느 문서인지
+                                모른다 (`unassigned_hands`)
+
+    셋을 한 이름으로 부르면 사람은 셋 다 못 믿는다. 그래서 상태를 나눈다.
+    **감추지는 않는다** — 어느 상태든 조용한 시간(`quiet_mins`)은 늘 함께
+    낸다. 조용함을 숨기는 것은 "한 일이 없는데 경보가 꺼진다"(REQ-20260829-034)
+    라는 반대편 병이고, 이 저장소는 그 병도 이미 앓았다.
+
+    반환 계약 — 화면·CLI·깨우기가 **이 하나**를 먹는다:
+      {"state": "moving"|"attached"|"waiting"|"unknown"|"stalled",
+       "mins": int|None,        # 멈춤으로 셀 분 — stalled 일 때만 값이 있다
+       "quiet_mins": int|None,  # 문서가 조용한 시간 — 상태와 무관하게
+       "why": str,              # 사람이 읽는 근거 한 문장
+       "wait": {"kind","why","mins"}|None}
+
+    hands: `unassigned_hands()` 의 결과를 미리 넘길 수 있다 — 카탈로그 한 벌을
+    도는 자리(`catalog_with_live`)가 행마다 다시 세면 문서를 n번 다시 읽는다.
     """
+    if hands is None:
+        hands = unassigned_hands(now=now)
+    v = {"state": "stalled", "mins": None, "quiet_mins": None, "why": "",
+         "wait": None}
     if r.get("status") != "in-progress":
-        return None
+        return dict(v, state="moving", why="진행 중이 아니다")
+    try:
+        age = now - datetime.datetime.fromisoformat(
+            r.get("updated") or r.get("status_since") or "").timestamp()
+    except (ValueError, TypeError):
+        age = None
+    v["quiet_mins"] = int((age or 0) // 60)
     # 무인 워커가 **이 요청을 위해** 돌고 있으면 직접 증거다 — 넘어간다.
     if r.get("live_kind") == "spawned":
-        return None
+        return dict(v, state="moving", why="무인 작업자가 이 요청을 맡아 돈다")
     # 점이 '멈췄다/죽었다'고 그린 행은 잣대를 좁힌다 — 점과 손잡이가 같은
     # 시계를 봐야 '멈췄다고 적혔는데 못 누르는 카드'가 사라진다.
     #
@@ -7876,24 +8217,59 @@ def stall_mins(r, now, win):
             # 한 벌 더 만들어진다: 사람이 깨웠는데 워커가 즉사하면 그 카드는
             # 점만 빨갛게 켠 채 15분 동안 다시 누를 것을 주지 않았다.
             dead = float(r["live_age"])
-        upd = _iso_age(r.get("updated") or r.get("status_since"), now)
-        if dead is not None and (upd is None or upd >= dead - 5):
+        if dead is not None and (age is None or age >= dead - 5):
             win = min(win, STALLED_DEAD_WIN)
     # 서브에이전트에게 맡겨 그쪽이 붙어 있는 것도 같다 (REQ-20260828-003).
     # 판정을 두 벌 만들지 않는다 — 워처가 쓰는 그 함수를 그대로 쓴다.
-    if delegated_live(r["id"], now=now):
-        return None
-    try:
-        age = now - datetime.datetime.fromisoformat(
-            r.get("updated") or r.get("status_since") or "").timestamp()
-    except (ValueError, TypeError):
-        age = None
+    c = delegated_running(r["id"], now=now)
+    if c:
+        act = str(c.get("actor") or "")
+        who = act.split(":")[1] if act.startswith("sub:") and ":" in act[4:] \
+            else (act or "위임된 작업자")
+        return dict(v, state="attached", why=f"{who} 가 붙어 있다")
     if age is not None and age < win:
-        return None                    # 방금 착수한 것 — 아직 멈춘 게 아니다
-    return int((age or 0) // 60)
+        # 방금 착수한 것 — 아직 멈춘 게 아니다
+        return dict(v, state="moving", why="방금 움직였다")
+    # ---- 여기부터는 '조용하다' 가 확정이다. 무엇 때문에 조용한가만 남는다.
+    w = _wait_info(r["id"], now=now)
+    if w:
+        return dict(v, state="waiting", wait=w,
+                    why=f"차례를 기다린다 — {w['why']}")
+    if hands:
+        # 어느 문서인지 모르는 손이 붙어 있다. 이 요청일 수도 있다 — 그러니
+        # '멈춤' 이라 단정하지 않고 겹쳐 띄우지도 않는다. 넓게 잡히는 것은
+        # 알고 한 선택이다: 거짓 멈춤의 대가는 **일하는 파일 위의 두 번째
+        # 손**(2026-08-29 20:34)이고, 거짓 미상의 대가는 2분간의 유예다.
+        return dict(v, state="unknown",
+                    why=f"어느 문서인지 모르는 서브에이전트 {len(hands)}이 "
+                        f"세션 {hands[0].get('session') or '?'} 에서 도는 중이다")
+    return dict(v, state="stalled", mins=v["quiet_mins"],
+                why=f"{v['quiet_mins']}분째 진전 없음")
 
 
-def stalled_requests(win=None):
+def stall_mins(r, now, win):
+    """이 행이 **얼마나 조용한가** — 멈췄으면 분(minutes), 아니면 None.
+
+    판정이 사는 유일한 자리다 (REQ-20260828-036). 전에는 CLI(`stalled_requests`)
+    만 이 판정을 갖고 화면(`catalog_with_live`)은 옛 축("세션이 살아 있나")에
+    남아, 같은 요청을 두고 CLI 는 "멈췄다", 화면은 초록 점으로 "돈다"고 말했다.
+    사용자가 하루에 세 번 물은 것이 그 어긋남이다. 그래서 함수 하나를 두고
+    화면·CLI 가 모두 여기를 지난다.
+
+    진전의 시계는 **문서가 마지막으로 바뀐 때**다(updated) — 노트·전이·수정이
+    거기 다 찍힌다. "그 세션이 살아 있나"가 아니다: 리드 세션은 늘 살아 있고
+    요청을 여럿 한꺼번에 잡으므로, 그걸 증거로 치면 손 뗀 것을 하나도 못 잡는다
+    (REQ-20260827-074).
+
+    지금 이 함수는 `stall_verdict()` 의 **얇은 껍데기**다 (REQ-20260829-036).
+    나이를 여기서 다시 재면 판정이 두 벌이 되고, 이 저장소는 그 병으로 이미
+    "CLI 는 멈췄다, 화면은 돈다"를 겪었다. 껍데기를 남긴 이유는 호출부
+    보존뿐이다 — 새 코드는 `stall_verdict()` 를 직접 읽어라.
+    """
+    return stall_verdict(r, now, win)["mins"]
+
+
+def stalled_requests(win=None, states=("stalled",)):
     """클레임해 놓고 진전이 멈춘 in-progress 요청 (REQ-20260827-046).
 
     실사고 2026-08-27 19:57~20:25: 리드가 REQ-042 를 in-progress 로 옮기고 다른
@@ -7914,11 +8290,15 @@ def stalled_requests(win=None):
     win = STALLED_WIN if win is None else win
     out = []
     for r in catalog_with_live(stall_win=win):
+        st = r.get("stall_state") or ""
+        if st not in states:
+            continue
         mins = r.get("stalled_mins")
         if mins is None:
-            continue
+            mins = r.get("quiet_mins") or 0
         out.append({"id": r["id"], "title": r.get("title", ""),
-                    "user": r.get("user", ""), "mins": mins,
+                    "user": r.get("user", ""), "mins": mins, "state": st,
+                    "why": r.get("stall_why", ""),
                     "reason": r.get("live_reason", "")})
     out.sort(key=lambda x: -x["mins"])
     return out
@@ -8050,13 +8430,25 @@ def cmd_loose(args):
 
 
 def cmd_stalled(args):
-    rows = stalled_requests()
+    # 색인은 한 번만 읽는다 — 이 명령은 매 턴 프롬프트 훅이 부른다.
+    all_rows = stalled_requests(states=("stalled", "waiting", "unknown"))
+    rows = [r for r in all_rows if r["state"] == "stalled"]
+    other = [r for r in all_rows if r["state"] != "stalled"]
     for r in rows[:STALLED_SHOW]:
         extra = f" — {r['reason']}" if r["reason"] else ""
         print(f"- {r['id']} {r['title']} ({r['mins']}분째 진전 없음){extra}")
     if len(rows) > STALLED_SHOW:
         print(f"- … 외 {len(rows) - STALLED_SHOW}건")
-    if not rows and not getattr(args, "quiet", False):
+    # 멈춤에서 빠진 것들을 **한 줄로 세어 낸다** (REQ-20260829-036). 상태를
+    # 나눈 대가로 조용해지면 그건 "한 일 없이 경보만 꺼진다"의 다른 얼굴이다 —
+    # 대기·미상은 멈춤이 아니지만 사라진 것도 아니다.
+    if other:
+        w = sum(1 for r in other if r["state"] == "waiting")
+        u = len(other) - w
+        bits = ([f"차례를 기다리는 것 {w}건"] if w else []) \
+            + ([f"누가 붙었는지 모르는 것 {u}건"] if u else [])
+        print("- (멈춤 아님: " + " · ".join(bits) + " — `s9 workers`)")
+    if not rows and not other and not getattr(args, "quiet", False):
         print("(멈춘 작업 없음)")
 
 
@@ -9202,7 +9594,8 @@ def doc_status(doc_id):
     return ""
 
 
-def _claim_req(machine, session, doc_id, agent_transcript=""):
+def _claim_req(machine, session, doc_id, agent_transcript="",
+               agent_req_guess=False):
     """세션 바인딩에 REQ 실행 등록(active_reqs) + 문서 세션 승계 스탬프.
 
     저장 id는 카탈로그 정식 id로 정규화한다 — 접미 없는 짧은 id로 저장돼
@@ -9253,6 +9646,18 @@ def _claim_req(machine, session, doc_id, agent_transcript=""):
                 atp.append(agent_transcript)
                 changed = True
             b["agent_transcript_path"] = atp
+            # **이 손이 어느 문서를 맡았는지 함께 적는다** (REQ-20260829-036).
+            # 추정으로 붙인 위임은 빈 값이다 — 추정을 확정처럼 굳히면 남의
+            # 문서가 영원히 '작업 중'이 되고(2026-08-29 20:09 REQ-029),
+            # 정작 도는 문서는 '멈춤'이 되어 그 카드의 깨우기가 두 번째 손을
+            # 붙인다(20:34 REQ-030). 빈 값은 `unassigned_hands()` 가 받는다.
+            am = b.get("agent_req")
+            am = dict(am) if isinstance(am, dict) else {}
+            want = "" if (agent_req_guess or doc_id_terminal) else doc_id
+            if am.get(agent_transcript) != want:
+                am[agent_transcript] = want
+                changed = True
+            b["agent_req"] = {k: v for k, v in am.items() if k in atp}
         if not b.get("transcript_path"):   # 클레임 즉시 live 증거 확보
             tp = _discover_transcript(session)
             if tp:
@@ -9264,6 +9669,40 @@ def _claim_req(machine, session, doc_id, agent_transcript=""):
         release_lock()
     stamp_doc_session(doc_id, session)
     return doc_id
+
+
+def _bind_agent_hand(machine, session, transcript):
+    """**대상 문서 없이** 손 하나만 바인딩에 단다 (REQ-20260829-036).
+
+    귀속을 못 정한 위임의 마지막 안전망이다. 클레임(active_reqs)은 건드리지
+    않는다 — 어느 문서인지 모르는데 문서를 잡을 수는 없다. 남기는 것은
+    "이 세션에 손이 하나 붙어 있고 어디 있는지 모른다" 한 줄뿐이고,
+    그 한 줄이 `s9 workers` 에 보이게 하고 `unassigned_hands()` 로 세어져
+    겹친 스폰을 막는다.
+    """
+    acquire_lock()
+    try:
+        b = read_binding(machine, session) or {
+            "machine": machine, "session": session, "user": "", "history": []}
+        atp = b.get("agent_transcript_path") or []
+        atp = [atp] if isinstance(atp, str) else list(atp)
+        atp = [x for x in atp if x]
+        changed = False
+        if transcript not in atp:
+            atp.append(transcript)
+            changed = True
+        b["agent_transcript_path"] = atp
+        am = b.get("agent_req")
+        am = dict(am) if isinstance(am, dict) else {}
+        if am.get(transcript) != "":
+            am[transcript] = ""      # 미상 — 문서로도 되짚지 않는다
+            changed = True
+        b["agent_req"] = {k: v for k, v in am.items() if k in atp}
+        if changed:
+            write_binding(b)
+    finally:
+        release_lock()
+    return transcript
 
 
 def cmd_claim(args):
@@ -9289,8 +9728,24 @@ def cmd_claim(args):
         print(res["message"])
         return
     atp = getattr(args, "agent_transcript", "") or ""
-    rid = _claim_req(current_machine(), session, args.id, atp)
-    print(f"claim {rid}" + (f" + agent transcript {atp}" if atp else ""))
+    # `--guess` 는 "이 문서일 것이다" 이지 "이 문서다" 가 아니다
+    # (REQ-20260829-036). 훅이 지명을 못 풀어 세션 클레임에서 추측했을 때 그
+    # 사실이 바인딩에 남아야, 그 손이 `unassigned_hands()` 로 세어지고 판정이
+    # '멈춤' 대신 '미상' 이라 말할 수 있다.
+    guess = bool(getattr(args, "guess", False))
+    if not (args.id or "").strip():
+        # 손만 등록한다 — 대상 문서를 못 골랐을 때. 클레임(active_reqs)은
+        # 건드리지 않는다: 모르는 문서를 잡을 수는 없다.
+        if not atp:
+            die("클레임할 문서 id 가 없다 (손만 등록하려면 "
+                "`--agent-transcript <경로>` 를 함께 줘라)")
+        _bind_agent_hand(current_machine(), session, atp)
+        print(f"hand {atp} (미상)")
+        return
+    rid = _claim_req(current_machine(), session, args.id, atp,
+                     agent_req_guess=guess)
+    print(f"claim {rid}" + (f" + agent transcript {atp}" if atp else "")
+          + (" (추정)" if atp and guess else ""))
 
 
 def resume_item_plan(doc_id):
@@ -12267,10 +12722,25 @@ def catalog_with_live(stall_win=None):
                                     or f"{ag.get('actor', '')} 정지")
     # 멈춤은 live 판정이 다 선 뒤에 잰다 — spawned(기동 중)를 읽어야 하기 때문.
     win = STALLED_WIN if stall_win is None else stall_win
+    hands = unassigned_hands(now=now)     # 한 번만 센다 — 행마다 세면 n제곱이다
     for r in rows:
-        m = stall_mins(r, now, win)
-        if m is not None:
-            r["stalled_mins"] = m
+        if r.get("status") != "in-progress":
+            continue
+        # 행이 나르는 것은 **판정 하나의 결과 전부**다 (REQ-20260829-036).
+        # `stalled_mins` 만 실으면 화면은 '멈춤 아님' 셋(대기·미상·진행)을
+        # 구별할 수 없어 전부 조용한 카드로 그린다 — 그것이 "대기와 멈춤이
+        # 구별되지 않는다"의 서버 쪽 절반이다.
+        v = stall_verdict(r, now, win, hands=hands)
+        r["stall_state"] = v["state"]
+        r["stall_why"] = v["why"]
+        if v["quiet_mins"] is not None:
+            r["quiet_mins"] = v["quiet_mins"]
+        if v["mins"] is not None:
+            r["stalled_mins"] = v["mins"]
+        if v["wait"]:
+            r["wait_kind"] = v["wait"]["kind"]
+            r["wait_why"] = v["wait"]["why"]
+            r["wait_mins"] = v["wait"]["mins"]
     return rows
 
 
@@ -12996,6 +13466,27 @@ def cmd_serve(args):
                         self._send(200, "text/html; charset=utf-8", f.read())
                 else:
                     self._send(404, "text/plain", b"not found")
+            elif re.fullmatch(r"/(?:app|css)/[\w.-]+\.(?:js|css)",
+                              parsed.path or ""):
+                # 화면 조각 (REQ-20260829-027). 위 html 길과 **같은 realpath
+                # 규율**이다 — 접두 검사만으로는 심링크가 새 나간다
+                # (REQ-20260828-028 에서 배운 것). MIME 은 정확해야 한다:
+                # 스타일시트를 text/html 로 내주면 브라우저가 거부한다.
+                #
+                # 캐시는 `_send` 가 이미 no-store 로 준다. 조각은 자주 바뀌고
+                # 여기는 루프백이라, 첨부(`_send_asset`)처럼 ETag 로 물리면
+                # "고쳤는데 F5 해도 옛 화면"이 된다 — 그 자막은 결함이다.
+                sub, _, base = parsed.path.strip("/").partition("/")
+                home = os.path.realpath(os.path.join(ROOT, "web", sub))
+                fp = os.path.realpath(
+                    os.path.join(home, os.path.basename(base)))
+                if os.path.dirname(fp) == home and os.path.isfile(fp):
+                    ctype = ("text/javascript" if fp.endswith(".js")
+                             else "text/css")
+                    with open(fp, "rb") as f:
+                        self._send(200, ctype + "; charset=utf-8", f.read())
+                else:
+                    self._send(404, "text/plain", b"not found")
             # 가시성 필터는 응답 직전에만 — 내부 함수(catalog_with_live 등)의
             # 반환은 무필터 원본 유지 (워처·live 판정이 그 데이터로 동작)
             elif parsed.path == "/api/serveinfo":
@@ -13710,6 +14201,20 @@ def cmd_serve(args):
                     res = wake_request(str(req.get("id") or "").strip(),
                                        actor=actor)
                     self._json(res, 200 if res.get("ok") else 409)
+                elif parsed.path == "/api/stop":
+                    # 깨우기의 반대편 — 진행 중인 것을 사람이 눌러 세운다
+                    # (REQ-20260829-024). {"id": ...} 는 한 건, {"all": true}
+                    # 는 계정·모델을 바꾸기 전 판을 비우는 걸음이다. 판정도
+                    # 죽이는 것도 stop_request/worker_stop 한 줄기에만 있다.
+                    if req.get("all"):
+                        res = stop_all_workers(
+                            actor=actor,
+                            why=str(req.get("why") or "").strip())
+                    else:
+                        res = stop_request(str(req.get("id") or "").strip(),
+                                           actor=actor,
+                                           why=str(req.get("why") or "").strip())
+                    self._json(res, 200 if res.get("ok") else 409)
                 elif parsed.path == "/api/session/wake":
                     # account: 고른 계정으로 깨운다 (REQ-20260829-023) — 계정을
                     # 바꾸려는데 붙어 있는 세션이 없을 때 빠져나갈 문이다.
@@ -13731,7 +14236,10 @@ def cmd_serve(args):
                         str(req.get("sid") or "") or None,
                         model=str(req.get("model") or "").strip(),
                         effort=str(req.get("effort") or "").strip(),
-                        account=str(req.get("account") or "").strip())
+                        account=str(req.get("account") or "").strip(),
+                        # 바꾸며 세운다 (REQ-20260829-024) — 화면이 이 갈래를
+                        # 보내면 옛 계정으로 도는 작업자를 남기지 않는다.
+                        stop_workers=bool(req.get("stop_workers")))
                     self._json(res, 200 if res.get("ok") else 409)
                 elif parsed.path == "/api/chat/upload":
                     # 이미지/파일 첨부 (REQ-040): base64 저장 → 절대경로 반환.
@@ -14035,6 +14543,12 @@ def repo_code_dirty(root=None):
 # 그 판정은 사실상 상수 True 이고, 그러면 무인 작업자가 영영 안 뜬다(그건 이
 # 저장소의 다른 병이다). 그래서 거부가 아니라 **자리를 바꾼다**.
 SPINE = ("bin/s9", "web/index.html")   # 이 저장소가 통째로 기대는 두 파일
+# 등뼈는 파일 둘이 아니라 **자리**이기도 하다 (REQ-20260829-027). 화면이
+# `web/index.html` 껍데기 + `web/css/`·`web/app/` 조각으로 갈리면서, 로직은
+# 조각으로 옮겨 갔는데 등뼈 판정은 옛 한 파일만 셌다. 그대로 두면 조각이
+# 미커밋인 채로 워크트리가 열리고, 그 자리의 검증(9909·tests 의 ../web)이
+# 과거를 본다 — 오늘 아홉 개를 만든 그 사고와 같은 모양이다.
+SPINE_UNDER = ("web/css/", "web/app/")
 LIVE_VERIFY = ("web/",)                # 9909 서버·tests 의 ../web 상대경로
 SCOPE_DIRS = ("bin", "web", "tests", "harness", "docs")
 WORKTREE_MAX = 6                       # 이보다 쌓이면 새로 만들지 않는다
@@ -14170,7 +14684,7 @@ def workspace_decision(doc_id, cfg, scope=None, dirty=None):
     dirty = repo_code_dirty() if dirty is None else dirty
     if not dirty:
         return W("fresh")
-    spine = [p for p in dirty if p in SPINE]
+    spine = [p for p in dirty if p in SPINE or p.startswith(SPINE_UNDER)]
     if spine:
         # 등뼈가 미커밋이면 스코프가 겹치지 않아도 워크트리는 낡은 자리다:
         # 시험이 `HERE/../bin/s9` 를 읽고 화면 검증이 9909 를 보기 때문에
@@ -14348,6 +14862,41 @@ def _wait_age(doc_id, now=None):
     except (OSError, ValueError, TypeError):
         return 0.0
     return max(0.0, (_time.time() if now is None else now) - since)
+
+
+WAIT_FRESH_SEC = 180        # 표식이 이만큼 안 갱신되면 대기가 아니다
+
+
+def _wait_info(doc_id, now=None):
+    """이 문서가 **차례를 기다리는 중인가** — {"kind","why","mins"} 또는 None.
+
+    표식은 이미 있었다(`_wait_mark`). 없던 것은 그것을 **행에 싣는 통로**다
+    (REQ-20260829-036 ③). 그래서 화면은 대기와 멈춤을 구별할 수 없었고,
+    "25분째 진전 없음"이 참인데도 사람에게는 "버려졌다"로 읽혔다.
+
+    두 시계를 본다. `last` 는 워처가 30초마다 갱신하므로 그것이 멎으면 이미
+    대기가 아니다(워처가 죽었거나 스폰됐거나). `since` 는 기다림의 천장
+    (`LEASE_WAIT_MAX_SEC`)을 잰다 — 천장을 넘으면 스폰이 그냥 뜨므로 그때부터
+    이 문서는 기다리는 것이 아니다. **오래된 표식으로 오늘을 말하지 않는다.**
+    """
+    import time as _time
+    now = _time.time() if now is None else now
+    try:
+        with open(_wait_path(doc_id), encoding="utf-8") as f:
+            info = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(info, dict):
+        return None
+    try:
+        since, last = float(info.get("since") or 0), float(info.get("last") or 0)
+    except (TypeError, ValueError):
+        return None
+    if now - last >= WAIT_FRESH_SEC or now - since >= LEASE_WAIT_MAX_SEC:
+        return None
+    return {"kind": str(info.get("kind") or ""),
+            "why": str(info.get("why") or ""),
+            "mins": int(max(0.0, now - since) // 60)}
 
 
 def _wait_clear(doc_id):
@@ -14854,7 +15403,10 @@ def main():
     wk.add_argument("--quiet", action="store_true")
     wk.add_argument("--stop", metavar="문서id",
                     help="그 문서의 무인 작업자를 세운다 (집은 세션만)")
-    wk.add_argument("--why", default="", help="세우는 이유 (--stop 에 필수)")
+    wk.add_argument("--stop-all", action="store_true", dest="stop_all",
+                    help="도는 무인 작업자를 전부 세운다 (계정·모델 변경 전)")
+    wk.add_argument("--why", default="",
+                    help="세우는 이유 (--stop 에 필수, --stop-all 에 권장)")
     wk.set_defaults(fn=cmd_workers)
 
     rv = sub.add_parser("review", help="확인 대기(review) 요청 목록")
@@ -14939,9 +15491,17 @@ def main():
     cl = sub.add_parser("claim",
                         help="REQ 클레임 + 위임 에이전트 transcript 등록 "
                              "(--release 로 해제)")
-    cl.add_argument("id")
+    # id 는 **손만 등록할 때** 생략된다 (REQ-20260829-036): 위임의 대상 문서를
+    # 못 골랐을 때도 "손이 붙어 있다"는 사실만은 남아야 한다. 종전엔 그 경우
+    # 훅이 그냥 돌아섰고, 바인딩에 transcript 조차 안 남아 `s9 workers` 도
+    # 그 손을 못 봤다 — 아무도 못 보는 손이 일하는 파일 위의 두 번째 손을 부른다.
+    cl.add_argument("id", nargs="?", default="")
     cl.add_argument("--agent-transcript", metavar="PATH",
                     help="위임한 에이전트의 transcript/output 경로 (리스트로 누적)")
+    cl.add_argument("--guess", action="store_true",
+                    help="이 귀속은 추정이다 — 지명을 못 풀어 세션 클레임에서 "
+                         "골랐을 때. 그 손은 '어느 문서인지 모르는 손'으로 "
+                         "세어져 멈춤 판정이 '미상'이 된다 (REQ-20260829-036)")
     cl.add_argument("--session")
     cl.add_argument("--release", action="store_true",
                     help="클레임 해제 — 문서의 세션 도장과 그 세션의 바인딩 "
@@ -14950,6 +15510,14 @@ def main():
     cl.add_argument("--reason", metavar="TEXT",
                     help="--release 의 사유 (History 에 함께 남는다)")
     cl.set_defaults(fn=cmd_claim)
+
+    dt = sub.add_parser("delegate-target",
+                        help="이 위임이 붙을 요청을 판정한다 (훅 전용) — "
+                             "JSON {reqs, src}")
+    dt.add_argument("--description", default="")
+    dt.add_argument("--prompt", default="")
+    dt.add_argument("--session", default="")
+    dt.set_defaults(fn=cmd_delegate_target)
 
     ct = sub.add_parser("contrib",
                         help="항목별 기여 기록 (프론트매터 contributions)")

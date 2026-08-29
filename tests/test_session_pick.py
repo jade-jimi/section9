@@ -30,6 +30,7 @@ import re
 import tempfile
 import unittest
 from unittest import mock
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
@@ -181,7 +182,7 @@ class TestWakeCarriesAccount(unittest.TestCase):
         self.assertIn("살아있는 세션", r["reason"])
 
 
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 
 class TestPickerScreen(unittest.TestCase):

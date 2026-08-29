@@ -1,0 +1,174 @@
+/* usage.js — 터미널 판 생존 상태(TERM)와 클로드 사용량 칩 */
+"use strict";
+let TERM = null;          // 터미널 탭 생존 상태 — stopChat()이 전량 정리
+// 컴포저 보존 (REQ-20260825-001): 탭 이탈 시 #view innerHTML 교체로 textarea가
+// 파괴돼 쓰다 만 메시지·첨부·히스토리가 사라지던 결함 — 여기 담아 복귀 시 복원
+let termKeep = {draft: "", atts: [], hist: []};
+let termCmdCache = null;  // /api/chat/commands 캐시 (탭 재진입 시 재사용)
+const CC_BUILTINS = [     // CC CLI 빌트인 — 대시보드에선 실행 불가, 구분 표시(L4)
+  ["clear","대화 히스토리 클리어"],["compact","컨텍스트 압축"],["help","도움말"],
+  ["model","모델 선택"],["resume","이전 세션 재개"],["config","설정"],
+  ["cost","토큰 사용량"],["status","세션 상태"],["memory","메모리 편집"],
+  ["init","CLAUDE.md 생성"],["doctor","설치 진단"],
+  // 아래는 이 세션에서 실제로 필요해진 것들 (REQ-20260827-050). 목록에 없으면
+  // 사용자가 친 `/permissions` 가 **그냥 채팅 메시지로 전송돼** 리드가 "그건
+  // 터미널에서만 됩니다"라고 답하는 데서 끝난다 — 팔레트가 미리 말해 주는 편이
+  // 한 왕복 빠르다. 이름을 지어내지 않고 이 하네스가 실제로 안내하는 것만 넣는다.
+  ["permissions","도구 권한 허용/거부 (CLI 전용)"],
+  ["hooks","훅 확인·편집 (CLI 전용)"],
+  ["artifacts","발행한 아티팩트 목록 (CLI 전용)"],
+  ["tasks","백그라운드 작업 목록 (CLI 전용)"],
+  ["workflows","워크플로 진행 보기 (CLI 전용)"],
+].map(([n,d]) => ({name:n, desc:d, source:"cli"}));
+
+/* 계정·사용량 (REQ-043): 서버가 60s 캐시+계정전환 즉시 무효화 — 클라이언트는
+   응답을 캐시하지 않고 매 폴마다 다시 그린다(계정이 바뀔 수 있다는 전제). */
+/* 한도가 언제 풀리는지 (REQ-20260827-056).
+   칩은 이미 `5h 16% · wk 75% · fable 100%` 를 보여 준다. 100% 를 보고 사람이
+   정말로 알고 싶은 것은 숫자가 아니라 **그래서 언제 풀리느냐**이고, 그 답이
+   "지금 기다릴까, 다른 길로 갈까"를 결정한다. 서버는 이미 한도마다 resets_at
+   을 주므로 화면만 말하면 된다.
+
+   남은 시간을 앞, 절대 시각을 괄호로 둔다: 남은 시간이 결정을 돕는 값이고,
+   절대 시각은 일정에 맞추는 값이다. 문장이므로 단위는 사람 말로 쓴다 —
+   카드 경과시간의 라틴 축약(2h 37m)은 모노 메타데이터의 어휘라 섞지 않는다.
+   보이는 칩에는 넣지 않는다: 헤더는 2행 고정 구조라 칩이 길어지면 툴바가
+   접힌다. 그래서 이 정보는 호버의 자리다(사용자도 호버로 요청했다). */
+function fmtUntil(iso){
+  if (!iso) return "모른다";
+  const t = Date.parse(iso);
+  if (isNaN(t)) return "모른다";
+  const s = Math.floor((t - Date.now()) / 1000);
+  if (s <= 60) return "곧";
+  const m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (m < 60) return `${m}분 뒤`;
+  if (h < 24) return (m % 60) ? `${h}시간 ${m % 60}분 뒤` : `${h}시간 뒤`;
+  return (h % 24) ? `${d}일 ${h % 24}시간 뒤` : `${d}일 뒤`;
+}
+// 절대 시각은 보는 사람의 시계로 말한다. 오늘·내일은 이름으로 부른다 —
+// "8월 27일 22:59"를 받아 들고 날짜를 다시 세게 만들지 않는다.
+function fmtWhen(iso){
+  const t = iso ? new Date(iso) : null;
+  if (!t || isNaN(t.getTime())) return "";
+  const p = n => String(n).padStart(2, "0");
+  const hm = `${p(t.getHours())}:${p(t.getMinutes())}`;
+  const day = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  const now = new Date();
+  const diff = Math.round((day - new Date(now.getFullYear(), now.getMonth(), now.getDate()))
+    / 86400000);
+  if (diff === 0) return `오늘 ${hm}`;
+  if (diff === 1) return `내일 ${hm}`;
+  return `${t.getMonth() + 1}월 ${t.getDate()}일 ${hm}`;
+}
+let usageLast = null;   // 마지막 응답 — 카드를 열 때 남은 시간을 다시 센다
+// 칩에 실린 한도 셋을 [칩 토큰 + 한국어 이름] 순서대로 편다. 이름이 칩에 찍힌
+// 글자와 같아야 어느 줄이 칩의 어느 조각인지 옮겨 적지 않아도 된다.
+function usageRows(){
+  if (!usageLast) return [];
+  const L = {};
+  (usageLast.limits || []).forEach(x => { L[x.kind] = x; });
+  return [[L.session, "5h 세션"], [L.weekly_all, "wk 주간"],
+          [L.weekly_scoped, `${L.weekly_scoped
+            ? (L.weekly_scoped.scope_name || "모델") : ""} 모델`]]
+    .filter(([x]) => x);
+}
+// 보조기술이 읽는 한 줄 — 화면의 카드와 같은 사실을 평문으로. 카드는 그림이라
+// 스크린리더에 닿지 않으므로, 같은 내용을 칩의 이름으로 붙여 준다.
+function usageTitle(){
+  if (!usageLast) return "클로드 계정과 사용량 — 아직 받지 못했다";
+  const d = usageLast;
+  return `${d.email || "?"} 사용량. `
+    + usageRows().map(([x, name]) => {
+        const when = fmtWhen(x.resets_at);
+        return `${name} ${x.percent}%, ${fmtUntil(x.resets_at)} 초기화${when ? `, ${when}` : ""}`;
+      }).join(". ")
+    + ". 60초마다 갱신";
+}
+/* 사용량 카드 (REQ-20260827-056 재작업). 새 팝오버를 만들지 않고 doclink
+   미리보기·우선순위 척도와 **같은 카드**를 쓴다 — 점선/칩에 손을 얹으면 뜬다는
+   약속이 이 화면에 이미 있어서 배울 것이 늘지 않고, 위치 계산과 10스킨 대응이
+   이미 풀려 있다. 한도 셋은 같은 질문의 세 답이라 표로 세운다. */
+function showUsageHover(el){
+  hoverWide(true);
+  const rows = usageRows();
+  if (!rows.length){
+    hovercard.innerHTML = `<div class="hid ucap">클로드 사용량</div>
+      <div class="hs">아직 받지 못했다 — 60초마다 다시 물어본다.</div>`;
+    placeHover(el); return;
+  }
+  const d = usageLast;
+  const cells = rows.map(([x, name]) => {
+    const sev = x.percent >= 90 ? " crit" : x.percent >= 70 ? " warn" : "";
+    const when = fmtWhen(x.resets_at);
+    return `<span class="uk">${esc(name)}</span>`
+      + `<span class="up${sev}">${x.percent}%</span>`
+      + `<span class="uw">${esc(fmtUntil(x.resets_at))}</span>`
+      + `<span class="ua">${esc(when)}</span>`;
+  }).join("");
+  hovercard.innerHTML = `<div class="hid ucap">클로드 사용량</div>
+    <div class="ht umail">${esc(d.email || "?")}${d.subscription
+      ? ` <span>${esc(d.subscription)}</span>` : ""}</div>
+    <div class="ug"><span class="uh">한도</span><span class="uh ur">사용</span>`
+    + `<span class="uh">남은 시간</span><span class="uh ur">초기화 시각</span>`
+    + `<span class="urule"></span>${cells}</div>
+    <div class="hs">60초마다 갱신${d.stale ? " · 지금은 마지막으로 받은 값이다" : ""}
+      · 눌러서 계정 바꾸기</div>`;
+  placeHover(el);
+}
+async function refreshUsage(){
+  const el = $("#usage-chip");
+  if (!el) return;
+  try{
+    const d = await loadSupply("usage", async () => {
+      const r = await fetch("/api/claude/usage");
+      return r.ok ? await r.json() : null;
+    }, {prio: 1, tries: 1, quiet: true});
+    if (!d || (!d.ok && !d.stale)){
+      // 폭 0 인 빈 칩에 키보드가 멈추면 아무 일도 안 일어나는 정거장이 된다
+      // (교차 리뷰 지적 6) — 보여 줄 것이 없으면 tab 순서에서도 빠진다.
+      el.textContent = ""; usageLast = null;
+      el.removeAttribute("tabindex");
+      el.setAttribute("aria-label", usageTitle()); return;
+
+    }
+    usageLast = d;
+    el.setAttribute("tabindex", "0");   // 되살아나면 다시 tab 으로 닿는다
+    // 카드는 그림이라 스크린리더에 닿지 않는다 — 같은 사실을 칩의 이름으로 붙인다
+    el.setAttribute("aria-label", usageTitle());
+    // ?usagecard: 진단·헤드리스 캡처용 — 호버 카드를 열어 둔다 (?depall·?mpanel 과
+    // 동형). 마우스가 없는 환경에서 "직접 보고 고치는" 길을 남긴다.
+    if (/[?&]usagecard/.test(location.search)) setTimeout(() => showUsageHover(el), 0);
+    const L = {};
+    (d.limits || []).forEach(x => { L[x.kind] = x; });
+    const pct = x => x == null ? "—"
+      : `<span class="${x.percent >= 90 ? "crit" : x.percent >= 70 ? "warn" : ""}">${x.percent}%</span>`;
+    el.innerHTML = `${esc(d.email || "?")}${d.stale ? " ⏳" : ""}` +
+      ` · 5h ${pct(L.session)} · wk ${pct(L.weekly_all)}` +
+      (L.weekly_scoped
+        ? ` · ${esc((L.weekly_scoped.scope_name || "model").toLowerCase())} ${pct(L.weekly_scoped)}` : "");
+  }catch(e){ /* 다음 폴 */ }
+}
+
+/* 브라우저 탭 제목 = 워크스페이스명 · 선택 프로젝트 (REQ-20260824-064) —
+   다중 워크스페이스 대시보드를 브라우저 탭에서 구분한다. */
+function updateTitle(){
+  const ws = (window.__whoami || {}).workspace || "section9";
+  const pj = ($("#f-project") || {}).value || "";
+  document.title = pj ? `${ws} · ${pj}` : ws;
+}
+
+function stopChat(){
+  if (!TERM) return;
+  const ta = $("#chat-in");                        // 컴포저 보존 — 복귀 시 복원
+  if (ta) termKeep.draft = ta.value;
+  termKeep.atts = (TERM.atts || []).filter(a => a.path && !a.up);
+  termKeep.hist = TERM.hist || [];
+  TERM.timers.forEach(clearInterval);
+  if (TERM.es){ try{ TERM.es.close(); }catch(e){} }
+  if (TERM.esRetryT) clearTimeout(TERM.esRetryT);
+  if (TERM.raf) cancelAnimationFrame(TERM.raf);
+  TERM = null;   // 진행 중 async는 TERM !== T 비교로 자멸
+}
+
+/* ANSI SGR → HTML (의존성 0, XSS 방지: 텍스트 조각은 esc() 후 span만 입힘).
+   기본 16색은 CC 근사 팔레트, 256색은 xterm 큐브/그레이스케일 산식. */

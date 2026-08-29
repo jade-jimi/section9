@@ -28,10 +28,11 @@ import importlib.util
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 STAMP = "`[2026-08-29 10:20:37 KST - designer]`"
 

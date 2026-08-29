@@ -119,6 +119,12 @@ class TheDotAndTheHandleAgree(unittest.TestCase):
 
     def setUp(self):
         self.m = _load("s9wake_d")
+        # 이 클래스는 **점과 손잡이의 짝**만 본다. 판정에는 축이 하나 더 있고
+        # (어느 문서인지 모르는 서브에이전트가 붙어 있나 — REQ-20260829-036)
+        # 그 축은 이 기계의 살아 있는 세션을 읽으므로, 여기 두면 시험 결과가
+        # "지금 리드가 무엇을 시켜 놨나"에 따라 흔들린다. 그 축은
+        # test_stall_trust 가 격리된 루트에서 따로 본다.
+        self.m.unassigned_hands = lambda *_a, **_k: []
 
     def test_w4_yesterdays_contribution_does_not_paint_todays_dot(self):
         """어제 22:36 의 stalled 가 오늘 점을 계속 정지로 칠했다."""

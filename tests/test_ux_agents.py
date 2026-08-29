@@ -9,6 +9,7 @@ designer·ux-writer·frontend-developer는 s9-design 스킬을 필수 로드하�
 """
 import os
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AGENTS = os.path.join(HERE, "..", "harness", "claude", "agents")
@@ -66,7 +67,7 @@ class TestNewSkin(unittest.TestCase):
     """새 스킨·톤 (REQ-20260825-062 재작업): 기존 화면을 손대는 대신 선택
     가능한 스킨/톤으로 제공한다 — Apple·토스 계보(여백·카드·라운드·단일 강조)."""
     def setUp(self):
-        with open(os.path.join(HERE, "..", "web", "index.html"),
+        with open(index_path(),
                   encoding="utf-8") as f:
             self.html = f.read()
 
@@ -107,7 +108,7 @@ class TestSkinAudit(unittest.TestCase):
     사용자 확정 금지 패턴을 전 스킨에 고정한다. 스킨이 늘어날 때마다 같은
     결함이 재발하지 않도록 계약으로 박는다."""
     def setUp(self):
-        with open(os.path.join(HERE, "..", "web", "index.html"),
+        with open(index_path(),
                   encoding="utf-8") as f:
             self.html = f.read()
 
@@ -185,7 +186,7 @@ class TestBoardScope(unittest.TestCase):
     """Board 정보구조 (REQ-20260825-084 / -085): 보드는 요청의 상태 흐름만
     다루고, 없앤 요소의 취지는 다른 수단이 받는다."""
     def setUp(self):
-        with open(os.path.join(HERE, "..", "web", "index.html"),
+        with open(index_path(),
                   encoding="utf-8") as f:
             self.html = f.read()
 

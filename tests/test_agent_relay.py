@@ -15,11 +15,12 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
 HOOK = os.path.join(HERE, "..", "bin", "s9-audit-session")
-WEB = os.path.join(HERE, "..", "web", "index.html")
+WEB = index_path()
 
 
 # 임시 포트를 뽑지 않는다 — 고정 풀에서 돌려쓴다 (REQ-20260825-100, portpool 참조)

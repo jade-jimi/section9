@@ -1,0 +1,53 @@
+/* tokens.css — 토큰 — 색·간격·글꼴의 단일 소유자. 컴포넌트는 값을 직접 쓰지 않는다. */
+:root{
+  --bg:#fafaf8; --panel:#ffffff; --border:#d8d8d3; --hairline:#e9e9e5;
+  --text:#141518; --muted:#5c6470; --faint:#9096a0;
+  --accent:#141518; --accent-soft:#f0f0ec; --accent-line:#141518;
+  --r:0;
+  --c-draft:#868c96; --c-open:#1d4ed8; --c-inprogress:#b45309; --c-blocked:#b91c1c;
+  --c-review:#6d28d9; --c-done:#047857; --c-cancelled:#868c96; --c-published:#0f766e;
+  --t-request:#1d4ed8; --t-knowledge:#0f766e; --t-session:#92400e; --t-question:#9d174d;
+  --t-article:#6b21a8;
+  --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+}
+/* 테마: system(OS 추종) / paper(라이트 고정=기본 토큰) / carbon(다크 고정) / phosphor(CRT) */
+@media (prefers-color-scheme: dark){
+  :root[data-theme="system"]{
+    --bg:#111214; --panel:#17181b; --border:#33353a; --hairline:#232529;
+    --text:#e8e8e4; --muted:#9aa0aa; --faint:#5f646d;
+    --accent:#e8e8e4; --accent-soft:#222327; --accent-line:#e8e8e4;
+    --c-open:#5b8def; --c-inprogress:#d99537; --c-blocked:#e05d5d;
+    --c-review:#a582e8; --c-done:#3fa583; --c-published:#3d9d96;
+    --t-request:#5b8def; --t-knowledge:#3d9d96; --t-session:#c08a4e; --t-question:#e07a9f;
+    --t-article:#b18cf0;
+  }
+}
+:root[data-theme="carbon"]{
+  --bg:#111214; --panel:#17181b; --border:#33353a; --hairline:#232529;
+  --text:#e8e8e4; --muted:#9aa0aa; --faint:#5f646d;
+  --accent:#e8e8e4; --accent-soft:#222327; --accent-line:#e8e8e4;
+  --c-open:#5b8def; --c-inprogress:#d99537; --c-blocked:#e05d5d;
+  --c-review:#a582e8; --c-done:#3fa583; --c-published:#3d9d96;
+  --t-request:#5b8def; --t-knowledge:#3d9d96; --t-session:#c08a4e; --t-question:#e07a9f;
+    --t-article:#b18cf0;
+}
+:root[data-theme="phosphor"]{
+  --bg:#0a0e0a; --panel:#0d120d; --border:#2b3a2b; --hairline:#1a231a;
+  --text:#b9e2b2; --muted:#79a674; --faint:#4b6f49;
+  --accent:#b9e2b2; --accent-soft:#131b13; --accent-line:#b9e2b2;
+  --c-draft:#5f7f5c; --c-open:#5b9bd5; --c-inprogress:#d9b13b; --c-blocked:#e06c5d;
+  --c-review:#b78ee0; --c-done:#55c07a; --c-cancelled:#5f7f5c; --c-published:#46b39a;
+  --t-request:#5b9bd5; --t-knowledge:#46b39a; --t-session:#c9a35a; --t-question:#d98cb0;
+  --t-article:#bda0ef;
+}
+*{box-sizing:border-box}
+::selection{background:var(--text);color:var(--bg)}
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-thumb{background:var(--border)}
+*::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+*::-webkit-scrollbar-track{background:transparent}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{
+  outline:1px solid var(--text);outline-offset:1px}
+body{margin:0;font-family:"Noto Sans KR",system-ui,sans-serif;
+  background:var(--bg);color:var(--text);font-size:13.5px;-webkit-font-smoothing:antialiased}
+

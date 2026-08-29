@@ -28,9 +28,10 @@
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 DASH_ON = 9      # 의존 획의 대시 한 칸 길이 — 촉은 이보다 확실히 커야 구별된다
 HEAD_MIN = 11    # 촉 길이 하한 (대시 한 칸 + 여유)

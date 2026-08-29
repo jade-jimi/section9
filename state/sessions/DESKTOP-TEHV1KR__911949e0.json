@@ -9,22 +9,18 @@
  "ended": "",
  "capture_paused": true,
  "active_reqs": [
-  "REQ-20260829-035-62x6",
   "REQ-20260829-027-62x6",
   "REQ-20260829-024-62x6",
   "REQ-20260829-025-62x6",
-  "REQ-20260829-029-62x6"
+  "REQ-20260829-029-62x6",
+  "REQ-20260829-036-62x6"
  ],
  "claim_at": {
-  "REQ-20260829-035-62x6": "2026-08-29T20:07:05+09:00",
-  "REQ-20260829-033-62x6": "2026-08-29T20:07:17+09:00",
-  "REQ-20260829-034-62x6": "2026-08-29T20:07:17+09:00",
-  "REQ-20260829-031-62x6": "2026-08-29T20:08:36+09:00",
-  "REQ-20260829-030-62x6": "2026-08-29T20:08:36+09:00",
   "REQ-20260829-027-62x6": "2026-08-29T20:08:49+09:00",
   "REQ-20260829-024-62x6": "2026-08-29T20:09:10+09:00",
   "REQ-20260829-025-62x6": "2026-08-29T20:09:10+09:00",
-  "REQ-20260829-029-62x6": "2026-08-29T20:09:10+09:00"
+  "REQ-20260829-029-62x6": "2026-08-29T20:09:10+09:00",
+  "REQ-20260829-036-62x6": "2026-08-29T21:03:30+09:00"
  },
  "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/911949e0-5d1b-4cd2-b08d-70fd0415a19a.jsonl",
  "cwd": "/home/sjpark1/section9",
@@ -34,7 +30,9 @@
   "/tmp/claude-1000/-home-sjpark1-section9/911949e0-5d1b-4cd2-b08d-70fd0415a19a/tasks/a656139598308f76d.output",
   "/tmp/claude-1000/-home-sjpark1-section9/911949e0-5d1b-4cd2-b08d-70fd0415a19a/tasks/aa5cccf14c7b52d44.output",
   "/tmp/claude-1000/-home-sjpark1-section9/911949e0-5d1b-4cd2-b08d-70fd0415a19a/tasks/ad36c247dec4d2ed4.output",
-  "/tmp/claude-1000/-home-sjpark1-section9/911949e0-5d1b-4cd2-b08d-70fd0415a19a/tasks/a848238e8b9856212.output"
+  "/tmp/claude-1000/-home-sjpark1-section9/911949e0-5d1b-4cd2-b08d-70fd0415a19a/tasks/a848238e8b9856212.output",
+  "/tmp/claude-1000/-home-sjpark1-section9/911949e0-5d1b-4cd2-b08d-70fd0415a19a/tasks/a5ae3d6579050fc7d.output",
+  "/tmp/claude-1000/-home-sjpark1-section9/911949e0-5d1b-4cd2-b08d-70fd0415a19a/tasks/a740027ef12761cdd.output"
  ],
  "last_qst": "",
  "pending_qst": ""

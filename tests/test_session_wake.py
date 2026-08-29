@@ -13,6 +13,7 @@ import os
 import tempfile
 import unittest
 from unittest import mock
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
@@ -76,7 +77,7 @@ class TestWake(unittest.TestCase):
 
     # W4. 프런트: 대기 화면에 깨우기 버튼과 호출 경로가 있다
     def test_w4_ui_button(self):
-        with open(os.path.join(HERE, "..", "web", "index.html"),
+        with open(index_path(),
                   encoding="utf-8") as f:
             html = f.read()
         self.assertIn("cc-wake", html)

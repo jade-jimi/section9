@@ -22,11 +22,12 @@ import subprocess
 import tempfile
 import time
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
 STOP_HOOK = os.path.join(HERE, "..", "bin", "s9-audit-response")
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 
 class env_as:

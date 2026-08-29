@@ -68,6 +68,7 @@ REQ-20260827-056 과 정확히 같은 실패다 — 네이티브 위젯. `prompt
 import glob
 import importlib.machinery
 import importlib.util
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 import os
 import re
 import subprocess
@@ -76,7 +77,7 @@ import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 S9 = os.path.join(HERE, "..", "bin", "s9")
 
 # 이름표가 상태머신을 벗어나지 않는지 보려면 상태머신 원본을 봐야 한다

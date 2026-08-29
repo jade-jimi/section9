@@ -31,9 +31,10 @@
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 # 서버가 돌려주는 action 낱말 — 화면은 이 중 어느 것도 알아서는 안 된다.
 REMOVE_ACTIONS = ("bad-name", "outside", "not-found", "logged-in", "in-use",

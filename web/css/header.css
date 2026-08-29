@@ -1,0 +1,246 @@
+/* header.css — 헤더 두 줄 · 서버 알림 띠 · 프로젝트 정보 · 사용량 칩 */
+/* ------- header: 2행 구조 — 1행 브랜드/탭, 2행 툴바(필터 좌 · 환경설정 우) ------- */
+header{background:var(--bg);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:10}
+.hrow1{display:flex;align-items:baseline;gap:26px;padding:14px 22px 0}
+.brand{font-size:15px;font-weight:700;letter-spacing:.02em;padding-bottom:12px}
+.brand .dot{display:inline-block;width:8px;height:8px;background:var(--text);margin-right:8px}
+.tabs{display:flex;gap:2px}
+.tabs button{border:0;background:none;padding:4px 12px 13px;cursor:pointer;
+  font-size:13px;color:var(--muted);font-family:inherit;letter-spacing:.01em;
+  border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button:hover{color:var(--text)}
+.tabs button.active{color:var(--text);font-weight:600;border-bottom-color:var(--text)}
+.hrow2{display:flex;gap:14px;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;padding:8px 22px;border-top:1px solid var(--hairline)}
+.fgroup,.pgroup{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+/* whoami 라벨 — 서버 파생 신원 표시 전용 (선택 UI 아님, REQ-20260824-027) */
+.who{font-family:var(--mono);font-size:10px;letter-spacing:.4px;color:var(--muted);white-space:nowrap}
+.who b{color:var(--text);font-weight:600}
+.who.warn{color:var(--c-blocked);white-space:normal}
+.who.warn code{font-family:var(--mono);border:1px solid var(--hairline);padding:0 3px}
+.who .as{color:var(--c-review)}
+
+/* ── 서버 코드 낡음 알림 (REQ-20260826-011-62x6) ─────────────────────────────
+   구동 중인 serve 는 기동 시점의 bin/s9 를 물고 있고, 화면(web/index.html)은
+   디스크에서 매번 읽힌다 — 그래서 "UI 는 바뀌었는데 동작만 안 된다"가 된다.
+   낡았을 때만 나타나는 헤더 3행이다: stale=false 면 자리표시자도 남기지 않는다
+   (항상 보이는 경고는 정작 진짜일 때 안 읽힌다).
+   터미널 뷰의 "stale" 은 **세션 무응답**이라는 다른 사실이라, 여기서는 문구도
+   식별자도 oldcode 로 분리했다.
+   색면·세로 띠 없이 마크(▲)와 글자색만으로 신호를 준다. */
+.hrow3{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 11px;
+  padding:7px 22px;border-top:1px solid var(--hairline)}
+.hrow3[hidden]{display:none}
+.oc-mark{color:var(--c-inprogress);font-size:11px;line-height:1}
+.oc-t{font-size:12.5px;font-weight:600;color:var(--c-inprogress);letter-spacing:-.01em}
+.oc-d{font-size:12px;color:var(--muted)}
+.oc-d code{font-family:var(--mono);font-size:11px;color:var(--text)}
+.oc-act{margin-left:auto;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.oc-cmd{font-family:var(--mono);font-size:11px;letter-spacing:.02em;
+  border:1px solid var(--border);background:var(--panel);color:var(--text);
+  padding:4px 9px;cursor:pointer}
+.oc-cmd::before{content:"⧉ ";color:var(--faint)}
+.oc-cmd:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+.oc-cmd:hover::before{color:var(--bg)}
+/* 복사 피드백은 자리를 미리 잡아 둔다 — 글자가 늘며 줄이 밀리면 그 자체가 결함 */
+.oc-copied{display:inline-block;min-width:3.6em;font-family:var(--mono);font-size:10px;
+  letter-spacing:.04em;color:var(--c-done)}
+.oc-note{font-size:12px;color:var(--muted)}
+.oc-fold{border:0;background:none;cursor:pointer;font-family:var(--mono);
+  font-size:11px;letter-spacing:.04em;color:var(--muted);padding:3px 2px}
+.oc-fold:hover{color:var(--text);text-decoration:underline}
+.oc-cmd:focus-visible,.oc-fold:focus-visible{
+  outline:2px solid var(--text);outline-offset:1px}
+
+/* ── 서버 자동 복구 기록 (REQ-20260826-018-62x6) ───────────────────────────
+   감시자는 죽은 서버를 되살릴 때마다 사유·직전 출력·연속 실패 횟수·되살리기까지의
+   대기를 남기는데, 지금까지 그걸 보려면 파일을 열어야 했다. 대시보드가 왜 죽었나는
+   대시보드 안에서 답해야 하는 질문이다.
+   자리는 코드 낡음 알림과 같은 헤더 3행이다 — 둘 다 이 서버 자신에 대한 사실이고,
+   한 자리에 모아야 사용자가 볼 곳을 하나만 기억한다. 어휘는 갈랐다: 사람이 하는
+   일은 재기동(위 알림), 감시자가 하는 일은 자동 복구(여기).
+   평소엔 흔적을 남기지 않고 사건이 잠잠해지면 스스로 걷힌다. 색면도 띠도 없이
+   마크(↻/▲)와 글자색만으로 신호를 준다. */
+.gw-mark{font-size:11px;line-height:1}
+.gw-t{font-size:12.5px;font-weight:600;letter-spacing:-.01em}
+.gw-d{font-size:12px;color:var(--muted)}
+.gw-d code,.gw-det code{font-family:var(--mono);font-size:11px;
+  letter-spacing:.04em;color:var(--text)}
+.gw-act{margin-left:auto;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+/* 한국어가 들어가는 컨트롤에는 자간을 벌리지 않는다 — 모노·자간은 시각·포트
+   번호 같은 라틴/숫자 메타데이터의 어휘다. 문장에 쓰면 글자가 흩어져 보인다. */
+.gw-link{border:0;background:none;cursor:pointer;font:inherit;
+  font-size:11.5px;color:var(--muted);padding:3px 2px}
+.gw-link:hover{color:var(--text);text-decoration:underline}
+.gw-cmd{font-family:var(--mono);font-size:11px;letter-spacing:.02em;
+  border:1px solid var(--border);background:var(--panel);color:var(--text);
+  padding:4px 9px;cursor:pointer}
+.gw-cmd::before{content:"⧉ ";color:var(--faint)}
+.gw-cmd:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+.gw-cmd:hover::before{color:var(--bg)}
+/* 복사 피드백은 자리를 미리 잡아 둔다 — 글자가 늘며 줄이 밀리면 그 자체가 결함 */
+.gw-copied{display:inline-block;min-width:3.6em;font-family:var(--mono);
+  font-size:10px;letter-spacing:.04em;color:var(--c-done)}
+.gw-cmd:focus-visible,.gw-link:focus-visible{
+  outline:2px solid var(--text);outline-offset:1px}
+/* 기록은 헤더 안에서 열린다 — 다른 자리로 보내면 방금 읽은 알림과의 연결이
+   끊긴다. 대신 높이를 묶어 화면을 삼키지 않게 하고 자체 스크롤을 준다. */
+.gwlog{border-top:1px solid var(--hairline);padding:9px 22px 12px;
+  max-height:min(44vh,320px);overflow:auto}
+.gwlog[hidden]{display:none}
+.gw-h{display:flex;align-items:baseline;gap:8px;font-size:11.5px;
+  color:var(--faint);padding-bottom:6px;border-bottom:1px solid var(--hairline)}
+.gw-h b{font-family:var(--mono);font-size:10px;letter-spacing:.06em;font-weight:400}
+.gw-h .gw-link{margin-left:auto}
+.gw-row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding:6px 0;
+  border-bottom:1px solid var(--hairline);font-size:12px}
+.gw-ts{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;
+  color:var(--faint);flex:none}
+.gw-ev{font-weight:600;min-width:5.2em;flex:none}
+.gw-ev.bad{color:var(--c-blocked)}
+.gw-ev.ok{color:var(--c-done)}
+.gw-ev.on{color:var(--c-open)}
+.gw-det{color:var(--muted)}
+.gw-row .gw-link{margin-left:auto}
+.gw-out{margin:0 0 8px;padding:7px 10px;border:1px solid var(--hairline);
+  font-family:var(--mono);font-size:10.5px;line-height:1.55;color:var(--muted);
+  white-space:pre-wrap;word-break:break-all}
+.gw-none{padding:10px 0;font-size:12px;color:var(--muted)}
+/* 서버 상태 칩 (REQ-20260827-017-62x6) — 헤더 줄은 사람의 손을 요구하는 사실에만
+   준다. 자동 복구가 **성공**한 것은 이미 끝난 일이라 읽고 나서 할 일이 없는데,
+   그것에 전용 행을 주면 자주 복구되는 서버일수록 헤더가 상시 한 줄 눌린다.
+   그런 사실과 접어 둔 경고는 이미 있는 브랜드 행(hrow1)의 칩으로 내려온다 —
+   새 행을 만들지 않고 탭 높이에 묻히므로 헤더 높이 증가가 0이다.
+   :empty 가 핵심이다. 빈 칩을 남기면 flex gap 만큼 자리가 남고, 무엇보다
+   상시 자리표시자는 곧 배경이 되어 진짜 사고 때도 안 읽힌다(018 이 세운 규칙). */
+.svchip{display:flex;align-items:baseline;gap:12px;min-width:0;
+  margin-left:auto;padding-bottom:12px}
+.svchip:empty{display:none}
+.svchip button{border:0;background:none;cursor:pointer;font:inherit;font-size:11.5px;
+  color:var(--muted);padding:3px 2px;white-space:nowrap;max-width:34ch;
+  overflow:hidden;text-overflow:ellipsis}
+.svchip button:hover{color:var(--text);text-decoration:underline}
+.svchip button:focus-visible{outline:2px solid var(--text);outline-offset:1px}
+.svchip .sv-m{font-size:11px;line-height:1}          /* 마크: 색 없이도 읽히게 */
+.svchip .sv-ok .sv-m{color:var(--c-done)}
+.svchip .sv-warn{color:var(--c-inprogress)}
+.svchip .sv-warn .sv-m{color:var(--c-inprogress)}
+.svchip .sv-bad{color:var(--c-blocked)}
+.svchip .sv-bad .sv-m{color:var(--c-blocked)}
+/* 경고가 아닌 사실도 이 칩에 선다 (REQ-20260829-030). 색을 주지 않는 것이
+   설계다 — 무인 작업자가 본 저장소에 앉은 것은 고장이 아니라 상태라, 경고색을
+   입히면 옆의 진짜 경고(▲)와 층위가 같아져 둘 다 안 읽힌다. 마크만 한 급
+   흐리게 두고 낱말이 말하게 한다. */
+.svchip .sv-note .sv-m{color:var(--faint)}
+/* 도는 중이라는 표시 (REQ-20260827-079 반려) — 세션을 다시 여는 동안 이 칩이
+   가만히 있으면 멈춘 것으로 읽힌다. 낱말은 그대로 두고(aria-live 영역이라
+   글자가 바뀌면 매초 다시 읽힌다) 마크만 돈다. 대기 상태의 반복 애니메이션은
+   허용된 자리다 — 그래도 움직임을 원치 않는 사람에게는 멈춰 세운다. */
+@keyframes svspin{to{transform:rotate(360deg)}}
+.svchip .sv-m.sv-spin{display:inline-block;animation:svspin 1.8s linear infinite}
+@media (prefers-reduced-motion: reduce){.svchip .sv-m.sv-spin{animation:none}}
+
+.pdiv{width:1px;height:18px;background:var(--border);margin:0 4px}
+.gear{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  font-size:14px;line-height:1;padding:4px 9px;cursor:pointer}
+.gear:hover{background:var(--text);color:var(--bg)}
+.settings{position:fixed;inset:0;z-index:50}
+.settings-panel{position:absolute;top:92px;right:22px;width:290px;
+  background:var(--panel);border:1px solid var(--text);padding:14px 16px;
+  box-shadow:0 8px 28px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:12px}
+.settings-h{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;font-family:var(--mono);
+  display:flex;justify-content:space-between;align-items:baseline}
+.settings-h span{font-size:11px;color:var(--text);text-transform:none;letter-spacing:0}
+.settings-panel label{display:flex;flex-direction:column;gap:4px;font-size:11px;
+  color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em}
+.settings-panel select{border:1px solid var(--border);padding:6px 9px;font-size:12.5px;
+  background:var(--panel);color:var(--text);font-family:inherit;text-transform:none;letter-spacing:0}
+.settings-note{font-size:11px;color:var(--faint);margin:2px 0 0;line-height:1.5}
+/* 프로젝트 정보 패널 — 계기판/장부 스타일(둥근모서리·pill 금지) */
+.proj-info{border:1px solid var(--text);background:var(--panel);margin:0 0 14px;
+  padding:12px 14px;display:grid;gap:10px}
+.proj-info[hidden]{display:none}  /* display:grid가 UA [hidden] 규칙을 덮어써 빈 박스가 남던 버그 수정 */
+.proj-info .pi-head{display:flex;justify-content:space-between;align-items:baseline;
+  border-bottom:1px solid var(--hairline);padding-bottom:8px;gap:12px;flex-wrap:wrap}
+.proj-info .pi-title{font-size:14px;font-weight:600}
+.proj-info .pi-slug{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.proj-info .pi-status{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted)}
+.proj-info .pi-grid{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;
+  font-size:12px;align-items:baseline}
+.proj-info .pi-k{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--faint)}
+.proj-info .pi-v{color:var(--text)}
+.proj-info table{border-collapse:collapse;width:100%;font-size:12px}
+.proj-info th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--faint);font-weight:600;
+  border-bottom:1px solid var(--hairline);padding:3px 10px 5px 0}
+.proj-info td{padding:4px 10px 4px 0;border-bottom:1px solid var(--hairline)}
+.proj-info .m-role{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.proj-info .m-exp{color:var(--c-blocked);font-family:var(--mono);font-size:10.5px}
+.proj-info .m-act{color:var(--c-done);font-family:var(--mono);font-size:10.5px}
+.hrow2 input[type="text"],.hrow2 select{border:1px solid var(--border);
+  padding:5px 9px;font-size:12.5px;background:var(--panel);color:var(--text);font-family:inherit}
+.hrow2 input[type="text"]{width:190px;font-family:var(--mono)}
+/* 그 화면에 축이 없는 필터는 감춘다 — skin override가 select에 display를 걸어도
+   지도록 명시(REQ-20260826-006). Board에는 타입 축이 없다. */
+.hrow2 select[hidden]{display:none}
+.chk{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);
+  cursor:pointer;user-select:none}
+.chk input{accent-color:var(--text)}
+.chk:has(input:disabled){opacity:.45;cursor:not-allowed}
+
+/* MY PROJECTS 레저 스트립 — '내 것만' 토글 ON일 때 #proj-info 자리 위에 표시
+   (DOC-20260823-006 권고안 B). 배지·pill·라운드·그림자 금지 — 선과 타이포만. */
+/* 헤더 계정·사용량 칩 (REQ-20260824-043) — 60s 폴, 색은 임계 신호만 */
+.usagechip{font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  white-space:nowrap;letter-spacing:.02em}
+/* 클로드 계정(사용량)과 하네스 신원을 두 줄로 분리 — 가독 (2026-08-24 채팅 요청) */
+.pgroup.idcol{flex-direction:column;align-items:flex-end;gap:2px}
+.usagechip .warn{color:var(--c-inprogress);font-weight:600}
+.usagechip .crit{color:var(--c-blocked);font-weight:600}
+.mystrip{border:1px solid var(--border);background:var(--panel);margin:0 0 14px}
+.mystrip[hidden]{display:none}
+.mystrip .ms-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:9px 14px;border-bottom:1px solid var(--hairline);font-family:var(--mono);
+  font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.mystrip .ms-row{display:flex;width:100%;align-items:baseline;gap:10px;flex-wrap:wrap;
+  border:0;border-bottom:1px solid var(--hairline);background:none;text-align:left;
+  cursor:pointer;font-family:inherit;color:var(--text);padding:9px 14px}
+.mystrip .ms-row:hover{background:var(--accent-soft)}
+.mystrip .ms-row.sel{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--text)}
+.mystrip .ms-row:focus-visible{outline:1px solid var(--text);outline-offset:-1px}
+.mystrip .ms-t{font-size:13px;font-weight:600}
+.mystrip .ms-slug{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.mystrip .ms-role{font-family:var(--mono);font-size:11px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.04em;margin-left:auto}
+.mystrip .ms-until{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.mystrip .ms-until.soon{color:var(--c-inprogress)}  /* until ≤14일 임박 — 색은 보조 신호 */
+.mystrip .ms-note{padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+.mystrip .more{padding-left:14px}
+.proj-info .m-me{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.proj-info .m-me-name{font-weight:600}
+/* 멤버 관리(manage 권한 me) — 인라인 편집 컨트롤: 플랫, 모노, 헤어라인 */
+.proj-info select,.proj-info input{border:1px solid var(--hairline);background:var(--panel);
+  color:var(--text);font-family:var(--mono);font-size:11px;padding:2px 4px;border-radius:0}
+.proj-info select:focus,.proj-info input:focus{outline:none;border-color:var(--text)}
+.proj-info input[type="date"]{width:118px}
+.proj-info .pi-x{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  font-family:var(--mono);font-size:10.5px;padding:2px 8px;cursor:pointer;letter-spacing:.03em}
+.proj-info .pi-x:hover:not(:disabled){background:var(--text);color:var(--bg);border-color:var(--text)}
+.proj-info .pi-x:disabled{color:var(--faint);cursor:not-allowed}
+.proj-info .pi-addrow td{border-bottom:0;border-top:1px solid var(--border);padding-top:6px}
+.proj-info .pi-err{font-family:var(--mono);font-size:10.5px;color:var(--c-blocked);margin-top:6px}
+
+main{padding:18px 22px}
+.count{color:var(--muted);font-size:11px;margin:0 0 14px;font-family:var(--mono);
+  text-transform:uppercase;letter-spacing:.06em}
+/* Board는 이 줄을 비운다 (REQ-20260825-085) — 빈 문단이 유령 여백을 남기지 않게 접는다 */
+.count:empty{display:none}
+.more{display:block;width:100%;border:0;background:none;color:var(--faint);
+  padding:7px 0;cursor:pointer;font-size:11.5px;font-family:var(--mono);text-align:left}
+.more:hover{color:var(--text);text-decoration:underline}
+.more::before{content:"+ "}
+

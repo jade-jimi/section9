@@ -23,6 +23,7 @@ import json
 import os
 import tempfile
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
@@ -157,7 +158,7 @@ class Banner(unittest.TestCase):
     박혀 있으면 훅만 바뀐 경우에 거짓말이 된다."""
 
     def test_h12_banner_names_reported_files(self):
-        body = open(os.path.join(HERE, "..", "web", "index.html"),
+        body = open(index_path(),
                     encoding="utf-8").read()
         i = body.index("서버가 옛 코드로 돌고 있습니다")
         seg = body[max(0, i - 700):i + 700]

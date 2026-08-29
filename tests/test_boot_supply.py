@@ -30,9 +30,10 @@
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 # 부트가 첫 화면을 위해 받는 값 → 그 값을 받는 유일한 fetch 주소
 BOOT_ENDPOINTS = ["/api/whoami", "/api/users", "/api/catalog", "/api/projects",

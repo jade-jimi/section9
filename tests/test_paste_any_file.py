@@ -11,9 +11,10 @@ pdf·mp4·csv 를 붙이면 조용히 사라지고, 사람은 붙였다고 믿�
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = open(os.path.join(HERE, "..", "web", "index.html"), encoding="utf-8").read()
+SRC = open(index_path(), encoding="utf-8").read()
 
 
 def _paste_handler():

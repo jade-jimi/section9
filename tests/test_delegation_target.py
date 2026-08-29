@@ -170,3 +170,185 @@ class DelegationTarget(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class DelegationTargetShortNames(unittest.TestCase):
+    """D7~D9. 리드는 대상을 **번호로** 적는다 (REQ-20260829-036-62x6).
+
+    실사고 2026-08-29 20:09:58. 리드가 designer 를 띄우며 description 에
+    `030·031 화면 몫` 이라 적었다. 위 D1 의 지명 경로는 정식 id 정규식만 보므로
+    그 둘이 하나도 안 잡혔고, prompt 에 배경으로 실린 정식 id 는 여럿이라
+    D3(유일하지 않으면 고르지 않는다)에 걸려 클레임 경로로 물러났다. 세션의
+    active_reqs 는 [027,024,025,029] 였고 최근 것인 029 가 뽑혔다.
+
+    결과가 둘이다 — 030 은 손이 안 보여 25분째 '멈춤' 이 됐고 20:34 의 깨우기가
+    designer 가 `web/index.html` 을 쓰는 중에 무인 작업자를 하나 더 띄웠다.
+    029 는 없는 손이 보여 진짜 멈춤이 가려졌다. **한 오귀속이 사고 둘을 낳는다.**
+
+    그래서 둘을 고친다: ① description 의 번호를 살아 있는 요청으로 푼다
+    ② 리드가 둘을 적었으면 **둘 다**에 붙인다 — 실제로 둘을 하고 있으니까.
+    그리고 추측으로 물러난 경우는 추측이라고 적는다(`--guess`).
+
+    실행: python3 tests/ delegation_target
+    """
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="s9dtn-")
+        self.env = {**os.environ, "S9_ROOT": self.root, "S9_MACHINE": "testbox"}
+        self.env.pop("S9_SESSION", None)
+        self.cli("init")
+        self.cli("user", "add", "alice")
+        self.ids = [self.mkreq(f"요청 {i}") for i in range(4)]
+        for rid in self.ids:
+            self.cli("status", rid, "in-progress", "--note", "t",
+                     sess="sess1234")
+        # 리드가 잡고 있는 것은 마지막 하나뿐 — 위임은 앞의 둘로 간다.
+        self.claimed = self.ids[3]
+        self.bind([self.claimed])
+        self.hook = DelegationTarget.load_hook(self)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    cli = DelegationTarget.cli
+    mkreq = DelegationTarget.mkreq
+    bind = DelegationTarget.bind
+
+    @staticmethod
+    def num(rid):
+        """REQ-20260829-030-62x6 → '030' — 리드가 실제로 적는 형태."""
+        return rid.split("-")[2]
+
+    def targets(self, inp):
+        return self.hook.target_reqs({**self.env, "S9_SESSION": "sess1234"},
+                                     inp)
+
+    # ---- D7. 번호 지명이 풀린다 (실사고 재현) ---------------------------
+    def test_d7_the_actual_incident(self):
+        """description `030·031 화면 몫` + prompt 에 배경 id 여럿."""
+        inp = {"description": f"{self.num(self.ids[0])}·{self.num(self.ids[1])}"
+                              f" 화면 몫",
+               "prompt": f"배경: {self.ids[2]} 와 {self.claimed} 도 보라"}
+        got, src = self.targets(inp)
+        self.assertEqual(got, [self.ids[0], self.ids[1]],
+                         f"리드가 적은 두 문서 대신 {got} 에 붙었다 — "
+                         f"도는 요청이 '멈춤' 이 되고 안 도는 요청은 "
+                         f"'작업 중' 이 된다 (2026-08-29 20:09 그대로)")
+        self.assertEqual(src, "지명")
+
+    def test_d7b_single_number_resolves(self):
+        got, _ = self.targets({"description": f"{self.num(self.ids[1])} 백엔드 몫",
+                               "prompt": "고쳐라"})
+        self.assertEqual(got, [self.ids[1]])
+
+    def test_d7c_dates_and_ports_are_not_doc_numbers(self):
+        """네 자리 수와 날짜는 번호가 아니다 — 아무거나 잡으면 오귀속이 는다."""
+        got, src = self.targets({"description": "9909 포트와 2026 년치 정리",
+                                 "prompt": "그냥 해라"})
+        self.assertEqual(got, [self.claimed])
+        self.assertEqual(src, "클레임")
+
+    def test_d7d_resolution_lives_in_s9_not_in_the_hook(self):
+        """판정은 훅이 아니라 `bin/s9` 에 있다 — 훅은 시험이 잘 안 닿는 자리다."""
+        out = self.cli("delegate-target", "--description",
+                       f"{self.num(self.ids[0])} 어쩌고", "--session", "sess1234")
+        got = json.loads(out)
+        self.assertEqual(got["reqs"], [self.ids[0]])
+        self.assertEqual(got["src"], "지명")
+
+    # ---- D8. 추측은 추측이라고 적힌다 -----------------------------------
+    def test_d8_claim_fallback_is_marked_a_guess(self):
+        payload = {
+            "tool_name": "Agent", "session_id": "sess1234",
+            "tool_input": {"description": "이름 없는 일",
+                           "subagent_type": "designer", "prompt": "그냥 해라"},
+            "tool_response": {"agentId": "abc12345",
+                              "output_file": "/tmp/nonexistent.output"}}
+        r = subprocess.run(["python3", AGENT_HOOK], input=json.dumps(payload),
+                           capture_output=True, text=True,
+                           env={**self.env, "S9_SESSION": "sess1234"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        p = os.path.join(self.root, "state", "sessions",
+                         "testbox__sess1234.json")
+        with open(p, encoding="utf-8") as f:
+            b = json.load(f)
+        self.assertEqual((b.get("agent_req") or {}).get("/tmp/nonexistent.output"),
+                         "", "추측을 확정으로 적었다 — 그 손은 '미상' 으로 "
+                             "세어져야 겹쳐 띄우기를 막는다")
+
+    def test_d8b_named_target_is_recorded_as_certain(self):
+        payload = {
+            "tool_name": "Agent", "session_id": "sess1234",
+            "tool_input": {"description": f"{self.num(self.ids[1])} 화면",
+                           "subagent_type": "designer", "prompt": "고쳐라"},
+            "tool_response": {"agentId": "abc12345",
+                              "output_file": "/tmp/nonexistent.output"}}
+        r = subprocess.run(["python3", AGENT_HOOK], input=json.dumps(payload),
+                           capture_output=True, text=True,
+                           env={**self.env, "S9_SESSION": "sess1234"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        p = os.path.join(self.root, "state", "sessions",
+                         "testbox__sess1234.json")
+        with open(p, encoding="utf-8") as f:
+            b = json.load(f)
+        self.assertEqual((b.get("agent_req") or {}).get("/tmp/nonexistent.output"),
+                         self.ids[1])
+
+    # ---- D9. 둘을 지명하면 둘 다에 기여가 남는다 -------------------------
+    def test_d9_both_named_docs_get_the_contribution(self):
+        payload = {
+            "tool_name": "Agent", "session_id": "sess1234",
+            "tool_input": {"description": f"{self.num(self.ids[0])}·"
+                                          f"{self.num(self.ids[1])} 화면 몫",
+                           "subagent_type": "designer", "prompt": "고쳐라"},
+            "tool_response": {"agentId": "abc12345",
+                              "output_file": "/tmp/nonexistent.output"}}
+        r = subprocess.run(["python3", AGENT_HOOK], input=json.dumps(payload),
+                           capture_output=True, text=True,
+                           env={**self.env, "S9_SESSION": "sess1234"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        for rid in self.ids[:2]:
+            self.assertIn("sub:designer:abc12345", self.cli("show", rid, "--meta"),
+                          f"{rid} 에 위임 기록이 없다")
+        self.assertNotIn("sub:designer",
+                         self.cli("show", self.claimed, "--meta"),
+                         "지명하지 않은 문서에 붙었다")
+
+    # ---- D10. 붙일 곳이 없어도 손은 보인다 ------------------------------
+    def test_d10_a_homeless_hand_is_still_registered(self):
+        """대상 REQ 를 못 골라도 **손이 있다는 사실**은 남는다.
+
+        종전에는 여기서 훅이 그냥 돌아섰고 바인딩에 transcript 조차 안 남았다 —
+        `s9 workers` 도 못 보는 손이 되고, 아무도 못 보는 손 위에 무인 작업자가
+        겹쳐 뜬다. 그것이 2026-08-29 20:34 사고의 모양이다."""
+        self.bind([])                       # 클레임 없음
+        # 실제로 존재하는 파일이어야 한다 — 바인딩 경계(`_norm_binding`)가
+        # 파일 아닌 경로를 걷어낸다 (REQ-20260827-011).
+        tp = os.path.join(self.root, "hand.output")
+        open(tp, "w").write("x")
+        payload = {
+            "tool_name": "Agent", "session_id": "sess1234",
+            "tool_input": {"description": "이름도 번호도 없는 일",
+                           "subagent_type": "designer", "prompt": "그냥 해라"},
+            "tool_response": {"agentId": "abc12345", "output_file": tp}}
+        r = subprocess.run(["python3", AGENT_HOOK], input=json.dumps(payload),
+                           capture_output=True, text=True,
+                           env={**self.env, "S9_SESSION": "sess1234"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        p = os.path.join(self.root, "state", "sessions",
+                         "testbox__sess1234.json")
+        with open(p, encoding="utf-8") as f:
+            b = json.load(f)
+        self.assertIn(tp, b.get("agent_transcript_path") or [],
+                      "귀속을 못 정했다고 손까지 지웠다")
+        self.assertEqual((b.get("agent_req") or {}).get(tp), "",
+                         "미상으로 적히지 않았다")
+        # 모르는 문서를 잡지는 않는다 — 클레임은 그대로 비어 있어야 한다.
+        self.assertEqual(b.get("active_reqs") or [], [],
+                         "어느 문서인지 모르면서 문서를 잡았다")
+
+    def test_d10b_claim_without_id_needs_a_transcript(self):
+        r = subprocess.run([S9, "claim", "--session", "sess1234"],
+                           capture_output=True, text=True, env=self.env)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("문서 id", r.stdout + r.stderr)

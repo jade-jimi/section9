@@ -30,9 +30,10 @@ REQ-20260826-018 이 서버 자동 복구 기록을 헤더 3행에 올렸다. �
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 
 class HeaderNoticeArea(unittest.TestCase):

@@ -1,0 +1,198 @@
+/* density.css — density: compact — skin 과 독립인 밀도 축 */
+/* ============ density: compact — 초고밀도 (skin과 독립인 밀도 축) ============ */
+[data-density="compact"] body{font-size:12px}
+[data-density="compact"] main{padding:10px 12px}
+[data-density="compact"] .stats .stat{padding:4px 10px}
+[data-density="compact"] .stats .stat b{font-size:12.5px}
+[data-density="compact"] .col{flex-basis:198px;min-width:176px;width:auto}
+[data-density="compact"] .col h2{padding:7px 10px}
+[data-density="compact"] .card{padding:5px 10px}
+[data-density="compact"] .card .id{font-size:9px}
+[data-density="compact"] .card .t{font-size:12px;font-weight:500;margin:1px 0 2px;line-height:1.3}
+[data-density="compact"] .card .m{font-size:9.5px;gap:6px}
+[data-density="compact"] .doclist .row{padding:4px 10px}
+[data-density="compact"] .doclist .row>div:nth-child(3){font-size:12px}
+[data-density="compact"] .viewer{--vpad:20px;padding:0 var(--vpad) 14px}
+[data-density="compact"] .metatbl td{padding:3px 8px 3px 0;font-size:11.5px}
+[data-density="compact"] .audit td{padding:4px 10px;font-size:11.5px}
+[data-density="compact"] .term{font-size:11px;line-height:1.45}
+[data-density="compact"] .acts button{padding:1px 7px;font-size:9.5px}
+
+/* ------- users 탭 ------- */
+.uform{display:flex;flex-direction:column;gap:6px;padding:10px 14px 14px}
+.uform input,.uform select,.uf{border:1px solid var(--border);padding:5px 9px;
+  font-size:12.5px;background:var(--panel);color:var(--text);font-family:inherit}
+.uf{width:min(300px,100%)}
+.uform button{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  font-family:var(--mono);font-size:11px;padding:6px;cursor:pointer;letter-spacing:.03em}
+.uform button:hover{background:var(--text);color:var(--bg)}
+/* ------- 머신·계정 이력 표 (REQ-20260827-066) -------
+   메타데이터의 어휘 그대로다: 모노 · 작은 글자 · 헤어라인 행 구분. 색면도
+   세로 띠도 없고, 위계는 잉크의 명도와 굵기로만 만든다. 열 이름은 한 번만
+   가르치면 되므로 faint 로 두되 잘려 보이지 않게 대문자 트래킹은 로마자에만
+   해당하는 규칙이라 한글 열 이름에는 자간을 벌리지 않는다. */
+/* 넘치면 **표만** 가로로 스크롤한다 — 판이 통째로 밀리면 옆의 폼까지 어긋난다 */
+.mhwrap{overflow-x:auto;margin:10px 0 24px}
+.mhtbl{width:100%;border-collapse:collapse;font-size:12px;
+  border-top:1px solid var(--border)}
+.mhtbl th{text-align:left;font-weight:400;font-size:10px;color:var(--faint);
+  padding:6px 14px 6px 0;border-bottom:1px solid var(--hairline);white-space:nowrap}
+.mhtbl td{padding:7px 14px 7px 0;border-bottom:1px solid var(--hairline);
+  white-space:nowrap;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.mhtbl tr td:last-child,.mhtbl tr th:last-child{padding-right:0}
+/* 머신 이름이 이 표의 주어다 — 한 급 굵고 잉크로 */
+.mhtbl td.mn{color:var(--text);font-weight:600}
+/* 경과는 마지막 칸에 붙는 부차 값이다 — 날짜 옆에서 "얼마나 됐나"만 말한다 */
+.mhtbl .mel{color:var(--faint);font-size:10px;margin-left:8px}
+/* 하루가 넘은 줄 — 색상이 아니라 명도로 뒤로 물린다. 지금 쓰는 머신이 위에서
+   먼저 읽히게 하는 것이 이 표의 전부다. */
+.mhtbl tr.stale td,.mhtbl tr.stale td.mn{color:var(--faint);font-weight:400}
+/* 처음과 마지막이 같은 줄 = 한 번 스쳐간 머신 */
+.mhtbl .mone{color:var(--muted)}
+.mhtbl tr.stale .mone{color:var(--faint)}
+.mhempty{margin:10px 0 24px}
+/* ------- 비밀 키 · 대화 기록 (REQ-20260828-012 · 013) -------
+   값을 그리는 자리가 없다는 것이 이 블록의 전부다. 목록은 머신 이력 표(.mhtbl)와
+   같은 어휘를 그대로 쓴다 — 모노 · 헤어라인 행 구분 · 색면 없음. 어느 쪽에
+   있는지는 색이 아니라 낱말로 말한다(색만으로 상태를 구분하지 않는다). */
+/* 읽는 글의 폭은 재어 준다 — 판이 넓다고 한 줄을 1,100px 로 흘리면 눈이 줄을
+   놓친다. 설명은 읽는 글이고 표는 훑는 글이라 폭 규칙이 다르다. */
+.secnote{max-width:62ch;margin-top:2px}
+.secform{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:12px 0 0}
+.secform button{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  font-family:var(--mono);font-size:11px;padding:6px 10px;cursor:pointer;letter-spacing:.03em}
+.secform button:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+.secform button[disabled]{opacity:.45;cursor:default}
+.secform button[disabled]:hover{background:var(--panel);color:var(--text);border-color:var(--border)}
+.mhtbl td.sk{color:var(--text);font-weight:600;font-size:12px}
+/* 세 칸이 한눈에 들어와야 한다 — 판 폭에 맞춰 늘리면 키 이름과 지우기 사이가
+   1,100px 이 되고, 어느 줄의 버튼인지 눈으로 이어 붙여야 한다. */
+.sectbl{max-width:560px}
+.sectbl td:last-child,.sectbl th:last-child{text-align:right}
+/* 지우기 — 파괴적 행동이라 눈에 띄어야 하지만 색면은 쓰지 않는다. 평소엔 잉크의
+   흐린 단계로 물러나 있다가, 손이 닿으면 경고색 글자·테두리로 얼굴을 바꾼다. */
+.secrm{border:1px solid var(--hairline);background:none;color:var(--faint);
+  font-family:var(--mono);font-size:10px;padding:2px 7px;cursor:pointer;
+  letter-spacing:.05em;text-transform:uppercase}
+.secrm:hover{color:var(--c-blocked);border-color:var(--c-blocked)}
+.secmsg{font-family:var(--mono);font-size:11px;color:var(--muted);min-height:17px;
+  margin-top:10px}
+/* 기록을 끄면 보관 기간은 물을 것이 없다 — 칸만 잠그면 옆의 설명이 아직 쓸 수 있는
+   것처럼 남는다. 줄 전체를 한 단계 물린다(색이 아니라 명도로). */
+.uf:disabled{cursor:not-allowed}
+tr.rowoff td{opacity:.45}
+/* 빈 상태는 설명과 구별되어야 한다 — 같은 회색으로 이어 붙이면 한 문단으로 읽힌다.
+   잉크를 한 급 올리고 위에 헤어라인을 그어 "여기가 목록 자리"임을 보인다. */
+.secempty{border-top:1px solid var(--hairline);margin-top:12px;padding-top:12px;
+  color:var(--muted);font-size:12.5px;max-width:62ch}
+.secmsg.bad{color:var(--c-blocked)}
+/* 바깥 폴더 (REQ-20260828-017) — 같은 판 안의 작은 단락이다. 섹션을 하나 더
+   떼면 "비밀 키"와 "그 비밀을 어디서 더 읽나"가 남남처럼 읽힌다. 헤어라인 한
+   줄로 가르고 제목은 섹션 제목(.cfg-h)보다 한 급 낮춘다. */
+.secsub{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:600;
+  border-top:1px solid var(--hairline);margin:22px 0 6px;padding-top:14px}
+/* 지금 그 경로가 쓰이는지 — **색만으로 말하지 않는다.** 앞의 낱말이 먼저 답하고
+   색은 그 낱말을 거들 뿐이다(색면 없음, 잉크와 상태색 글자만). */
+.secstate{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:9px;
+  max-width:62ch;line-height:1.55}
+.secstate .sm{font-weight:700;letter-spacing:.06em;white-space:nowrap;
+  margin-right:7px;color:var(--muted)}
+.secstate.on .sm{color:var(--c-done)}
+.secstate.warn .sm{color:var(--c-inprogress)}
+.secstate.bad .sm{color:var(--c-blocked)}
+/* 어디에 넣을까 — **두 칸을 좌우로 세운다** (REQ-20260828-017).
+   "internal 항목이랑 좌우 형태로 같이 등록" — 폼을 두 벌 세우면 값을 두 번 치게
+   되고, 옮기려면 지우고 다시 친다. 값은 한 번만 치고 **목적지만 고른다**.
+   고른 자리는 색면이 아니라 밑줄 2px(잉크)와 ●/○ 모양으로 말한다 — 색을 못 보는
+   눈에도, 300px 로 줄인 그림에서도 어느 쪽인지 읽힌다. */
+.secwlab{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--faint);font-weight:600;margin:14px 0 5px}
+.secwhere{display:flex;max-width:560px;border:1px solid var(--hairline)}
+.secwhere .wopt{flex:1 1 0;position:relative;padding:9px 12px;cursor:pointer;
+  min-height:44px;border-bottom:2px solid transparent}
+.secwhere .wopt:first-child{border-right:1px solid var(--hairline)}
+.secwhere .wopt input{position:absolute;width:1px;height:1px;opacity:0;margin:0}
+.wopt .wm{font-family:var(--mono);font-size:10px;color:var(--faint);margin-right:6px}
+.wopt .wn{font-size:12.5px;font-weight:600;color:var(--muted)}
+.wopt .wp{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);
+  margin-top:5px;line-height:1.5;word-break:break-all}
+.wopt.on{border-bottom-color:var(--text)}
+.wopt.on .wm,.wopt.on .wn{color:var(--text)}
+.wopt:hover:not(.on):not(.off) .wm,.wopt:hover:not(.on):not(.off) .wn{color:var(--text)}
+.wopt.off{cursor:not-allowed}
+.wopt.off .wm,.wopt.off .wn,.wopt.off .wp{opacity:.55}
+.secwhere .wopt:has(input:focus-visible){outline:2px solid var(--text);outline-offset:-3px}
+/* 못 고르는 이유는 **그 자리에** 있어야 한다 — 눌러도 아무 일이 없으면 고장으로
+   읽힌다. 다음 행동(경로 정하기)까지 한 손잡이로 잇는다. */
+.secwhy{font-family:var(--mono);font-size:11px;color:var(--c-inprogress);
+  margin-top:7px;max-width:62ch;line-height:1.6}
+.secwhy:empty{display:none}
+/* 가려진 이름 — 넣었는데 안 쓰이는 것이 이 기능에서 가장 나쁜 결말이다.
+   목록의 그 줄이 직접 말한다(같은 이름이면 저장소 안이 이긴다). */
+.mhtbl .shad{display:block;font-family:var(--mono);font-size:10px;
+  color:var(--c-inprogress);letter-spacing:.02em;margin-top:3px}
+.secmsg.warn{color:var(--c-inprogress)}
+.cfg-h{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  margin:26px 0 4px;font-weight:600;font-family:var(--mono);
+  border-top:1px solid var(--border);padding-top:14px}
+/* ------- 시간대 고르기 (REQ-20260828-029) -------
+   한 줄에 적는 것은 **이름과 지금 몇 시인가** 둘뿐이다. 오프셋은 적지 않는다 —
+   손목시계에 +09:00 은 안 적혀 있고, 시각이 그것보다 정확하게 같은 말을 한다.
+   시각을 옆에 두는 이유는 장식이 아니다: `Etc/GMT+9` 는 POSIX 규약 탓에 실제로
+   UTC−9 라, 이름만 보면 한국인은 백이면 백 그걸 고른다. 옆의 시계가 고르기
+   전에 그 사실을 보여 준다.
+   어휘는 이 판이 이미 쓰는 것 그대로다 — 이름은 모노(식별자), 시각도 모노,
+   구획은 헤어라인, 고른 줄은 **색면이 아니라 잉크 inset 바 + 굵기**. */
+.tzline{display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap}
+.tzc{position:relative;width:min(330px,100%)}
+.tzin{width:100%;padding-right:24px;font-family:var(--mono);font-size:12.5px}
+.tzin::placeholder{color:var(--faint)}
+.tzcar{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  color:var(--faint);font-size:9px;pointer-events:none}
+/* 지금 몇 시인가 — 값이 바뀐 것을 이 자리에서 증명한다 */
+.tznow{font-family:var(--mono);font-size:12.5px;color:var(--text);white-space:nowrap}
+.tznow .w{color:var(--faint);margin-right:5px}
+/* 설정이 없거나 이름을 모를 때는 시계가 아니라 문장이다 — 모노를 벗는다 */
+.tznow.tzsub,.tznow.tzbad{font-family:inherit;font-size:12px;white-space:normal;
+  max-width:44ch;line-height:1.55;word-break:keep-all}
+.tznow.tzsub{color:var(--muted)}
+.tznow.tzbad{color:var(--c-inprogress)}
+/* 목록은 **판 밖(body)에 띄운다** — 설정 판은 안쪽 스크롤이 있고 glass 스킨은
+   .docs 를 overflow:hidden 으로 자른다. 판 안에 그리면 목록이 잘리거나 접힌
+   자리 아래로 숨는다. 테두리는 hovercard 와 같은 어휘(잉크 1px, 그림자 0). */
+.tzpop{position:fixed;z-index:99;background:var(--panel);border:1px solid var(--text);
+  overflow-y:auto;overscroll-behavior:contain;padding:2px 0}
+.tzpop .tzg{font-family:var(--mono);font-size:10.5px;color:var(--faint);
+  padding:9px 12px 4px;border-top:1px solid var(--hairline)}
+.tzpop .tzg:first-child{border-top:0;padding-top:6px}
+.tzpop .tzrow{display:flex;align-items:baseline;gap:12px;padding:7px 12px;
+  cursor:pointer;border-left:2px solid transparent}
+.tzpop .tzn{font-family:var(--mono);font-size:12px;color:var(--text);
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tzpop .tzt{font-family:var(--mono);font-size:11px;color:var(--muted);flex:none}
+.tzpop .tzt .w{color:var(--faint);margin-right:4px}
+.tzpop .tzrow:hover{background:var(--accent-soft)}
+.tzpop .tzrow.on{background:var(--accent-soft);border-left-color:var(--text)}
+.tzpop .tzrow.on .tzn{font-weight:600}
+/* 지우는 줄 — 이름이 아니라 상태라 모노를 벗고, 뒤따르는 말이 물러설 곳을 밝힌다 */
+.tzpop .tzoff .tzn{font-family:inherit;color:var(--muted)}
+.tzpop .tzoff .tzt{font-family:inherit;color:var(--faint);font-size:11px}
+.tzpop .tzrow.on.tzoff .tzn{color:var(--text)}
+/* 못 찾았을 때는 안내가 아니라 **다음 손**이다 */
+.tzpop .tzempty{padding:12px;color:var(--muted);font-size:12px;line-height:1.65}
+.tzpop .tzempty b{font-family:var(--mono);font-weight:400;color:var(--text)}
+/* 프로필 확장 (REQ-20260824-055 E7) — 미기재 신호는 앰버, 실패는 인라인 mono (팝업 금지) */
+.pbadge{font-family:var(--mono);font-size:11px;color:var(--c-inprogress);margin-left:5px}
+.reqhint{font-family:var(--mono);font-size:10px;color:var(--c-inprogress);
+  text-transform:uppercase;letter-spacing:.05em;margin-left:8px;white-space:nowrap}
+.ferr{font-family:var(--mono);font-size:11px;color:var(--c-blocked);align-self:center;
+  margin-left:4px}
+.emrow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.emrow .em-rm{border:1px solid var(--border);background:var(--panel);color:var(--muted);
+  font-family:var(--mono);font-size:11px;padding:4px 8px;cursor:pointer;line-height:1.2}
+.emrow .em-rm:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+.em-add{border:0;background:none;color:var(--faint);padding:2px 0;cursor:pointer;
+  font-size:11px;font-family:var(--mono);text-align:left}
+.em-add:hover{color:var(--text);text-decoration:underline}
+

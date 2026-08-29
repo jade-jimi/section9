@@ -15,9 +15,10 @@ REQ-20260825-022(글리프 다양화)로 프레임을 늘릴 때도 이 검사�
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 # Unicode Emoji=Yes 코드포인트 중 스피너류 글리프가 속할 수 있는 구간
 # (Miscellaneous Symbols 2600-26FF · Dingbats 2700-27BF, UTS #51 emoji-data 발췌).
@@ -93,7 +94,7 @@ class TestSpinnerWidth(unittest.TestCase):
     def setUp(self):
         import os as _os
         here = _os.path.dirname(_os.path.abspath(__file__))
-        with open(_os.path.join(here, "..", "web", "index.html"),
+        with open(index_path(),
                   encoding="utf-8") as f:
             self.html = f.read()
 

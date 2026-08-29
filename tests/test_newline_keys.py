@@ -19,9 +19,10 @@ Ctrl+Enter 는 **아무 일도 안 일어나는 키**가 된다 — 사용자 �
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 
 class NewlineKeys(unittest.TestCase):

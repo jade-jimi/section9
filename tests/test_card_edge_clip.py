@@ -40,9 +40,10 @@
 import os
 import re
 import unittest
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "..", "web", "index.html")
+INDEX = index_path()
 
 # 박스 밖에 그리는 것 중 가장 먼 것 = 포커스 링(2px 굵기 + 2px 오프셋)
 NEED_PX = 4

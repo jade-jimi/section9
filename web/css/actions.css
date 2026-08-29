@@ -1,0 +1,200 @@
+/* actions.css — 상태 전이 — 판정 버튼 · 드래그 드롭 표시 */
+/* ------- 상태 전이 액션 (판정 버튼 / 드래그) ------- */
+.tdd{font-family:var(--mono);font-size:10px;color:var(--c-inprogress);border:1px solid currentColor;
+  padding:0 4px;border-radius:2px}
+.tdd.full{color:var(--c-done)}
+.livedot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.livedot.on{background:#16a34a;box-shadow:0 0 0 0 rgba(22,163,74,.6);animation:livepulse 1.6s infinite}
+/* 꺼진 점 = **속 빈 링** (REQ-20260828-036). 채운 --faint 점은 라이트·다크
+   양쪽에서 대비 2.98:1 로 큰 텍스트 기준(3:1)에 미달이었고, 라이트에서는
+   초록보다 오히려 밝았다 — 흑백으로 보면 "일하는 중"이 "버려짐"보다 어두웠다.
+   상태를 밝기 순서로 읽는 눈에는 화면이 거꾸로 말하고 있었던 셈이다.
+   링은 --muted(종이톤 6:1대)로 그리고, 채움을 비워 "안이 비었다"를 모양으로도
+   말한다 — 색을 못 보는 눈에도 남는 차이다. */
+.livedot.off{background:transparent;border:1.5px solid var(--muted)}
+/* 간접 신호: 세션은 활동 중이나 이 REQ의 직접 증거 없음 — 비점멸 hollow (REQ-20260823-080) */
+.livedot.sess{background:transparent;border:1.5px solid #16a34a}
+/* 무인 작업자 기동 중(스폰 후 클레임 전) — 앰버 점멸 (REQ-20260824-008) */
+.livedot.spawn{background:#d97706;box-shadow:0 0 0 0 rgba(217,119,6,.6);animation:livepulse 1.6s infinite}
+/* 정지등 (REQ-20260825-089): 죽은 워커·멈춘 에이전트. 점멸하지 않는 것이
+   핵심이다 — 점멸은 "지금 움직인다"는 뜻이고, 이건 그 반대다. 실패는 사각(정지
+   신호의 관습), 정지는 같은 사각의 속 빈 형태로 한 단계 낮춘다. */
+.livedot.dot-stopped{border-radius:1px;background:var(--c-blocked);animation:none}
+.livedot.dot-stopped.mild{background:transparent;border:1.5px solid var(--c-inprogress)}
+@keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.5)}70%{box-shadow:0 0 0 5px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
+.card:focus-visible{outline:2px solid var(--text);outline-offset:-2px}
+.col .colempty{padding:14px;color:var(--faint);font-size:11.5px;line-height:1.5}
+/* 판정 블록 (REQ-20260825-071): 색면·띠 없이 "무엇을 판정하는가"를 드러낸다 —
+   캡션 + 잉크 위계 + 헤어라인. 확인 포인트와 버튼을 한 덩어리로 묶어
+   판정 단위가 눈에 잡히게 한다. */
+.rvpt{margin-top:7px;font-size:11px;color:var(--muted);line-height:1.5}
+/* 캡션은 "무엇을 판정하는가"의 라벨이다 — faint(2.9:1)로는 전 스킨에서 읽히지
+   않았다(REQ-20260825-081 점검). 상태 잉크로 올린다: 색은 글자에만, 면 금지. */
+.rvcap{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--c-review);font-weight:700;margin-bottom:3px}
+.card[data-status="blocked"] .rvcap{color:var(--c-blocked)}
+/* 선행 대기 한 줄 (REQ-20260826-009). 상태와 독립된 축이라 blocked 카드가 아닐
+   때도 뜬다 — 그래서 캡션을 blocked 잉크로 두어 "이건 상태가 아니라 제약"임을
+   말한다. 색은 글자에만, 면·띠 없음. 카드는 한 줄로 잘라 밀도를 지킨다. */
+.rvpt.dep{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rvpt.dep .rvcap{color:var(--c-blocked)}
+/* 멈춤 한 줄 (REQ-20260828-036). 새 배지도 색면도 만들지 않는다 — 카드에 이미
+   있는 한 줄 문법(.rvpt)을 그대로 쓴다. 캡션 잉크는 in-progress 색: 이 줄이
+   말하는 것은 새 상태가 아니라 **그 상태가 나아가지 않고 있다**는 사실이라,
+   상태 자신의 잉크로 말하는 편이 정직하다. blocked 의 빨강은 "막혔다"는 다른
+   뜻을 얹고, 그 자리는 바로 위 선행 대기 줄이 이미 쓴다. */
+.rvpt.stall{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rvpt.stall .rvcap{color:var(--c-inprogress)}
+/* 멈춘 것을 깨우는 손잡이 (REQ-20260828-041). **새 컴포넌트를 만들지 않는다** —
+   카드가 이미 쓰는 행동 줄(.acts)과 행위 버튼(.deed)을 그대로 입는다. 그래야
+   열 몇 벌의 스킨이 따라오고, 판정 버튼과 같은 손맛이 된다.
+   자리는 멈춤 줄 **바로 아래**다: 사실 한 줄 → 그 사실에 대해 할 수 있는 일
+   하나. 판정 카드(.judge)가 이미 쓰는 그 순서이고, 줄 안에 끼워 넣으면 긴
+   문장이 잘리는 자리(.rvpt.stall 은 ellipsis)와 버튼이 폭을 다툰다.
+   간격은 .acts 기본(8px)보다 좁힌다 — 위의 멈춤 줄과 한 덩어리로 읽혀야 한다. */
+.acts.wakerow{margin-top:5px}
+/* 도는 중에는 눌리지 않는다. 색면·붉은 실패로 그리지 않고, 잉크를 한 급 낮춰
+   "지금은 내 차례가 아니다"만 말한다. */
+.acts button.wake[disabled]{cursor:default;color:var(--muted);
+  border-color:var(--hairline);background:var(--panel)}
+.acts button.wake[disabled]:hover{background:var(--panel);color:var(--muted);
+  border-color:var(--hairline)}
+/* 키보드로 닿은 자리가 보여야 손이 간다 — 카드(.card:focus-visible)와 같은 잉크 링 */
+.card .acts button:focus-visible,.viewer .acts button:focus-visible{
+  outline:2px solid var(--text);outline-offset:1px}
+/* 판정 카드의 배경 한 줄 (DOC-20260826-015). 확인 포인트 "위에" 무엇에 대한
+   건인지 먼저 놓는다 — 순서가 곧 읽는 순서다. 판정 카드에만 붙인다: 모든
+   카드에 요약을 깔면 보드가 문장 벽이 된다.
+   캡션 잉크는 --muted. 이 블록에서 가장 큰 소리는 '확인 요청'(--c-review)
+   하나여야 하니 상태색을 두 번 쓰지 않고, faint(2.9:1)는 캡션 잉크로 이미
+   한 번 반려된 값이라 쓰지 않는다(REQ-20260825-081). --muted 는 종이톤
+   배경에서 6:1대 — 조용하되 읽힌다. */
+.rvpt.what .rvcap{color:var(--muted)}
+/* 긴 요약이 컬럼 리듬을 무너뜨리지 않게 2줄에서 자른다 — 카드는 "무슨 건인가"만
+   집어주면 되고, 전문은 문서 뷰어의 확인 요청 callout 이 편다. */
+.rvpt.what .wtx{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden}
+/* 카드가 내주는 몫은 **세 줄**이다 (REQ-20260829-009).
+
+   사용자: "확인 메시지가 너무 기니까 잘린다. 잘리는게 맞나? 그리고 이렇게까지
+   길게 보여주는게 맞을까? 너무 길면 결국 가독성이 떨어져서 본문으로 들어가서
+   보게 되는데 말이야."
+
+   잘리는 게 맞다. 보드 열에서 내리는 결정은 "어느 건을 지금 볼 것인가"이지
+   판정 자체가 아니다 — 판정은 근거 전문을 읽고 내리는 일이고, 그 자리는 문서
+   뷰어의 확인 요청 callout(.gate)이다(갈래 분리·문서 링크·첨부 그림이 거기
+   다 있다). 폭 210~252px 짜리 열에 스무 줄 문단을 넣는 것은 읽으라고 준 것이
+   아니라 **있다고 보여준 것**이다.
+
+   세 줄인 이유: 배경 줄(무엇을) 2줄 + 확인 요청 3줄 = 판정 블록 다섯 줄 상한.
+   카드 높이에 천장이 생겨야 열의 리듬이 서고, 승인·반려 버튼이 긴 글에 밀려
+   화면 밖으로 나가지 않는다.
+
+   클램프는 본문 span(.rvtx)에 건다 — 블록에 걸면 캡션('확인 요청')이 세 줄 중
+   한 줄을 먹어 실제로 읽히는 것은 두 줄뿐이다. `.rvpt.dep`·`.rvpt.stall`(한 줄
+   ellipsis)과 `.rvpt.what .wtx`(두 줄)는 자기 규칙을 그대로 쓴다. */
+.rvpt .rvtx{display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;
+  -webkit-box-orient:vertical;overflow:hidden}
+/* 잘렸다는 사실은 **갈 곳**으로 말한다. 말줄임표는 "끊겼다"만 말하고 나머지가
+   어디 있는지는 말하지 않는다 — 사용자가 본문으로 들어가 읽게 된 그 길을
+   카드가 먼저 알려 준다. 문법은 이미 있는 것을 빌린다: `+ N개 더 보기` 와 같은
+   mono 텍스트 버튼(색면·테두리 없음, hover 밑줄). 누르면 카드 클릭과 같은
+   목적지(문서)로 간다 — 새 핸들러 없이 카드의 [data-doc] 로 버블링한다.
+   카드 안에서 펼치지 않는다: 펼치는 순간 사용자가 신고한 그 화면이 된다. */
+/* **펴는 자리는 카드 안이다** (REQ-20260829-009 반려).
+
+   사용자: "전문 보기 기능은 의미 없다. 그냥 카드를 클릭하면 전문이 있는 문서로
+   가는데 굳이?? … 전문 보기를 눌러서 보드탭의 카드에서 전문을 다 보이는거면
+   모를까, docs 탭으로 이동이 되는 전문 보기는 쓸데없는 기능같다."
+
+   맞다. 카드 전체가 이미 그 문서로 가는 손잡이라, 같은 자리에 같은 목적지가
+   둘이면 하나는 없느니만 못하다. 그래서 손잡이는 그 자리에서 편다 — 이 화면이
+   이미 쓰는 펼침 문법(`data-expand` + `expanded`)을 그대로 빌린다.
+
+   호버 전개로는 돌아가지 않는다: 스치기만 해도 열리던 그것이 애초의 결함이었다
+   (카드가 스무 줄로 자라 위아래가 화면 밖으로 나갔다). 눌러서 열고 눌러서
+   닫는다 — 사람이 뜻을 가지고 하는 동작이다. */
+.rvmore{display:none;background:none;border:0;padding:0;margin:5px 0 0;cursor:pointer;
+  font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--muted);
+  /* 잘린 글이 이어지는 자리다 — 그 글의 왼쪽 끝에 선다. button 의 기본
+     text-align:center 와, 카드를 flex 로 세우는 스킨(calm)의 stretch 가
+     내버려 두면 한가운데로 보낸다. */
+  text-align:left;align-self:flex-start}
+.rvpt.iscut + .rvmore{display:block}
+/* 열어 놓고 접을 수 없으면 여는 것이 파괴적 행동이 된다 — 열린 동안에는
+   잘림 여부와 무관하게 손잡이가 남는다. */
+.rvpt.open + .rvmore{display:block}
+/* 펼친 글은 **자기 상자 안에서** 스크롤한다. 카드 높이에 천장이 없으면 두 가지가
+   한꺼번에 무너진다: 열의 리듬(카드 한 장이 열을 통째로 차지한다)과 판정
+   버튼(승인·반려가 긴 글에 밀려 화면 밖으로 나간다 — 사용자가 본 그 화면이다).
+   232px ≈ 열네 줄. 그 이상은 카드가 아니라 문서에서 읽을 몫이고, 카드를 누르면
+   거기로 간다.
+   상자 규격은 첨부 발췌(.attx.open)가 이미 쓰는 것과 같은 것이다 — 이 화면에서
+   "펼친 글은 자기 상자 안에서 스크롤한다"는 규칙이 두 벌이 되지 않게. */
+.rvpt.open .rvtx{-webkit-line-clamp:unset;line-clamp:unset;display:block;
+  max-height:min(38vh,232px);overflow:auto;overscroll-behavior:contain;padding-right:6px}
+/* 마우스 휠만 되는 상자는 키보드 사용자에게 잘린 글이다 (WCAG 2.1.1) */
+.rvpt.open .rvtx:focus-visible{outline:1px solid var(--text);outline-offset:2px}
+.rvmore:hover{color:var(--text);text-decoration:underline;text-underline-offset:3px}
+.rvmore:focus-visible{outline:1px solid var(--text);outline-offset:2px}
+.depmore{color:var(--faint)}
+/* 전이표가 아직 안 온 자리의 한 줄 (REQ-20260828-027). `.path`(--faint)를 빌려
+   썼다가 캡처에서 거의 안 읽혔다 — faint 는 캡션 잉크로 이미 한 번 반려된 값이다
+   (REQ-20260825-081). --muted 로 올린다: 조용하되 읽힌다. 버튼 줄에 서므로
+   높이는 옆 버튼에 맞춰 가운데로.
+   글꼴은 본문체다: 이 줄은 상태의 **이름**이 아니라 사람에게 하는 말이라,
+   같은 줄의 `→ done`(mono) 과 갈라 놓는다 (REQ-20260828-007 이 세운 규칙). */
+.transwait{font-size:11.5px;color:var(--muted);align-self:center;margin-right:2px}
+/* 문서 뷰: 카드가 자른 나머지를 전부 펴고, 각 선행으로 건너뛸 수 있게 한다 */
+.depcap{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--c-blocked);font-weight:700;margin-bottom:5px}
+.depitem{line-height:1.75}
+.depitem .cdot{display:inline-block;width:7px;height:7px;margin-right:7px}
+/* 담당자 이니셜 링(.av)은 calm 전용 마크다. @이름 표기를 쓰는 스킨에서는
+   "@Ssjpark1"처럼 이름에 붙어 오타로 읽힌다 — 기본은 숨기고, 담당자 식별은
+   그 스킨의 기존 수단(@마크·이름 pill)이 그대로 맡는다. */
+.av{display:none}
+.judge{margin-top:9px;padding-top:9px;border-top:1px solid var(--hairline)}
+.acts{display:flex;gap:6px;margin-top:8px}
+.acts button{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  font-family:var(--mono);font-size:10.5px;padding:3px 10px;cursor:pointer;letter-spacing:.03em}
+.acts button:hover{background:var(--text);color:var(--bg);border-color:var(--text)}
+/* **이름은 이름처럼, 행위는 행위처럼** (REQ-20260828-007 반려).
+
+   사용자: "다른 상태에서는 open, in-progress, done인데 리뷰 단계에서만 …
+   한글로 승인/반려 라고 표시된다. 용어를 통일할 필요가 있다."
+
+   원인은 낱말이 아니라 **생김새**였다. 같은 줄에 서는 두 종류를 한 글꼴로
+   그렸다: `→ done` 은 상태의 **이름**이고 `승인`·`반려` 는 사람이 하는 **일**인데,
+   둘 다 mono + 자간이라 같은 급으로 읽혔다. 이름은 문서 앞머리·CLI·커밋에 같은
+   글자로 박힌 식별자라 mono 로 두고(그래야 "그게 그거"임이 이어진다), 행위는
+   본문체로 세운다. 한글에 트래킹을 거는 것은 이 문서가 이미 금한 것이기도 하다.
+   생김새가 다르면 같은 줄에 있어도 헷갈리지 않는다. */
+.acts button.deed{font-family:inherit;font-size:11.5px;letter-spacing:0;font-weight:600}
+/* 한 줄, 한 문법: **[행위][도착지]** (REQ-20260828-007 5차).
+
+   사용자(4차): "review 문서만 버튼이 한국어라 다른 상태의 영어 이름과 섞인다."
+   사용자(5차): "다른 상태의 카드에 대한 상태 전이도 고려해서 판단한게 맞나?"
+
+   두 번째 지적이 정확했다. 4차에서 판정 버튼에만 이름을 붙였더니 같은 줄에
+   모양이 셋이 됐고, 무엇보다 **같은 것(상태의 이름)이 두 크기로 그려졌다**:
+   `→ blocked` 의 이름은 mono 10.5px 잉크, `승인 done` 의 이름은 mono 9.5px
+   muted. `open` 문서의 `→ in-progress` 와 review 문서의 `반려 in-progress` 는
+   목적지가 같은데 글자 크기가 달랐다 — 그건 무게 차이가 아니라 불일치다.
+
+   그래서 이름의 얼굴을 하나로 고정하고(이 규칙), 무게 차이는 **행위 칸**이
+   맡는다: 옮기기는 기호(`→`), 판정은 낱말(`승인`·`반려`). 같은 자리에 기호가
+   서느냐 낱말이 서느냐로 "이건 그냥 이동" 과 "이건 판정" 이 갈린다.
+
+   색은 물려받는다 — 반전(hover)에서 고정 잉크는 배경에 묻힌다.
+   크기는 9.5px 다: 10.5px 로 두면 `반려 in-progress` 가 보드 판정 카드(1280px
+   화면에서 193px)에서 두 줄로 감긴다 — 실측. 이름이 작아지는 대가로 다섯 상태
+   어디서나 같은 얼굴을 얻는다. */
+.acts .stn{font-family:var(--mono);font-size:9.5px;letter-spacing:.02em;
+  font-weight:400;color:inherit;margin-left:5px}
+/* 판정(승인·반려)과 그 밖의 행동을 가르는 헤어라인 — 헤더 툴바의 .pdiv 와 같은
+   어휘다. 같은 줄에 서더라도 한 묶음으로 읽히지 않게 한다 (REQ-20260828-002). */
+.acts .adiv{align-self:stretch;width:1px;background:var(--border);margin:0 4px}
+.card[draggable="true"]{cursor:grab}
+.col.dropok{outline:2px dashed var(--text);outline-offset:-2px;background:var(--accent-soft)}
+

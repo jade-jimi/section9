@@ -23,6 +23,14 @@ agentId/output_file 을 돌려준다 — 즉 이 훅은 종료가 아니라 기�
 기록은 028 로 갔고, 039 는 화면에서 "69분째 진전 없음" 이 됐다. 지명이 없거나
 유일하지 않으면 종전 경로(클레임)로 물러난다.
 
+그 지명 해석은 이제 훅이 아니라 `bin/s9 delegate-target` 에 산다 (REQ-20260829-036)
+— 훅 안쪽 정규식이 정식 id 만 보는 바람에 리드가 실제로 치는 형태(`030·031 화면
+몫`)를 하나도 못 풀었고, 2026-08-29 20:09 designer 의 위임이 REQ-029 로 갔다.
+그 하나가 사고 둘을 낳았다: 030 은 손이 안 보여 거짓 멈춤 + 겹친 스폰, 029 는
+없는 손이 보여 진짜 멈춤이 가려짐. 그리고 클레임 경로로 물러난 귀속은
+**추측이라고 적는다**(`s9 claim --guess`) — 그래야 그 손이 '어느 문서인지 모르는
+손'으로 세어져 멈춤 판정이 '미상'이 되고 무인 작업자가 겹쳐 뜨지 않는다.
+
 원칙: 실패 시 조용히 exit 0. 문서를 건드릴 근거가 없으면 아무것도 하지 않는다.
 비활성화: S9_AUDIT=off
 """
@@ -82,91 +90,35 @@ def actor_for(agent_type, agent_id):
     return "sub:%s:%s" % (t, (agent_id or "")[:8]) if agent_id else "sub:%s" % t
 
 
-REQ_RE = re.compile(r"\bREQ-\d{8}-\d{1,5}(?:-[0-9a-z]{2,8})?\b")
-NAME_SCAN_MAX = 8       # 지명 후보 조회 상한 — 훅은 툴 호출마다 돈다
+def target_reqs(env, inp=None):
+    """이 위임이 붙을 요청들 — ([정식 id…], 출처) (REQ-20260829-036).
 
+    **판정은 훅이 아니라 `bin/s9` 에 산다.** 여기 있던 시절에는 시험이 잘 안
+    닿았고(훅은 하네스가 부르는 자리다), 실제로 2026-08-29 20:09 의 오귀속은
+    훅 안쪽 정규식 하나가 원인이었다. `s9 delegate-target` 한 번으로 끝내는
+    것은 부수 효과도 있다 — 종전에는 후보마다 `s9 show`·`s9 last --owns` 를
+    따로 불러 훅 하나가 s9 를 대여섯 번 띄웠다. 훅에는 20초 제한이 있다.
 
-def named_reqs(inp):
-    """위임을 띄운 쪽이 **지명한** REQ id — 등장 순, 중복 제거.
-
-    description 을 먼저 보는 이유: 리드가 대상을 명시적으로 적는 자리이고,
-    프롬프트에는 배경으로 언급되는 다른 id 가 섞이기 쉽다."""
+    출처가 "클레임" 이면 그것은 **추측**이다 — 그 사실을 그대로 돌려준다.
+    """
     inp = inp or {}
-    text = "\n".join(str(inp.get(k) or "") for k in ("description", "prompt"))
-    return list(dict.fromkeys(REQ_RE.findall(text)))[:NAME_SCAN_MAX]
-
-
-def doc_meta(env, rid):
-    """(정식 id, status). 문서가 없으면 ("", "").
-
-    짧은 id 지명도 정식 id 로 돌려준다 — 클레임·기여가 짧은 형태로 저장되면
-    live 매칭과 클레임 판정이 깨진다 (REQ-20260825-086)."""
-    r = run(env, "show", rid, "--meta")
-    if r.returncode != 0:
-        return "", ""
-    cid = status = ""
-    for line in (r.stdout or "").splitlines():
-        if line.startswith("id:") and not cid:
-            cid = line.split(":", 1)[1].strip()
-        elif line.startswith("status:") and not status:
-            status = line.split(":", 1)[1].strip()
-    return cid, status
-
-
-def named_target(env, inp):
-    """지명된 것 중 **살아 있는 하나** — 없거나 여럿이면 "" (고르지 않는다).
-
-    위임을 띄우는 쪽은 대상을 알고 있다. 그 값을 읽는 것이 세션 클레임에서
-    추측하는 것보다 언제나 낫다 — 리드가 자기가 클레임하지 않은 문서에 위임하는
-    일이 흔하고(실사고 2026-08-28 21:10: designer 는 039 를 하는데 기록은 028 에
-    붙었다), 그러면 도는 요청이 화면에서 '멈춤' 이 된다.
-
-    **유일하지 않으면 고르지 않는다.** 프롬프트에는 배경 설명으로 다른 REQ 가
-    함께 실린다 — 그중 하나를 골라 running 을 심으면 남의 문서가 영원히
-    '진행 중'으로 보인다. 여럿이면 세션 클레임 경로로 물러난다."""
-    live = []
-    for rid in named_reqs(inp):
-        cid, status = doc_meta(env, rid)
-        if cid and status not in ("done", "cancelled") and cid not in live:
-            live.append(cid)
-    return live[0] if len(live) == 1 else ""
+    r = run(env, "delegate-target",
+            "--description", str(inp.get("description") or "")[:2000],
+            "--prompt", str(inp.get("prompt") or "")[:8000])
+    try:
+        got = json.loads(r.stdout or "{}")
+    except ValueError:
+        return [], ""
+    reqs = [x for x in (got.get("reqs") or []) if isinstance(x, str) and x]
+    return reqs, str(got.get("src") or "")
 
 
 def target_req(env, inp=None, out=None):
-    """이 위임을 귀속할 REQ — ① 지명된 것 ② 세션이 실행 등록한 것 순.
-
-    ②에서 언급 기반 추측은 하지 않는다: 위임 시점엔 아직 보고 본문이 없고,
-    추측으로 남의 문서에 running 을 심으면 그 문서가 영원히 '진행 중'으로 보인다.
-    ①은 추측이 아니다 — 위임을 띄운 리드가 대상을 적은 값이다.
-    out: 넘기면 어느 경로로 골랐는지 담는다(로그용) — 오귀속을 사후에 추적하려면
-    "무엇에 붙였나" 만으로는 부족하고 "왜 그것이었나" 가 있어야 한다."""
-    if out is None:
-        out = {}
-    named = named_target(env, inp)
-    if named:
-        out["src"] = "지명"
-        return named
-    out["src"] = "클레임"
-    try:
-        b = json.loads(run(env, "bind").stdout or "{}")
-    except ValueError:
-        return ""
-    # **끝난 문서는 후보가 아니다** (REQ-20260828-036). 소유만 보고 상태를 안
-    # 보던 탓에, 13:35 에 done 된 REQ 가 그 뒤 위임 네 건을 전부 빨아들였다 —
-    # 화면은 끝난 문서를 "에이전트 4명 작업 중" 으로 그렸고, 그 문서는
-    # agent_health 의 시야(in-progress) 밖이라 좀비 기여가 마감되지도 않았다.
-    # 그리고 **최근 클레임 우선**으로 고른다: last_req 를 먼저 보면 오래된
-    # 포인터가 새 위임을 계속 가로챈다. bin/s9 의 _capture_target 과 같은 순서다.
-    cands = [x for x in [*reversed(b.get("active_reqs") or []),
-                         (b.get("last_req") or "").strip()] if x]
-    for rid in dict.fromkeys(cands):
-        if run(env, "last", "--owns", rid).stdout.strip() != rid:
-            continue
-        st = run(env, "show", rid, "--meta").stdout
-        if any(f"status: {t}" in st for t in ("done", "cancelled")):
-            continue
-        return rid
-    return ""
+    """옛 이름 — 하나만 돌려준다. 새 코드는 `target_reqs` 를 써라."""
+    reqs, src = target_reqs(env, inp)
+    if out is not None:
+        out["src"] = src
+    return reqs[0] if reqs else ""
 
 
 def main():
@@ -183,20 +135,26 @@ def main():
     env = dict(os.environ)
     env["S9_SESSION"] = (data.get("session_id") or "unknown")[:8]
     inp = data.get("tool_input") or {}
-    pick = {}
-    req = target_req(env, inp, pick)
-    if not req:
-        run(env, "log", f"위임 등록 보류: 대상 REQ 없음 (agent {aid[:8]})")
+    reqs, src = target_reqs(env, inp)
+    actor = actor_for(inp.get("subagent_type"), aid)
+    if not reqs:
+        # 붙일 곳이 없어도 **손이 있다는 사실은 남긴다** (REQ-20260829-036).
+        # 종전에는 여기서 그냥 돌아섰고, 그러면 바인딩에 transcript 조차 안
+        # 남아 `s9 workers` 도 그 손을 못 봤다 — 아무도 못 보는 손이 일하는
+        # 파일 위의 두 번째 손을 부른다.
+        run(env, "claim", "--agent-transcript", out)
+        run(env, "log", f"위임 등록 보류(손만 등록): 대상 REQ 없음 "
+                        f"(agent {aid[:8]})")
         return
-
-    run(env, "claim", req, "--agent-transcript", out)
-    run(env, "contrib", req,
-        "--actor", actor_for(inp.get("subagent_type"), aid),
-        "--item", (inp.get("description") or "")[:120],
-        "--result", "running", "--transcript", out)
-    run(env, "log", f"위임 등록: {req} ← "
-                    f"{actor_for(inp.get('subagent_type'), aid)} "
-                    f"({pick.get('src', '?')})")
+    # 추측(클레임 경로)은 추측이라고 적는다 — 그래야 그 손이 '어느 문서인지
+    # 모르는 손'으로 세어져 멈춤 판정이 '미상'이 되고 스폰이 겹치지 않는다.
+    guess = ["--guess"] if src != "지명" else []
+    for req in reqs:
+        run(env, "claim", req, "--agent-transcript", out, *guess)
+        run(env, "contrib", req, "--actor", actor,
+            "--item", (inp.get("description") or "")[:120],
+            "--result", "running", "--transcript", out)
+    run(env, "log", f"위임 등록: {' · '.join(reqs)} ← {actor} ({src or '?'})")
 
 
 if __name__ == "__main__":

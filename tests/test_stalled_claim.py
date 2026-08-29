@@ -144,8 +144,11 @@ class StalledClaim(unittest.TestCase):
     #     (REQ-20260828-036) — 화면이 옛 축에 남아 CLI 와 다른 말을 했기
     #     때문이다. 그래서 여기서 보는 곳도 그 자리다.
     def test_b4_live_session_is_not_evidence(self):
+        # 판정은 2026-08-29 에 `stall_verdict()` 로 한 번 더 옮겨졌다
+        # (REQ-20260829-036) — 멈춤 하나로 부르던 것이 셋(멈춤·대기·미상)이라
+        # 나뉘었기 때문이다. `stall_mins()` 는 그 함수의 껍데기다.
         src = open(S9, encoding="utf-8").read()
-        i = src.index("def stall_mins(")
+        i = src.index("def stall_verdict(")
         seg = src[i:src.index("\ndef ", i + 10)]
         self.assertNotIn('r.get("live_kind") in ("session"', seg,
                          "세션 생존을 그 요청의 진전으로 치고 있다")

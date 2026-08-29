@@ -1,0 +1,534 @@
+/* skins.css — skin override — soft·terminal·glass·field·cobalt·grid·slate·cork */
+/* ============ skin: soft — 사이드바 앱 셸 + 라운드 카드 (구조부터 다른 언어) ============ */
+[data-skin="soft"] header{position:fixed;left:0;top:0;bottom:0;width:232px;
+  display:flex;flex-direction:column;border-right:1px solid var(--border);
+  border-bottom:0;background:var(--panel);overflow-y:auto}
+[data-skin="soft"] main{margin-left:232px}
+[data-skin="soft"] .hrow1{flex-direction:column;align-items:stretch;gap:16px;
+  padding:18px 14px 10px}
+[data-skin="soft"] .brand{padding-bottom:0;font-size:16px}
+[data-skin="soft"] .tabs{flex-direction:column;gap:3px}
+[data-skin="soft"] .tabs button{text-align:left;border-bottom:0;border-radius:8px;
+  padding:8px 12px;margin:0;font-size:13.5px}
+[data-skin="soft"] .tabs button:hover{background:var(--accent-soft)}
+[data-skin="soft"] .tabs button.active{background:var(--accent-soft);color:var(--text)}
+[data-skin="soft"] .hrow2{flex-direction:column;align-items:stretch;gap:10px;
+  padding:12px 14px;border-top:1px solid var(--hairline)}
+[data-skin="soft"] .fgroup,[data-skin="soft"] .pgroup{flex-direction:column;
+  align-items:stretch;gap:7px}
+[data-skin="soft"] .pgroup{border-top:1px solid var(--hairline);padding-top:12px}
+/* 사이드바 셸에서는 알림이 필터 아래로 밀려 스크롤 밖에 숨는다 — 탭 바로
+   아래(필터 위)로 끌어올린다. 알림은 접히기 전까지 눈에 닿아야 한다. */
+[data-skin="soft"] .hrow1{order:0}
+[data-skin="soft"] .hrow3{order:1;flex-direction:column;align-items:flex-start;
+  gap:7px;padding:12px 14px}
+[data-skin="soft"] .hrow2{order:2}
+[data-skin="soft"] .oc-act{margin-left:0}
+[data-skin="soft"] .oc-copied{min-width:0}
+[data-skin="soft"] .pdiv{display:none}
+[data-skin="soft"] .pgroup{flex-direction:row;justify-content:space-between}
+[data-skin="soft"] .settings-panel{top:auto;bottom:14px;left:14px;right:auto;width:204px}
+[data-skin="soft"] .hrow2 input[type="text"],[data-skin="soft"] .hrow2 select{
+  width:100%;border-radius:8px}
+[data-skin="soft"] .viewer{max-height:none}
+[data-skin="soft"] .stats{border:0;background:none;gap:8px}
+[data-skin="soft"] .stat{border:1px solid var(--border);border-radius:9px;background:var(--panel)}
+[data-skin="soft"] .stat.on{box-shadow:none;border-color:var(--text)}
+[data-skin="soft"] .board{border:0;background:none;gap:14px}
+[data-skin="soft"] .col{background:var(--accent-soft);border-right:0;border-radius:12px;padding:6px}
+[data-skin="soft"] .col h2{border-bottom:0}
+[data-skin="soft"] .cards{gap:8px;padding:2px}
+/* 좌측 컬러 띠는 사용자 반려로 확정된 금지 패턴 — 제거한다. 띠가 하던 일
+   (이 카드의 상태를 즉시 안다)은 컬럼 헤더의 상태 점·이름이 이미 하고 있고,
+   포인터를 올렸을 때는 테두리가 상태색으로 물들어 되짚어준다(면 아님·윤곽). */
+[data-skin="soft"] .card{background:var(--panel);border-radius:10px;border-bottom:0;
+  border:1px solid transparent;
+  box-shadow:0 1px 3px rgba(16,24,40,.09);
+  transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease}
+[data-skin="soft"] .card:hover{background:var(--panel);transform:translateY(-1px);
+  border-color:color-mix(in srgb,var(--sc,var(--border)) 45%,transparent);
+  box-shadow:0 4px 10px rgba(16,24,40,.13)}
+@media (prefers-reduced-motion: reduce){
+  [data-skin="soft"] .card{transition:border-color .12s ease}
+  [data-skin="soft"] .card:hover{transform:none}
+}
+/* 사이드바 셸: 신원·사용량 줄이 nowrap이라 232px 밖으로 밀려 잘리고 가로
+   스크롤바가 생겼다 — 좌측 정렬 + 줄바꿈으로 폭 안에 앉힌다. */
+[data-skin="soft"] .pgroup.idcol{align-items:flex-start}
+[data-skin="soft"] .who,[data-skin="soft"] .usagechip{white-space:normal;
+  word-break:break-word;line-height:1.55}
+[data-skin="soft"] header{overflow-x:hidden}
+[data-skin="soft"] .ccterm{border-radius:10px}
+[data-skin="soft"] .badge{background:var(--accent-soft);border-radius:5px;padding:1px 7px}
+[data-skin="soft"] .badge::before{content:""}
+[data-skin="soft"] .docs,[data-skin="soft"] .audit,[data-skin="soft"] .graphwrap,[data-skin="soft"] .depsum,
+[data-skin="soft"] .streamwrap{border-radius:12px;overflow:hidden}
+[data-skin="soft"] .term{border-radius:10px}
+[data-skin="soft"] .hovercard{border-radius:10px;border-color:var(--border);
+  box-shadow:0 4px 14px rgba(0,0,0,.16)}
+[data-skin="soft"] .kind{background:color-mix(in srgb,var(--kc) 12%,transparent);
+  border-radius:5px;padding:1px 8px}
+[data-skin="soft"] .kind::before{content:none}
+[data-skin="soft"] .more{border:1px dashed var(--border);border-radius:8px;text-align:center}
+[data-skin="soft"] .more::before{content:""}
+/* 세로 띠 override 제거 (REQ-20260828-009) — 베이스가 잉크 표식으로 바뀌었다 */
+[data-skin="soft"] .doclist .row.sel{box-shadow:none}
+
+/* ============ skin: terminal — 브루탈리스트 모노 디자인 언어 ============ */
+[data-skin="terminal"] body,[data-skin="terminal"] .card .t,
+[data-skin="terminal"] .viewer h1,[data-skin="terminal"] .tabs button,
+[data-skin="terminal"] .doclist .row>div:nth-child(3),
+[data-skin="terminal"] .hovercard .ht,[data-skin="terminal"] .backlinks .bl{
+  font-family:var(--mono);letter-spacing:0}
+[data-skin="terminal"] body{font-size:12.5px}
+[data-skin="terminal"] header{border-bottom:2px solid var(--text)}
+[data-skin="terminal"] .tabs button{text-transform:uppercase;letter-spacing:.08em;font-size:12px}
+[data-skin="terminal"] .tabs button.active{background:var(--text);color:var(--bg);
+  border-bottom-color:transparent}
+[data-skin="terminal"] .viewer h1{font-size:17px}
+[data-skin="terminal"] .viewer h1::before{content:"> "}
+[data-skin="terminal"] .card:hover,[data-skin="terminal"] .doclist .row:hover{
+  background:var(--text)}
+[data-skin="terminal"] .card:hover *,[data-skin="terminal"] .doclist .row:hover *{
+  color:var(--bg) !important}
+[data-skin="terminal"] .typebar .tb.on{background:var(--text);color:var(--bg);
+  border-bottom-color:transparent}
+/* 선택 상태는 배경이 잉크로 반전된다 — 그 위에서 타입색 잉크는 대비를 잃는다.
+   43/46 은 색을 잃어도 두 수가 다르다는 것으로 "남았다"를 그대로 나른다(색
+   없이도 구분되는 것이 원칙이다) — 가독성을 택한다. 색 강조는 비선택 상태에서
+   일한다. */
+[data-skin="terminal"] .typebar .tb.on b,
+[data-skin="terminal"] .typebar .tb.on b.qf.left{color:var(--bg)}
+[data-skin="terminal"] .doclist .row.sel{background:var(--text);box-shadow:none}
+[data-skin="terminal"] .doclist .row.sel *{color:var(--bg) !important}
+/* 반전된 행 위에서는 링도 반전한다 — 잉크 배경에 잉크 링은 없는 것과 같다.
+   뜻("실선 = 지금 여기")은 그대로 두고 색만 뒤집는다 (REQ-20260827-013,
+   실브라우저 캡처로 발견). 열린 행이 곧 포커스 행인 순간이 기본값이라
+   그냥 두면 터미널 스킨에서는 키보드가 어디 있는지 보이지 않는다. */
+[data-skin="terminal"] .doclist .row.sel:focus-visible,
+[data-skin="terminal"] .doclist .row:hover:focus-visible{outline-color:var(--bg)}
+[data-skin="terminal"] .stat.on{background:var(--text);color:var(--bg);box-shadow:none}
+[data-skin="terminal"] .stat.on b{color:var(--bg)}
+[data-skin="terminal"] .brand .dot{width:9px;height:14px;animation:s9blink 1.1s steps(1) infinite}
+@keyframes s9blink{50%{opacity:0}}
+
+/* ============ skin: glass — frosted 레이어 + 앰비언트 컬러 필드 (2026-08-23 사용자 번복으로 부활)
+   ledger의 정반대 언어: 반투명 패널 + backdrop blur, 은은한 그라데이션 배경, 라운드/부드러운 그림자.
+   색은 tone 토큰(color-mix)에서만 파생 — 4개 tone 어디서든 성립. ============ */
+[data-skin="glass"]{
+  --gl-panel:color-mix(in srgb, var(--panel) 62%, transparent);
+  --gl-card:color-mix(in srgb, var(--panel) 52%, transparent);
+  --gl-solid:color-mix(in srgb, var(--panel) 90%, transparent);
+  --gl-line:color-mix(in srgb, var(--text) 16%, transparent);
+  --gl-hairline:color-mix(in srgb, var(--text) 9%, transparent);
+  --gl-tint:color-mix(in srgb, var(--text) 9%, transparent);
+  --gl-shadow:0 14px 38px -16px color-mix(in srgb, var(--text) 35%, transparent);
+}
+[data-skin="glass"] body{
+  background:
+    radial-gradient(62% 50% at 10% -4%, color-mix(in srgb, var(--c-open) 44%, transparent), transparent 72%),
+    radial-gradient(54% 46% at 92% 4%,  color-mix(in srgb, var(--c-review) 38%, transparent), transparent 72%),
+    radial-gradient(50% 42% at 80% 92%, color-mix(in srgb, var(--c-inprogress) 26%, transparent), transparent 74%),
+    radial-gradient(64% 54% at 18% 104%, color-mix(in srgb, var(--c-done) 34%, transparent), transparent 74%),
+    var(--bg);
+  background-attachment:fixed;
+}
+[data-skin="glass"] header{
+  background:color-mix(in srgb, var(--bg) 52%, transparent);
+  -webkit-backdrop-filter:blur(16px) saturate(1.3);
+  backdrop-filter:blur(16px) saturate(1.3);
+  border-bottom:1px solid var(--gl-line)}
+[data-skin="glass"] .tabs{gap:6px}
+[data-skin="glass"] .tabs button{border-bottom:0;border-radius:999px;
+  padding:6px 14px;margin:0 0 8px}
+[data-skin="glass"] .tabs button:hover{background:color-mix(in srgb, var(--text) 6%, transparent)}
+[data-skin="glass"] .tabs button.active{background:var(--gl-tint);color:var(--text)}
+[data-skin="glass"] .hrow2,[data-skin="glass"] .hrow3{border-top-color:var(--gl-hairline)}
+/* 패널 = 떠 있는 유리판: 반투명 + blur + 라운드 + 부드러운 그림자 */
+[data-skin="glass"] .stats,[data-skin="glass"] .board,[data-skin="glass"] .docs,
+[data-skin="glass"] .audit,[data-skin="glass"] .graphwrap,[data-skin="glass"] .depsum,[data-skin="glass"] .streamwrap,
+[data-skin="glass"] .proj-info,[data-skin="glass"] .mystrip{
+  background:var(--gl-panel);
+  -webkit-backdrop-filter:blur(18px) saturate(1.25);
+  backdrop-filter:blur(18px) saturate(1.25);
+  border:1px solid var(--gl-line);border-radius:14px;box-shadow:var(--gl-shadow)}
+[data-skin="glass"] .docs,[data-skin="glass"] .audit,[data-skin="glass"] .graphwrap,[data-skin="glass"] .depsum,
+[data-skin="glass"] .streamwrap{overflow:hidden}
+[data-skin="glass"] .stats{overflow:hidden}
+[data-skin="glass"] .stat{border-right-color:var(--gl-hairline)}
+[data-skin="glass"] .stat:hover{background:var(--gl-tint)}
+[data-skin="glass"] .stat.on{background:var(--gl-tint);box-shadow:none}
+/* Board: 레저 행 대신 유리 칩 카드 */
+[data-skin="glass"] .col{border-right-color:var(--gl-hairline)}
+[data-skin="glass"] .col h2{border-bottom-color:var(--gl-hairline)}
+[data-skin="glass"] .cards{gap:8px;padding:8px}
+[data-skin="glass"] .card{background:var(--gl-card);border:1px solid var(--gl-hairline);
+  border-radius:11px;box-shadow:0 4px 16px -10px color-mix(in srgb, var(--text) 30%, transparent)}
+[data-skin="glass"] .card:hover{background:var(--gl-solid)}
+[data-skin="glass"] .col .more{padding-left:22px}
+[data-skin="glass"] .doclist{border-right-color:var(--gl-hairline)}
+[data-skin="glass"] .doclist .grp{background:var(--gl-solid);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border-bottom-color:var(--gl-hairline)}
+[data-skin="glass"] .typebar{background:var(--gl-solid);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border-bottom-color:var(--gl-line)}
+[data-skin="glass"] .doclist .row{border-bottom-color:var(--gl-hairline)}
+[data-skin="glass"] .doclist .row:hover,[data-skin="glass"] .doclist .row.sel,
+[data-skin="glass"] .card:hover,[data-skin="glass"] .urow:hover,
+[data-skin="glass"] .mystrip .ms-row:hover,[data-skin="glass"] .mystrip .ms-row.sel,
+[data-skin="glass"] .backlinks .bl:hover{background:var(--gl-tint)}
+[data-skin="glass"] .audit tr:hover td{background:var(--gl-tint)}
+[data-skin="glass"] .audit td,[data-skin="glass"] .metatbl td{border-bottom-color:var(--gl-hairline)}
+/* 컨트롤: 라운드 + 반투명 */
+[data-skin="glass"] .hrow2 input[type="text"],[data-skin="glass"] .hrow2 select,
+[data-skin="glass"] .settings-panel select,[data-skin="glass"] .uf,
+[data-skin="glass"] .uform input,[data-skin="glass"] .uform select,
+[data-skin="glass"] .uform button,[data-skin="glass"] .gear,
+[data-skin="glass"] .acts button,[data-skin="glass"] .gmode,
+[data-skin="glass"] .pi-x{border-radius:9px;
+  background:var(--gl-card);border-color:var(--gl-line)}
+[data-skin="glass"] .gmode.on,[data-skin="glass"] .gear:hover,
+[data-skin="glass"] .acts button:hover,[data-skin="glass"] .uform button:hover{
+  background:var(--text);color:var(--bg);border-color:transparent}
+[data-skin="glass"] .settings-panel{background:var(--gl-panel);
+  -webkit-backdrop-filter:blur(20px) saturate(1.25);
+  backdrop-filter:blur(20px) saturate(1.25);
+  border-radius:14px;border-color:var(--gl-line);box-shadow:var(--gl-shadow)}
+[data-skin="glass"] .hovercard{background:var(--gl-solid);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  border-radius:12px;border-color:var(--gl-line);box-shadow:var(--gl-shadow)}
+[data-skin="glass"] .proj-info{border-color:var(--gl-line)}
+[data-skin="glass"] .term{background:rgba(13,17,22,.92)}
+[data-skin="glass"] .ccterm{border-radius:14px;border-color:var(--gl-line)}
+[data-skin="glass"] .ghint{background:var(--gl-solid);border-color:var(--gl-hairline);
+  border-radius:8px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+[data-skin="glass"] .legend{border-bottom-color:var(--gl-hairline)}
+[data-skin="glass"] .md pre{border-radius:8px;border-left-color:var(--gl-line)}
+[data-skin="glass"] .kind{background:color-mix(in srgb, var(--kc) 13%, transparent);
+  border-radius:6px;padding:1px 8px}
+[data-skin="glass"] .kind::before{content:none}
+[data-skin="glass"] .more{border-radius:8px}
+[data-skin="glass"] .more:hover{background:var(--gl-tint);text-decoration:none;
+  color:var(--text)}
+
+/* ============ skin: field — 강한 컬러 필드 + 플랫 패널 ============
+   glass의 안개를 훨씬 밀어붙인 선명한 앰비언트 그라운드 — 그 위에 불투명·플랫한
+   패널이 또렷이 앉는다. 블러·그림자·반투명 없음: 채색 지면 vs 백색 판의 대비가 언어.
+   축: 배경 분위기(강) + 깊이(플랫으로 반전) + 셸(여백·컬럼 분리).
+   필드는 tone의 상태색·--bg에서만 파생(color-mix) — 4 tone 성립. 토큰 재정의 없음. */
+[data-skin="field"]{
+  --fd-line:color-mix(in srgb, var(--text) 24%, transparent);
+  --fd-hair:color-mix(in srgb, var(--text) 10%, transparent);
+  --fd-field:
+    radial-gradient(58% 66% at 6% 0%,  color-mix(in srgb, var(--c-open) 68%, transparent), transparent 76%),
+    radial-gradient(52% 60% at 98% 2%, color-mix(in srgb, var(--c-review) 62%, transparent), transparent 74%),
+    radial-gradient(48% 56% at 92% 100%, color-mix(in srgb, var(--c-inprogress) 55%, transparent), transparent 76%),
+    radial-gradient(58% 62% at 2% 100%, color-mix(in srgb, var(--c-done) 60%, transparent), transparent 76%),
+    linear-gradient(155deg, color-mix(in srgb, var(--c-open) 34%, var(--bg)) 0%,
+      color-mix(in srgb, var(--c-review) 30%, var(--bg)) 48%,
+      color-mix(in srgb, var(--c-done) 26%, var(--bg)) 100%);
+}
+[data-skin="field"] body{background:var(--fd-field);background-attachment:fixed}
+/* 헤더도 같은 fixed 필드 — 지면과 이음새 없이 이어진다 (블러 없이 sticky 성립) */
+[data-skin="field"] header{background:var(--fd-field);background-attachment:fixed;
+  border-bottom:1px solid var(--fd-line)}
+[data-skin="field"] main{padding:26px clamp(22px, 4vw, 64px)}
+[data-skin="field"] .count{color:var(--text)}
+/* 탭 잉크는 투명도를 섞지 않는다 — 채도 높은 지면 위에서 76%로 흐리면 라이트
+   tone 좌측(가장 짙은 필드)에서 3.8:1까지 떨어졌다 (REQ-20260825-081 실측).
+   전량 --text로 올려 최소 4.5:1을 확보하고, 활성/비활성 위계는 투명도가 아니라
+   굵기와 "지면 위로 올라온 백색 칩"이 만든다. */
+[data-skin="field"] .tabs button{color:var(--text);font-weight:500}
+[data-skin="field"] .tabs button:hover{color:var(--text);text-decoration:underline;
+  text-underline-offset:4px}
+/* 활성 탭 = 지면 위 백색 판이 헤더까지 올라온 칩 */
+[data-skin="field"] .tabs button.active{background:var(--panel);color:var(--text);
+  font-weight:700;text-decoration:none;border-bottom-color:transparent}
+[data-skin="field"] .hrow2{background:var(--panel);border-top:0;
+  border-bottom:1px solid var(--fd-line)}
+[data-skin="field"] .hrow2 input[type="text"],[data-skin="field"] .hrow2 select{
+  border-color:var(--fd-line)}
+/* 알림 줄도 hrow2와 같은 백색 판 위에 둔다 — 고채도 필드 위 앰버는 대비가 무너진다 */
+[data-skin="field"] .hrow3{background:var(--panel);border-top:1px solid var(--fd-line);
+  border-bottom:1px solid var(--fd-line)}
+[data-skin="field"] .chk{color:var(--muted)}
+[data-skin="field"] .pdiv{background:var(--fd-line)}
+[data-skin="field"] .stats,[data-skin="field"] .docs,[data-skin="field"] .audit,
+[data-skin="field"] .graphwrap,[data-skin="field"] .depsum,[data-skin="field"] .streamwrap,
+[data-skin="field"] .proj-info,[data-skin="field"] .mystrip{border-color:var(--fd-line)}
+/* Board: 패널 상자를 버리고 컬럼 자체가 지면 위 백색 판 — 판 사이로 필드가 흐른다 */
+[data-skin="field"] .board{background:transparent;border:0;gap:16px;padding-bottom:4px}
+[data-skin="field"] .col,[data-skin="field"] .col:last-child{
+  background:var(--panel);border:1px solid var(--fd-line)}
+[data-skin="field"] .ghint{border-color:var(--fd-hair)}
+
+/* ============ skin: cobalt — 컬러 헤더 밴드 셸 ============
+   상단을 짙은 코발트 밴드(브랜드·탭 백색 잉크)로 바꾼 클래식 프로 SaaS 셸.
+   축: 셸 구조(밴드 2단) + 배경(밴드 색) + 모양(라운드 10px 카드 그리드).
+   밴드색은 --c-open을 black으로 눌러 파생 — 어느 tone에서도 백색 잉크 대비 성립. */
+[data-skin="cobalt"]{
+  --cb-band:color-mix(in srgb, var(--c-open) 66%, black);
+  --cb-band2:color-mix(in srgb, var(--c-open) 52%, black);
+  --cb-ink:#ffffff;
+  --cb-ink-dim:rgba(255,255,255,.72);
+  --cb-edge:rgba(255,255,255,.16);
+}
+[data-skin="cobalt"] header{background:var(--cb-band);border-bottom:0}
+[data-skin="cobalt"] .hrow1{padding:16px 24px 0}
+[data-skin="cobalt"] .brand{color:var(--cb-ink);font-size:16px}
+[data-skin="cobalt"] .brand .dot{background:var(--cb-ink)}
+[data-skin="cobalt"] .tabs button{color:var(--cb-ink-dim);border-bottom-width:3px;
+  padding:6px 13px 13px}
+[data-skin="cobalt"] .tabs button:hover{color:var(--cb-ink)}
+[data-skin="cobalt"] .tabs button.active{color:var(--cb-ink);border-bottom-color:var(--cb-ink)}
+[data-skin="cobalt"] header button:focus-visible{outline-color:var(--cb-ink)}
+[data-skin="cobalt"] .hrow2{background:var(--cb-band2);border-top:1px solid var(--cb-edge)}
+[data-skin="cobalt"] .hrow2 input[type="text"],[data-skin="cobalt"] .hrow2 select{
+  border-color:transparent;border-radius:7px}
+[data-skin="cobalt"] .hrow2 .chk{color:var(--cb-ink-dim)}
+[data-skin="cobalt"] .hrow2 .chk input{accent-color:var(--cb-ink)}
+/* 밴드 위 텍스트는 전부 밴드 잉크로 — 라이트 tone에서 --text/--muted를 그대로
+   쓰면 남색 위 검정이 되어 신원 줄이 사라졌다 (REQ-20260825-081 점검). */
+[data-skin="cobalt"] .hrow2 .who{color:var(--cb-ink-dim)}
+[data-skin="cobalt"] .hrow2 .who b{color:var(--cb-ink)}
+[data-skin="cobalt"] .hrow2 .who .as{color:#d6c8ff}
+[data-skin="cobalt"] .hrow2 .who.warn{color:#ffb4b0}
+[data-skin="cobalt"] .hrow2 .who.warn code{border-color:var(--cb-edge)}
+[data-skin="cobalt"] .hrow2 .usagechip{color:var(--cb-ink-dim)}
+[data-skin="cobalt"] .hrow2 .usagechip .warn{color:#ffd27a}
+[data-skin="cobalt"] .hrow2 .usagechip .crit{color:#ffb4b0}
+[data-skin="cobalt"] .hrow2 .pbadge,[data-skin="cobalt"] .hrow2 .reqhint{color:#ffd27a}
+[data-skin="cobalt"] .hrow3{background:var(--cb-band2);border-top:1px solid var(--cb-edge);
+  padding:7px 24px}
+[data-skin="cobalt"] .oc-mark,[data-skin="cobalt"] .oc-t{color:#ffd27a}
+[data-skin="cobalt"] .oc-d,[data-skin="cobalt"] .oc-note{color:var(--cb-ink-dim)}
+[data-skin="cobalt"] .oc-d code{color:var(--cb-ink)}
+[data-skin="cobalt"] .oc-cmd{background:transparent;border-color:var(--cb-edge);
+  color:var(--cb-ink);border-radius:7px}
+[data-skin="cobalt"] .oc-cmd::before{color:var(--cb-ink-dim)}
+[data-skin="cobalt"] .oc-cmd:hover{background:var(--cb-ink);color:var(--cb-band)}
+[data-skin="cobalt"] .oc-cmd:hover::before{color:var(--cb-band)}
+[data-skin="cobalt"] .oc-copied{color:#a7f3d0}
+[data-skin="cobalt"] .oc-fold,[data-skin="cobalt"] .oc-open{color:var(--cb-ink-dim)}
+[data-skin="cobalt"] .oc-fold:hover,[data-skin="cobalt"] .oc-open:hover{color:var(--cb-ink)}
+[data-skin="cobalt"] .pdiv{background:var(--cb-edge)}
+[data-skin="cobalt"] .gear{background:transparent;border-color:var(--cb-edge);
+  color:var(--cb-ink);border-radius:7px}
+[data-skin="cobalt"] .gear:hover{background:var(--cb-ink);color:var(--cb-band)}
+[data-skin="cobalt"] .settings-panel{top:118px;border-radius:12px}
+/* 콘텐츠: 라운드 카드 그리드 — 밴드 아래는 밝고 정돈된 작업면 */
+[data-skin="cobalt"] .stats,[data-skin="cobalt"] .docs,[data-skin="cobalt"] .audit,
+[data-skin="cobalt"] .graphwrap,[data-skin="cobalt"] .depsum,[data-skin="cobalt"] .streamwrap,
+[data-skin="cobalt"] .proj-info,[data-skin="cobalt"] .mystrip{border-radius:12px}
+[data-skin="cobalt"] .docs,[data-skin="cobalt"] .audit,[data-skin="cobalt"] .graphwrap,[data-skin="cobalt"] .depsum,
+[data-skin="cobalt"] .streamwrap,[data-skin="cobalt"] .stats{overflow:hidden}
+[data-skin="cobalt"] .board{background:transparent;border:0;gap:12px}
+[data-skin="cobalt"] .col,[data-skin="cobalt"] .col:last-child{background:var(--panel);
+  border:1px solid var(--border);border-radius:12px}
+/* 액센트 = 밴드색 계열(--c-open): 선택·활성 신호를 일관 코딩 */
+[data-skin="cobalt"] .stat.on{box-shadow:inset 0 -2px 0 var(--c-open);color:var(--text)}
+[data-skin="cobalt"] .typebar .tb.on{color:var(--c-open);border-bottom-color:var(--c-open)}
+/* 목록의 '지금 보는 문서'에서 세로 띠를 뺀다 (REQ-20260828-009) — 색면·세로 띠는
+   이 화면이 금하는 것이고, 베이스가 잉크 표식(●·굵기)으로 바뀌었다.
+   프로젝트 스트립(.ms-row)은 다른 컴포넌트라 그대로 둔다. */
+[data-skin="cobalt"] .mystrip .ms-row.sel{box-shadow:inset 2px 0 0 var(--c-open)}
+[data-skin="cobalt"] .more:hover{color:var(--c-open)}
+[data-skin="cobalt"] .acts button,[data-skin="cobalt"] .gmode,[data-skin="cobalt"] .pi-x,
+[data-skin="cobalt"] .uform button{border-radius:7px}
+[data-skin="cobalt"] .hovercard{border-radius:10px}
+[data-skin="cobalt"] .ccterm{border-radius:12px}
+
+/* ============ skin: grid — 풀블리드 고밀도 데이터 그리드 ============
+   프레임·여백을 걷어낸 엣지-투-엣지 그리드: 잉크 인버스 헤더 바 + 지브라 행 +
+   전폭 컬럼. 축: 셸(풀블리드) + 밀도(고) + 모양(라운드 0·면 채움 헤더).
+   서체는 베이스 그대로(sans) — terminal(전면 mono·인버스 hover)과 다른 문법. */
+[data-skin="grid"] main{padding:0}
+[data-skin="grid"] .count{margin:0;padding:7px 14px;border-bottom:1px solid var(--hairline)}
+[data-skin="grid"] .hrow1{padding:10px 14px 0}
+[data-skin="grid"] .brand{padding-bottom:9px}
+[data-skin="grid"] .tabs button{padding:3px 11px 9px}
+[data-skin="grid"] .hrow2{padding:6px 14px}
+[data-skin="grid"] .hrow3{padding:5px 14px}
+[data-skin="grid"] .stats,[data-skin="grid"] .board,[data-skin="grid"] .docs,
+[data-skin="grid"] .audit,[data-skin="grid"] .graphwrap,[data-skin="grid"] .depsum,[data-skin="grid"] .streamwrap{
+  border-left:0;border-right:0;border-top:0}
+[data-skin="grid"] .stats{margin:0}
+[data-skin="grid"] .stat{flex:1 1 auto}
+/* 활성 스탯의 기본 신호는 2px 인셋 밑줄인데, grid에서는 바로 아래 잉크 인버스
+   컬럼 헤더 바에 붙어 삼켜진다 (REQ-20260825-081 픽셀 실측). 이 스킨의 활성
+   문법인 잉크 인버스로 바꾼다 — 컬럼 헤더·그룹 헤더와 같은 규칙. */
+[data-skin="grid"] .stat.on{background:var(--text);color:var(--bg);box-shadow:none}
+[data-skin="grid"] .stat.on b{color:var(--bg)}
+[data-skin="grid"] .proj-info,[data-skin="grid"] .mystrip{margin:10px 14px}
+/* 컬럼: 고정폭을 버리고 화면을 나눠 가진다 — 잉크 헤더 바가 구획의 앵커 */
+[data-skin="grid"] .board{padding-bottom:0}
+[data-skin="grid"] .col{flex:1 1 0;width:auto;min-width:212px;padding-bottom:0}
+[data-skin="grid"] .col h2{background:var(--text);color:var(--bg);border-bottom:0;
+  letter-spacing:.12em;padding:8px 12px}
+[data-skin="grid"] .col h2 .n{color:color-mix(in srgb, var(--bg) 72%, transparent)}
+[data-skin="grid"] .doclist .grp{background:var(--text);color:var(--bg);border-bottom:0}
+[data-skin="grid"] .typebar{padding:0 12px;border-bottom-color:var(--border)}
+[data-skin="grid"] .audit th{background:var(--text);color:var(--bg);border-bottom:0}
+[data-skin="grid"] .audit .cap{border-bottom-color:var(--hairline)}
+/* 지브라 + 조밀 행 */
+[data-skin="grid"] .card{padding:7px 12px}
+[data-skin="grid"] .card .t{font-size:12.5px;margin:2px 0 4px;padding-right:52px}
+[data-skin="grid"] .card:nth-child(even),
+[data-skin="grid"] .audit tbody tr:nth-child(even) td,
+[data-skin="grid"] .doclist .row:nth-child(even){
+  background:color-mix(in srgb, var(--text) 3%, var(--panel))}
+[data-skin="grid"] .card:hover,[data-skin="grid"] .doclist .row:hover{
+  background:color-mix(in srgb, var(--text) 8%, var(--panel))}
+[data-skin="grid"] .audit tr:hover td{
+  background:color-mix(in srgb, var(--text) 8%, var(--panel))}
+[data-skin="grid"] .doclist .row{padding:6px 12px}
+[data-skin="grid"] .doclist{width:300px}
+/* 좌우 여백이 다른 스킨·밀도에서도 붙박이 줄이 판 끝에 정확히 맞도록 --vpad 로
+   함께 옮긴다 (REQ-20260828-009). 윗 여백은 제목 줄이 가진다. */
+[data-skin="grid"] .viewer{--vpad:26px;padding:0 var(--vpad) 18px}
+[data-skin="grid"] .settings-panel{top:84px}
+
+/* skin: cockpit — 제거됨 (REQ-20260825-079: 다크-온-다크로 판독 불가).
+   저장값 cockpit은 opts 검증에서 기본(ledger)으로 폴백된다. */
+
+/* ============ skin: slate — 라이트 SaaS 셸·블루 액센트 ============
+   메인스트림 협업 도구의 디자인 언어(상표 요소 없이): 회청(blue-gray) 캔버스 위
+   화이트 패널 + 미세 그림자 + 6~8px 라운드, 명확한 블루 프라이머리(활성 탭·선택·버튼),
+   컴팩트하고 단정한 밀도의 화이트 제품 네비. 축: 배경(회청 캔버스) + 깊이(카드 그림자) +
+   모양(라운드) + 색(블루 액센트). cobalt(짙은 밴드 셸)와 달리 헤더가 밝다.
+   전 색상 tone 토큰 color-mix 파생 — 4 tone 성립. 그림자는 남색 저알파 고정(다크에선 침잠). */
+[data-skin="slate"]{
+  --sl-canvas:color-mix(in srgb, var(--c-open) 9%, color-mix(in srgb, var(--text) 4%, var(--bg)));
+  --sl-line:color-mix(in srgb, var(--c-open) 16%, var(--border));
+  --sl-blue:var(--c-open);
+  --sl-tint:color-mix(in srgb, var(--c-open) 10%, var(--panel));
+  --sl-tint2:color-mix(in srgb, var(--c-open) 16%, var(--panel));
+  --sl-shadow:0 1px 2px rgba(9,30,66,.14), 0 0 1px rgba(9,30,66,.16);
+  --sl-pop:0 8px 20px -6px rgba(9,30,66,.22), 0 0 1px rgba(9,30,66,.2);
+}
+[data-skin="slate"] body{background:var(--sl-canvas);font-size:13px}
+/* 화이트 제품 네비: 패널색 2단 바 + 블루 활성 언더라인 */
+[data-skin="slate"] header{background:var(--panel);border-bottom:1px solid var(--sl-line);
+  box-shadow:var(--sl-shadow)}
+[data-skin="slate"] .hrow1{padding:12px 22px 0}
+[data-skin="slate"] .tabs button{padding:4px 12px 12px;border-bottom-width:3px}
+[data-skin="slate"] .tabs button:hover{color:var(--sl-blue)}
+[data-skin="slate"] .tabs button.active{color:var(--sl-blue);border-bottom-color:var(--sl-blue)}
+[data-skin="slate"] .brand .dot{background:var(--sl-blue);border-radius:2px}
+[data-skin="slate"] .hrow2{background:var(--panel)}
+[data-skin="slate"] .hrow2 input[type="text"],[data-skin="slate"] .hrow2 select,
+[data-skin="slate"] .settings-panel select,[data-skin="slate"] .uform input,
+[data-skin="slate"] .uform select,[data-skin="slate"] .uf{
+  border-radius:4px;border-color:var(--sl-line)}
+[data-skin="slate"] .hrow2 input[type="text"]:focus,[data-skin="slate"] .hrow2 select:focus{
+  outline:2px solid var(--sl-blue);outline-offset:-1px}
+[data-skin="slate"] .chk input{accent-color:var(--sl-blue)}
+/* 버튼 = 블루 프라이머리 문법 (베이스 잉크 인버스를 블루로 교체) */
+[data-skin="slate"] .gear,[data-skin="slate"] .acts button,[data-skin="slate"] .gmode,
+[data-skin="slate"] .uform button,[data-skin="slate"] .pi-x{border-radius:4px}
+[data-skin="slate"] .gear:hover,[data-skin="slate"] .acts button:hover,
+[data-skin="slate"] .uform button:hover{
+  background:var(--sl-blue);color:#fff;border-color:var(--sl-blue)}
+[data-skin="slate"] .gmode.on{background:var(--sl-blue);color:#fff;border-color:var(--sl-blue)}
+[data-skin="slate"] .pi-x:hover:not(:disabled){background:var(--sl-blue);color:#fff;
+  border-color:var(--sl-blue)}
+/* 패널 = 화이트 카드: 라운드 8px + 미세 그림자 */
+[data-skin="slate"] .stats,[data-skin="slate"] .docs,[data-skin="slate"] .audit,
+[data-skin="slate"] .graphwrap,[data-skin="slate"] .depsum,[data-skin="slate"] .streamwrap,
+[data-skin="slate"] .proj-info,[data-skin="slate"] .mystrip{
+  border-radius:8px;border-color:var(--sl-line);box-shadow:var(--sl-shadow)}
+[data-skin="slate"] .docs,[data-skin="slate"] .audit,[data-skin="slate"] .graphwrap,[data-skin="slate"] .depsum,
+[data-skin="slate"] .streamwrap,[data-skin="slate"] .stats{overflow:hidden}
+/* Board: 컬럼이 각각 화이트 카드로 분리 — 캔버스가 사이로 보인다 */
+[data-skin="slate"] .board{background:transparent;border:0;gap:10px}
+[data-skin="slate"] .col,[data-skin="slate"] .col:last-child{background:var(--panel);
+  border:1px solid var(--sl-line);border-radius:8px;box-shadow:var(--sl-shadow)}
+[data-skin="slate"] .card{padding:9px 13px}
+[data-skin="slate"] .card .t{font-size:13px}
+[data-skin="slate"] .card:hover{background:var(--sl-tint)}
+/* 선택·활성 = 블루 코딩 */
+[data-skin="slate"] .stat.on{box-shadow:inset 0 -2px 0 var(--sl-blue);color:var(--text)}
+[data-skin="slate"] .stat:hover{background:var(--sl-tint)}
+[data-skin="slate"] .doclist .row:hover,[data-skin="slate"] .urow:hover,
+[data-skin="slate"] .backlinks .bl:hover,[data-skin="slate"] .mystrip .ms-row:hover{
+  background:var(--sl-tint)}
+[data-skin="slate"] .audit tr:hover td{background:var(--sl-tint)}
+[data-skin="slate"] .typebar .tb.on{color:var(--sl-blue);border-bottom-color:var(--sl-blue)}
+[data-skin="slate"] .typebar .tb:hover{color:var(--sl-blue)}
+/* 같은 이유로 doclist 만 뺀다 (REQ-20260828-009) — 파란 색면과 파란 세로 띠였다 */
+[data-skin="slate"] .mystrip .ms-row.sel{
+  background:var(--sl-tint);box-shadow:inset 2px 0 0 var(--sl-blue)}
+[data-skin="slate"] a.doclink{color:var(--sl-blue)}
+[data-skin="slate"] .md a{color:var(--sl-blue)}
+[data-skin="slate"] .more:hover{color:var(--sl-blue)}
+[data-skin="slate"] .settings-panel,[data-skin="slate"] .hovercard{
+  border-radius:8px;border-color:var(--sl-line);box-shadow:var(--sl-pop)}
+[data-skin="slate"] .col.dropok{outline-color:var(--sl-blue);border-radius:8px}
+[data-skin="slate"] .ghint{border-radius:4px}
+[data-skin="slate"] .ccterm{border-radius:8px}
+[data-skin="slate"] header button:focus-visible,[data-skin="slate"] a:focus-visible,
+[data-skin="slate"] input:focus-visible,[data-skin="slate"] select:focus-visible{
+  outline-color:var(--sl-blue)}
+
+/* ============ skin: cork — 컬러 캔버스 보드 웰 ============
+   대중적 칸반 보드의 디자인 언어(상표 요소 없이): 은은한 단색 컬러 캔버스가 지면,
+   컬럼 = 라운드 회색 웰(보드가 주인공), 카드 = 화이트 라운드 + 얕은 그림자 + hover
+   리프트. 가볍고 친근한 밀도. 축: 배경(컬러 캔버스) + 셸(웰 보드 문법) + 깊이(리프트).
+   field(고채도 멀티컬러+플랫 판)와 달리 저채도 단일 계열 + 웰/리프트가 언어.
+   캔버스는 --c-open→--c-done 저농도 사선 그라데이션 — 4 tone 성립. */
+[data-skin="cork"]{
+  --ck-canvas:linear-gradient(160deg,
+    color-mix(in srgb, var(--c-open) 46%, var(--bg)) 0%,
+    color-mix(in srgb, var(--c-open) 30%, var(--bg)) 55%,
+    color-mix(in srgb, var(--c-done) 26%, var(--bg)) 100%);
+  --ck-well:color-mix(in srgb, var(--text) 7%, var(--panel));
+  --ck-line:color-mix(in srgb, var(--text) 14%, transparent);
+  --ck-shadow:0 1px 1px rgba(20,25,35,.16);
+  --ck-lift:0 6px 14px -6px rgba(20,25,35,.3);
+}
+[data-skin="cork"] body{background:var(--ck-canvas);background-attachment:fixed}
+/* 헤더 = 캔버스 위 반투명 판 (블러 없음 — glass와 다른 문법) */
+[data-skin="cork"] header{background:color-mix(in srgb, var(--panel) 62%, transparent);
+  border-bottom:1px solid var(--ck-line)}
+[data-skin="cork"] .tabs button{border-bottom:0;border-radius:6px;padding:5px 12px;
+  margin:0 0 9px}
+[data-skin="cork"] .tabs button:hover{
+  background:color-mix(in srgb, var(--panel) 55%, transparent);color:var(--text)}
+[data-skin="cork"] .tabs button.active{background:var(--panel);color:var(--text);
+  box-shadow:var(--ck-shadow)}
+[data-skin="cork"] .hrow2,[data-skin="cork"] .hrow3{border-top-color:var(--ck-line)}
+[data-skin="cork"] .hrow2 input[type="text"],[data-skin="cork"] .hrow2 select{
+  border-radius:6px;border-color:var(--ck-line)}
+[data-skin="cork"] .gear,[data-skin="cork"] .gmode,[data-skin="cork"] .acts button,
+[data-skin="cork"] .uform button,[data-skin="cork"] .pi-x{border-radius:6px}
+[data-skin="cork"] .pdiv{background:var(--ck-line)}
+/* Board = 주인공: 프레임 상자를 버리고 웰 컬럼이 캔버스 위에 뜬다 */
+[data-skin="cork"] .board{background:transparent;border:0;gap:12px;padding-bottom:6px}
+[data-skin="cork"] .col,[data-skin="cork"] .col:last-child{
+  background:var(--ck-well);border:0;border-radius:12px;padding:4px 6px 8px}
+[data-skin="cork"] .col h2{border-bottom:0;padding:9px 10px 5px}
+[data-skin="cork"] .cards{gap:7px;padding:2px 4px}
+[data-skin="cork"] .card{background:var(--panel);border-bottom:0;border-radius:8px;
+  box-shadow:var(--ck-shadow);padding:9px 12px;
+  transition:transform .12s ease, box-shadow .12s ease}
+[data-skin="cork"] .card:hover{background:var(--panel);transform:translateY(-2px);
+  box-shadow:var(--ck-lift)}
+[data-skin="cork"] .col .more{padding-left:10px}
+[data-skin="cork"] .col.dropok{outline-color:var(--text);border-radius:12px;
+  background:color-mix(in srgb, var(--text) 12%, var(--ck-well))}
+/* 다른 탭들도 같은 문법: 캔버스 위 라운드 화이트 판 */
+[data-skin="cork"] .stats,[data-skin="cork"] .docs,[data-skin="cork"] .audit,
+[data-skin="cork"] .graphwrap,[data-skin="cork"] .depsum,[data-skin="cork"] .streamwrap,
+[data-skin="cork"] .proj-info,[data-skin="cork"] .mystrip{
+  border:0;border-radius:12px;box-shadow:var(--ck-shadow)}
+[data-skin="cork"] .docs,[data-skin="cork"] .audit,[data-skin="cork"] .graphwrap,[data-skin="cork"] .depsum,
+[data-skin="cork"] .streamwrap,[data-skin="cork"] .stats{overflow:hidden}
+[data-skin="cork"] .settings-panel,[data-skin="cork"] .hovercard{border-radius:10px;
+  border-color:var(--ck-line);box-shadow:var(--ck-lift)}
+[data-skin="cork"] .ghint{border-radius:6px}
+[data-skin="cork"] .md pre{border-radius:8px;border-left:0}
+[data-skin="cork"] .md code{border-radius:4px}
+[data-skin="cork"] .term{border-radius:10px;margin:8px}
+[data-skin="cork"] .ccterm{border-radius:12px}
+

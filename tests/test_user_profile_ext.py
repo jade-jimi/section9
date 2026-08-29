@@ -15,6 +15,7 @@ S9 = os.path.join(HERE, "..", "bin", "s9")
 
 # 임시 포트를 뽑지 않는다 — 고정 풀에서 돌려쓴다 (REQ-20260825-100, portpool 참조)
 from portpool import free_port, wait_server  # noqa: E402
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 
 class TestProfileExt(unittest.TestCase):
@@ -140,7 +141,7 @@ class TestProfileWarnScope(unittest.TestCase):
     def setUp(self):
         import os as _os
         here = _os.path.dirname(_os.path.abspath(__file__))
-        with open(_os.path.join(here, "..", "web", "index.html"),
+        with open(index_path(),
                   encoding="utf-8") as f:
             self.html = f.read()
         with open(_os.path.join(here, "..", "bin", "s9"),

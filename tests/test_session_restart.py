@@ -15,6 +15,7 @@ import tempfile
 import time
 import unittest
 from unittest import mock
+from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
@@ -279,7 +280,7 @@ class TestRestartUiContract(unittest.TestCase):
     구버전 serve(404)는 정확한 사유로 안내하며, 진단 플래그로 자가 검증 가능."""
     @classmethod
     def setUpClass(cls):
-        with open(os.path.join(HERE, "..", "web", "index.html"),
+        with open(index_path(),
                   encoding="utf-8") as f:
             cls.html = f.read()
 
