@@ -2331,11 +2331,26 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
 .chief-project span{display:block;color:var(--muted);font:10px/1.45 var(--mono);white-space:nowrap}
 .chief-project .attention{color:var(--c-review)}
 .chief-project .moving{color:var(--c-inprogress)}
+.chief-project-desk{display:grid;grid-template-columns:minmax(190px,.8fr) minmax(0,2.2fr);
+  gap:18px;align-items:center;border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  padding:16px 2px;box-shadow:0 9px 28px color-mix(in srgb,var(--text) 4%,transparent)}
+.chief-project-desk h2{margin:4px 0 0;font-size:18px;line-height:1.2;letter-spacing:-.02em}
+.chief-project-desk nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.chief-project-entry{text-align:left;border:1px solid var(--border);background:var(--panel);color:var(--text);
+  min-height:58px;padding:9px 11px;cursor:pointer;box-shadow:0 4px 12px color-mix(in srgb,var(--text) 3%,transparent)}
+.chief-project-entry:hover{border-color:var(--text);transform:translateY(-1px)}
+.chief-project-entry b{display:block;font-size:12px;margin-bottom:4px}
+.chief-project-entry span{display:block;color:var(--muted);font:10px/1.35 var(--mono)}
 
 .chief-section-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
   margin-bottom:12px}
 .chief-section-head h2{margin:0;font-size:16px;letter-spacing:-.015em}
 .chief-section-head p{margin:0;color:var(--muted);font:10.5px/1.4 var(--mono)}
+.chief-section-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.chief-create-report{border:1px solid var(--c-review);background:var(--panel);color:var(--c-review);
+  min-height:32px;padding:6px 11px;font-size:11.5px;font-weight:650;cursor:pointer}
+.chief-create-report:hover{border-color:var(--text);color:var(--text)}
+.chief-create-report:disabled{border-color:var(--hairline);color:var(--faint);cursor:not-allowed}
 .chief-lanes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .chief-lane{min-width:0;border-top:1px solid var(--border);padding-top:12px}
 .chief-lane-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
@@ -2421,6 +2436,7 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
 @media(max-width:980px){
   .chief-lanes{grid-template-columns:repeat(2,minmax(0,1fr))}
   .chief-deep{grid-template-columns:1fr}
+  .chief-project-desk{grid-template-columns:1fr}
 }
 @media(max-width:640px){
   body[data-view="chief"] main{padding:0 16px 34px}
@@ -2431,6 +2447,8 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
   .chief-work{min-height:0}
   .chief-empty{min-height:92px}
   .chief-section-head{align-items:flex-start;flex-direction:column;gap:4px}
+  .chief-section-actions{width:100%;align-items:flex-start;justify-content:space-between}
+  .chief-project-desk nav{grid-template-columns:1fr}
   .chief-report-reader{padding:0}
   .chief-report-panel{width:100vw;height:100vh;border:0}
   .chief-report-head{align-items:flex-start;flex-wrap:wrap;padding:11px 12px}
@@ -3853,6 +3871,16 @@ async function chiefPost(name,payload){
   if (!res.ok || body.ok === false) throw new Error(body.error || body.detail || body.status || `HTTP ${res.status}`);
   return body;
 }
+async function chiefOrder(payload){
+  const res = await fetch(chiefWrite("order"),{method:"POST",cache:"no-store",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify(payload || {})});
+  const raw = await res.text();
+  let body;
+  try{ body = JSON.parse(raw); }catch(_e){ throw new Error(`HTTP ${res.status}: ${raw.slice(0,160)}`); }
+  if (body.status === "rejected" || (!res.ok && res.status !== 202))
+    throw new Error(body.error || body.detail || body.status || `HTTP ${res.status}`);
+  return body;
+}
 const chiefRunActive = run => run && ["starting","running","waiting_result","unknown","requested"].includes(String(run.status || ""));
 async function chiefPollRun(key,runId){
   if (!runId) return;
@@ -4000,17 +4028,30 @@ function renderChief(){
   const releases = chiefArr(chiefData.releases).filter(r => !chiefProject ||
     [r.project_id,r.repo,r.project].some(v => chiefNorm(v) === chiefNorm(chiefProject)));
   const reports = chiefArr(chiefData.evidence).filter(r => r.kind === "report" && chiefInProject(r)).slice(0, 6);
+  const jiraCount = rows.filter(r => r.jira).length;
+  const selectedProject = allProjects.find(p => chiefNorm(p.id) === chiefNorm(chiefProject));
+  const jiraLanes = selectedProject ? {
+    needs:lanes.needs.filter(r => r.jira),progress:lanes.progress.filter(r => r.jira),
+    ready:lanes.ready.filter(r => r.jira),done:lanes.done.filter(r => r.jira),
+  } : lanes;
+  const projectDesk = selectedProject ? `<section class="chief-project-desk" aria-label="${esc(selectedProject.title || selectedProject.id)} project workspace">
+    <div><p class="chief-kicker">Project workspace</p><h2>${esc(selectedProject.title || selectedProject.id)}</h2></div>
+    <nav aria-label="Project destinations">
+      <button class="chief-project-entry" data-chief-jump="jira"><b>Jira work</b><span>${jiraCount} linked · ${rows.length} total</span></button>
+      <button class="chief-project-entry" data-chief-jump="release"><b>Release</b><span>${releases.length ? `${releases.length} release record${releases.length === 1 ? "" : "s"}` : "No release recorded"}</span></button>
+      <button class="chief-project-entry" data-chief-jump="reports"><b>Reports</b><span>${reports.length ? `${reports.length} durable report${reports.length === 1 ? "" : "s"}` : "Create the first report"}</span></button>
+    </nav></section>` : "";
   const total = rows.length;
   view.innerHTML = `<div class="chief">
     <section class="chief-top"><div><p class="chief-kicker">Chief · portfolio</p><h1>${lanes.needs.length ? `${lanes.needs.length} thing${lanes.needs.length === 1 ? "" : "s"} need your call.` : total ? "Work is moving without noise." : "There is no current work."}</h1>
       <p>${lanes.progress.length} moving · ${lanes.ready.length} ready · ${lanes.done.length} recently done${chiefProject ? " in this project" : " across the portfolio"}.${chiefNotice ? ` ${esc(chiefNotice)}` : ""}</p></div>
       <div class="chief-source"><strong>${chiefLoading ? "Refreshing…" : "Source connected"}</strong>${esc(chiefData.generated_at || "time not recorded")}<br><button class="chief-refresh" data-chief-sync aria-busy="${chiefLoading ? "true" : "false"}" ${chiefLoading ? "disabled" : ""}>${chiefLoading ? "Syncing Chief…" : "Sync Chief"}</button></div></section>
-    <nav class="chief-projects" aria-label="Chief projects">${projectsHTML}</nav>
-    <section><div class="chief-section-head"><h2>Work now</h2><p>Three per lane · open Board for the full ledger</p></div>
-      <div class="chief-lanes">${chiefLaneHTML("needs","Needs you",lanes.needs)}${chiefLaneHTML("progress","In progress",lanes.progress)}${chiefLaneHTML("ready","Ready",lanes.ready)}${chiefLaneHTML("done","Done",lanes.done)}</div></section>
-    <div class="chief-deep"><section><div class="chief-section-head"><h2>Release state</h2><p>${releases.length} project${releases.length === 1 ? "" : "s"}</p></div>
+    <nav class="chief-projects" aria-label="Chief projects">${projectsHTML}</nav>${projectDesk}
+    <section id="chief-jira"><div class="chief-section-head"><h2>${selectedProject ? "Jira work" : "Work now"}</h2><p>${selectedProject ? `${jiraCount} Jira-linked · ` : ""}three per lane · open Board for the full ledger</p></div>
+      <div class="chief-lanes">${chiefLaneHTML("needs","Needs you",jiraLanes.needs)}${chiefLaneHTML("progress","In progress",jiraLanes.progress)}${chiefLaneHTML("ready","Ready",jiraLanes.ready)}${chiefLaneHTML("done","Done",jiraLanes.done)}</div></section>
+    <div class="chief-deep"><section id="chief-release"><div class="chief-section-head"><h2>Release</h2><p>${releases.length} record${releases.length === 1 ? "" : "s"}</p></div>
       <div class="chief-release-list">${releases.length ? releases.map(chiefReleaseHTML).join("") : `<div class="chief-empty">No release record for this scope.</div>`}</div></section>
-      <section><div class="chief-section-head"><h2>Reports</h2><p>durable evidence</p></div>
+      <section id="chief-reports"><div class="chief-section-head"><h2>Reports</h2><div class="chief-section-actions"><p>durable evidence</p><button class="chief-create-report" data-chief-create-report data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Create meeting report</button></div></div>
       <div class="chief-report-list">${reports.length ? reports.map(chiefReportHTML).join("") : `<div class="chief-empty">No report has been attached yet.</div>`}</div></section></div>
   </div>`;
 }
@@ -8907,7 +8948,7 @@ document.addEventListener("drop", e => {
 });
 
 /* ---------------- events ---------------- */
-document.addEventListener("click", e => {
+document.addEventListener("click", async e => {
   const chiefReportClose = e.target.closest("[data-chief-report-close]");
   if (chiefReportClose){ chiefCloseReport(); return; }
   const chiefReport = e.target.closest("[data-chief-report-open]");
@@ -8923,6 +8964,41 @@ document.addEventListener("click", e => {
   if (chiefSync){ chiefManualSync(); return; }
   const chiefProj = e.target.closest("[data-chief-project]");
   if (chiefProj){ chiefProject = chiefProj.dataset.chiefProject || ""; renderChief(); return; }
+  const chiefJump = e.target.closest("[data-chief-jump]");
+  if (chiefJump){
+    const target = $("#chief-" + chiefJump.dataset.chiefJump);
+    if (target) target.scrollIntoView({behavior:"smooth",block:"start"});
+    return;
+  }
+  const chiefCreateReport = e.target.closest("[data-chief-create-report]");
+  if (chiefCreateReport && !chiefCreateReport.disabled){
+    const project = chiefCreateReport.dataset.chiefProject || "this project";
+    const registered = chiefArr(chiefData.projects).find(p => chiefNorm(p.id) === chiefNorm(project));
+    const title = registered && registered.title || project;
+    const brief = await s9dlg({kind:"prompt",cap:"Meeting report",
+      title:`What is the ${title} meeting for?`,
+      desc:"Include the meeting, audience, date, and the decision or update they need. Chief will gather current Jira, release, work-order, and report evidence.",
+      ok:"Assign report",cancel:"Not now",required:true});
+    if (brief === null) return;
+    chiefNotice = `Assigning the ${title} meeting report…`; renderChief();
+    const order = `Create a meeting-ready report for the ${title} project.\n\nJade's brief:\n${brief}\n\n`
+      + `Use current Jira, release, repository work-order, existing report, and runtime evidence; record every source and observation time. `
+      + `Use /home/jade/section9-chief/projects/meeting-reports/assets/MEETING-REPORT-TEMPLATE.md. `
+      + `Write the durable Markdown source under /home/jade/section9-chief/projects/meeting-reports/assets/ and a dashboard-readable HTML report under /home/jade/chief/reports/. `
+      + `Create or update the durable work record before gathering evidence, attach the finished report to the ${project} project, and surface any follow-up as separate Jira work. `
+      + `If a PowerPoint is requested, use /home/jade/EE the.thmx with its actual slide master/layouts. Do not publish to Confluence or send Teams messages without Jade's explicit approval.`;
+    try{
+      const result = await chiefOrder({target:"chief",text:order});
+      const state = String(result.status || "assigned");
+      chiefNotice = state === "delivered"
+        ? `${title} meeting report assigned to Chief.`
+        : `${title} meeting report recorded; delivery state: ${state.replaceAll("-"," ")}.`;
+      renderChief();
+    }catch(err){
+      chiefNotice = `Meeting report was not assigned: ${err.message || err}`; renderChief();
+    }
+    return;
+  }
   const chiefAct = e.target.closest("[data-chief-action]");
   if (chiefAct){
     const action = chiefAct.dataset.chiefAction || "ready";
