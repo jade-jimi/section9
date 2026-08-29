@@ -8,9 +8,7 @@
  "entry": "code",
  "ended": "1",
  "worker": "1",
- "active_reqs": [
-  "REQ-20260829-030-62x6"
- ],
+ "active_reqs": [],
  "claim_at": {
   "REQ-20260829-030-62x6": "2026-08-29T20:34:27+09:00"
  },
