@@ -69,6 +69,21 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
   border-bottom:2px solid transparent;margin-bottom:-1px}
 .tabs button:hover{color:var(--text)}
 .tabs button.active{color:var(--text);font-weight:600;border-bottom-color:var(--text)}
+.daily-tabs{min-width:0;overflow-x:auto;scrollbar-width:none}
+.daily-tabs::-webkit-scrollbar{display:none}
+.daily-tabs .talk-chief{color:var(--c-review);font-weight:650}
+.advanced-nav{position:relative;margin-left:auto;padding-bottom:8px;flex:none}
+.advanced-toggle{border:0;background:none;color:var(--faint);padding:5px 3px;cursor:pointer;
+  font:10px/1.2 var(--mono);letter-spacing:.04em}
+.advanced-toggle:hover,.advanced-toggle.active{color:var(--text)}
+.advanced-menu{position:absolute;right:0;top:31px;z-index:45;min-width:190px;padding:7px;
+  border:1px solid var(--border);background:var(--panel);box-shadow:0 16px 42px color-mix(in srgb,#000 22%,transparent)}
+.advanced-menu[hidden]{display:none}
+.advanced-menu button{display:flex;width:100%;justify-content:space-between;border:0;background:none;
+  color:var(--muted);padding:7px 9px;text-align:left;cursor:pointer;font-size:11.5px}
+.advanced-menu button:hover,.advanced-menu button.active{color:var(--text);background:var(--accent-soft)}
+.advanced-menu .advanced-cap{padding:5px 9px 7px;color:var(--faint);font:9px/1 var(--mono);
+  letter-spacing:.12em;text-transform:uppercase;border-bottom:1px solid var(--hairline);margin-bottom:3px}
 .hrow2{display:flex;gap:14px;align-items:center;justify-content:space-between;
   flex-wrap:wrap;padding:8px 22px;border-top:1px solid var(--hairline)}
 .fgroup,.pgroup{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
@@ -2335,12 +2350,15 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
   gap:18px;align-items:center;border-top:1px solid var(--border);border-bottom:1px solid var(--border);
   padding:16px 2px;box-shadow:0 9px 28px color-mix(in srgb,var(--text) 4%,transparent)}
 .chief-project-desk h2{margin:4px 0 0;font-size:18px;line-height:1.2;letter-spacing:-.02em}
-.chief-project-desk nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.chief-project-desk nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px}
 .chief-project-entry{text-align:left;border:1px solid var(--border);background:var(--panel);color:var(--text);
   min-height:58px;padding:9px 11px;cursor:pointer;box-shadow:0 4px 12px color-mix(in srgb,var(--text) 3%,transparent)}
 .chief-project-entry:hover{border-color:var(--text);transform:translateY(-1px)}
 .chief-project-entry b{display:block;font-size:12px;margin-bottom:4px}
 .chief-project-entry span{display:block;color:var(--muted);font:10px/1.35 var(--mono)}
+.chief-daily-empty{min-height:260px;display:flex;align-items:center;justify-content:center;text-align:center;
+  color:var(--muted);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:36px}
+.chief-daily-empty b{display:block;color:var(--text);font-size:15px;margin-bottom:6px}
 
 .chief-section-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
   margin-bottom:12px}
@@ -2351,6 +2369,10 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
   min-height:32px;padding:6px 11px;font-size:11.5px;font-weight:650;cursor:pointer}
 .chief-create-report:hover{border-color:var(--text);color:var(--text)}
 .chief-create-report:disabled{border-color:var(--hairline);color:var(--faint);cursor:not-allowed}
+.chief-add-work{border:1px solid var(--c-open);background:var(--panel);color:var(--c-open);
+  min-height:32px;padding:6px 11px;font-size:11.5px;font-weight:650;cursor:pointer}
+.chief-add-work:hover{border-color:var(--text);color:var(--text)}
+.chief-add-work:disabled{border-color:var(--hairline);color:var(--faint);cursor:not-allowed}
 .chief-lanes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .chief-lane{min-width:0;border-top:1px solid var(--border);padding-top:12px}
 .chief-lane-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
@@ -2423,6 +2445,60 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
   background:var(--panel);color:var(--muted);font:11px/1.5 var(--mono);z-index:1}
 .chief-report-loading[hidden]{display:none}
 
+.chief-brief-grid{display:grid;grid-template-columns:minmax(0,1.2fr) repeat(3,minmax(150px,.55fr));gap:10px}
+.chief-next{border:1px solid var(--border);background:var(--panel);padding:16px 17px;
+  box-shadow:0 9px 26px color-mix(in srgb,var(--text) 5%,transparent)}
+.chief-next h2{margin:5px 0 7px;font-size:18px;line-height:1.25;letter-spacing:-.02em}
+.chief-next p{margin:0;color:var(--muted);font-size:11.5px;line-height:1.5}
+.chief-brief-link{border:1px solid var(--hairline);background:var(--panel);color:var(--text);
+  padding:14px;text-align:left;cursor:pointer;box-shadow:0 5px 16px color-mix(in srgb,var(--text) 3%,transparent)}
+.chief-brief-link:hover{border-color:var(--text);transform:translateY(-1px)}
+.chief-brief-link b{display:block;font-size:13px;margin-bottom:8px}
+.chief-brief-link span{display:block;color:var(--muted);font:10px/1.4 var(--mono)}
+
+.chief-relations{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.chief-relation{border:1px solid var(--hairline);background:var(--panel);padding:14px 15px;
+  box-shadow:0 7px 20px color-mix(in srgb,var(--text) 4%,transparent)}
+.chief-relation h3{margin:0 0 7px;font-size:13.5px;line-height:1.35}
+.chief-relation p{margin:0;color:var(--muted);font-size:11.5px;line-height:1.5}
+.chief-relation-foot{display:flex;gap:9px;flex-wrap:wrap;margin-top:11px;color:var(--faint);font:9.5px/1.4 var(--mono)}
+.chief-relation-foot .project{color:var(--c-published)}
+.chief-relation-foot .jira{color:var(--c-open)}
+
+.chief-sessions{display:grid;grid-template-columns:minmax(230px,.65fr) minmax(0,1.35fr);gap:14px;min-height:520px}
+.chief-session-list,.chief-thread{border:1px solid var(--border);background:var(--panel);
+  box-shadow:0 9px 28px color-mix(in srgb,var(--text) 5%,transparent);min-width:0}
+.chief-session-list header,.chief-thread header{padding:13px 14px;border-bottom:1px solid var(--hairline)}
+.chief-session-list header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.chief-session-list h3,.chief-thread h3{margin:0;font-size:13px}
+.chief-new-session{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  padding:5px 8px;font-size:10.5px;font-weight:600;cursor:pointer}
+.chief-new-session:hover{border-color:var(--text)}
+.chief-new-session:disabled{color:var(--faint);border-color:var(--hairline);cursor:not-allowed}
+.chief-session-rows{max-height:570px;overflow:auto}
+.chief-session-row{display:block;width:100%;border:0;border-bottom:1px solid var(--hairline);
+  background:none;color:var(--text);padding:11px 14px;text-align:left;cursor:pointer}
+.chief-session-row:hover,.chief-session-row[aria-pressed="true"]{background:var(--accent-soft)}
+.chief-session-row b{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:12px}
+.chief-session-row b span{color:var(--c-inprogress);font:9px/1 var(--mono);font-weight:500}
+.chief-session-row p{margin:5px 0 0;color:var(--muted);font-size:10.5px;line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.chief-thread{display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+.chief-thread header p{margin:4px 0 0;color:var(--muted);font:10px/1.4 var(--mono)}
+.chief-messages{overflow:auto;padding:15px;display:grid;align-content:start;gap:10px}
+.chief-message{max-width:82%;padding:10px 12px;border:1px solid var(--hairline);font-size:11.5px;line-height:1.5;
+  white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg)}
+.chief-message.agent{justify-self:start}
+.chief-message.jade{justify-self:end;border-color:var(--border);background:var(--panel)}
+.chief-message small{display:block;color:var(--faint);font:9px/1.3 var(--mono);margin-bottom:5px}
+.chief-compose{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:11px;
+  border-top:1px solid var(--hairline)}
+.chief-compose textarea{resize:none;min-height:54px;max-height:150px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);padding:8px 9px;font:12px/1.45 inherit}
+.chief-compose button{border:1px solid var(--text);background:var(--text);color:var(--bg);
+  padding:7px 13px;font-size:11.5px;font-weight:650;cursor:pointer}
+.chief-compose button:disabled{opacity:.45;cursor:not-allowed}
+
 .chief-state{min-height:430px;display:flex;align-items:center;justify-content:center;padding:50px 20px}
 .chief-state-inner{max-width:620px;text-align:center}
 .chief-state .chief-kicker{color:var(--c-inprogress)}
@@ -2437,6 +2513,9 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
   .chief-lanes{grid-template-columns:repeat(2,minmax(0,1fr))}
   .chief-deep{grid-template-columns:1fr}
   .chief-project-desk{grid-template-columns:1fr}
+  .chief-brief-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .chief-next{grid-column:1/-1}
+  .chief-sessions{grid-template-columns:1fr;min-height:0}
 }
 @media(max-width:640px){
   body[data-view="chief"] main{padding:0 16px 34px}
@@ -2449,6 +2528,11 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
   .chief-section-head{align-items:flex-start;flex-direction:column;gap:4px}
   .chief-section-actions{width:100%;align-items:flex-start;justify-content:space-between}
   .chief-project-desk nav{grid-template-columns:1fr}
+  .chief-brief-grid,.chief-relations{grid-template-columns:1fr}
+  .chief-next{grid-column:auto}
+  .chief-sessions{grid-template-columns:1fr}
+  .chief-session-rows{max-height:280px}
+  .chief-thread{min-height:500px}
   .chief-report-reader{padding:0}
   .chief-report-panel{width:100vw;height:100vh;border:0}
   .chief-report-head{align-items:flex-start;flex-wrap:wrap;padding:11px 12px}
@@ -2460,16 +2544,28 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
 <body>
 <header>
   <div class="hrow1">
-    <div class="brand"><span class="dot"></span>section9</div>
-    <div class="tabs">
-      <button data-tab="chief" class="active">Chief</button>
-      <button data-tab="board">Board</button>
-      <button data-tab="docs">Docs</button>
-      <button data-tab="graph">Graph</button>
-      <button data-tab="audit">Audit</button>
-      <button data-tab="stream">Stream</button>
-      <button data-tab="terminal">Terminal</button>
-      <button data-tab="settings">Settings<span id="settings-badge" class="pbadge" hidden>⚠</span></button>
+    <div class="brand"><span class="dot"></span>Chief</div>
+    <div class="tabs daily-tabs" aria-label="Chief daily navigation">
+      <button data-chief-nav="brief" class="active">Brief</button>
+      <button data-chief-nav="work">Work</button>
+      <button data-chief-nav="release">Release</button>
+      <button data-chief-nav="reports">Reports</button>
+      <button data-chief-nav="relations">Relations</button>
+      <button data-chief-nav="sessions">Sessions</button>
+      <button class="talk-chief" data-chief-talk>Talk to Chief</button>
+    </div>
+    <div class="advanced-nav">
+      <button class="advanced-toggle" data-advanced-toggle aria-expanded="false">Advanced</button>
+      <div class="advanced-menu" id="advanced-menu" hidden>
+        <div class="advanced-cap">Section9 system</div>
+        <button data-tab="board">Raw Board</button>
+        <button data-tab="docs">Documents</button>
+        <button data-tab="graph">Raw Graph</button>
+        <button data-tab="audit">Audit</button>
+        <button data-tab="stream">Stream</button>
+        <button data-tab="terminal">Raw Terminal</button>
+        <button data-tab="settings">System settings<span id="settings-badge" class="pbadge" hidden>⚠</span></button>
+      </div>
     </div>
     <!-- 서버 상태 칩 — 사람의 손을 요구하지 않는(또는 접어 둔) 서버 사실의 자리
          (REQ-20260827-017-62x6). 전용 행을 주면 아무 할 일 없는 사실 때문에 헤더가
@@ -2652,6 +2748,9 @@ let catalog = [], graph = null, auditCache = null, TRANS = {}, projects = [];
 let tab = "chief", selectedDoc = null, selectedStream = null;
 let chiefData = null, chiefError = "", chiefLoading = false, chiefProject = "";
 let chiefReportReturn = null, chiefReportOverflow = "";
+let chiefDaily = "brief", advancedOpen = false;
+let chiefSessions = null, chiefSessionsLoading = false, chiefSessionsError = "";
+let chiefSelectedSession = "", chiefThread = null, chiefThreadLoading = false, chiefSending = false;
 let chiefNotice = "", chiefRuns = {};
 let streamTimer = null, reqStreamTimer = null;  // live follow 폴링 (화면 이탈 시 정리)
 // 그래프 타입 표시 집합 — 기본은 request/knowledge (세션 로그 노드 숨김, REQ-20260824-026)
@@ -3487,6 +3586,18 @@ async function boot(){
 }
 
 const TABS = ["chief","board","docs","graph","audit","stream","terminal","settings"];
+const CHIEF_DAILY = ["brief","work","release","reports","relations","sessions"];
+function syncChiefNav(){
+  document.querySelectorAll("[data-chief-nav]").forEach(b =>
+    b.classList.toggle("active",tab === "chief" && b.dataset.chiefNav === chiefDaily));
+  const adv = document.querySelector("[data-advanced-toggle]");
+  if (adv){
+    adv.classList.toggle("active",tab !== "chief");
+    adv.textContent = tab === "chief" ? "Advanced" : `Advanced · ${tab}`;
+    adv.setAttribute("aria-expanded",advancedOpen ? "true" : "false");
+  }
+  const menu = $("#advanced-menu"); if (menu) menu.hidden = !advancedOpen;
+}
 
 // URL 해시 ↔ 상태. 형태: #<tab> 또는 #docs/REQ-.. 또는 #settings/account
 function applyRoute(hash, doRender){
@@ -3518,18 +3629,21 @@ function applyRoute(hash, doRender){
     || (t === "stream" && parts[1] && parts[1] !== selectedStream);
   if (moved && dlgClose) dlgClose(null);
   tab = t;
+  if (t === "chief") chiefDaily = CHIEF_DAILY.includes(parts[1]) ? parts[1] : "brief";
   if (t === "docs" && parts[1]) selectedDoc = parts[1];
   if (t === "stream" && parts[1]) selectedStream = parts[1];
   if (t === "settings" && parts[1]) settingsSection = parts[1];
   document.querySelectorAll("[data-tab]").forEach(b =>
     b.classList.toggle("active", b.dataset.tab === t));
+  syncChiefNav();
   if (doRender) render();
 }
 
 // 상태 → 해시 push (뒤로가기가 동작하도록 history에 쌓는다)
 function pushRoute(){
   let h = "#" + tab;
-  if (tab === "docs" && selectedDoc) h += "/" + selectedDoc;
+  if (tab === "chief") h += "/" + chiefDaily;
+  else if (tab === "docs" && selectedDoc) h += "/" + selectedDoc;
   else if (tab === "stream" && selectedStream) h += "/" + selectedStream;
   else if (tab === "settings") h += "/" + settingsSection;
   if (location.hash !== h){ history.pushState(null, "", h); }
@@ -3851,6 +3965,7 @@ function chiefWrite(name){
   const root = chiefProxyRoot();
   const routes = {
     sync:["api/chief/sync","/sync"],
+    createWork:["api/chief/work/create","/work/create"],
     session:["api/chief/session/start","/work-session/start"],
     release:["api/chief/release/ensure","/release/autopilot/ensure"],
     complete:["api/chief/work/complete","/work/done"],
@@ -3858,6 +3973,7 @@ function chiefWrite(name){
     order:["api/chief/order","/orders"],
     chatSession:["api/chief/chat/session","/chief-chat/session"],
     chatMessage:["api/chief/chat/message","/chief-chat/message"],
+    projectSessionMessage:["api/chief/project-session/message","/project-session/message"],
   };
   const pair = routes[name];
   return root === null ? pair[0] : root + pair[1];
@@ -3932,6 +4048,128 @@ async function chiefManualSync(){
   try{ await chiefPost("sync",{}); chiefNotice = "Chief sources synchronized."; }
   catch(e){ chiefNotice = `Sync failed; existing data was preserved: ${e.message || e}`; }
   finally{ chiefLoading = false; await refreshChief(true); }
+}
+async function chiefCreateWork(project,startSession=false){
+  const registered = chiefArr(chiefData && chiefData.projects).find(p => chiefNorm(p.id) === chiefNorm(project));
+  const projectTitle = registered && registered.title || project;
+  if (!registered){ chiefNotice = "Select one registered project before adding work."; renderChief(); return; }
+  const title = await s9dlg({kind:"prompt",cap:startSession ? "New project session" : "Add work",
+    title:`What outcome does ${projectTitle} need?`,desc:"Use one short, concrete outcome. Chief will create the Jira Story and matching durable work record before it can start.",ok:"Continue",cancel:"Not now",required:true});
+  if (title === null) return;
+  const goal = await s9dlg({kind:"prompt",cap:"Evidence gate",title:"What proves this is done?",
+    desc:"Name the observable result, report, PR, or live check. This becomes the agent's durable boundary.",ok:startSession ? "Create and start" : "Create work",cancel:"Not now",required:true});
+  if (goal === null) return;
+  chiefNotice = `Creating Jira-backed work for ${projectTitle}…`; renderChief();
+  try{
+    const made = await chiefPost("createWork",{project,title,goal});
+    if (!made.jira || !made.request_id){
+      chiefNotice = `${title} is only a draft because Jira-backed creation did not complete. It cannot be started yet.`;
+      renderChief(); return;
+    }
+    chiefProject = project;
+    chiefNotice = `${made.jira} and ${made.request_id} created for ${projectTitle}.`;
+    await refreshChief(true);
+    if (startSession){
+      await chiefStartWork(made.request_id,made.title || title);
+      chiefSessions = null;
+      if (chiefDaily === "sessions") await chiefRefreshSessions();
+    }
+  }catch(e){
+    chiefNotice = `${title} remains a draft: Jira creation was unavailable or declined, so it cannot be started. ${e.message || e}`;
+    renderChief();
+  }
+}
+function chiefSessionProject(row){
+  if (row && row.project_id)
+    return chiefArr(chiefData && chiefData.projects).find(p => chiefNorm(p.id) === chiefNorm(row.project_id));
+  const name = chiefNorm(row && row.name), cwd = String(row && row.cwd || "");
+  return chiefArr(chiefData && chiefData.projects).find(p =>
+    chiefArr(p.sessions).some(s => chiefNorm(s) === name) ||
+    (p.repo && cwd && (cwd === p.repo || cwd.startsWith(p.repo + "/"))));
+}
+async function chiefRefreshSessions(){
+  if (chiefSessionsLoading) return;
+  chiefSessionsLoading = true; chiefSessionsError = "";
+  if (tab === "chief" && chiefDaily === "sessions") renderChief();
+  try{
+    const res = await fetch(chiefGet("project-sessions?refresh=1"),{cache:"no-store"});
+    const body = await res.json();
+    if (!res.ok || body.ok === false) throw new Error(body.error || `HTTP ${res.status}`);
+    chiefSessions = chiefArr(body.projects).flatMap(p => chiefArr(p.sessions).map(s => ({
+      ...s,project_id:p.id,project_title:p.title,host:p.host,
+      session_key:s.thread_id || s.id || s.name,
+      name:s.title || s.name || s.work_id || s.thread_id,
+      status:s.state || s.status || "recorded",
+    })));
+  }catch(e){ chiefSessionsError = e.message || String(e); if (!chiefSessions) chiefSessions = []; }
+  finally{ chiefSessionsLoading = false; if (tab === "chief" && chiefDaily === "sessions") renderChief(); }
+}
+async function chiefOpenThread(sessionKey){
+  if (!sessionKey) return;
+  chiefSelectedSession = sessionKey; chiefThread = null; chiefThreadLoading = true; renderChief();
+  try{
+    const selected = chiefArr(chiefSessions).find(s => String(s.session_key) === String(sessionKey));
+    const path = sessionKey === "__chief__" ? "chat/chief-messages" :
+      `project-session/messages?thread_id=${encodeURIComponent(selected && selected.thread_id || sessionKey)}`;
+    const res = await fetch(chiefGet(path),{cache:"no-store"});
+    const body = await res.json();
+    if (!res.ok || body.ok === false) throw new Error(body.error || `HTTP ${res.status}`);
+    chiefThread = body;
+  }catch(e){ chiefThread = {name:sessionKey,messages:[],error:e.message || String(e)}; }
+  finally{ chiefThreadLoading = false; if (tab === "chief" && chiefDaily === "sessions") renderChief(); }
+}
+async function chiefTalk(){
+  tab = "chief"; chiefDaily = "sessions"; advancedOpen = false; chiefSelectedSession = "__chief__";
+  pushRoute(); syncChiefNav(); render();
+  try{ await chiefPost("chatSession",{}); }catch(e){ chiefNotice = `Chief conversation could not open: ${e.message || e}`; }
+  await chiefOpenThread("__chief__");
+}
+async function chiefSendMessage(){
+  const ta = $("#chief-session-message"), text = ta && ta.value.trim();
+  if (!text || !chiefSelectedSession || chiefSending) return;
+  chiefSending = true; renderChief();
+  try{
+    if (chiefSelectedSession === "__chief__") await chiefPost("chatMessage",{text});
+    else {
+      const selected = chiefArr(chiefSessions).find(s => String(s.session_key) === String(chiefSelectedSession));
+      await chiefPost("projectSessionMessage",{thread_id:selected && selected.thread_id || chiefSelectedSession,text});
+    }
+    chiefNotice = chiefSelectedSession === "__chief__" ? "Chief received your message." : "The T3 project session received your order.";
+    await chiefOpenThread(chiefSelectedSession);
+  }catch(e){ chiefNotice = `Message was not delivered: ${e.message || e}`; }
+  finally{ chiefSending = false; if (tab === "chief" && chiefDaily === "sessions") renderChief(); }
+}
+function chiefSessionsHTML(){
+  if (chiefSessions === null && !chiefSessionsLoading) setTimeout(chiefRefreshSessions,0);
+  const rows = chiefArr(chiefSessions).filter(s => {
+    const p = chiefSessionProject(s);
+    return !chiefProject || (p && chiefNorm(p.id) === chiefNorm(chiefProject));
+  });
+  const sessionRows = (!chiefProject ? [{name:"__chief__",status:"chief",preview:"Ask or order Chief across projects.",running:false}] : []).concat(rows);
+  const selectedRow = chiefArr(chiefSessions).find(s => String(s.session_key) === String(chiefSelectedSession));
+  const threadName = chiefSelectedSession === "__chief__" ? "Chief" : selectedRow && selectedRow.name || chiefSelectedSession;
+  const messages = chiefArr(chiefThread && chiefThread.messages).slice(-24);
+  return `<section id="chief-sessions"><div class="chief-section-head"><h2>Project sessions</h2><div class="chief-section-actions"><p>${rows.length} conversation${rows.length === 1 ? "" : "s"}${chiefProject ? " in this project" : " across projects"}</p><button class="chief-new-session" data-chief-new-session data-chief-project="${esc(chiefProject)}" ${chiefProject ? "" : "disabled title=\"Select one project first\""}>New T3 Codex session</button></div></div>
+    <div class="chief-sessions"><aside class="chief-session-list"><header><h3>Conversations</h3><button class="chief-new-session" data-chief-refresh-sessions ${chiefSessionsLoading ? "disabled" : ""}>${chiefSessionsLoading ? "Refreshing…" : "Refresh"}</button></header><div class="chief-session-rows">
+      ${chiefSessionsError ? `<div class="chief-empty">Session source unavailable: ${esc(chiefSessionsError)}</div>` : sessionRows.length ? sessionRows.map(s => {
+        const p = s.name === "__chief__" ? null : chiefSessionProject(s);
+        const key = s.session_key || s.name;
+        return `<button class="chief-session-row" data-chief-session="${esc(key)}" aria-pressed="${key === chiefSelectedSession}"><b>${esc(s.name === "__chief__" ? "Chief" : s.name)}<span>${esc(s.status || (s.running ? "running" : "recorded"))}</span></b><p>${esc(p ? `${p.title} · ${chiefShort(s.preview || s.jira || "No recent message",105)}` : chiefShort(s.preview || "Cross-project conversation",120))}</p></button>`;
+      }).join("") : `<div class="chief-empty">No project sessions are recorded for this scope.</div>`}
+    </div></aside>
+    <section class="chief-thread"><header><h3>${esc(threadName || "Choose a conversation")}</h3><p>${chiefThreadLoading ? "Loading messages…" : chiefThread && chiefThread.error ? esc(chiefThread.error) : chiefSelectedSession ? "Open, read and steer without leaving Chief." : "Select a session on the left."}</p></header>
+      <div class="chief-messages">${chiefThreadLoading ? `<div class="chief-empty">Loading this conversation…</div>` : messages.length ? messages.map(m => `<article class="chief-message ${m.role === "jade" ? "jade" : "agent"}"><small>${esc(m.role || "agent")} · ${esc(m.ts || "")}</small>${esc(chiefShort(m.text,1800))}</article>`).join("") : `<div class="chief-empty">${chiefSelectedSession ? "No readable messages in this session." : "Choose a project conversation to read it here."}</div>`}</div>
+      <form class="chief-compose" data-chief-compose><textarea id="chief-session-message" placeholder="${chiefSelectedSession ? `Steer ${threadName}…` : "Choose a session first"}" ${chiefSelectedSession ? "" : "disabled"}></textarea><button type="submit" ${chiefSelectedSession && !chiefSending ? "" : "disabled"}>${chiefSending ? "Sending…" : "Send"}</button></form>
+    </section></div></section>`;
+}
+function chiefRelationsHTML(){
+  const streams = chiefArr(chiefData && chiefData.streams).filter(s => !chiefProject ||
+    chiefArr(s.spans).some(p => chiefNorm(p) === chiefNorm(chiefProject)));
+  const relatedWork = chiefArr(chiefData && chiefData.portfolio).filter(r => chiefInProject(r) && chiefArr(r.relations).length);
+  const rows = streams.map(s => ({title:s.goal,summary:s.primary,projects:s.spans,jira:s.jira}))
+    .concat(relatedWork.slice(0,8).map(r => ({title:r.title,summary:r.next || r.goal,projects:[r.project],jira:[r.jira].filter(Boolean),relations:r.relations})));
+  return `<section id="chief-relations"><div class="chief-section-head"><h2>Relations</h2><p>${rows.length} explicit connections · similarity is not dependency</p></div>
+    <div class="chief-relations">${rows.length ? rows.map(r => `<article class="chief-relation"><h3>${esc(r.title || "Related work")}</h3><p>${esc(chiefShort(r.summary || "The durable ledger records this connection."))}</p><div class="chief-relation-foot">${chiefArr(r.projects).filter(Boolean).map(p => `<span class="project">${esc(p)}</span>`).join("")}${chiefArr(r.jira).filter(Boolean).map(j => `<span class="jira">${esc(j)}</span>`).join("")}${chiefArr(r.relations).filter(Boolean).slice(0,4).map(x => `<span>${esc(x)}</span>`).join("")}</div></article>`).join("") : `<div class="chief-empty">No explicit relations are recorded for this scope.</div>`}</div></section>`;
 }
 function chiefLane(row){
   const s = chiefNorm(row && row.status);
@@ -4037,23 +4275,24 @@ function renderChief(){
   const projectDesk = selectedProject ? `<section class="chief-project-desk" aria-label="${esc(selectedProject.title || selectedProject.id)} project workspace">
     <div><p class="chief-kicker">Project workspace</p><h2>${esc(selectedProject.title || selectedProject.id)}</h2></div>
     <nav aria-label="Project destinations">
-      <button class="chief-project-entry" data-chief-jump="jira"><b>Jira work</b><span>${jiraCount} linked · ${rows.length} total</span></button>
-      <button class="chief-project-entry" data-chief-jump="release"><b>Release</b><span>${releases.length ? `${releases.length} release record${releases.length === 1 ? "" : "s"}` : "No release recorded"}</span></button>
-      <button class="chief-project-entry" data-chief-jump="reports"><b>Reports</b><span>${reports.length ? `${reports.length} durable report${reports.length === 1 ? "" : "s"}` : "Create the first report"}</span></button>
+      <button class="chief-project-entry" data-chief-nav="work"><b>Jira work</b><span>${jiraCount} linked · ${rows.length} total</span></button>
+      <button class="chief-project-entry" data-chief-nav="release"><b>Release</b><span>${releases.length ? `${releases.length} release record${releases.length === 1 ? "" : "s"}` : "No release recorded"}</span></button>
+      <button class="chief-project-entry" data-chief-nav="reports"><b>Reports</b><span>${reports.length ? `${reports.length} durable report${reports.length === 1 ? "" : "s"}` : "Create the first report"}</span></button>
+      <button class="chief-project-entry" data-chief-nav="relations"><b>Relations</b><span>Explicit cross-project links</span></button>
+      <button class="chief-project-entry" data-chief-nav="sessions"><b>Sessions</b><span>Open or steer conversations</span></button>
     </nav></section>` : "";
   const total = rows.length;
-  view.innerHTML = `<div class="chief">
-    <section class="chief-top"><div><p class="chief-kicker">Chief · portfolio</p><h1>${lanes.needs.length ? `${lanes.needs.length} thing${lanes.needs.length === 1 ? "" : "s"} need your call.` : total ? "Work is moving without noise." : "There is no current work."}</h1>
+  const projectScope = `<nav class="chief-projects" aria-label="Chief projects">${projectsHTML}</nav>${projectDesk}`;
+  const hero = `<section id="chief-brief" class="chief-top"><div><p class="chief-kicker">Chief · portfolio</p><h1>${lanes.needs.length ? `${lanes.needs.length} thing${lanes.needs.length === 1 ? "" : "s"} need your call.` : total ? "Work is moving without noise." : "There is no current work."}</h1>
       <p>${lanes.progress.length} moving · ${lanes.ready.length} ready · ${lanes.done.length} recently done${chiefProject ? " in this project" : " across the portfolio"}.${chiefNotice ? ` ${esc(chiefNotice)}` : ""}</p></div>
-      <div class="chief-source"><strong>${chiefLoading ? "Refreshing…" : "Source connected"}</strong>${esc(chiefData.generated_at || "time not recorded")}<br><button class="chief-refresh" data-chief-sync aria-busy="${chiefLoading ? "true" : "false"}" ${chiefLoading ? "disabled" : ""}>${chiefLoading ? "Syncing Chief…" : "Sync Chief"}</button></div></section>
-    <nav class="chief-projects" aria-label="Chief projects">${projectsHTML}</nav>${projectDesk}
-    <section id="chief-jira"><div class="chief-section-head"><h2>${selectedProject ? "Jira work" : "Work now"}</h2><p>${selectedProject ? `${jiraCount} Jira-linked · ` : ""}three per lane · open Board for the full ledger</p></div>
-      <div class="chief-lanes">${chiefLaneHTML("needs","Needs you",jiraLanes.needs)}${chiefLaneHTML("progress","In progress",jiraLanes.progress)}${chiefLaneHTML("ready","Ready",jiraLanes.ready)}${chiefLaneHTML("done","Done",jiraLanes.done)}</div></section>
-    <div class="chief-deep"><section id="chief-release"><div class="chief-section-head"><h2>Release</h2><p>${releases.length} record${releases.length === 1 ? "" : "s"}</p></div>
-      <div class="chief-release-list">${releases.length ? releases.map(chiefReleaseHTML).join("") : `<div class="chief-empty">No release record for this scope.</div>`}</div></section>
-      <section id="chief-reports"><div class="chief-section-head"><h2>Reports</h2><div class="chief-section-actions"><p>durable evidence</p><button class="chief-create-report" data-chief-create-report data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Create meeting report</button></div></div>
-      <div class="chief-report-list">${reports.length ? reports.map(chiefReportHTML).join("") : `<div class="chief-empty">No report has been attached yet.</div>`}</div></section></div>
-  </div>`;
+      <div class="chief-source"><strong>${chiefLoading ? "Refreshing…" : "Source connected"}</strong>${esc(chiefData.generated_at || "time not recorded")}<br><button class="chief-refresh" data-chief-sync aria-busy="${chiefLoading ? "true" : "false"}" ${chiefLoading ? "disabled" : ""}>${chiefLoading ? "Syncing Chief…" : "Sync Chief"}</button></div></section>`;
+  const next = lanes.needs[0] || lanes.progress[0] || lanes.ready[0];
+  const brief = `${hero}${projectScope}<section class="chief-brief-grid">${next ? `<article class="chief-next"><p class="chief-kicker">Your next move</p><h2>${esc(next.title)}</h2><p>${esc(chiefShort(next.next || next.goal || next.why || "Open Work for the durable context."))}</p></article>` : `<article class="chief-next"><p class="chief-kicker">Clear</p><h2>No immediate work needs your call.</h2><p>Open Work, Release, or Reports when you want to go deeper.</p></article>`}<button class="chief-brief-link" data-chief-nav="work"><b>Work</b><span>${jiraCount} Jira-linked in scope</span></button><button class="chief-brief-link" data-chief-nav="release"><b>Release</b><span>${releases.length} release records</span></button><button class="chief-brief-link" data-chief-nav="sessions"><b>Sessions</b><span>Open or steer project conversations</span></button></section>`;
+  const work = `${projectScope}<section id="chief-work"><div class="chief-section-head"><h2>${selectedProject ? "Jira work" : "Jira-backed work"}</h2><div class="chief-section-actions"><p>${selectedProject ? `${jiraCount} Jira-linked · ` : ""}three per lane</p><button class="chief-add-work" data-chief-add-work data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Add work</button></div></div><div class="chief-lanes">${chiefLaneHTML("needs","Needs you",jiraLanes.needs)}${chiefLaneHTML("progress","In progress",jiraLanes.progress)}${chiefLaneHTML("ready","Ready",jiraLanes.ready)}${chiefLaneHTML("done","Done",jiraLanes.done)}</div></section>`;
+  const release = `${projectScope}<section id="chief-release"><div class="chief-section-head"><h2>Release</h2><p>${releases.length} record${releases.length === 1 ? "" : "s"}</p></div><div class="chief-release-list">${releases.length ? releases.map(chiefReleaseHTML).join("") : `<div class="chief-empty">No release record for this scope.</div>`}</div></section>`;
+  const report = `${projectScope}<section id="chief-reports"><div class="chief-section-head"><h2>Reports</h2><div class="chief-section-actions"><p>durable evidence</p><button class="chief-create-report" data-chief-create-report data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Create meeting report</button></div></div><div class="chief-report-list">${reports.length ? reports.map(chiefReportHTML).join("") : `<div class="chief-empty">No report has been attached yet.</div>`}</div></section>`;
+  const bodies = {brief,work,release,reports:report,relations:`${projectScope}${chiefRelationsHTML()}`,sessions:`${projectScope}${chiefSessionsHTML()}`};
+  view.innerHTML = `<div class="chief">${bodies[chiefDaily] || brief}</div>`;
 }
 async function refreshChief(rerender=false){
   if (chiefLoading) return;
@@ -4080,6 +4319,7 @@ async function refreshChief(rerender=false){
 function render(){
   updateTitle();
   document.body.dataset.view = tab;
+  syncChiefNav();
   syncTypeFilter();
   markHeaderCause(null);   // 지목은 그래프 빈 화면이 다시 붙인다 — 남으면 거짓말이 된다
   // L0 (REQ-040): 살아있는 terminal 셸은 절대 재빌드하지 않는다 — 15s catalog
@@ -8949,6 +9189,16 @@ document.addEventListener("drop", e => {
 
 /* ---------------- events ---------------- */
 document.addEventListener("click", async e => {
+  const dailyNav = e.target.closest("[data-chief-nav]");
+  if (dailyNav){
+    tab = "chief"; chiefDaily = dailyNav.dataset.chiefNav || "brief"; advancedOpen = false;
+    pushRoute(); syncChiefNav(); render();
+    if (chiefDaily === "sessions") chiefRefreshSessions();
+    return;
+  }
+  if (e.target.closest("[data-chief-talk]")){ chiefTalk(); return; }
+  const advanced = e.target.closest("[data-advanced-toggle]");
+  if (advanced){ advancedOpen = !advancedOpen; syncChiefNav(); return; }
   const chiefReportClose = e.target.closest("[data-chief-report-close]");
   if (chiefReportClose){ chiefCloseReport(); return; }
   const chiefReport = e.target.closest("[data-chief-report-open]");
@@ -8963,13 +9213,24 @@ document.addEventListener("click", async e => {
   const chiefSync = e.target.closest("[data-chief-sync]");
   if (chiefSync){ chiefManualSync(); return; }
   const chiefProj = e.target.closest("[data-chief-project]");
-  if (chiefProj){ chiefProject = chiefProj.dataset.chiefProject || ""; renderChief(); return; }
+  if (chiefProj){
+    chiefProject = chiefProj.dataset.chiefProject || "";
+    if (chiefDaily === "sessions"){ chiefSelectedSession = ""; chiefThread = null; }
+    renderChief(); return;
+  }
   const chiefJump = e.target.closest("[data-chief-jump]");
   if (chiefJump){
     const target = $("#chief-" + chiefJump.dataset.chiefJump);
     if (target) target.scrollIntoView({behavior:"smooth",block:"start"});
     return;
   }
+  const chiefAddWork = e.target.closest("[data-chief-add-work]");
+  if (chiefAddWork && !chiefAddWork.disabled){ chiefCreateWork(chiefAddWork.dataset.chiefProject || "",false); return; }
+  const chiefNewSession = e.target.closest("[data-chief-new-session]");
+  if (chiefNewSession && !chiefNewSession.disabled){ chiefCreateWork(chiefNewSession.dataset.chiefProject || "",true); return; }
+  if (e.target.closest("[data-chief-refresh-sessions]")){ chiefRefreshSessions(); return; }
+  const chiefSession = e.target.closest("[data-chief-session]");
+  if (chiefSession){ chiefOpenThread(chiefSession.dataset.chiefSession || ""); return; }
   const chiefCreateReport = e.target.closest("[data-chief-create-report]");
   if (chiefCreateReport && !chiefCreateReport.disabled){
     const project = chiefCreateReport.dataset.chiefProject || "this project";
@@ -9030,9 +9291,11 @@ document.addEventListener("click", async e => {
   const tabBtn = e.target.closest("[data-tab]");
   if (tabBtn){
     tab = tabBtn.dataset.tab;
+    advancedOpen = false;
     if (tab === "audit") auditCache = null;
     document.querySelectorAll("[data-tab]").forEach(b =>
       b.classList.toggle("active", b === tabBtn));
+    syncChiefNav();
     pushRoute();
     render();
     refreshCatalog(true);
@@ -9198,8 +9461,12 @@ document.addEventListener("click", async e => {
     } else { pushRoute(); loadDoc(selectedDoc); }
   }
 });
+document.addEventListener("submit", e => {
+  if (e.target.matches("[data-chief-compose]")){ e.preventDefault(); chiefSendMessage(); }
+});
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && !$("#chief-report-reader").hidden){ e.preventDefault(); chiefCloseReport(); }
+  else if (e.key === "Escape" && advancedOpen){ advancedOpen = false; syncChiefNav(); }
 });
 ["#q","#q-body","#f-user","#f-project","#f-tag","#f-type"].forEach(s =>
   $(s).addEventListener("input", () => {
