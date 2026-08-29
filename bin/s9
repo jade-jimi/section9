@@ -9880,6 +9880,99 @@ def cmd_serve(args):
                 values.append((key, value))
         return path + (("?" + urllib.parse.urlencode(values)) if values else "")
 
+    import threading as _board_threading
+    _board_start_lock = _board_threading.Lock()
+
+    def board_start_work(doc_id, engine, actor, test=False):
+        """Start one native request through Chief, then move it to in-progress.
+
+        The external session is created first.  A failed launch therefore never
+        makes a quiet status-only "working" card.  The lock and open-state guard
+        make one successful click the only start boundary in this server.
+        """
+        doc_id = str(doc_id or "").strip()
+        engine = str(engine or "t3").strip().lower()
+        if engine not in ("t3", "codex", "claude"):
+            return {"ok": False, "error": "engine must be t3, codex, or claude"}, 400
+        path = locate(doc_id)
+        if not path:
+            return {"ok": False, "error": f"not found: {doc_id}"}, 404
+        meta, body = read_doc(path)
+        if meta.get("type") != "request":
+            return {"ok": False, "error": "Start work applies only to requests"}, 409
+        if not doc_visible(meta, actor):
+            return {"ok": False, "error": f"not found: {doc_id}"}, 404
+        if meta.get("status") != "open":
+            return {"ok": False, "error":
+                    f"request is {meta.get('status') or 'not open'}; Start work requires open"}, 409
+
+        title = str(meta.get("title") or doc_id).strip()
+        project = str(meta.get("project") or "").strip()
+        goal = str(meta.get("goal") or "").strip()
+        request_path = os.path.realpath(path)
+        context_path = os.path.join(ROOT, "projects", safe_name(project), "CONTEXT.md") \
+            if project else ""
+        combined = "\n".join((json.dumps(meta, ensure_ascii=False), body or ""))
+        jira = next(iter(re.findall(r"\bBDA-\d+\b", combined, re.I)), "").upper()
+        order = (
+            f"Start and own Section9 request `{doc_id}` now.\n\n"
+            f"Title: {title}\nGoal: {goal or 'complete the recorded request goal'}\n"
+            f"Request: `{request_path}`\n"
+            + (f"Project context: `{context_path}`\n" if context_path else "")
+            + "Read the durable request and project instructions before editing. Claim the work, "
+              "keep the request/work order and Jira current, verify proportionally, and return a "
+              "durable report. Create a separate Jira ticket for genuinely separate findings. "
+              "Feature work may integrate to dev after passing its gates; never merge or deploy "
+              "production."
+        )
+
+        def call_json(path_, payload_):
+            code, _ctype, raw = chief_call(path_, method="POST", payload=payload_, test=test)
+            try:
+                parsed = json.loads(raw.decode("utf-8", "replace") or "{}")
+            except (ValueError, AttributeError):
+                parsed = {"ok": False, "error": raw.decode("utf-8", "replace")[:300]}
+            if code >= 400 or parsed.get("ok") is False:
+                return parsed, code
+            return parsed, code
+
+        if jira:
+            launched, code = call_json("/api/work-session/start", {
+                "work_id": jira, "engine": engine, "order": order})
+            mode = "jira-work"
+        else:
+            if not project:
+                return {"ok": False, "error":
+                        "request has no project or Jira link; file it before starting"}, 409
+            launched, code = call_json("/api/project-session/start", {
+                "project": project, "title": title, "engine": engine, "fresh": True})
+            if code >= 400 or launched.get("ok") is False:
+                return launched, code
+            thread_id = str(launched.get("thread_id") or "")
+            if not thread_id:
+                return {"ok": False, "error":
+                        "project session started without a durable thread id"}, 502
+            sent, send_code = call_json("/api/project-session/message", {
+                "thread_id": thread_id, "text": order})
+            if send_code >= 400 or sent.get("ok") is False:
+                return sent, send_code
+            launched.update(sent_state=sent.get("state"), sent=True)
+            mode = "project-session"
+
+        if code >= 400 or launched.get("ok") is False:
+            return launched, code
+        session_ref = str(launched.get("run_id") or launched.get("thread_id") or "session")
+        if not test:
+            do_transition(doc_id, "in-progress",
+                          note=(f"Started {engine} via Board; {mode} {session_ref}. "
+                                "Durable request and project context delivered."),
+                          user=actor)
+        return {"ok": True, "id": doc_id, "status": "in-progress",
+                "engine": engine, "mode": mode, "jira": jira or None,
+                "run_id": launched.get("run_id"),
+                "thread_id": launched.get("thread_id"),
+                "open_url": launched.get("open_url"), "order": order}, 200
+
     # 관계 필드까지 포함한 그래프 데이터 (본문 제외 — 토큰/전송량 최소)
     def graph_data():
         nodes, edges, dep_rows = [], [], []
@@ -10857,7 +10950,19 @@ def cmd_serve(args):
                     self._send(code, ctype, data)
                     return
 
-                if parsed.path == "/api/status":
+                if parsed.path == "/api/work/start":
+                    if not _board_start_lock.acquire(blocking=False):
+                        self._json({"ok": False, "error":
+                                    "another board start is being assigned; one click is enough"}, 409)
+                        return
+                    try:
+                        result, code = board_start_work(
+                            req.get("id"), req.get("engine"), actor,
+                            test=bool(self.headers.get("X-Chief-Test")))
+                        self._json(result, code)
+                    finally:
+                        _board_start_lock.release()
+                elif parsed.path == "/api/status":
                     note = (req.get("note") or "").strip()[:500]
                     tid, tto = str(req.get("id", "")), str(req.get("to", ""))
                     # judge=True: 대시보드 전이는 사람의 행위 — review→done
