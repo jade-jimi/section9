@@ -45,6 +45,21 @@ acceptance. Section9 never grants an agent authority to merge production.
 Needs-you work remains a human decision and Done opens evidence. Any post-production defect becomes
 a new ticket/work item through Chief's existing lifecycle rather than reopening the released work.
 
+## Curated Chief mode
+
+The default navigation is Jade's operating workflow: Brief, Work, Release, Reports, Relations,
+Sessions, and Talk to Chief. Raw Section9 Board/Docs/Graph/Audit/Stream/Terminal/Settings remain
+available under Advanced for maintenance; they are not daily work surfaces.
+
+Work is Jira-backed. Add work creates and assigns a Jira Story and matching Chief REQ before the
+card can start. Claim moves Jira to In Progress; agent PR/dev evidence is appended to Jira and may
+move it to Review; only Jade's Complete + close Jira action or a recorded production merge (plus any
+required live acceptance) reaches Done. Post-production repairs are always separate tickets.
+
+Sessions groups the actual T3 work threads by project, including multiple conversations, transcript
+reading, and steering. New T3 Codex session first creates Jira-backed work. Louisville-owned
+Bismuth/BT2 Stations remain explicitly remote rather than being silently launched from a local clone.
+
 ## Fixed adapter routes
 
 Read routes:

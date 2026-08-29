@@ -10458,6 +10458,14 @@ def cmd_serve(args):
             elif parsed.path == "/api/chief/chat/sessions":
                 code, ctype, data = chief_call("/api/chat/sessions")
                 self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/project-sessions":
+                target = chief_query_path("/api/project-sessions", qs, ("project", "refresh"))
+                code, ctype, data = chief_call(target)
+                self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/project-session/messages":
+                target = chief_query_path("/api/project-session/messages", qs, ("thread_id",))
+                code, ctype, data = chief_call(target)
+                self._send(code, ctype, data)
             elif parsed.path == "/api/chief/chat/messages":
                 target = chief_query_path("/api/chat/messages", qs, ("session",))
                 code, ctype, data = chief_call(target)
@@ -10829,6 +10837,9 @@ def cmd_serve(args):
                     "/api/chief/sync": "/api/sync",
                     "/api/chief/session/start": "/api/work-session/start",
                     "/api/chief/release/ensure": "/api/release/autopilot/ensure",
+                    "/api/chief/project-session/start": "/api/project-session/start",
+                    "/api/chief/project-session/message": "/api/project-session/message",
+                    "/api/chief/work/create": "/api/work/create",
                     "/api/chief/work/complete": "/api/work/done",
                     "/api/chief/work/investigate": "/api/work/investigate",
                     "/api/chief/order": "/api/order",
