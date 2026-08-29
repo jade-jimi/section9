@@ -132,7 +132,15 @@ class DocTitleAnchor(unittest.TestCase):
         self.assertIn("const pin = selectedDoc", rd, "지금 보는 문서를 못 박지 않는다")
         self.assertIn("catFind(selectedDoc)", rd,
                       "조건 밖 문서를 열어 두면 목록에서 사라진다")
-        self.assertIn("if (pin) list += rowHTML(pin)", rd, "못 박은 줄이 맨 위가 아니다")
+        # 못 박은 줄은 그룹보다 **먼저** 세워진다. 글자 그대로의 한 줄로 묶지
+        # 않는다 — REQ-20260829-012 가 그 앞에 머리글 한 줄을 세웠다("이 줄이
+        # 목록의 1번으로 읽힌다"는 반려). 결정은 그대로고 모양만 자랐다.
+        m = re.search(r"if \(pin\) list \+= (.+?);\n", rd, re.S)
+        self.assertIsNotNone(m, "못 박은 줄이 맨 위가 아니다")
+        self.assertIn("rowHTML(pin)", m.group(1), "못 박은 자리에 그 줄이 없다")
+        self.assertLess(rd.index("if (pin) list +="),
+                        rd.index("for (const [g, grp] of Object.entries(groups))"),
+                        "못 박은 줄이 그룹보다 아래에 선다")
         self.assertIn("if (pin && r.id === pin.id) return;", rd,
                       "같은 문서가 두 줄로 보인다")
         # 줄을 짓는 자리는 하나 — 두 벌이면 한 벌만 고쳐진다

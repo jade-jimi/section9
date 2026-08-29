@@ -8,6 +8,7 @@ admin이 아니면 커밋을 거부한다.
 우회 가능하며, 이는 의도된 설계다(실수 방지 + 규율 + 감사가 목표).
 우회 불가능한 최종 게이트는 GitHub branch protection + CODEOWNERS (docs/09).
 """
+import json
 import os
 import subprocess
 import sys
@@ -45,7 +46,47 @@ def current_user():
     if u:
         return u
     import getpass
-    return getpass.getuser()
+    acct = getpass.getuser()
+    # 운영체제 계정을 그대로 쓰기 전에 os_accounts 별칭을 본다
+    # (REQ-20260829-010). 계정 이름과 하네스의 사용자 이름이 다르면 그 사람은
+    # 여기서 늘 '미등록'이고, admin 이어도 막힌다 — 그러면 권한 있는 사람이
+    # `S9_USER=<admin> git commit` 을 손에 익히게 되고, 그 습관은 게이트가
+    # 정말 막아야 할 때도 그대로 나온다. bin/s9 의 resolve_user() 는 이미 이
+    # 매칭을 한다(REQ-20260827-060 이 CLI 와 화면 사이에서 겪은 것과 같은
+    # 갈림이다 — 이번엔 CLI 와 게이트가 갈렸다).
+    return _user_by_os_account(acct) or acct
+
+
+def _user_by_os_account(acct):
+    """os_accounts 에 이 운영체제 계정을 적어 둔 등록 사용자.
+
+    매칭이지 승격이 아니다 — 모르는 계정은 그대로 두고, 역할은 role_of() 가
+    따로 본다. 프로필이 깨져 있어도 커밋을 터뜨리지 않는다."""
+    users = os.path.join(ROOT, "users")
+    try:
+        names = sorted(os.listdir(users))
+    except OSError:
+        return ""
+    for name in names:
+        profile = os.path.join(users, name, "profile.md")
+        try:
+            with open(profile, encoding="utf-8") as f:
+                for line in f:
+                    if not line.startswith("os_accounts:"):
+                        continue
+                    raw = line.split(":", 1)[1].strip()
+                    try:
+                        val = json.loads(raw)
+                    except ValueError:
+                        break
+                    if isinstance(val, str):
+                        val = [val]
+                    if isinstance(val, list) and acct in val:
+                        return name
+                    break
+        except OSError:
+            continue
+    return ""
 
 
 def role_of(user):

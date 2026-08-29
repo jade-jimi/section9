@@ -120,10 +120,21 @@ class DocTarget(unittest.TestCase):
         self.assertIn('"로 기록됨"', send, "새 요청일 때의 말이 사라졌다")
 
     def test_it_can_be_opened_without_hands(self):
-        """헤드리스로 직접 보고 고칠 길 — 집힌 상태는 손으로 만들어야 한다."""
+        """헤드리스로 직접 보고 고칠 길 — 집힌 상태는 손으로 만들어야 한다.
+
+        건너뜀은 **기본이 꺼짐**이다: 그냥 `?pick=` 이면 제자리에 서서 집힌
+        카드를 보여 준다. `&jump` 를 붙였을 때만 진짜 `이어 말하기` 처럼
+        터미널까지 간다 — 그 건너뜀 자체가 결함이 났던 자리라 헤드리스로 볼
+        길이 필요했다 (REQ-20260829-007).
+        """
         self.assertIn("[?&]pick=", self.src, "진단 파라미터가 없다")
-        self.assertIn("docPick(m[1], false)", self.src,
-                      "진단이 화면을 옮겨 버려 집힌 카드를 볼 수 없다")
+        self.assertIn("docPick(m[1], pjump)", self.src,
+                      "진단이 화면을 옮길지 말지를 고를 수 없다")
+        m = re.search(r"const pjump = (.+);", self.src)
+        self.assertIsNotNone(m, "건너뜀 스위치를 찾지 못했다")
+        self.assertIn("[?&]jump", m.group(1),
+                      "기본이 꺼짐이어야 한다 — 그냥 ?pick= 이 화면을 옮기면 "
+                      "집힌 카드를 볼 수 없다")
 
     # ---------- helpers ----------
 

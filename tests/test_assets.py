@@ -150,10 +150,13 @@ class TestInlineRenderContract(unittest.TestCase):
         self.assertIn("/api/asset?doc=", self.html)
 
     def test_i2_placeholder_protection(self):
+        # 창을 글자 수로 자르지 않는다 — 규칙이 하나 늘 때마다 계약이 창 밖으로
+        # 밀려나 "없다"로 읽힌다(REQ-20260829-008 이 맨 경로 규칙을 더하며
+        # 실제로 그랬다). 함수 시작점부터 앞뒤 관계만 본다.
         i = self.html.index("const inline = s =>")
-        seg = self.html[i:i + 1600]
-        self.assertIn("held", seg)          # 자리표시자 보관
-        self.assertIn("\\u0000", seg)        # 마커로 치환 후 복원
+        seg = self.html[i:]
+        self.assertIn("held", seg[:1600])   # 자리표시자 보관
+        self.assertIn("\\u0000", seg[:1600])  # 마커로 치환 후 복원
         self.assertLess(seg.index("hold("), seg.index("linkifyIds("),
                         "첨부 HTML이 linkifyIds보다 먼저 보호돼야 한다")
 

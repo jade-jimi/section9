@@ -344,16 +344,52 @@ main{padding:18px 22px}
 .card:hover .pickdoc,.card:focus-within .pickdoc{display:block}
 .card .pickdoc:hover{color:var(--text);text-decoration:underline;text-underline-offset:3px}
 .card .pickdoc:focus-visible{display:block;outline:1px solid var(--text);outline-offset:2px}
-/* 손잡이와 경과 시각은 같은 칸을 나눠 쓴다 — 겹쳐 읽히느니 서로 자리를 비킨다 */
-.card:hover .elapsed,.card:focus-within .elapsed,.card.picked .elapsed{visibility:hidden}
+/* 손잡이와 경과 시각은 같은 칸을 나눠 쓴다 — 겹쳐 읽히느니 서로 자리를 비킨다.
+
+   **나누는 축은 픽셀이 아니라 시간이다** (REQ-20260829-011). 셋이 한 줄에 설
+   자리가 없다 — 실측하면 id 97 + 손잡이 56 + 시각 57 ≈ 226px 인데 카드 줄은
+   199px 다. 그래서 교대는 남기되, **포인터가 그 카드에 있는 동안만**이다.
+   키보드 포커스도 사용자가 스스로 옮기는 찰나라 같은 규칙을 쓴다.
+   지속 상태(집힘)는 이 줄에서 빠졌다 — 아래를 보라. */
+.card:hover .elapsed,.card:focus-within .elapsed{visibility:hidden}
 /* 집힌 카드는 얹지 않아도 보인다 — 어디를 집었는지 목록에서 잃지 않는다.
    테두리를 box-shadow 로 그렸더니 카드에 자기 그림자를 주는 skin(calm 등)이
    같은 속성을 덮어써서 **집은 표시가 통째로 사라졌다** — 사용자가 쓰는 skin 이
    바로 그것이었다. outline 은 그림자와 다투지 않고 라운드도 따라간다. */
 .card.picked{outline:1px solid var(--text);outline-offset:-1px}
-.card.picked .pickdoc{display:block;color:var(--text);
-  text-decoration:underline;text-underline-offset:3px}
-.card .id{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.02em}
+/* **집힘은 얹힌 척하지 않는다** (REQ-20260829-011).
+
+   사용자: "카드 테두리와 경과시간, 이어 말하기 위치가 고정이 되어 원래대로
+   돌아오지 않는 경우가 있다."
+
+   멈춘 hover 가 아니었다. `?pick=` 로 세워 보니 집어 둔 카드의 모습 그대로다 —
+   그리고 그렇게 읽힌 이유는 집힘의 손잡이 규칙이 hover 의 규칙과 **글자
+   그대로 같았기** 때문이다(`color:var(--text); text-decoration:underline`).
+   지속 상태를 찰나 상태의 재료로 그리면, 사람은 마우스를 치웠는데 안 풀리는
+   화면으로 읽는다. 그 규칙을 지웠다: 이제 집힌 카드도 손잡이는 얹었을 때만
+   뜨고, 밑줄은 hover 만의 말로 되돌아간다.
+
+   대신 집힘은 **낱말**로 말한다. 테두리는 모양일 뿐이라 무슨 상태인지
+   못 말한다 — id 줄에 잉크 한 마디를 세운다. 색면·알약이 아니라 글자다.
+   자리도 모서리가 아니라 id 옆이다: 모서리는 시각이 이미 쓰고 있고, 집는
+   일은 몇 시간씩 이어지니 그 내내 시각이 없어질 이유가 없다.
+   낱말은 ux-writer 몫이라 한 곳(PICKED_MARK)에만 있다 — 다만 이 줄의 남는
+   폭이 ~45px 라 두어 자를 넘기면 시각과 다시 다툰다. */
+.card .pkst{display:none;margin-left:7px;color:var(--text);font-weight:600}
+.card.picked .pkst{display:inline}
+/* id 줄은 **경과시각의 칸을 침범하지 않는다** (REQ-20260829-011). 시각은
+   모서리에 절대 위치로 서 있어서 흐름을 밀어내지 못한다 — 자리를 비워 두지
+   않으면 집힘 낱말이 시각 위로 올라탄다(좁은 열에서 실측 여유 17px, 낱말 28px).
+
+   비워 둔 폭보다 좁아지면 밀려나는 것은 **낱말**이다. 그러려면 줄을 flex 로
+   세우고 식별자를 nowrap 한 덩어리로 묶어야 한다 — 그냥 padding 만 줬더니
+   좁은 열에서 평범한 카드까지 `REQ-20260829-` / `010` 으로 쪼개졌다
+   (glass @1000px 실측). 식별자는 카드를 가르는 이름이라 반으로 접히면
+   옆 카드와 구별이 안 된다. 낱말은 아랫줄로 내려갈지언정 이름을 자르거나
+   시각을 덮지 않는다. */
+.card .id{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.02em;
+  display:flex;flex-wrap:wrap;align-items:center;padding-right:62px}
+.card .id .idn{white-space:nowrap}
 /* 우선순위 표기 (REQ-20260827-029 재작업 — REQ-20260826-005의 계약은 유지).
    지켜야 하는 것: 기본값 50도 반드시 그린다. 값이 기본과 다를 때만 찍었더니
    전 문서가 50이라 화면 어디에도 아무 값이 없었고 "숨겨져 있는 건가"로
@@ -472,7 +508,40 @@ main{padding:18px 22px}
 .doclist .row.sel>div:nth-child(3){font-weight:650}
 /* 못 박은 줄과 그 아래 목록 사이의 경계 — 그룹 헤어라인보다 한 급 진하게 해
    "여기까지가 지금 보는 것"을 말한다. 색면도 띠도 아닌 선 하나다. */
-.doclist .typebar + .row.sel{border-bottom:1px solid var(--border)}
+.doclist .grp.pinhead + .row.sel{border-bottom:1px solid var(--border)}
+/* **못 박은 줄은 목록의 1번이 아니다** (REQ-20260829-012).
+
+   사용자: "docs 탭에서 문서 목록이나 문서 선택이 내 의도와 다른 것 같다.
+   그리고 선택한 문서를 취소할 수도 있게 해줘."
+
+   Docs 에 다시 들어가니 예전에 열어 둔 문서가 REQUEST 머리글 **위**에 이름 없이
+   홀로 서 있었다 — 지금 고른 적이 없는데 목록의 첫 줄로 읽힌다. 이 목록의
+   덩어리는 전부 머리글을 갖는데(REQUEST·ARTICLE·KNOWLEDGE…) 이 줄만 없었다.
+
+   못 박기 자체는 옳다(REQ-20260828-009) — 묻히면 못 찾는다. 다시 그은 것은
+   그 줄의 **정체**다: 못 박기는 "내가 고른 것"의 표시가 아니라 **"지금 오른쪽에
+   열려 있는 것"**의 표시다. 그래서 되살아난 선택도 여전히 맨 위에 선다(오른쪽
+   판이 실제로 그것을 그리고 있으니 목록이 숨기면 두 판이 다른 말을 한다) —
+   대신 그 줄이 스스로를 밝히고, 바로 그 자리에서 풀린다.
+
+   새 컴포넌트는 만들지 않는다: 이 목록이 이미 쓰는 머리글(.grp) 그대로다. */
+/* 자간은 라틴 대문자용 .1em 을 쓰지 않는다 — 한글에 그대로 걸면 "지 금  보 는
+   문 서" 로 벌어져 낱말이 흩어진다. 잉크는 --faint 에서 한 급 올린다: 이 줄은
+   구획 표시가 아니라 **라벨**이다. */
+.doclist .grp.pinhead{display:flex;align-items:baseline;gap:8px;
+  color:var(--muted);letter-spacing:.02em;text-transform:none}
+/* 푸는 손잡이. 색면·테두리 없는 잉크 글자에 hover 밑줄 — `+ N개 더 보기`·
+   `전문 보기` 와 같은 어휘다. 자리는 푸는 대상 바로 위: 오른쪽 문서 판에 두면
+   그 판이 이미 쓰는 문서 행위(승인·반려·이어 말하기) 옆에 서서 "문서를 닫는다"가
+   아니라 "문서를 취소한다"로 읽힌다. */
+.doclist .pinoff{margin-left:auto;background:none;border:0;padding:0;cursor:pointer;
+  font-family:var(--mono);font-size:10px;letter-spacing:.02em;
+  /* 잉크는 **머리글에서 물려받는다**. 값을 박으면 머리글을 잉크로 뒤집는
+     스킨(grid)에서 글자가 배경에 묻힌다 — 물려받으면 그 스킨의 대비를 그대로
+     쓴다. hover 표시는 색이 아니라 밑줄이 맡는다(이 화면의 기존 어휘). */
+  color:inherit}
+.doclist .pinoff:hover{text-decoration:underline;text-underline-offset:3px}
+.doclist .pinoff:focus-visible{outline:1px solid currentColor;outline-offset:2px}
 /* 점선 = 여기를 누르세요 / 실선 = 지금 여기 있습니다 (REQ-20260827-007 어휘).
    행은 아래 테두리로 맞닿아 있으므로 링을 안쪽으로 물려 이웃 행을 덮지 않게 한다. */
 .doclist .row:focus-visible,.backlinks .bl:focus-visible{
@@ -1269,6 +1338,42 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    집어주면 되고, 전문은 문서 뷰어의 확인 요청 callout 이 편다. */
 .rvpt.what .wtx{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;
   -webkit-box-orient:vertical;overflow:hidden}
+/* 카드가 내주는 몫은 **세 줄**이다 (REQ-20260829-009).
+
+   사용자: "확인 메시지가 너무 기니까 잘린다. 잘리는게 맞나? 그리고 이렇게까지
+   길게 보여주는게 맞을까? 너무 길면 결국 가독성이 떨어져서 본문으로 들어가서
+   보게 되는데 말이야."
+
+   잘리는 게 맞다. 보드 열에서 내리는 결정은 "어느 건을 지금 볼 것인가"이지
+   판정 자체가 아니다 — 판정은 근거 전문을 읽고 내리는 일이고, 그 자리는 문서
+   뷰어의 확인 요청 callout(.gate)이다(갈래 분리·문서 링크·첨부 그림이 거기
+   다 있다). 폭 210~252px 짜리 열에 스무 줄 문단을 넣는 것은 읽으라고 준 것이
+   아니라 **있다고 보여준 것**이다.
+
+   세 줄인 이유: 배경 줄(무엇을) 2줄 + 확인 요청 3줄 = 판정 블록 다섯 줄 상한.
+   카드 높이에 천장이 생겨야 열의 리듬이 서고, 승인·반려 버튼이 긴 글에 밀려
+   화면 밖으로 나가지 않는다.
+
+   클램프는 본문 span(.rvtx)에 건다 — 블록에 걸면 캡션('확인 요청')이 세 줄 중
+   한 줄을 먹어 실제로 읽히는 것은 두 줄뿐이다. `.rvpt.dep`·`.rvpt.stall`(한 줄
+   ellipsis)과 `.rvpt.what .wtx`(두 줄)는 자기 규칙을 그대로 쓴다. */
+.rvpt .rvtx{display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;
+  -webkit-box-orient:vertical;overflow:hidden}
+/* 잘렸다는 사실은 **갈 곳**으로 말한다. 말줄임표는 "끊겼다"만 말하고 나머지가
+   어디 있는지는 말하지 않는다 — 사용자가 본문으로 들어가 읽게 된 그 길을
+   카드가 먼저 알려 준다. 문법은 이미 있는 것을 빌린다: `+ N개 더 보기` 와 같은
+   mono 텍스트 버튼(색면·테두리 없음, hover 밑줄). 누르면 카드 클릭과 같은
+   목적지(문서)로 간다 — 새 핸들러 없이 카드의 [data-doc] 로 버블링한다.
+   카드 안에서 펼치지 않는다: 펼치는 순간 사용자가 신고한 그 화면이 된다. */
+.rvmore{display:none;background:none;border:0;padding:0;margin:5px 0 0;cursor:pointer;
+  font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--muted);
+  /* 잘린 글이 이어지는 자리다 — 그 글의 왼쪽 끝에 선다. button 의 기본
+     text-align:center 와, 카드를 flex 로 세우는 스킨(calm)의 stretch 가
+     내버려 두면 한가운데로 보낸다. */
+  text-align:left;align-self:flex-start}
+.rvpt.iscut + .rvmore{display:block}
+.rvmore:hover{color:var(--text);text-decoration:underline;text-underline-offset:3px}
+.rvmore:focus-visible{outline:1px solid var(--text);outline-offset:2px}
 .depmore{color:var(--faint)}
 /* 전이표가 아직 안 온 자리의 한 줄 (REQ-20260828-027). `.path`(--faint)를 빌려
    썼다가 캡처에서 거의 안 읽혔다 — faint 는 캡션 잉크로 이미 한 번 반려된 값이다
@@ -2253,9 +2358,9 @@ tr.rowoff td{opacity:.45}
    order 로 다시 세우므로, 자리를 안 주면 order:0 이 되어 **제목보다 위로**
    튀어 오른다 — 카드 맨 윗줄에 버튼이 서는 화면이 된다. */
 [data-skin="calm"] .card .judge,[data-skin="calm"] .card>.rvpt,
-[data-skin="calm"] .card>.acts{order:3}
+[data-skin="calm"] .card>.rvmore,[data-skin="calm"] .card>.acts{order:3}
 [data-skin="calm"] .card .id{order:4;margin-top:11px;display:flex;align-items:center;gap:2px;
-  font-size:10px;color:var(--calm-quiet);letter-spacing:.03em}
+  flex-wrap:wrap;font-size:10px;color:var(--calm-quiet);letter-spacing:.03em}
 [data-skin="calm"] .card .elapsed{position:absolute;right:16px;bottom:12px;top:auto;
   font-size:10px;color:var(--calm-quiet);letter-spacing:.01em}
 /* 집는 손잡이는 경과 시각이 선 칸을 빌려 쓴다 — calm 은 그 칸이 아래쪽이다 */
@@ -2289,18 +2394,25 @@ tr.rowoff td{opacity:.45}
 [data-skin="calm"] .card .prio[data-tier="normal"]{color:var(--calm-quiet)}
 
 /* ---- 판정 블록: 캡션은 상태색 글자, 본문은 3줄로 접어 컬럼 리듬을 지킨다.
-   접힌 내용은 카드 호버·키보드 포커스에서 전문으로 펼친다 (REQ-071 반려:
-   3줄만으로는 리뷰 내용 파악 불가 — 호버 시 클램프 해제 + max-height 확장,
-   포인터가 떠나면 3줄 리듬으로 복귀) ---- */
+
+   **호버로 펼치던 규칙을 걷어냈다** (REQ-20260829-009). 마우스를 얹으면
+   클램프를 풀고 max-height 를 60em 으로 늘리던 규칙(REQ-071 때 넣은 것)이
+   사용자가 신고한 바로 그 화면을 만들고 있었다: 스무 줄이 카드 안으로
+   돌아오고, 아래 카드들이 통째로 밀리고, 마우스를 떼면 읽던 글이 사라진다.
+   카드 높이가 포인터 위치에 따라 변하는 것 자체가 결함이다. 전문은 카드가
+   아니라 문서가 편다 — 잘렸을 때만 뜨는 `.rvmore` 가 그 길을 알려 준다. ---- */
 [data-skin="calm"] .judge{margin-top:12px;padding-top:11px;border-top:1px solid var(--hairline)}
 [data-skin="calm"] .card>.rvpt{margin-top:12px;padding-top:11px;
   border-top:1px solid var(--hairline)}
+/* max-height 와 그 전이는 **뺐다** (REQ-20260829-009). 둘 다 호버 전개를
+   여닫으려고 있던 것이고, 전개가 사라진 지금은 클램프와 싸우기만 한다:
+   대기 사유 줄(.card>.rvpt)은 padding-top:11px 을 얹고 서는데 border-box 에서
+   그 패딩이 4.9em 안으로 들어와, 세 줄을 다 못 채운 채 **글자 한 줄이 가로로
+   반 잘린 화면**이 나왔다 — 말줄임표도 없이. 줄 수를 세는 일은 line-clamp
+   하나에 맡긴다. */
 [data-skin="calm"] .rvpt{background:none;border:0;padding:0;margin:0;font-size:11.5px;
   line-height:1.6;color:var(--muted);
-  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
-  max-height:4.9em;transition:max-height .28s ease}
-[data-skin="calm"] .card:hover .rvpt,[data-skin="calm"] .card:focus-within .rvpt{
-  -webkit-line-clamp:unset;max-height:60em}
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 [data-skin="calm"] .rvcap{display:inline;margin:0 6px 0 0;font-size:9.5px;font-weight:700;
   letter-spacing:.08em;color:var(--faint)}
 [data-skin="calm"] .judge .rvcap{color:var(--c-review)}
@@ -2312,6 +2424,9 @@ tr.rowoff td{opacity:.45}
    문장 벽으로 붙는다 — 두 갈래로 읽히게 간격을 돌려준다. */
 [data-skin="calm"] .judge .rvpt.what{margin-bottom:10px}
 [data-skin="calm"] .rvpt.what .wtx{display:inline;-webkit-line-clamp:unset;overflow:visible}
+/* calm 은 캡션을 인라인으로 눕히고 블록(.rvpt) 전체를 3줄로 접는다 — 그 안에
+   -webkit-box 를 하나 더 겹치면 바깥 클램프가 죽는다(위 .wtx 와 같은 이유). */
+[data-skin="calm"] .rvpt .rvtx{display:inline;-webkit-line-clamp:unset;overflow:visible}
 [data-skin="calm"] .card[data-status="blocked"] .rvcap{color:var(--c-blocked)}
 [data-skin="calm"] .acts{gap:7px;margin-top:10px}
 [data-skin="calm"] .acts button{border-radius:999px;border:1px solid var(--border);
@@ -2903,6 +3018,16 @@ const GRAPH_TYPES = ["request", "article", "knowledge", "question", "session"];
 const DOC_ID_PREFIX = "REQ|DOC|SES|QST";
 const DOC_ID_TAIL = "-\\d{8}-\\d{3,}(?:-[0-9a-z]{4})?";
 const DOC_ID_INLINE_RE = new RegExp(`(^|[^"\\w-])((?:${DOC_ID_PREFIX})${DOC_ID_TAIL})`, "g");
+/* 맨 경로로 적힌 첨부 (REQ-20260829-008). 문서 뷰어는 `[Image: assets/…]` 표기를
+   그림으로 내는데, 글을 쓰다 보면 표기 없이 경로만 적는 일이 잦다 — "스크린샷:
+   vault/requests/2026/08/assets/REQ-…/….png" 처럼. 그러면 그림이 있어야 할 자리에
+   긴 경로 한 줄만 남고, 읽는 사람은 그림을 못 본다. 표기를 쓰라고 사람에게 미루는
+   것은 답이 아니다 — 그 사람은 다음에도 경로를 적는다.
+   문서 id 규칙은 위의 것을 그대로 쓴다: 두 벌을 적으면 한 벌만 고쳐진다. 꼬리가
+   선택이라 축약 id(`REQ-20260829-008`)도 걸리고, 푸는 것은 catFind 가 맡는다. */
+const BARE_ASSET_RE = new RegExp(
+  `(?:[\\w.@+-]+\\/)*assets\\/((?:${DOC_ID_PREFIX})${DOC_ID_TAIL})\\/`
+  + `([\\w.@+-]+\\.(?:png|jpe?g|gif|webp|svg|avif))`, "gi");
 const DOC_ID_FULL_RE = new RegExp(`^(?:${DOC_ID_PREFIX})${DOC_ID_TAIL}$`);
 const DOC_ID_WIKI_RE = new RegExp(`\\[\\[((?:${DOC_ID_PREFIX})${DOC_ID_TAIL})\\]\\]`, "g");
 
@@ -4285,9 +4410,22 @@ function applyRoute(hash, doRender){
   if (t === "stream" && parts[1]) selectedStream = parts[1];
   if (t === "settings" && parts[1]) settingsSection = parts[1];
   dlgCheckNav();   // 뒤로가기로 화면이 바뀌었으면 열려 있던 창을 닫는다
-  document.querySelectorAll("[data-tab]").forEach(b =>
-    b.classList.toggle("active", b.dataset.tab === t));
+  tabSync();       // doRender 가 꺼져 있어도 표시는 맞춘다
   if (doRender) render();
+}
+
+/* 상단 알약을 지금 화면(tab)에 맞춘다 (REQ-20260829-007).
+
+   한때 이 세 줄이 네 자리에 손으로 적혀 있었다 — 라우트 복원·탭 클릭·docOpen·
+   그래프 노드 클릭. 그래서 `tab` 을 옮기는 다섯 번째 길(docPick, 즉 `이어
+   말하기`)이 한 줄을 빠뜨렸고, 터미널이 떠 있는데 알약은 Board 에 남았다.
+   화면과 표시가 갈리면 헤드가 사용자에게 어디 있는지를 거짓말한다.
+
+   그래서 인자를 받지 않는다. 상태를 읽어 결정하므로 부르는 쪽은 `tab` 만
+   옮기면 되고, 표시를 따로 챙길 일이 없다 — 사본이 다시 생길 자리가 없다. */
+function tabSync(){
+  document.querySelectorAll("[data-tab]").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === tab));
 }
 
 // 상태 → 해시 push (뒤로가기가 동작하도록 history에 쌓는다)
@@ -4591,6 +4729,10 @@ function syncTypeFilter(){
 
 function render(){
   dlgCheckNav();   // 화면이 바뀐 채로 그려지면 열려 있던 창은 남지 않는다
+  /* 상단 알약은 아래 조기 반환보다 **먼저** 맞춘다 — 살아있는 터미널 셸을
+     재빌드하지 않으려는 그 return 뒤에 두면, 정작 결함이 났던 자리(보드 →
+     터미널)에서만 안 불린다 (REQ-20260829-007). */
+  tabSync();
   updateTitle();
   syncTypeFilter();
   markHeaderCause(null);   // 지목은 그래프 빈 화면이 다시 붙인다 — 남으면 거짓말이 된다
@@ -4727,6 +4869,26 @@ async function wakeDoc(id){
   if (d.ok) refreshCatalog(true);
 }
 
+/* 카드가 내주는 긴 글 한 덩어리 — 세 줄 + (잘렸으면) 갈 곳 (REQ-20260829-009).
+
+   확인 요청과 대기 사유는 같은 종류의 글이다: 사람이 손대기 전에 읽어야 하는
+   문단이고, 둘 다 카드 폭에서는 다 못 읽는다. 한 함수로 지어야 한쪽만 고쳐져
+   blocked 카드가 문장 벽으로 남는 일이 없다.
+
+   본문을 캡션과 분리해 span 으로 싼다 — 클램프를 블록에 걸면 캡션이 세 줄 중
+   한 줄을 먹는다. 손잡이는 클램프 박스 **밖**에 형제로 둔다: 안에 넣으면
+   자기가 잘린다. 문구는 ux-writer 몫이라 이 상수 한 곳에만 있다. */
+const RVMORE_LABEL = "전문 보기";
+/* 집어 둔 카드가 스스로를 부르는 이름 (REQ-20260829-011). 문구는 ux-writer
+   몫이지만 폭 예산이 붙는다: id 줄에 남는 자리가 ~45px 이라 두어 자를 넘기면
+   경과시각과 다시 자리를 다툰다. */
+const PICKED_MARK = "대상";
+function rvClamped(cap, text){
+  return `<div class="rvpt clampy"><span class="rvcap">${esc(cap)}</span>`
+    + `<span class="rvtx">${esc(text)}</span></div>`
+    + `<button type="button" class="rvmore">${RVMORE_LABEL}</button>`;
+}
+
 function cardHTML(r){
   const isReq = r.type === "request";
   // "무엇을 기다리는가" 한 줄 (REQ-20260826-009). blocked 전용이 아니다 —
@@ -4748,11 +4910,11 @@ function cardHTML(r){
   // 제목만으로 무슨 건인지 떠오르지 않은 채 결론부터 읽게 된다 — 그래서 확인
   // 포인트 "위에" 요약을 놓는다. 이 블록(판정 카드)에만 붙인다.
   const acts = isReq && r.status === "review"
-    ? `<div class="judge">${r.summary ? `<div class="rvpt what"><span class="rvcap">무엇을</span><span class="wtx">${esc(r.summary)}</span></div>` : ""}${r.review_point ? `<div class="rvpt"><span class="rvcap">확인 요청</span>${esc(r.review_point)}</div>` : ""}<div class="acts"><button class="deed" data-approve="${esc(r.id)}" title="승인하면 done 상태가 됩니다">${rvLabel("done")}</button><button class="deed" data-reject="${esc(r.id)}" title="반려하면 in-progress 상태로 돌아갑니다">${rvLabel("in-progress")}</button></div></div>`
+    ? `<div class="judge">${r.summary ? `<div class="rvpt what"><span class="rvcap">무엇을</span><span class="wtx">${esc(r.summary)}</span></div>` : ""}${r.review_point ? rvClamped("확인 요청", r.review_point) : ""}<div class="acts"><button class="deed" data-approve="${esc(r.id)}" title="승인하면 done 상태가 됩니다">${rvLabel("done")}</button><button class="deed" data-reject="${esc(r.id)}" title="반려하면 in-progress 상태로 돌아갑니다">${rvLabel("in-progress")}</button></div></div>`
     // 선행이 잡히면 구조화된 대기 줄이 이긴다 — 같은 사실을 두 줄로 말하지 않는다.
     // 관계가 없는 과거 문서만 note 본문의 대기 사유로 폴백 (DOC-20260826-001 규칙 7).
     : isReq && r.status === "blocked" && r.block_reason && !bl.length
-    ? `<div class="rvpt"><span class="rvcap">대기 사유</span>${esc(r.block_reason)}</div>`
+    ? rvClamped("대기 사유", r.block_reason)
     : "";
   /* 멈춤 한 줄. **선행 대기 줄이 있으면 그쪽이 이긴다** — 같은 사실을 두 줄로
      말하지 않는다는 기존 규칙(DOC-20260826-001 규칙 7)을 그대로 따른다: 선행이
@@ -4786,7 +4948,7 @@ function cardHTML(r){
   return `<div class="card" ${isReq ? 'draggable="true"' : ""} tabindex="0" role="button" style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
     <button type="button" class="pickdoc" data-pick="${esc(r.id)}"
       aria-label="${esc(shortId(r.id))} 에 이어 말하기">이어 말하기</button>
-    <div class="id">${liveDot}${esc(shortId(r.id))}</div>
+    <div class="id">${liveDot}<span class="idn">${esc(shortId(r.id))}</span><span class="pkst" title="이어 말할 대상 — 카드에 얹어 손잡이를 다시 누르면 놓는다">${PICKED_MARK}</span></div>
     <div class="t">${esc(r.title)}</div>
     <div class="m">
       <span class="badge" style="--ah:${tagHue(r.user||"?")}"><i class="av">${esc((r.user||"?").slice(0,1).toUpperCase())}</i>${esc(r.user)}</span>
@@ -5066,8 +5228,39 @@ function renderBoard(rows){
   html += `</div>`;
   $("#view").innerHTML = html;
   markPicked();   // 집어 둔 카드 표시 복원 (REQ-20260827-064)
+  // 세 줄에서 잘린 카드에만 "전문 보기"를 연다 — 잘림은 재서 안다 (REQ-20260829-009).
+  // 그림이 붙은 다음 프레임에 잰다: innerHTML 직후에는 아직 레이아웃이 없다.
+  requestAnimationFrame(() => markClamped($("#view")));
   elapsedTimer = setInterval(tickElapsed, 1000);  // 카드 경과시간 실시간 갱신
 }
+
+/* 잘렸는지는 **재서** 안다 (REQ-20260829-009). 글자 수로 짐작하면 스킨마다
+   틀린다 — 열 폭(210~252px)·글꼴·줄간·밀도가 열 벌 넘는 스킨에서 다 달라서,
+   같은 문장이 한 스킨에선 세 줄, 다른 스킨에선 네 줄이다. 짐작이 빗나가면
+   둘 중 하나가 된다: 안 잘린 카드에 손잡이가 붙는 소음이거나, 잘린 채로
+   아무 말도 없는 화면이거나. 후자가 이 요청의 원인이다.
+
+   재는 자리가 둘인 이유: 베이스는 본문 span(.rvtx)에 클램프를 걸고, calm 은
+   캡션을 인라인으로 눕히므로 블록(.rvpt) 전체에 건다. 실제로 넘친 쪽을 잡는다.
+   1px 여유는 소수점 줄 높이의 반올림 때문이다 — 없으면 안 잘린 글도 잘렸다고
+   말한다. 계약: tests/test_review_clamp.py */
+function markClamped(root){
+  (root || document).querySelectorAll(".rvpt.clampy").forEach(el => {
+    const tx = el.querySelector(".rvtx");
+    const box = tx && tx.clientHeight ? tx : el;
+    /* 문턱은 px 상수가 아니라 **줄 높이**다. 클램프가 자르면 최소 한 줄이
+       남으므로 넘침은 늘 한 줄 이상이다 — 그보다 작은 차이는 레이아웃
+       반올림이지 잘림이 아니다. 상수 1px 로 쟀다가 실제로 틀렸다: 넓은
+       창에서 딱 세 줄로 끝난 대기 사유가(말줄임표도 없이) 잘렸다고
+       보고돼 손잡이가 붙었다. 반 줄을 문턱으로 둔다. */
+    const lh = parseFloat(getComputedStyle(box).lineHeight) || 16;
+    el.classList.toggle("iscut", box.scrollHeight - box.clientHeight > lh * 0.5);
+  });
+}
+// 열 폭이 바뀌면 몇 줄인지도 바뀐다 — 창을 줄였는데 손잡이가 그대로면 거짓말이다.
+let clampResizeT;
+function markClampedSoon(){ clearTimeout(clampResizeT); clampResizeT = setTimeout(markClamped, 60); }
+window.addEventListener("resize", markClampedSoon);
 
 /* ---------------- docs ---------------- */
 function hl(text, q){
@@ -5077,6 +5270,33 @@ function hl(text, q){
     out = out.replace(re, m => `<b>${m}</b>`);
   }
   return out;
+}
+
+/* 못 박은 줄의 머리글과 그 손잡이의 낱말 (REQ-20260829-012). 문구는 ux-writer
+   몫이라 한 곳에만 둔다 — 다만 머리글은 **타입 이름처럼 보이면 안 된다**
+   (request·knowledge 옆에 또 하나의 덩어리로 읽힌다). */
+const PIN_HEAD_LABEL = "지금 보는 문서";
+const PIN_OFF_LABEL = "닫기";
+/* 고른 문서를 놓는다 (REQ-20260829-012).
+
+   주소에서도 뺀다 — 새로고침에 되살아나면 아무것도 안 푼 것이다. 오른쪽 판도
+   직접 비운다: renderDocs 는 판이 이미 서 있으면 목록(doclist)만 갈아 끼우므로,
+   여기서 비우지 않으면 방금 놓은 문서를 오른쪽이 계속 그린다.
+   빈 화면의 말은 새로 짓지 않는다 — 처음 들어왔을 때와 같은 한 줄이다.
+
+   Esc 에는 묶지 않는다: 이 화면에서 Esc 는 **떠 있는 것**(호버카드·터미널
+   미리보기·대화상자)을 닫는 키이고, 문서 선택은 떠 있는 것이 아니라 판의
+   상태다. 같은 키에 두 층을 얹으면 호버카드를 닫으려던 Esc 가 읽던 문서까지
+   되돌리기 없이 지운다. 손잡이는 진짜 button 이라 Tab 으로 닿고 Enter 로 눌린다. */
+function docDeselect(){
+  selectedDoc = null;
+  const v = $("#viewer");
+  if (v){
+    v.innerHTML = `<p class="empty">← 문서를 선택하세요</p>`;
+    v.dataset.showing = ""; v.dataset.updated = "";
+  }
+  pushRoute();
+  render();
 }
 
 async function renderDocs(rows){
@@ -5171,7 +5391,12 @@ async function renderDocs(rows){
         <div class="id">${esc(shortId(r.id))}${prioHTML(r)}</div><div>${esc(r.title)}</div>${snips}</div>`;
   };
   let list = `<div class="typebar">${bar}</div>`;
-  if (pin) list += rowHTML(pin);
+  /* 못 박은 줄은 **머리글을 앞세운다** (REQ-20260829-012) — 그래야 목록의
+     1번이 아니라 "오른쪽에 열려 있는 것"으로 읽힌다. 푸는 손잡이도 여기 산다. */
+  if (pin) list += `<div class="grp pinhead">${PIN_HEAD_LABEL}`
+    + `<button type="button" class="pinoff" data-pinoff`
+    + ` title="이 문서를 놓는다 — 목록만 남고 오른쪽은 빈 화면이 된다">${PIN_OFF_LABEL}</button></div>`
+    + rowHTML(pin);
   for (const [g, grp] of Object.entries(groups)){
     if (!grp.length) continue;
     const open = expanded.has("grp:"+g) || !!matchMap;
@@ -5904,11 +6129,14 @@ function md2html(src){
   const inline = s => {
     const held = [];
     const hold = html => `\u0000${held.push(html) - 1}\u0000`;
+    /* 표기와 맨 경로가 같은 그림을 낸다 — 모양이 갈리면 한 문서 안에 두 종류의
+       그림이 생긴다. 문서 가시성을 상속하는 /api/asset 로만 낸다. */
+    const attImg = (did, f) =>
+      `<a class="attlink" href="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(f)}" target="_blank">` +
+      `<img class="attimg" src="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(f)}" alt="${f}" loading="lazy"></a>`;
     const src2 = s
       .replace(/\[Image: (assets\/([A-Z]{3}-[\w-]+)\/([^\]\/\n]+))\]/g,
-        (mm, rel, did, f) => hold(
-          `<a class="attlink" href="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(f)}" target="_blank">` +
-          `<img class="attimg" src="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(f)}" alt="${f}" loading="lazy"></a>`))
+        (mm, rel, did, f) => hold(attImg(did, f)))
       // data-adoc/data-af: 첨부 본문(attachTexts)이 읽는 자리. data-doc 이라는
       // 이름은 쓰지 않는다 — 그건 문서 열기 위임의 이름이라 칩 클릭을 가로챈다.
       .replace(/\[File: (assets\/([A-Z]{3}-[\w-]+)\/([^\]\/\n]+))\]/g,
@@ -5916,7 +6144,17 @@ function md2html(src){
           `<a class="attfile" data-adoc="${did}" data-af="${f}" href="/api/asset?doc=${encodeURIComponent(did)}&f=${encodeURIComponent(f)}" target="_blank">📎 ${f}</a>`))
       // 레거시 절대경로(미이전) — 로드 불가라 파일명 칩으로만
       .replace(/\[(?:Image|File): ([^\]\n]*\/([^\]\/\n]+))\]/g,
-        (mm, full, f) => hold(`<span class="attchip" title="${full}">🖼 ${f}</span>`));
+        (mm, full, f) => hold(`<span class="attchip" title="${full}">🖼 ${f}</span>`))
+      /* 표기 없이 적힌 경로 (REQ-20260829-008). 위 셋보다 **뒤**여야 한다 —
+         표기는 이미 자리표시자로 빠졌으므로 같은 줄을 두 번 집을 일이 없다.
+         백틱 안은 건드리지 않는다: 그 자리는 경로 자체를 보여주려고 쓴 것이고,
+         이 저장소의 노트에 그런 줄이 많다. 앞뒤 글자는 정규식이 아니라 offset
+         으로 본다 — 가변 길이 lookbehind 를 쓰지 않으려는 것이다. */
+      .replace(BARE_ASSET_RE, (mm, did, f, offset, whole) => {
+        if (whole[offset - 1] === "`" || whole[offset + mm.length] === "`") return mm;
+        const r = catFind(did);          // 축약 id 를 그 문서로 푼다
+        return hold(attImg(r ? r.id : did, f));
+      });
     return linkifyIds(src2
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
@@ -8144,8 +8382,12 @@ function docPickDiag(){
   /* 카탈로그가 아직 안 왔으면 집을 문서를 찾지 못하고 조용히 아무 일도 안 한다 —
      터미널 라우트로 바로 들어가면 900ms 에는 비어 있는 일이 잦아, 입력창 위의
      대상 줄을 헤드리스로 볼 길이 사실상 없었다. 올 때까지 몇 번 더 본다. */
+  /* `&jump` 를 붙이면 진짜 `이어 말하기` 처럼 터미널까지 건너뛴다 — 그 건너뜀
+     자체가 결함이 났던 자리다(상단 알약이 Board 에 남았다, REQ-20260829-007).
+     기본은 여전히 제자리다: 집힌 카드 표시를 그 자리에서 봐야 한다. */
+  const pjump = /[?&]jump\b/.test(location.search);
   if (m) (function retry(n){
-    if (catFind(m[1])){ docPick(m[1], false); return; }
+    if (catFind(m[1])){ docPick(m[1], pjump); return; }
     if (n > 0) setTimeout(() => retry(n - 1), 400);
   })(12);
   // ?art — 새 아티클로 쓰기를 켠 화면 (REQ-20260827-073 진단)
@@ -8169,8 +8411,7 @@ function docOpen(id){
   selectedDoc = id;
   if (tab !== "docs"){
     tab = "docs";
-    document.querySelectorAll("[data-tab]").forEach(b =>
-      b.classList.toggle("active", b.dataset.tab === "docs"));
+    tabSync();
     pushRoute();
     render();
   } else { pushRoute(); loadDoc(selectedDoc); }
@@ -10358,8 +10599,7 @@ async function renderGraph(rows){
     if (st.drag && st.moved < 4){
       const id = st.drag.id;
       selectedDoc = id; tab = "docs";
-      document.querySelectorAll("[data-tab]").forEach(b =>
-        b.classList.toggle("active", b.dataset.tab === "docs"));
+      tabSync();
       // 이 이동도 history에 쌓는다 (REQ-20260826-026): 빠뜨리면 스택 꼭대기가
       // 아직 #graph 라, 뒤로가기가 그래프가 아니라 **그 이전 탭**(대개 board)
       // 으로 튄다 — 화면은 문서로 넘어가 있는데 이력만 안 따라온 상태다.
@@ -12088,8 +12328,7 @@ document.addEventListener("click", e => {
   if (tabBtn){
     tab = tabBtn.dataset.tab;
     if (tab === "audit") auditCache = null;
-    document.querySelectorAll("[data-tab]").forEach(b =>
-      b.classList.toggle("active", b === tabBtn));
+    tabSync();
     pushRoute();
     render();
     refreshCatalog(true);
@@ -12166,6 +12405,11 @@ document.addEventListener("click", e => {
   // 아니다 (REQ-20260828-041). 보드 카드와 문서 화면이 같은 길로 들어온다.
   const wk = e.target.closest("[data-wake]");
   if (wk){ e.stopPropagation(); wakeDoc(wk.dataset.wake); return; }
+  /* 못 박은 줄을 놓는 손잡이 — 문서를 여는 길보다 **먼저** 잡는다
+     (REQ-20260829-012). 이 손잡이는 못 박은 줄의 머리글 안에 있어 [data-doc]
+     행 밖이지만, 손잡이가 행보다 앞에 서는 규칙은 이 화면 전체에 하나다. */
+  const po = e.target.closest("[data-pinoff]");
+  if (po){ e.stopPropagation(); docDeselect(); return; }
   // 문서 집기 손잡이는 카드(문서 열기)보다 **먼저** 잡는다 (REQ-20260827-064)
   const pk = e.target.closest("[data-pick]");
   if (pk){ e.stopPropagation(); docPick(pk.dataset.pick); return; }

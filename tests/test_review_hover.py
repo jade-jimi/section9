@@ -1,13 +1,25 @@
-"""보드 카드 리뷰 내용 호버 펼침 계약 (REQ-20260825-071 반려 재작업).
+"""접는다면 **펼 수단을 짝으로 준다** — 그 수단이 호버 전개는 아니다.
 
-반려 사유: "보드 화면에서 카드만 봤을 때 리뷰 내용이 줄어들어서 내용을
-파악할 수가 없다. 마우스 호버를 했을 때라도 내용을 확인이 되면 좋겠는데."
+이력이 둘이다. 순서대로 읽어야 한다.
 
-calm 스킨은 컬럼 리듬을 위해 .rvpt(확인 포인트/대기 사유)를 3줄로 접는다.
-이 테스트는 그 접힘에 반드시 호버/포커스 펼침이 짝으로 존재함을 계약으로
-고정한다: 어떤 스킨이든 .rvpt에 line-clamp를 걸면, 같은 스킨에 카드
-호버(:hover)로 클램프를 해제하는 규칙이 있어야 한다 — 접기만 하고 펼칠
-수단을 주지 않으면 이 반려가 재발한다.
+① REQ-20260825-071 반려: "보드 화면에서 카드만 봤을 때 리뷰 내용이 줄어들어서
+   내용을 파악할 수가 없다. 마우스 호버를 했을 때라도 내용을 확인이 되면
+   좋겠는데." → calm 의 3줄 클램프에 호버·포커스 전개(-webkit-line-clamp:unset
+   + max-height:60em)를 붙였다.
+
+② REQ-20260829-009: "확인 메시지가 너무 기니까 잘린다. 잘리는게 맞나? 그리고
+   이렇게까지 길게 보여주는게 맞을까? 너무 길면 결국 가독성이 떨어져서 본문으로
+   들어가서 보게 되는데 말이야." → 사용자가 신고한 화면은 **①이 만든 화면**이다.
+   호버가 걸린 카드가 스무 줄로 자라 위아래가 화면 밖으로 나갔다.
+
+그래서 ①의 요구는 살리고 수단만 바꾼다. 살아 있는 요구: *접기만 하고 펼칠
+수단을 주지 않으면 안 된다.* 바뀐 수단: 카드 안에서 펼치는 대신, 잘렸을 때만
+뜨는 손잡이(.rvmore)가 전문이 있는 곳(문서)으로 데려간다. 호버 전개가 탈락한
+이유 셋 —
+
+  · 카드 높이가 포인터 위치에 따라 변해 아래 카드들이 통째로 밀린다.
+  · 마우스를 떼면 읽던 글이 사라진다. 오래 읽고 판정하는 글에 맞지 않는다.
+  · 펼친 결과가 폭 210~250px 짜리 스무 줄 문단이다 — 읽으라고 준 것이 아니다.
 
 실행: python3 tests/ hover
 """
@@ -25,56 +37,44 @@ class TestReviewHoverExpand(unittest.TestCase):
         with open(INDEX, encoding="utf-8") as f:
             cls.html = f.read()
 
-    def _skins_clamping_rvpt(self):
-        """`.rvpt`에 -webkit-line-clamp:<n>을 거는 스킨 이름 집합."""
-        skins = set()
-        for m in re.finditer(
-                r'\[data-skin="([^"]+)"\][^{}]*\.rvpt[^{}]*\{([^}]*)\}',
-                self.html):
-            if re.search(r"-webkit-line-clamp:\s*\d", m.group(2)):
-                skins.add(m.group(1))
-        return skins
+    def _clamp_rules(self):
+        """`.rvpt`/`.rvtx` 를 몇 줄로 접는 규칙 전부 — 베이스도 스킨도."""
+        out = []
+        for m in re.finditer(r"(?m)^([^\n{]*\.rv(?:pt|tx)[^{]*)\{([^}]*)\}", self.html):
+            if re.search(r"line-clamp:\s*\d", m.group(2)):
+                out.append((m.group(1).strip(), m.group(2)))
+        return out
 
-    def test_calm_clamps_rvpt(self):
-        """전제 확인: calm은 .rvpt를 접는다 (접힘 자체가 없어졌다면
-        이 계약의 대상이 사라진 것이므로 테스트를 갱신하라)."""
-        self.assertIn("calm", self._skins_clamping_rvpt())
+    def test_something_still_clamps(self):
+        """전제 확인: 카드는 여전히 긴 글을 접는다 (접힘이 없어졌다면 이
+        계약의 대상이 사라진 것이므로 테스트를 갱신하라)."""
+        self.assertTrue(self._clamp_rules(), ".rvpt/.rvtx 를 접는 규칙이 하나도 없다")
 
-    def test_every_clamp_has_hover_release(self):
-        """접는 스킨마다 카드 :hover 에서 클램프를 해제하는 규칙이 있다."""
-        for skin in self._skins_clamping_rvpt():
-            pat = (r'\[data-skin="%s"\][^{}]*\.card:hover[^{}]*\.rvpt'
-                   r'[^{}]*\{([^}]*)\}' % re.escape(skin))
-            m = re.search(pat, self.html)
-            self.assertIsNotNone(
-                m, f"skin '{skin}'이 .rvpt를 접는데 .card:hover 펼침 규칙이 "
-                   f"없다 — 리뷰 내용을 확인할 수단이 사라진다 (REQ-071 반려)")
-            css = m.group(1)
-            self.assertRegex(
-                css, r"-webkit-line-clamp:\s*(unset|none|initial|\d{2,})",
-                f"skin '{skin}'의 hover 규칙이 클램프를 해제하지 않는다")
-            # max-height로도 잘리면 해제가 무효 — 함께 열려야 한다
-            if re.search(r"max-height", self._rvpt_base_css(skin) or ""):
-                self.assertRegex(
-                    css, r"max-height:\s*(none|\d{2,}em|\d{3,}px)",
-                    f"skin '{skin}'의 hover 규칙이 max-height를 열지 않는다")
+    def test_clamp_is_paired_with_a_way_out(self):
+        """접었으면 나머지로 가는 길이 있어야 한다 (REQ-20260825-071 의 살아 있는 요구)."""
+        self.assertIn('class="rvmore"', self.html,
+                      "접기만 하고 전문으로 가는 손잡이가 없다 — REQ-071 반려가 재발한다")
+        self.assertRegex(self.html, r"\.rvpt\.iscut\s*\+\s*\.rvmore\{",
+                         "잘린 카드에만 손잡이를 여는 규칙이 없다")
 
-    def _rvpt_base_css(self, skin):
-        for m in re.finditer(
-                r'\[data-skin="%s"\][^{}]*\.rvpt[^{}]*\{([^}]*)\}'
-                % re.escape(skin), self.html):
-            if re.search(r"-webkit-line-clamp:\s*\d", m.group(1)):
-                return m.group(1)
-        return None
+    def test_the_way_out_is_reachable_without_a_mouse(self):
+        """마우스 없는 사용자도 갈 수 있어야 한다 — 손잡이는 진짜 button 이고
+        포커스가 보인다. 호버 전개는 이 조건을 애초에 못 채웠다."""
+        self.assertRegex(self.html, r'<button type="button" class="rvmore"',
+                         "손잡이가 진짜 button 이 아니다 — 키보드로 닿지 않는다")
+        self.assertRegex(self.html, r"\.rvmore:focus-visible\{[^}]*outline",
+                         "손잡이에 포커스 링이 없다")
 
-    def test_keyboard_focus_release(self):
-        """마우스 없는 사용자도 펼칠 수 있다 — :focus-within 짝 규칙."""
-        for skin in self._skins_clamping_rvpt():
-            self.assertRegex(
-                self.html,
-                r'\[data-skin="%s"\][^{}]*\.card:focus-within[^{}]*\.rvpt'
-                % re.escape(skin),
-                f"skin '{skin}'에 :focus-within 펼침이 없다")
+    def test_no_in_card_hover_expansion(self):
+        """포인터를 얹었다고 카드가 자라면 아래 카드가 밀리고, 사용자가 신고한
+        그 화면(REQ-20260829-009)이 된다."""
+        for sel, css in re.findall(r"(?m)^([^\n{]*:(?:hover|focus-within)[^\n{]*\.rvpt[^{]*)\{([^}]*)\}",
+                                   self.html):
+            flat = css.replace(" ", "")
+            self.assertNotIn("line-clamp:unset", flat,
+                             "호버/포커스로 클램프를 푸는 규칙이 남아 있다: " + sel.strip())
+            self.assertNotRegex(flat, r"max-height:\d{2,}em",
+                                "호버/포커스로 카드를 늘리는 규칙이 남아 있다: " + sel.strip())
 
 
 if __name__ == "__main__":
