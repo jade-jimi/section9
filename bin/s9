@@ -10466,6 +10466,10 @@ def cmd_serve(args):
                 target = chief_query_path("/api/project-session/messages", qs, ("thread_id",))
                 code, ctype, data = chief_call(target)
                 self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/document":
+                target = chief_query_path("/api/document", qs, ("path",))
+                code, ctype, data = chief_call(target)
+                self._send(code, ctype, data)
             elif parsed.path == "/api/chief/chat/messages":
                 target = chief_query_path("/api/chat/messages", qs, ("session",))
                 code, ctype, data = chief_call(target)

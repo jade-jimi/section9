@@ -53,6 +53,8 @@ class FakeChief(http.server.BaseHTTPRequestHandler):
             return self.send_body(200, "application/json", json.dumps({"projects": [{"id": "argon", "sessions": []}]}))
         if self.path.startswith("/api/project-session/messages"):
             return self.send_body(200, "application/json", json.dumps({"thread_id": "t-1", "messages": []}))
+        if self.path.startswith("/api/document"):
+            return self.send_body(200, "text/html; charset=utf-8", "<h1>Durable document</h1>")
         if self.path.startswith("/api/chat/messages?"):
             return self.send_body(200, "application/json", json.dumps({"name": "argon", "messages": []}))
         if self.path == "/api/chief-chat/messages":
@@ -129,6 +131,12 @@ class TestChiefAdapter(unittest.TestCase):
         self.assertEqual((code, ctype), (200, "text/html"))
         self.assertIn(b"Rendered report", raw)
         self.assertIn(("GET", "/refdoc?f=report.md&embed=1", None), FakeChief.calls)
+
+    def test_document_reader_preserves_html_and_only_path_query(self):
+        code, ctype, raw = self.call("/api/chief/document?path=%2Ftmp%2FREQ.md&evil=x")
+        self.assertEqual((code, ctype), (200, "text/html"))
+        self.assertIn(b"Durable document", raw)
+        self.assertIn(("GET", "/api/document?path=%2Ftmp%2FREQ.md", None), FakeChief.calls)
 
     def test_session_start_forwards_exact_json_to_fixed_route(self):
         payload = {"work_id": "REQ-1", "engine": "t3"}
