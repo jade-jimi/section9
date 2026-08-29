@@ -148,4 +148,5 @@ section9/
 - [docs/09-install-and-authz.md](docs/09-install-and-authz.md) — 자기완결 설치(s9-install), skills/agents 편입, 역할 기반 인가, 사용자 설정
 - [docs/10-context-bootstrap.md](docs/10-context-bootstrap.md) — 신규 세션 digest 자동 주입, 예산 설정
 - [docs/11-windows.md](docs/11-windows.md) — 순수 Windows(비-WSL) 지원, .cmd 래퍼, 플랫폼 분기
+- [docs/12-chief-integration.md](docs/12-chief-integration.md) — Chief 멀티 프로젝트 전면, 권위 경계, 런타임, 컷오버·롤백
 - [harness/README.md](harness/README.md) — 멀티 하네스(Claude/Gemini/Codex/Copilot) 지원 매트릭스와 어댑터 원칙

@@ -2297,6 +2297,146 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
    손가락이다(전에는 도움말 커서라 "읽는 것"으로만 보였다). */
 .usagechip{cursor:pointer}
 .usagechip:focus-visible{outline:1px solid var(--text);outline-offset:3px}
+
+/* ------- Chief: simple-first multi-project front door -----------------------
+   Chief borrows Section9's paper, ink, hairlines and depth. Status is carried by
+   type and a small text mark—not by painted cards or a vertical accent strip. */
+body[data-view="chief"] .hrow2{display:none}
+body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
+.chief{display:grid;gap:28px;padding:34px 0 0}
+.chief button,.chief a{font-family:inherit}
+.chief-top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;
+  padding:0 0 24px;border-bottom:1px solid var(--border)}
+.chief-kicker{margin:0 0 7px;font:700 10px/1 var(--mono);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--c-done)}
+.chief-top h1{margin:0;max-width:760px;font-size:clamp(28px,4vw,52px);line-height:1.04;
+  letter-spacing:-.045em;font-weight:700}
+.chief-top p:not(.chief-kicker){margin:12px 0 0;max-width:680px;color:var(--muted);
+  font-size:14px;line-height:1.55}
+.chief-source{flex:0 0 auto;text-align:right;color:var(--muted);font:10.5px/1.5 var(--mono)}
+.chief-source strong{display:block;color:var(--text);font-size:11px;font-weight:600}
+.chief-refresh{margin-top:9px;border:1px solid var(--border);background:var(--panel);
+  color:var(--text);min-height:32px;padding:6px 12px;cursor:pointer;font-size:11.5px;font-weight:600}
+.chief-refresh:hover{border-color:var(--text)}
+.chief-refresh:disabled{cursor:progress;color:var(--faint);border-color:var(--hairline)}
+
+.chief-projects{display:flex;gap:9px;overflow-x:auto;padding:2px 2px 12px;
+  scrollbar-width:thin;scroll-snap-type:x proximity}
+.chief-project{min-width:155px;scroll-snap-align:start;text-align:left;border:1px solid var(--border);
+  border-radius:calc(var(--r) + 2px);background:var(--panel);color:var(--text);
+  padding:13px 14px;cursor:pointer;box-shadow:0 5px 18px color-mix(in srgb,var(--text) 4%,transparent)}
+.chief-project:hover{border-color:var(--faint);transform:translateY(-1px)}
+.chief-project[aria-pressed="true"]{border-color:var(--text);box-shadow:0 9px 24px color-mix(in srgb,var(--text) 8%,transparent)}
+.chief-project b{display:block;margin-bottom:5px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chief-project span{display:block;color:var(--muted);font:10px/1.45 var(--mono);white-space:nowrap}
+.chief-project .attention{color:var(--c-review)}
+.chief-project .moving{color:var(--c-inprogress)}
+
+.chief-section-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  margin-bottom:12px}
+.chief-section-head h2{margin:0;font-size:16px;letter-spacing:-.015em}
+.chief-section-head p{margin:0;color:var(--muted);font:10.5px/1.4 var(--mono)}
+.chief-lanes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.chief-lane{min-width:0;border-top:1px solid var(--border);padding-top:12px}
+.chief-lane-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  margin:0 0 8px}
+.chief-lane-head h3{margin:0;font-size:12.5px;font-weight:650}
+.chief-lane-head span{color:var(--muted);font:10px/1 var(--mono)}
+.chief-lane[data-chief-lane="needs"] h3{color:var(--c-review)}
+.chief-lane[data-chief-lane="progress"] h3{color:var(--c-inprogress)}
+.chief-lane[data-chief-lane="done"] h3{color:var(--c-done)}
+.chief-work-list{display:grid;gap:8px}
+.chief-work{min-height:130px;border:1px solid var(--hairline);border-radius:calc(var(--r) + 3px);
+  background:var(--panel);padding:13px 14px;box-shadow:0 7px 20px color-mix(in srgb,var(--text) 4%,transparent)}
+.chief-work:hover{border-color:var(--border);box-shadow:0 11px 28px color-mix(in srgb,var(--text) 7%,transparent)}
+.chief-work-meta{display:flex;justify-content:space-between;gap:8px;margin-bottom:9px;
+  color:var(--muted);font:9.5px/1.35 var(--mono);letter-spacing:.035em;text-transform:uppercase}
+.chief-work-meta .blocked{color:var(--c-blocked)}
+.chief-work h4{margin:0;font-size:13.5px;line-height:1.35;letter-spacing:-.012em}
+.chief-work p{margin:8px 0 0;color:var(--muted);font-size:11.5px;line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.chief-work-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px}
+.chief-work-foot span{min-width:0;color:var(--faint);font:9.5px/1.35 var(--mono);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chief-work-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex:none}
+.chief-work-actions a{color:var(--muted);font-size:10.5px;text-underline-offset:3px;white-space:nowrap}
+.chief-text-action{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  min-height:30px;padding:5px 9px;font-size:11.5px;font-weight:600;line-height:1.2;cursor:pointer;
+  white-space:nowrap;text-decoration:none}
+.chief-text-action:hover{border-color:var(--text)}
+.chief-text-action:disabled{cursor:progress;color:var(--faint);border-color:var(--hairline)}
+.chief-text-action:focus-visible,.chief-refresh:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.chief-empty{min-height:130px;display:flex;align-items:center;justify-content:center;text-align:center;
+  border:1px dashed var(--border);color:var(--faint);font:10.5px/1.55 var(--mono);padding:20px}
+
+.chief-deep{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:22px}
+.chief-release-list,.chief-report-list{display:grid;gap:8px}
+.chief-release,.chief-report{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;
+  align-items:center;border-bottom:1px solid var(--hairline);padding:11px 0}
+.chief-release:first-child,.chief-report:first-child{border-top:1px solid var(--hairline)}
+.chief-release h3,.chief-report h3{margin:0;font-size:12.5px;line-height:1.35}
+.chief-release p,.chief-report p{grid-column:1;margin:4px 0 0;color:var(--muted);
+  font:10.5px/1.45 var(--mono)}
+.chief-release-state{grid-column:2;grid-row:1/3;color:var(--muted);font:10px/1.3 var(--mono);text-align:right}
+.chief-release-state.ready_for_human,.chief-release-state.review{color:var(--c-review)}
+.chief-release-state.building,.chief-release-state.in_progress{color:var(--c-inprogress)}
+.chief-release-state.blocked{color:var(--c-blocked)}
+.chief-release-state.released,.chief-release-state.done{color:var(--c-done)}
+.chief-report a{grid-column:2;grid-row:1/3;color:var(--text);font-size:10.5px;text-underline-offset:3px}
+.chief-report .chief-report-pending{grid-column:2;grid-row:1/3;color:var(--faint);font:9.5px/1.3 var(--mono)}
+
+/* Report reader — stays above Chief without changing its route or destroying its DOM state. */
+.chief-report-reader{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:28px}
+.chief-report-reader[hidden]{display:none}
+.chief-report-shade{position:absolute;inset:0;width:100%;height:100%;border:0;padding:0;
+  background:color-mix(in srgb,var(--text) 36%,transparent);cursor:default}
+.chief-report-panel{position:relative;z-index:1;width:min(1180px,calc(100vw - 56px));
+  height:min(860px,calc(100vh - 56px));display:grid;grid-template-rows:auto minmax(0,1fr);
+  background:var(--panel);border:1px solid var(--text);box-shadow:0 28px 80px color-mix(in srgb,#000 34%,transparent)}
+.chief-report-head{display:flex;align-items:center;gap:14px;padding:13px 15px;
+  border-bottom:1px solid var(--border);min-width:0}
+.chief-report-head div{min-width:0;flex:1}
+.chief-report-head p{margin:0 0 3px;color:var(--c-done);font:700 9.5px/1 var(--mono);
+  letter-spacing:.12em;text-transform:uppercase}
+.chief-report-head h2{margin:0;font-size:14px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chief-report-head a,.chief-report-head button{border:1px solid var(--border);background:var(--panel);
+  color:var(--text);padding:6px 10px;font-size:11.5px;font-weight:600;text-decoration:none;cursor:pointer;white-space:nowrap}
+.chief-report-head a:hover,.chief-report-head button:hover{border-color:var(--text)}
+.chief-report-body{position:relative;min-height:0;background:var(--bg)}
+.chief-report-body iframe{display:block;width:100%;height:100%;border:0;background:var(--panel)}
+.chief-report-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:var(--panel);color:var(--muted);font:11px/1.5 var(--mono);z-index:1}
+.chief-report-loading[hidden]{display:none}
+
+.chief-state{min-height:430px;display:flex;align-items:center;justify-content:center;padding:50px 20px}
+.chief-state-inner{max-width:620px;text-align:center}
+.chief-state .chief-kicker{color:var(--c-inprogress)}
+.chief-state h1{margin:8px 0 12px;font-size:clamp(26px,4vw,46px);line-height:1.08;letter-spacing:-.04em}
+.chief-state p{margin:0 auto;color:var(--muted);font-size:13px;line-height:1.6;max-width:540px}
+.chief-state code{font:11px/1.4 var(--mono);color:var(--text)}
+.chief-state button{margin-top:18px;border:1px solid var(--text);background:var(--text);color:var(--bg);
+  padding:9px 18px;cursor:pointer;font-weight:600}
+.chief-state button:hover{opacity:.84}
+
+@media(max-width:980px){
+  .chief-lanes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .chief-deep{grid-template-columns:1fr}
+}
+@media(max-width:640px){
+  body[data-view="chief"] main{padding:0 16px 34px}
+  .chief{gap:22px;padding-top:24px}
+  .chief-top{align-items:flex-start;flex-direction:column}
+  .chief-source{text-align:left}
+  .chief-lanes{grid-template-columns:1fr}
+  .chief-work{min-height:0}
+  .chief-empty{min-height:92px}
+  .chief-section-head{align-items:flex-start;flex-direction:column;gap:4px}
+  .chief-report-reader{padding:0}
+  .chief-report-panel{width:100vw;height:100vh;border:0}
+  .chief-report-head{align-items:flex-start;flex-wrap:wrap;padding:11px 12px}
+  .chief-report-head div{flex-basis:100%}
+  .chief-report-head a,.chief-report-head button{flex:1;text-align:center}
+}
 </style>
 </head>
 <body>
@@ -2304,7 +2444,8 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   <div class="hrow1">
     <div class="brand"><span class="dot"></span>section9</div>
     <div class="tabs">
-      <button data-tab="board" class="active">Board</button>
+      <button data-tab="chief" class="active">Chief</button>
+      <button data-tab="board">Board</button>
       <button data-tab="docs">Docs</button>
       <button data-tab="graph">Graph</button>
       <button data-tab="audit">Audit</button>
@@ -2356,6 +2497,21 @@ a.doclink{color:var(--text);cursor:pointer;text-decoration:underline;
   <div id="proj-info" class="proj-info" hidden></div>
   <div id="view"></div>
 </main>
+<div id="chief-report-reader" class="chief-report-reader" role="dialog"
+     aria-labelledby="chief-report-title" hidden>
+  <button class="chief-report-shade" data-chief-report-close aria-label="Close report"></button>
+  <section class="chief-report-panel">
+    <header class="chief-report-head">
+      <div><p>Chief report</p><h2 id="chief-report-title">Report</h2></div>
+      <a id="chief-report-external" href="#" target="_blank" rel="noopener">Open in new tab</a>
+      <button type="button" data-chief-report-close>Close</button>
+    </header>
+    <div class="chief-report-body">
+      <div id="chief-report-loading" class="chief-report-loading" role="status">Loading report…</div>
+      <iframe id="chief-report-frame" title="Chief report"></iframe>
+    </div>
+  </section>
+</div>
 
 <script>
 "use strict";
@@ -2475,7 +2631,10 @@ function statusLabel(r, body){
 }
 
 let catalog = [], graph = null, auditCache = null, TRANS = {}, projects = [];
-let tab = "board", selectedDoc = null, selectedStream = null;
+let tab = "chief", selectedDoc = null, selectedStream = null;
+let chiefData = null, chiefError = "", chiefLoading = false, chiefProject = "";
+let chiefReportReturn = null, chiefReportOverflow = "";
+let chiefNotice = "", chiefRuns = {};
 let streamTimer = null, reqStreamTimer = null;  // live follow 폴링 (화면 이탈 시 정리)
 // 그래프 타입 표시 집합 — 기본은 request/knowledge (세션 로그 노드 숨김, REQ-20260824-026)
 const GTYPES_DEFAULT = ["request", "article", "knowledge", "question"];
@@ -3284,6 +3443,7 @@ async function boot(){
   if (!location.hash) history.replaceState(null, "", "#" + tab);  // 초기 진입점 고정(뒤로가기 기준)
   await refreshProjects();
   await refreshCatalog();
+  await refreshChief();
   // ?project=slug — 공유 가능한 프로젝트 단위 뷰(보드/그래프가 그 프로젝트로 필터)
   const qp = new URLSearchParams(location.search).get("project");
   if (qp && [...$("#f-project").options].some(o => o.value === qp)) $("#f-project").value = qp;
@@ -3292,7 +3452,9 @@ async function boot(){
   anchorBind();    // 구간 메모 팝업 (REQ-20260827-072)
   anchorDiag();    // ?anchor — 진단·헤드리스 캡처용
   window.addEventListener("focus", () => refreshCatalog(true));
+  window.addEventListener("focus", () => { if (tab === "chief") refreshChief(true); });
   setInterval(() => refreshCatalog(true), 15000);
+  setInterval(() => { if (!document.hidden && tab === "chief") refreshChief(true); }, 60000);
   // 코드 낡음 감시: 20s 폴은 가시일 때만, 그리고 포커스 복귀 즉시 한 번 —
   // 터미널에서 재기동하고 돌아온 순간 알림이 사라지는 것이 곧 성공 확인이다.
   checkOldCode();
@@ -3306,7 +3468,7 @@ async function boot(){
   window.addEventListener("popstate", () => applyRoute(location.hash, true));
 }
 
-const TABS = ["board","docs","graph","audit","stream","terminal","settings"];
+const TABS = ["chief","board","docs","graph","audit","stream","terminal","settings"];
 
 // URL 해시 ↔ 상태. 형태: #<tab> 또는 #docs/REQ-.. 또는 #settings/account
 function applyRoute(hash, doRender){
@@ -3317,7 +3479,7 @@ function applyRoute(hash, doRender){
   // 뒤로가기로 들어와도 빈 탭에 앉히지 않고 Board 로 보낸다 — 세션 조각(parts[1])
   // 까지 지워야 아래 정규화가 "#board/<sid>" 같은 엉뚱한 주소를 만들지 않는다.
   if (parts[0] === "stream" && !streamOn()){ parts[0] = "board"; parts.length = 1; }
-  const t = TABS.includes(parts[0]) ? parts[0] : "board";
+  const t = TABS.includes(parts[0]) ? parts[0] : "chief";
   // 해시 정규화 (REQ-20260825-010): alias(#chat)·미지 해시 엔트리가 history에
   // 그대로 남으면 뒤로가기가 같은 화면 재방문·엉뚱한 탭 점프로 어긋난다 —
   // 현재 엔트리를 정규형으로 교체한다 (스택 방향은 보존)
@@ -3622,10 +3784,259 @@ function filtered(skipQ, skipType, skip){
 function syncTypeFilter(){
   const el = $("#f-type");
   if (el) el.hidden = (tab === "board");
+  if (el && tab === "chief") el.hidden = true;
+}
+
+/* ---------------- Chief ----------------
+   Data belongs to Chief; this screen is only a projection. The contract is the
+   existing /api/work response proxied by GET /api/chief/work. Missing arrays are
+   unknown/empty, never fabricated demo work. */
+const chiefArr = v => Array.isArray(v) ? v : [];
+const chiefNorm = v => String(v || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+function chiefGet(path){
+  // Relative GETs survive the deployed /app/<name>/ reverse-proxy prefix.
+  return `api/chief/${path.replace(/^\//, "")}`;
+}
+function chiefOpenReport(href,title,trigger){
+  if (!href) return;
+  const reader = $("#chief-report-reader"), frame = $("#chief-report-frame");
+  const loading = $("#chief-report-loading"), external = $("#chief-report-external");
+  const full = new URL(href,location.href), embedded = new URL(full.toString());
+  embedded.searchParams.set("embed","1");
+  chiefReportReturn = trigger || document.activeElement;
+  chiefReportOverflow = document.body.style.overflow;
+  $("#chief-report-title").textContent = title || "Report";
+  external.href = full.toString();
+  loading.hidden = false;
+  frame.onload = () => { loading.hidden = true; };
+  frame.src = embedded.toString();
+  reader.hidden = false;
+  document.body.style.overflow = "hidden";
+  requestAnimationFrame(() => reader.querySelector("[data-chief-report-close]").focus());
+}
+function chiefCloseReport(){
+  const reader = $("#chief-report-reader");
+  if (!reader || reader.hidden) return;
+  reader.hidden = true;
+  $("#chief-report-frame").src = "about:blank";
+  $("#chief-report-loading").hidden = false;
+  document.body.style.overflow = chiefReportOverflow;
+  const back = chiefReportReturn;
+  chiefReportReturn = null;
+  if (back && back.isConnected) requestAnimationFrame(() => back.focus());
+}
+function chiefProxyRoot(){
+  const m = location.pathname.match(/^(.*?)\/app\/[^/]+(?:\/|$)/);
+  return m ? (m[1] || "") : null;
+}
+function chiefWrite(name){
+  const root = chiefProxyRoot();
+  const routes = {
+    sync:["api/chief/sync","/sync"],
+    session:["api/chief/session/start","/work-session/start"],
+    release:["api/chief/release/ensure","/release/autopilot/ensure"],
+    complete:["api/chief/work/complete","/work/done"],
+    investigate:["api/chief/work/investigate","/work/investigate"],
+    order:["api/chief/order","/orders"],
+    chatSession:["api/chief/chat/session","/chief-chat/session"],
+    chatMessage:["api/chief/chat/message","/chief-chat/message"],
+  };
+  const pair = routes[name];
+  return root === null ? pair[0] : root + pair[1];
+}
+async function chiefPost(name,payload){
+  const res = await fetch(chiefWrite(name),{method:"POST",cache:"no-store",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify(payload || {})});
+  const raw = await res.text();
+  let body;
+  try{ body = JSON.parse(raw); }catch(_e){ throw new Error(`HTTP ${res.status}: ${raw.slice(0,160)}`); }
+  if (!res.ok || body.ok === false) throw new Error(body.error || body.detail || body.status || `HTTP ${res.status}`);
+  return body;
+}
+const chiefRunActive = run => run && ["starting","running","waiting_result","unknown","requested"].includes(String(run.status || ""));
+async function chiefPollRun(key,runId){
+  if (!runId) return;
+  try{
+    const res = await fetch(chiefGet(`session/status?id=${encodeURIComponent(runId)}`),{cache:"no-store"});
+    const run = await res.json();
+    chiefRuns[key] = run; if (tab === "chief") renderChief();
+    if (chiefRunActive(run)) setTimeout(() => chiefPollRun(key,runId),2600);
+    else { chiefNotice = run.status === "done" ? "Agent result recorded. Source state refreshed." : `Agent stopped: ${run.error || run.status || "attention needed"}`; await refreshChief(true); }
+  }catch(e){
+    chiefRuns[key] = {...chiefRuns[key],status:"unknown",error:String(e)};
+    if (tab === "chief") renderChief();
+    setTimeout(() => chiefPollRun(key,runId),5000);
+  }
+}
+async function chiefStartWork(id,title){
+  if (!id || chiefRunActive(chiefRuns[id])) return;
+  chiefRuns[id] = {status:"starting"}; chiefNotice = `Starting ${title}…`; renderChief();
+  try{
+    const priorRes = await fetch(chiefGet(`session/status?work_id=${encodeURIComponent(id)}`),{cache:"no-store"});
+    const prior = priorRes.ok ? await priorRes.json() : null;
+    if (chiefRunActive(prior)){
+      chiefRuns[id] = prior; chiefNotice = `${title} already has a live session; monitoring it instead of starting a duplicate.`;
+      renderChief(); chiefPollRun(id,prior.run_id); return;
+    }
+    const order = `Continue this bounded work autonomously through a verified PR and integration to dev. Preserve the durable request/work order, create same-scope repair follow-ups when needed, update Jira and report evidence, and keep moving while safe progress remains. Stop only at a named external blocker or Jade's dev-to-production human gate. Never merge production.`;
+    const run = await chiefPost("session",{work_id:id,engine:"t3",order});
+    chiefRuns[id] = run; chiefNotice = `${title} is assigned. The agent owns safe work through dev.`;
+    renderChief(); chiefPollRun(id,run.run_id);
+  }catch(e){ chiefRuns[id] = {status:"failed",error:String(e)}; chiefNotice = `Could not start ${title}: ${e.message || e}`; renderChief(); }
+}
+async function chiefStartRelease(id,action,title){
+  const key = `release:${id}:${action}`;
+  if (!id || chiefRunActive(chiefRuns[key])) return;
+  chiefRuns[key] = {status:"starting"}; chiefNotice = `Starting ${title}…`; renderChief();
+  try{
+    const payload = action === "merge_dev" ? {release_id:id,engine:"t3",explicit_start:true} :
+      {release_id:id,action,engine:"t3"};
+    const run = await chiefPost(action === "merge_dev" ? "release" : "session",payload);
+    chiefRuns[key] = run; chiefNotice = `${title} is agent-owned. Production remains Jade's gate.`;
+    renderChief(); if (run.run_id) chiefPollRun(key,run.run_id); else await refreshChief(true);
+  }catch(e){ chiefRuns[key] = {status:"failed",error:String(e)}; chiefNotice = `Could not start ${title}: ${e.message || e}`; renderChief(); }
+}
+async function chiefManualSync(){
+  if (chiefLoading) return;
+  chiefLoading = true; chiefNotice = "Syncing Jira, PRs, releases and work records…"; renderChief();
+  try{ await chiefPost("sync",{}); chiefNotice = "Chief sources synchronized."; }
+  catch(e){ chiefNotice = `Sync failed; existing data was preserved: ${e.message || e}`; }
+  finally{ chiefLoading = false; await refreshChief(true); }
+}
+function chiefLane(row){
+  const s = chiefNorm(row && row.status);
+  if (s.startsWith("done") || s.startsWith("complete") || s === "closed") return "done";
+  if (s.startsWith("in_progress")) return "progress";
+  if (s.startsWith("review") || s.startsWith("blocked")) return "needs";
+  return "ready";
+}
+function chiefProjectKey(row){ return chiefNorm(row && (row.project || row.project_id || "unfiled")); }
+function chiefInProject(row){
+  return !chiefProject || chiefProjectKey(row) === chiefNorm(chiefProject);
+}
+function chiefShort(text, n=150){
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  return clean.length > n ? clean.slice(0, n - 1).trimEnd() + "…" : clean;
+}
+function chiefStatusText(status){
+  const s = chiefNorm(status);
+  const names = {in_progress:"In progress",review:"Needs you",queued:"Ready",backlog:"Ready",
+    hold:"On hold",blocked:"Blocked",done:"Done",complete:"Done",closed:"Done"};
+  return names[s] || String(status || "Ready").replace(/_/g, " ");
+}
+function chiefWorkCard(row, lane){
+  const project = row.project_title || row.project || "Needs filing";
+  const context = row.next || row.outcome || row.goal || row.why || row.summary || "No next note has been recorded.";
+  const ref = row.jira || row.work_order || row.id || "Work";
+  const run = chiefRuns[row.id], running = chiefRunActive(run);
+  const act = running ? "Working…" : lane === "needs" ? "Review" : lane === "progress" ? "Continue" : lane === "done" ? "Evidence" : "Start work";
+  const sessionReport = run && run.run_id && !running ? chiefGet(`session/report?id=${encodeURIComponent(run.run_id)}`) : "";
+  const blocked = chiefNorm(row.status).startsWith("blocked");
+  return `<article class="chief-work">
+    <div class="chief-work-meta"><span>${esc(project)}</span><span class="${blocked ? "blocked" : ""}">${esc(chiefStatusText(row.status))}</span></div>
+    <h4>${esc(row.title || ref)}</h4>
+    <p>${esc(chiefShort(context))}</p>
+    <div class="chief-work-foot"><span>${esc(ref)}${row.assignee ? ` · ${esc(row.assignee)}` : ""}</span>
+      <div class="chief-work-actions">${sessionReport ? `<a href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.title || ref} · agent result`)}">Agent report</a>` : ""}
+      <button class="chief-text-action" data-chief-action="${esc(lane)}" data-chief-work="${esc(row.id || "")}" data-chief-title="${esc(row.title || ref)}" aria-busy="${running ? "true" : "false"}" ${running ? "disabled" : ""}>${act}</button></div></div>
+  </article>`;
+}
+function chiefLaneHTML(key, title, rows){
+  const shown = rows.slice(0, 3);
+  return `<section class="chief-lane" data-chief-lane="${key}">
+    <div class="chief-lane-head"><h3>${title}</h3><span>${rows.length}</span></div>
+    <div class="chief-work-list">${shown.length ? shown.map(r => chiefWorkCard(r, key)).join("") :
+      `<div class="chief-empty">Nothing here${chiefProject ? " for this project" : ""}.</div>`}</div>
+  </section>`;
+}
+function chiefReleaseHTML(row){
+  const state = chiefNorm(row.status || "unknown");
+  const open = row.open_pr_count != null ? row.open_pr_count : chiefArr(row.prs).filter(p => chiefNorm(p.state) !== "merged").length;
+  const report = row.report_file ? chiefGet(`report?f=${encodeURIComponent(row.report_file)}`) : "";
+  const acceptance = row.runtime_acceptance;
+  let action = "", label = "", href = "";
+  if (acceptance && chiefNorm(acceptance.status) !== "passed") { action = "verify_live"; label = "Check live"; }
+  else if (["building","blocked"].includes(state)) { action = "merge_dev"; label = "Run through dev"; }
+  else if (state === "ready_for_human" && row.promotion && chiefNorm(row.promotion.remote_state) === "open") { href = row.promotion.url || ""; label = "Review production PR"; }
+  else if (state === "ready_for_human") { action = "prepare_prod"; label = "Prepare production PR"; }
+  const runKey = action ? `release:${row.id}:${action}` : "", running = runKey && chiefRunActive(chiefRuns[runKey]);
+  const run = runKey ? chiefRuns[runKey] : null;
+  const sessionReport = run && run.run_id && !running ? chiefGet(`session/report?id=${encodeURIComponent(run.run_id)}`) : "";
+  return `<article class="chief-release">
+    <div><h3>${esc(row.project || row.repo || "Unfiled release")}</h3>
+      <p>${esc(row.target || "dev")} → ${esc(row.promotion_target || "production")} · ${open} open PR${open === 1 ? "" : "s"}</p></div>
+    <div class="chief-release-state ${esc(state)}">${esc(chiefStatusText(row.status || "Unknown"))}${report ? `<br><a href="${esc(report)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · release report`)}">report</a>` : ""}${sessionReport ? `<br><a href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · agent result`)}">agent report</a>` : ""}${href ? `<br><a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>` : action ? `<br><button class="chief-text-action" data-chief-release="${esc(row.id)}" data-chief-release-action="${esc(action)}" data-chief-title="${esc(`${row.project || row.repo} · ${label}`)}" aria-busy="${running ? "true" : "false"}" ${running ? "disabled" : ""}>${running ? "Working…" : esc(label)}</button>` : ""}</div>
+  </article>`;
+}
+function chiefReportHTML(row){
+  const href = row.href || (row.report_file ? chiefGet(`report?f=${encodeURIComponent(row.report_file)}`) : "");
+  return `<article class="chief-report"><div><h3>${esc(row.title || row.source || "Report")}</h3>
+    <p>${esc(row.project_title || row.project || row.authority || "Chief")} · ${esc(row.updated || row.status || "recorded")}</p></div>
+    ${href ? `<a href="${esc(href)}" data-chief-report-open data-chief-report-title="${esc(row.title || row.source || "Report")}">Open report</a>` : `<span class="chief-report-pending">link pending</span>`}</article>`;
+}
+function renderChief(){
+  const view = $("#view");
+  $("#count").textContent = "";
+  if (chiefLoading && !chiefData){
+    view.innerHTML = `<section class="chief-state" aria-live="polite"><div class="chief-state-inner"><p class="chief-kicker">Chief</p><h1>Rebuilding your context…</h1><p>Reading projects, work, releases and reports.</p></div></section>`;
+    return;
+  }
+  if (!chiefData){
+    view.innerHTML = `<section class="chief-state" aria-live="polite"><div class="chief-state-inner"><p class="chief-kicker">Source unavailable</p><h1>Chief is not connected yet.</h1><p>${esc(chiefError || "The work source did not answer.")} No work is shown as empty while its source is unknown.<br><code>GET /api/chief/work</code></p><button data-chief-refresh>Try again</button></div></section>`;
+    return;
+  }
+  const rows = chiefArr(chiefData.portfolio).filter(chiefInProject);
+  const lanes = {needs:[],progress:[],ready:[],done:[]};
+  rows.forEach(r => lanes[chiefLane(r)].push(r));
+  const doneIds = new Set(lanes.done.map(r => r.id).filter(Boolean));
+  if (!chiefProject) chiefArr(chiefData.done).forEach(r => { if (!doneIds.has(r.id)) lanes.done.push({...r,status:"done",project_title:"Recent outcome"}); });
+  const allProjects = chiefArr(chiefData.projects);
+  const projectsHTML = [{id:"",title:"All projects",items:chiefArr(chiefData.portfolio).length,
+    needs:chiefData.counts && chiefData.counts.blocked || 0,in_progress:chiefData.counts && chiefData.counts.doing || 0}, ...allProjects]
+    .map(p => `<button class="chief-project" data-chief-project="${esc(p.id || "")}" aria-pressed="${chiefNorm(chiefProject) === chiefNorm(p.id || "")}"><b>${esc(p.title || p.id || "Unfiled")}</b>
+      <span>${p.items || 0} work</span><span class="${p.needs ? "attention" : p.in_progress || p.working ? "moving" : ""}">${p.needs ? `${p.needs} need you` : p.in_progress || p.working ? `${p.in_progress || p.working} moving` : "clear"}</span></button>`).join("");
+  const releases = chiefArr(chiefData.releases).filter(r => !chiefProject ||
+    [r.project_id,r.repo,r.project].some(v => chiefNorm(v) === chiefNorm(chiefProject)));
+  const reports = chiefArr(chiefData.evidence).filter(r => r.kind === "report" && chiefInProject(r)).slice(0, 6);
+  const total = rows.length;
+  view.innerHTML = `<div class="chief">
+    <section class="chief-top"><div><p class="chief-kicker">Chief · portfolio</p><h1>${lanes.needs.length ? `${lanes.needs.length} thing${lanes.needs.length === 1 ? "" : "s"} need your call.` : total ? "Work is moving without noise." : "There is no current work."}</h1>
+      <p>${lanes.progress.length} moving · ${lanes.ready.length} ready · ${lanes.done.length} recently done${chiefProject ? " in this project" : " across the portfolio"}.${chiefNotice ? ` ${esc(chiefNotice)}` : ""}</p></div>
+      <div class="chief-source"><strong>${chiefLoading ? "Refreshing…" : "Source connected"}</strong>${esc(chiefData.generated_at || "time not recorded")}<br><button class="chief-refresh" data-chief-sync aria-busy="${chiefLoading ? "true" : "false"}" ${chiefLoading ? "disabled" : ""}>${chiefLoading ? "Syncing Chief…" : "Sync Chief"}</button></div></section>
+    <nav class="chief-projects" aria-label="Chief projects">${projectsHTML}</nav>
+    <section><div class="chief-section-head"><h2>Work now</h2><p>Three per lane · open Board for the full ledger</p></div>
+      <div class="chief-lanes">${chiefLaneHTML("needs","Needs you",lanes.needs)}${chiefLaneHTML("progress","In progress",lanes.progress)}${chiefLaneHTML("ready","Ready",lanes.ready)}${chiefLaneHTML("done","Done",lanes.done)}</div></section>
+    <div class="chief-deep"><section><div class="chief-section-head"><h2>Release state</h2><p>${releases.length} project${releases.length === 1 ? "" : "s"}</p></div>
+      <div class="chief-release-list">${releases.length ? releases.map(chiefReleaseHTML).join("") : `<div class="chief-empty">No release record for this scope.</div>`}</div></section>
+      <section><div class="chief-section-head"><h2>Reports</h2><p>durable evidence</p></div>
+      <div class="chief-report-list">${reports.length ? reports.map(chiefReportHTML).join("") : `<div class="chief-empty">No report has been attached yet.</div>`}</div></section></div>
+  </div>`;
+}
+async function refreshChief(rerender=false){
+  if (chiefLoading) return;
+  chiefLoading = true; chiefError = "";
+  if (rerender && tab === "chief") renderChief();
+  try{
+    const ac = new AbortController(), t = setTimeout(() => ac.abort(), 8000);
+    const res = await fetch(chiefGet("work"), {cache:"no-store",signal:ac.signal});
+    clearTimeout(t);
+    const raw = await res.text();
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") throw new Error("response was not an object");
+    chiefData = data;
+  }catch(e){
+    chiefError = `GET /api/chief/work failed (${e && e.message ? e.message : e})`;
+    if (!chiefData) chiefData = null;
+  }finally{
+    chiefLoading = false;
+    if (tab === "chief") renderChief();
+  }
 }
 
 function render(){
   updateTitle();
+  document.body.dataset.view = tab;
   syncTypeFilter();
   markHeaderCause(null);   // 지목은 그래프 빈 화면이 다시 붙인다 — 남으면 거짓말이 된다
   // L0 (REQ-040): 살아있는 terminal 셸은 절대 재빌드하지 않는다 — 15s catalog
@@ -3640,6 +4051,7 @@ function render(){
   $("#proj-info").hidden = true;  // 기본 숨김 — board/docs/graph에서만 조건부 표시
   $("#my-strip").hidden = true;   // MY PROJECTS 스트립도 동일 조건
   syncMineToggle();               // 토글은 상태(whoami/s9mine)의 파생 뷰
+  if (tab === "chief"){ renderChief(); return; }
   if (tab === "audit"){ renderAudit(); return; }
   if (tab === "stream"){ renderStream(); return; }
   if (tab === "terminal"){ renderTerminal(); return; }
@@ -8494,6 +8906,36 @@ document.addEventListener("drop", e => {
 
 /* ---------------- events ---------------- */
 document.addEventListener("click", e => {
+  const chiefReportClose = e.target.closest("[data-chief-report-close]");
+  if (chiefReportClose){ chiefCloseReport(); return; }
+  const chiefReport = e.target.closest("[data-chief-report-open]");
+  if (chiefReport){
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    chiefOpenReport(chiefReport.getAttribute("href"),chiefReport.dataset.chiefReportTitle || "Report",chiefReport);
+    return;
+  }
+  const chiefRefresh = e.target.closest("[data-chief-refresh]");
+  if (chiefRefresh){ refreshChief(true); return; }
+  const chiefSync = e.target.closest("[data-chief-sync]");
+  if (chiefSync){ chiefManualSync(); return; }
+  const chiefProj = e.target.closest("[data-chief-project]");
+  if (chiefProj){ chiefProject = chiefProj.dataset.chiefProject || ""; renderChief(); return; }
+  const chiefAct = e.target.closest("[data-chief-action]");
+  if (chiefAct){
+    const action = chiefAct.dataset.chiefAction || "ready";
+    const id = chiefAct.dataset.chiefWork || "";
+    const title = chiefAct.dataset.chiefTitle || chiefAct.dataset.chiefWork || "this work";
+    const row = chiefArr(chiefData && chiefData.portfolio).find(r => r.id === id) || {};
+    if (action === "ready" || action === "progress") { chiefStartWork(id,title); return; }
+    if (row.report_file){ chiefOpenReport(chiefGet(`report?f=${encodeURIComponent(row.report_file)}`),title,chiefAct); return; }
+    s9dlg({kind:"alert",cap:action === "needs" ? "Your decision" : "Evidence",title,
+      desc:chiefShort(row.next || row.outcome || row.goal || row.why || "The durable record has no attached report yet.",520),ok:"Close"});
+    return;
+  }
+  const chiefRelease = e.target.closest("[data-chief-release]");
+  if (chiefRelease){ chiefStartRelease(chiefRelease.dataset.chiefRelease || "",
+    chiefRelease.dataset.chiefReleaseAction || "merge_dev",chiefRelease.dataset.chiefTitle || "release work"); return; }
   // 본문 안에서 탭으로 건너뛰는 링크 — 헤더 탭 버튼의 active 표시를 빼앗지 않도록
   // data-tab 이 아니라 data-goto 로 둔다(그 핸들러는 클릭된 요소를 active로 만든다).
   // data-goto 는 두 뜻으로 쓰인다: 탭 이름("graph") 과 문서 본문의 상태 전이
@@ -8677,6 +9119,9 @@ document.addEventListener("click", e => {
       render();
     } else { pushRoute(); loadDoc(selectedDoc); }
   }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !$("#chief-report-reader").hidden){ e.preventDefault(); chiefCloseReport(); }
 });
 ["#q","#q-body","#f-user","#f-project","#f-tag","#f-type"].forEach(s =>
   $(s).addEventListener("input", () => {

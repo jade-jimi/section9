@@ -9819,7 +9819,50 @@ def cmd_serve(args):
         pass
     import http.server
     import urllib.parse
+    import urllib.error
+    import urllib.request
     web_index = os.path.join(ROOT, "web", "index.html")
+    chief_upstream = os.environ.get("S9_CHIEF_API", "http://127.0.0.1:14098").rstrip("/")
+
+    # Chief adapter (REQ-20260829-001-wfow): fixed-route loopback seam, never a user-supplied
+    # proxy. Chief remains authoritative for Jira/PR/release/session mutations; Section9 is the
+    # presentation shell and forwards only the existing validated contracts.
+    def chief_call(path, method="GET", payload=None, timeout=65, test=False):
+        parsed = urllib.parse.urlparse(chief_upstream)
+        if parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
+            return 503, "application/json; charset=utf-8", json.dumps({
+                "ok": False, "status": "unreachable",
+                "error": "S9_CHIEF_API must be a loopback HTTP endpoint",
+            }, ensure_ascii=False).encode()
+        data = None if payload is None else json.dumps(payload, ensure_ascii=False).encode()
+        request = urllib.request.Request(chief_upstream + path, data=data, method=method)
+        request.add_header("Accept", "application/json, text/html;q=0.9")
+        if data is not None:
+            request.add_header("Content-Type", "application/json")
+        if test:
+            request.add_header("X-Chief-Test", "1")
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return (response.status,
+                        response.headers.get("Content-Type") or "application/octet-stream",
+                        response.read())
+        except urllib.error.HTTPError as error:
+            return (error.code,
+                    error.headers.get("Content-Type") or "application/json; charset=utf-8",
+                    error.read())
+        except Exception as error:
+            return 502, "application/json; charset=utf-8", json.dumps({
+                "ok": False, "status": "unreachable",
+                "error": f"Chief backend unavailable: {type(error).__name__}: {error}",
+            }, ensure_ascii=False).encode()
+
+    def chief_query_path(path, qs, allowed):
+        values = []
+        for key in allowed:
+            value = (qs.get(key) or [""])[0]
+            if value:
+                values.append((key, value))
+        return path + (("?" + urllib.parse.urlencode(values)) if values else "")
 
     # 관계 필드까지 포함한 그래프 데이터 (본문 제외 — 토큰/전송량 최소)
     def graph_data():
@@ -10386,6 +10429,34 @@ def cmd_serve(args):
                 #  ② 응답에 **서버 시각**을 담는다. 신선도 기준이 브라우저
                 #     시계면 시계가 틀어진 기기에서 "6시간 전"이 "방금"이 된다.
                 self._json(guard_report(s9_port()))
+            elif parsed.path == "/api/chief/work":
+                code, ctype, data = chief_call("/api/work")
+                self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/now":
+                code, ctype, data = chief_call("/api/now")
+                self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/session/status":
+                target = chief_query_path("/api/work-session/status", qs, ("id", "work_id"))
+                code, ctype, data = chief_call(target)
+                self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/chat/sessions":
+                code, ctype, data = chief_call("/api/chat/sessions")
+                self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/chat/messages":
+                target = chief_query_path("/api/chat/messages", qs, ("session",))
+                code, ctype, data = chief_call(target)
+                self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/chat/chief-messages":
+                code, ctype, data = chief_call("/api/chief-chat/messages")
+                self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/report":
+                target = chief_query_path("/refdoc", qs, ("f", "raw", "embed"))
+                code, ctype, data = chief_call(target)
+                self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/session/report":
+                target = chief_query_path("/api/work-session/report", qs, ("id", "embed"))
+                code, ctype, data = chief_call(target)
+                self._send(code, ctype, data)
             elif parsed.path == "/api/catalog":
                 me = viewer_of(qs)
                 self._json([r for r in catalog_with_live()
@@ -10737,6 +10808,23 @@ def cmd_serve(args):
                         raise ValueError(f"unregistered user: {proxy}")
                     actor = proxy
                 is_admin = user_role(actor) == "admin"
+
+                chief_posts = {
+                    "/api/chief/sync": "/api/sync",
+                    "/api/chief/session/start": "/api/work-session/start",
+                    "/api/chief/release/ensure": "/api/release/autopilot/ensure",
+                    "/api/chief/work/complete": "/api/work/done",
+                    "/api/chief/work/investigate": "/api/work/investigate",
+                    "/api/chief/order": "/api/order",
+                    "/api/chief/chat/session": "/api/chief-chat/session",
+                    "/api/chief/chat/message": "/api/chief-chat/message",
+                }
+                if parsed.path in chief_posts:
+                    code, ctype, data = chief_call(
+                        chief_posts[parsed.path], method="POST", payload=req,
+                        test=bool(self.headers.get("X-Chief-Test")))
+                    self._send(code, ctype, data)
+                    return
 
                 if parsed.path == "/api/status":
                     note = (req.get("note") or "").strip()[:500]
