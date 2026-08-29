@@ -1,3 +1,4 @@
 {
- "agent_cli": "t3-codex"
+ "agent_cli": "t3-codex",
+ "pref_home_credentials": "For Bitbucket/Jira release work, use the authorized credential source in Jade home (currently /home/jade/.bitbucket_creds). Never copy secret values into repositories, work orders, reports, logs, chat, or remote hosts; reference only the path and capability. Production merges remain Jade-only."
 }
