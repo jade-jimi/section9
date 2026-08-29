@@ -2620,6 +2620,17 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   min-height:34px;padding:7px 11px;font-size:11.5px;font-weight:650;cursor:pointer}
 .chief-relation-map:hover{border-color:var(--text)}
 .chief-accordion{border-top:1px solid var(--border)}
+.chief-engine-picker{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  min-height:58px;padding:11px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.chief-engine-picker>span{color:var(--muted);font:700 9.5px/1.3 var(--mono);
+  letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
+.chief-engine-options{display:flex;align-items:center;gap:2px;border:1px solid var(--border);padding:3px;
+  background:var(--panel);box-shadow:0 5px 16px color-mix(in srgb,var(--text) 4%,transparent)}
+.chief-engine-options button{border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);
+  min-height:30px;padding:5px 9px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap}
+.chief-engine-options button:hover{color:var(--text)}
+.chief-engine-options button[aria-pressed="true"]{color:var(--c-done);border-bottom-color:var(--c-done);font-weight:750}
+.chief-engine-options button:focus-visible{outline:2px solid var(--text);outline-offset:2px}
 .chief-accordion:last-of-type{border-bottom:1px solid var(--border)}
 .chief-accordion>summary{list-style:none;display:flex;align-items:center;gap:14px;padding:20px 0;cursor:pointer}
 .chief-accordion>summary::-webkit-details-marker{display:none}
@@ -2678,6 +2689,9 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   .chief-trail{grid-template-columns:1fr}
   .chief-accordion-body{padding-left:0}
   .chief-home .chief-sessions{grid-template-columns:1fr}
+  .chief-engine-picker{align-items:flex-start;flex-direction:column;gap:7px}
+  .chief-engine-options{width:100%}
+  .chief-engine-options button{flex:1;padding-left:5px;padding-right:5px}
   .chief-talk-float{right:18px;bottom:16px}
 }
 </style>
@@ -2883,6 +2897,13 @@ let chiefReportReturn = null, chiefReportOverflow = "";
 let chiefDaily = "brief", advancedOpen = false, chiefScopeOpen = false;
 let chiefSessions = null, chiefSessionsLoading = false, chiefSessionsError = "";
 let chiefSelectedSession = "", chiefThread = null, chiefThreadLoading = false, chiefSending = false;
+const CHIEF_ENGINES = {
+  t3:{label:"T3 Code",note:"Project T3 default"},
+  codex:{label:"Codex",note:"Codex provider inside T3"},
+  claude:{label:"Claude",note:"Claude RC / provider inside T3"},
+};
+const chiefEngineValue = value => Object.hasOwn(CHIEF_ENGINES,String(value || "")) ? String(value) : "t3";
+let chiefEngine = (() => { try{ return chiefEngineValue(localStorage.getItem("chief-session-engine")); }catch(_e){ return "t3"; } })();
 let chiefNotice = "", chiefRuns = {};
 let streamTimer = null, reqStreamTimer = null;  // live follow 폴링 (화면 이탈 시 정리)
 // 그래프 타입 표시 집합 — 기본은 request/knowledge (세션 로그 노드 숨김, REQ-20260824-026)
@@ -4125,6 +4146,7 @@ function chiefWrite(name){
     order:["api/chief/order","/orders"],
     chatSession:["api/chief/chat/session","/chief-chat/session"],
     chatMessage:["api/chief/chat/message","/chief-chat/message"],
+    projectSessionStart:["api/chief/project-session/start","/project-session/start"],
     projectSessionMessage:["api/chief/project-session/message","/project-session/message"],
   };
   const pair = routes[name];
@@ -4150,6 +4172,9 @@ async function chiefOrder(payload){
   return body;
 }
 const chiefRunActive = run => run && ["starting","running","waiting_result","unknown","requested"].includes(String(run.status || ""));
+function chiefEnginePickerHTML(){
+  return `<div class="chief-engine-picker"><span>New sessions</span><div class="chief-engine-options" role="group" aria-label="Choose the engine for new work, release, and project sessions">${Object.entries(CHIEF_ENGINES).map(([value,meta]) => `<button type="button" data-chief-engine="${value}" aria-pressed="${value === chiefEngine}" aria-label="${esc(`${meta.label} — ${meta.note}`)}" title="${esc(meta.note)}">${esc(meta.label)}</button>`).join("")}</div></div>`;
+}
 async function chiefPollRun(key,runId){
   if (!runId) return;
   try{
@@ -4164,8 +4189,9 @@ async function chiefPollRun(key,runId){
     setTimeout(() => chiefPollRun(key,runId),5000);
   }
 }
-async function chiefStartWork(id,title){
+async function chiefStartWork(id,title,engine=chiefEngine){
   if (!id || chiefRunActive(chiefRuns[id])) return;
+  engine = chiefEngineValue(engine);
   chiefRuns[id] = {status:"starting"}; chiefNotice = `Starting ${title}…`; renderChief();
   try{
     const priorRes = await fetch(chiefGet(`session/status?work_id=${encodeURIComponent(id)}`),{cache:"no-store"});
@@ -4175,20 +4201,19 @@ async function chiefStartWork(id,title){
       renderChief(); chiefPollRun(id,prior.run_id); return;
     }
     const order = `Continue this bounded work autonomously through a verified PR and integration to dev. Preserve the durable request/work order, create same-scope repair follow-ups when needed, update Jira and report evidence, and keep moving while safe progress remains. Stop only at a named external blocker or Jade's dev-to-production human gate. Never merge production.`;
-    // Chief's "codex" engine is a Codex-provider thread inside T3 Code: durable,
-    // steerable in T3, and independent from a project's saved Claude default.
-    const run = await chiefPost("session",{work_id:id,engine:"codex",order});
+    const run = await chiefPost("session",{work_id:id,engine,order});
     chiefRuns[id] = run; chiefNotice = `${title} is assigned. The agent owns safe work through dev.`;
     renderChief(); chiefPollRun(id,run.run_id);
   }catch(e){ chiefRuns[id] = {status:"failed",error:String(e)}; chiefNotice = `Could not start ${title}: ${e.message || e}`; renderChief(); }
 }
-async function chiefStartRelease(id,action,title){
+async function chiefStartRelease(id,action,title,engine=chiefEngine){
   const key = `release:${id}:${action}`;
   if (!id || chiefRunActive(chiefRuns[key])) return;
+  engine = chiefEngineValue(engine);
   chiefRuns[key] = {status:"starting"}; chiefNotice = `Starting ${title}…`; renderChief();
   try{
-    const payload = action === "merge_dev" ? {release_id:id,engine:"codex",explicit_start:true} :
-      {release_id:id,action,engine:"codex"};
+    const payload = action === "merge_dev" ? {release_id:id,engine,explicit_start:true} :
+      {release_id:id,action,engine};
     const run = await chiefPost(action === "merge_dev" ? "release" : "session",payload);
     chiefRuns[key] = run; chiefNotice = `${title} is agent-owned. Production remains Jade's gate.`;
     renderChief(); if (run.run_id) chiefPollRun(key,run.run_id); else await refreshChief(true);
@@ -4222,9 +4247,16 @@ async function chiefCreateWork(project,startSession=false){
     chiefNotice = `${made.jira} and ${made.request_id} created for ${projectTitle}.`;
     await refreshChief(true);
     if (startSession){
-      await chiefStartWork(made.request_id,made.title || title);
+      const engine = chiefEngineValue(chiefEngine);
+      const session = await chiefPost("projectSessionStart",{project,title:`${made.jira} · ${made.title || title}`,engine,fresh:true});
+      if (session.thread_id){
+        const startingDocs = `Start from the durable work, not this chat.\n\nJira: ${made.jira}\nChief request: ${made.request_id}\nProject: ${project}\nOutcome: ${made.title || title}\nEvidence gate: ${goal}\n\nRead the matching repository work order and project instructions, claim the work before editing, preserve unrelated changes, and keep production behind Jade's human gate.`;
+        await chiefPost("projectSessionMessage",{thread_id:session.thread_id,text:startingDocs});
+      }
+      chiefNotice = `${made.jira} created and a new ${CHIEF_ENGINES[engine].label} project session opened with its starting documents.`;
       chiefSessions = null;
-      if (chiefDaily === "sessions") await chiefRefreshSessions();
+      await chiefRefreshSessions();
+      if (session.thread_id) await chiefOpenThread(session.thread_id);
     }
   }catch(e){
     chiefNotice = `${title} remains a draft: Jira creation was unavailable or declined, so it cannot be started. ${e.message || e}`;
@@ -4308,7 +4340,7 @@ function chiefSessionsHTML(){
   const messages = chiefArr(chiefThread && chiefThread.messages).slice(-24);
   const t3Url = selectedRow && selectedRow.open_url || chiefThread && chiefThread.open_url ||
     ((selectedRow && selectedRow.thread_id || chiefThread && chiefThread.thread_id) ? "t3code://app/" : "");
-  return `<section id="chief-sessions"><div class="chief-section-head"><h2>Project sessions</h2><div class="chief-section-actions"><p>${rows.length} conversation${rows.length === 1 ? "" : "s"}${chiefProject ? " in this project" : " across projects"}</p><button class="chief-new-session" data-chief-new-session data-chief-project="${esc(chiefProject)}" ${!chiefProject || remoteHost ? `disabled title="${esc(remoteHost ? `Use ${remoteHost} T3 for this project` : "Select one project first")}"` : ""}>${remoteHost ? `Use ${esc(remoteHost)} T3` : "New T3 Codex session"}</button></div></div>
+  return `<section id="chief-sessions"><div class="chief-section-head"><h2>Project sessions</h2><div class="chief-section-actions"><p>${rows.length} conversation${rows.length === 1 ? "" : "s"}${chiefProject ? " in this project" : " across projects"}</p><button class="chief-new-session" data-chief-new-session data-chief-project="${esc(chiefProject)}" data-chief-launch-engine="${esc(chiefEngine)}" ${!chiefProject || remoteHost ? `disabled title="${esc(remoteHost ? `Use ${remoteHost} T3 for this project` : "Select one project first")}"` : `title="Start with ${esc(CHIEF_ENGINES[chiefEngine].note)}"`}>${remoteHost ? `Use ${esc(remoteHost)} T3` : `New ${esc(CHIEF_ENGINES[chiefEngine].label)} session`}</button></div></div>
     <div class="chief-sessions"><aside class="chief-session-list"><header><h3>Conversations</h3><button class="chief-new-session" data-chief-refresh-sessions ${chiefSessionsLoading ? "disabled" : ""}>${chiefSessionsLoading ? "Refreshing…" : "Refresh"}</button></header><div class="chief-session-rows">
       ${chiefSessionsError ? `<div class="chief-empty">Session source unavailable: ${esc(chiefSessionsError)}</div>` : sessionRows.length ? sessionRows.map(s => {
         const p = s.name === "__chief__" ? null : chiefSessionProject(s);
@@ -4505,7 +4537,7 @@ function renderChief(){
   const releaseCompact = releases.length ? releases.slice(0,3).map(chiefReleaseHTML).join("") : `<div class="chief-daily-empty"><div><b>No release in scope.</b>Select another project or wait for the first PR.</div></div>`;
   const releaseNeedsDev = releases.some(r => ["building","blocked"].includes(chiefNorm(r.status)));
   const reportsCompact = reports.length ? reports.slice(0,4).map(chiefReportHTML).join("") : `<div class="chief-daily-empty"><div><b>No report attached.</b>Create the first meeting report for this project.</div></div>`;
-  view.innerHTML = `<div class="chief-shell">${scope}<div class="chief-home"><section class="chief-left"><section class="chief-return"><p class="chief-date">${esc(dateLabel)}</p><h1>${greeting},<br>Jade</h1><p>Your context has been rebuilt from saved work, Jira, project records, sessions, PRs and releases. ${lanes.needs.length} need you; ${lanes.progress.length} are moving.</p></section><section class="chief-block"><p class="chief-block-cap">Your next move</p>${nextMarkup}</section><section class="chief-block"><p class="chief-block-cap">What changed since your last visit</p>${changed}</section><section class="chief-block"><p class="chief-block-cap">Context trail</p>${trail}</section></section><aside class="chief-right"><details class="chief-accordion needs"><summary><span class="chief-accordion-mark">!</span><b>Needs you</b><span>${jiraLanes.needs.length}</span></summary><div class="chief-accordion-body"><div class="chief-compact-actions"><button data-chief-add-work data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Add work</button></div>${chiefAccordionRows(jiraLanes.needs,"needs")}</div></details><details class="chief-accordion working" ${releaseNeedsDev ? "" : "open"}><summary><span class="chief-accordion-mark">W</span><b>Working</b><span>${jiraLanes.progress.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.progress,"progress")}</div></details><details class="chief-accordion done"><summary><span class="chief-accordion-mark">D</span><b>Recent done</b><span>${jiraLanes.done.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.done,"done")}</div></details><details class="chief-compact" ${releaseNeedsDev ? "open" : ""}><summary><b>Release</b><span>${releases.length} records${releaseNeedsDev ? " · dev action ready" : ""}</span></summary><div class="chief-compact-body">${releaseCompact}</div></details><details class="chief-compact"><summary><b>Reports</b><span>${reports.length} durable</span></summary><div class="chief-compact-body"><div class="chief-compact-actions"><button data-chief-create-report data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Create meeting report</button></div>${reportsCompact}</div></details><details id="chief-sessions-disclosure" class="chief-compact" ${chiefSelectedSession ? "open" : ""}><summary><b>Sessions</b><span>${chiefArr(chiefSessions).length} conversations</span></summary><div class="chief-compact-body">${chiefSessionsHTML()}</div></details><details class="chief-compact"><summary><b>Documents</b><span>${documents.length} sources</span></summary><div class="chief-compact-body">${documentsMarkup}</div></details></aside></div><button class="chief-talk-float" data-chief-talk>Talk to Chief</button></div>`;
+  view.innerHTML = `<div class="chief-shell">${scope}<div class="chief-home"><section class="chief-left"><section class="chief-return"><p class="chief-date">${esc(dateLabel)}</p><h1>${greeting},<br>Jade</h1><p>Your context has been rebuilt from saved work, Jira, project records, sessions, PRs and releases. ${lanes.needs.length} need you; ${lanes.progress.length} are moving.</p></section><section class="chief-block"><p class="chief-block-cap">Your next move</p>${nextMarkup}</section><section class="chief-block"><p class="chief-block-cap">What changed since your last visit</p>${changed}</section><section class="chief-block"><p class="chief-block-cap">Context trail</p>${trail}</section></section><aside class="chief-right">${chiefEnginePickerHTML()}<details class="chief-accordion needs"><summary><span class="chief-accordion-mark">!</span><b>Needs you</b><span>${jiraLanes.needs.length}</span></summary><div class="chief-accordion-body"><div class="chief-compact-actions"><button data-chief-add-work data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Add work</button></div>${chiefAccordionRows(jiraLanes.needs,"needs")}</div></details><details class="chief-accordion working" ${releaseNeedsDev ? "" : "open"}><summary><span class="chief-accordion-mark">W</span><b>Working</b><span>${jiraLanes.progress.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.progress,"progress")}</div></details><details class="chief-accordion done"><summary><span class="chief-accordion-mark">D</span><b>Recent done</b><span>${jiraLanes.done.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.done,"done")}</div></details><details class="chief-compact" ${releaseNeedsDev ? "open" : ""}><summary><b>Release</b><span>${releases.length} records${releaseNeedsDev ? " · dev action ready" : ""}</span></summary><div class="chief-compact-body">${releaseCompact}</div></details><details class="chief-compact"><summary><b>Reports</b><span>${reports.length} durable</span></summary><div class="chief-compact-body"><div class="chief-compact-actions"><button data-chief-create-report data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Create meeting report</button></div>${reportsCompact}</div></details><details id="chief-sessions-disclosure" class="chief-compact" ${chiefSelectedSession ? "open" : ""}><summary><b>Sessions</b><span>${chiefArr(chiefSessions).length} conversations</span></summary><div class="chief-compact-body">${chiefSessionsHTML()}</div></details><details class="chief-compact"><summary><b>Documents</b><span>${documents.length} sources</span></summary><div class="chief-compact-body">${documentsMarkup}</div></details></aside></div><button class="chief-talk-float" data-chief-talk>Talk to Chief</button></div>`;
 }
 async function refreshChief(rerender=false){
   if (chiefLoading) return;
@@ -9410,6 +9442,14 @@ document.addEventListener("drop", e => {
 
 /* ---------------- events ---------------- */
 document.addEventListener("click", async e => {
+  const engineChoice = e.target.closest("[data-chief-engine]");
+  if (engineChoice){
+    chiefEngine = chiefEngineValue(engineChoice.dataset.chiefEngine);
+    try{ localStorage.setItem("chief-session-engine",chiefEngine); }catch(_e){}
+    renderChief();
+    requestAnimationFrame(() => document.querySelector(`[data-chief-engine="${chiefEngine}"]`)?.focus());
+    return;
+  }
   if (e.target.closest("[data-chief-home]")){
     tab = "chief"; chiefDaily = "brief"; advancedOpen = false; pushRoute(); render(); return;
   }
