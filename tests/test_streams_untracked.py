@@ -67,8 +67,17 @@ def _stream_paths(names):
             if "streams/" in n.replace("\\", "/") and n.strip()]
 
 
-@unittest.skipUnless(os.path.isdir(os.path.join(ROOT, ".git")),
-                     "git 리포가 아니면 이력을 물을 수 없다")
+def in_repo():
+    """저장소인가 — `.git` 이 디렉토리인지로 묻지 않는다 (REQ-20260829-001).
+
+    워크트리의 `.git` 은 파일이라 그 질문은 늘 '아니오'다. 그러면 이 검사가
+    통째로 사라지는데, 158MB 미러를 실을 위험이 가장 큰 자리가 바로 무인
+    워커가 커밋하는 워크트리다. git 에게 물으면 두 자리 모두에서 산다."""
+    r = git("rev-parse", "--is-inside-work-tree")
+    return r.returncode == 0 and r.stdout.strip() == "true"
+
+
+@unittest.skipUnless(in_repo(), "git 리포가 아니면 이력을 물을 수 없다")
 class StreamsUntracked(unittest.TestCase):
     """이 리포의 지금 상태 — 인덱스와 HEAD 이력에 미러가 없어야 한다."""
 
