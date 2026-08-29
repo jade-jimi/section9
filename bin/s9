@@ -9855,6 +9855,22 @@ def cmd_serve(args):
         request.add_header("Accept", "application/json, text/html;q=0.9")
         if data is not None:
             request.add_header("Content-Type", "application/json")
+        # Chief's mutating routes require its write token (Chief P0 auth, 2026-08-30) —
+        # the box is multi-user, so loopback is not a trust boundary. Read per call so
+        # rotation needs no serve restart; absent file just means the header is omitted
+        # and Chief itself decides (it fails closed).
+        token = os.environ.get("S9_CHIEF_TOKEN", "").strip()
+        if not token:
+            token_file = os.environ.get(
+                "S9_CHIEF_TOKEN_FILE",
+                os.path.join(os.path.expanduser("~"), "chief", "dashboard", ".token"))
+            try:
+                with open(token_file) as fh:
+                    token = fh.read().strip()
+            except OSError:
+                token = ""
+        if token:
+            request.add_header("X-Chief-Token", token)
         if test:
             request.add_header("X-Chief-Test", "1")
         try:
