@@ -62,6 +62,7 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
   position:sticky;top:0;z-index:10}
 .hrow1{display:flex;align-items:baseline;gap:26px;padding:14px 22px 0}
 .brand{font-size:15px;font-weight:700;letter-spacing:.02em;padding-bottom:12px}
+.brand{border:0;background:none;color:var(--text);font-family:inherit;cursor:pointer}
 .brand .dot{display:inline-block;width:8px;height:8px;background:var(--text);margin-right:8px}
 .tabs{display:flex;gap:2px}
 .tabs button{border:0;background:none;padding:4px 12px 13px;cursor:pointer;
@@ -2485,6 +2486,11 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .chief-thread{display:grid;grid-template-rows:auto minmax(0,1fr) auto}
 .chief-thread header p{margin:4px 0 0;color:var(--muted);font:10px/1.4 var(--mono)}
+.chief-thread header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.chief-thread header>div{min-width:0}
+.chief-thread header a{border:1px solid var(--border);color:var(--text);padding:5px 8px;
+  font-size:10.5px;font-weight:650;text-decoration:none;white-space:nowrap}
+.chief-thread header a:hover{border-color:var(--text)}
 .chief-messages{overflow:auto;padding:15px;display:grid;align-content:start;gap:10px}
 .chief-message{max-width:82%;padding:10px 12px;border:1px solid var(--hairline);font-size:11.5px;line-height:1.5;
   white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg)}
@@ -2539,21 +2545,147 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
   .chief-report-head div{flex-basis:100%}
   .chief-report-head a,.chief-report-head button{flex:1;text-align:center}
 }
+
+/* ------- Chief editorial home: selected visual truth ---------------------- */
+body[data-view="chief"]{
+  --bg:#f7f5ef;--panel:#fbfaf6;--border:#cad4c5;--hairline:#dfe5db;
+  --text:#0d3526;--muted:#5e6d67;--faint:#89938e;--accent-soft:#edf2e9;
+  --c-open:#18794e;--c-inprogress:#b46b12;--c-blocked:#b44434;--c-review:#7b4bb7;
+  --c-done:#228a4b;--c-published:#13805d;
+  font-family:"Open Sans",Inter,system-ui,sans-serif;background:var(--bg);color:var(--text)
+}
+body[data-view="chief"] header{position:relative;background:var(--bg);border:0}
+body[data-view="chief"] .hrow1{align-items:center;padding:25px max(28px,calc((100vw - 1100px)/2));gap:20px}
+body[data-view="chief"] .brand{padding:0;font-size:15px;letter-spacing:-.01em}
+body[data-view="chief"] .brand .dot{width:17px;height:2px;background:var(--c-done);vertical-align:middle}
+body[data-view="chief"] .advanced-nav{padding:0;margin-left:auto}
+body[data-view="chief"] .advanced-toggle{font-size:10.5px;color:var(--muted)}
+body[data-view="chief"] .svchip{padding:0;margin-left:0}
+body[data-view="chief"] main{max-width:1100px;margin:0 auto;padding:28px 0 64px}
+body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="chief"] .proj-info{display:none!important}
+.chief-shell{position:relative}
+.chief-home{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr);gap:64px;align-items:start}
+.chief-left,.chief-right{min-width:0}
+.chief-right{padding-top:58px}
+.chief-return{padding:28px 0 44px;border-bottom:1px solid var(--border)}
+.chief-date{margin:0 0 12px;color:var(--c-done);font-size:10px;font-weight:750;
+  letter-spacing:.13em;text-transform:uppercase}
+.chief-return h1{margin:0;font:700 clamp(48px,5vw,68px)/.98 Georgia,"Times New Roman",serif;
+  letter-spacing:-.055em;color:var(--text)}
+.chief-return>p:last-child{max-width:530px;margin:24px 0 0;color:var(--muted);font-size:15px;line-height:1.55}
+.chief-scope{position:absolute;right:0;top:0;z-index:34;display:flex;justify-content:flex-end;margin:0}
+.chief-scope-toggle{border:0;border-bottom:1px solid var(--border);background:none;color:var(--text);
+  padding:6px 0;font-size:11.5px;font-weight:650;cursor:pointer}
+.chief-scope-toggle span{color:var(--muted);font-weight:400;margin-right:6px}
+.chief-scope-drawer{position:absolute;right:0;top:34px;z-index:35;width:min(370px,calc(100vw - 40px));
+  max-height:440px;overflow:auto;border:1px solid var(--border);background:var(--panel);
+  padding:7px;box-shadow:0 20px 54px color-mix(in srgb,#123326 18%,transparent)}
+.chief-scope-drawer[hidden]{display:none}
+.chief-scope-drawer button{display:flex;width:100%;justify-content:space-between;gap:10px;border:0;
+  border-bottom:1px solid var(--hairline);background:none;color:var(--text);padding:10px;text-align:left;cursor:pointer}
+.chief-scope-drawer button:hover,.chief-scope-drawer button[aria-pressed="true"]{background:var(--accent-soft)}
+.chief-scope-drawer small{color:var(--muted);font:9.5px/1.3 var(--mono)}
+.chief-block{padding:40px 0;border-bottom:1px solid var(--border)}
+.chief-block-cap{margin:0 0 22px;color:var(--c-done);font-size:10px;font-weight:750;
+  letter-spacing:.14em;text-transform:uppercase}
+.chief-next-editorial{display:grid;grid-template-columns:54px minmax(0,1fr);gap:18px;align-items:start}
+.chief-next-mark{width:54px;height:54px;border:1px solid var(--border);border-radius:50%;display:flex;
+  align-items:center;justify-content:center;color:var(--c-done);font:700 18px/1 Georgia,serif}
+.chief-next-editorial h2{margin:0;font-size:22px;line-height:1.28;letter-spacing:-.025em}
+.chief-next-editorial p{margin:12px 0 0;color:var(--c-done);font-size:13px;line-height:1.55}
+.chief-next-editorial .chief-work-actions{grid-column:2;justify-content:flex-start;margin-top:16px}
+.chief-next-editorial .chief-text-action{min-width:190px;min-height:42px;border-color:var(--text);
+  background:var(--text);color:var(--bg);font-size:13px}
+.chief-next-editorial .chief-text-action:disabled{background:none;color:var(--faint);border-color:var(--border)}
+.chief-changed{display:grid;gap:14px}
+.chief-change{display:grid;grid-template-columns:78px minmax(0,1fr);gap:14px;align-items:baseline}
+.chief-change b{color:var(--muted);font:700 9.5px/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.chief-change span{font-size:12px;line-height:1.5;color:var(--text)}
+.chief-change-value{font-size:12px;line-height:1.5;color:var(--text)}
+.chief-change-value strong{font-weight:650}
+.chief-change-value small{display:block;margin-top:3px;color:var(--faint);font:9px/1.35 var(--mono)}
+.chief-change details summary{cursor:pointer;color:var(--muted);font-size:11px}
+.chief-change details p{margin:8px 0 0;color:var(--muted);font-size:11px;line-height:1.55}
+.chief-trail{list-style:none;margin:0;padding:0;counter-reset:trail;display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));gap:0 22px}
+.chief-trail-step{counter-increment:trail;position:relative;padding:13px 0 14px 34px;border-top:1px solid var(--hairline)}
+.chief-trail-step::before{content:counter(trail);position:absolute;left:0;top:13px;width:20px;height:20px;
+  border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:var(--c-done);font:700 9px/1 var(--mono)}
+.chief-trail-step b{display:block;margin-bottom:4px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.chief-trail-step span,.chief-trail-step a{font-size:11.5px;line-height:1.42;color:var(--text);overflow-wrap:anywhere}
+.chief-trail-step .unknown{color:var(--faint)}
+.chief-relation-note{margin:14px 0 0;color:var(--muted);font-size:10.5px;line-height:1.5}
+.chief-relation-map{margin-top:14px;border:1px solid var(--border);background:var(--panel);color:var(--text);
+  min-height:34px;padding:7px 11px;font-size:11.5px;font-weight:650;cursor:pointer}
+.chief-relation-map:hover{border-color:var(--text)}
+.chief-accordion{border-top:1px solid var(--border)}
+.chief-accordion:last-of-type{border-bottom:1px solid var(--border)}
+.chief-accordion>summary{list-style:none;display:flex;align-items:center;gap:14px;padding:20px 0;cursor:pointer}
+.chief-accordion>summary::-webkit-details-marker{display:none}
+.chief-accordion>summary::after{content:"+";margin-left:auto;color:var(--muted);font-size:17px}
+.chief-accordion[open]>summary::after{content:"−"}
+.chief-accordion-mark{width:42px;height:42px;border:1px solid var(--border);border-radius:50%;display:flex;
+  align-items:center;justify-content:center;font:700 13px/1 Georgia,serif;color:var(--c-done)}
+.chief-accordion.needs .chief-accordion-mark{color:var(--c-inprogress);border-color:#e2b86c}
+.chief-accordion>summary b{font-size:17px;letter-spacing:-.02em}
+.chief-accordion>summary span:not(.chief-accordion-mark){color:var(--muted);font:10px/1 var(--mono);margin-left:4px}
+.chief-accordion-body{display:grid;gap:0;padding:0 0 16px 56px}
+.chief-accordion-item{padding:12px 0;border-top:1px solid var(--hairline)}
+.chief-accordion-item h3{margin:0;font-size:13px;line-height:1.35}
+.chief-accordion-item p{margin:5px 0 0;color:var(--muted);font-size:11px;line-height:1.45}
+.chief-accordion-item footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px}
+.chief-accordion-item footer span{color:var(--faint);font:9.5px/1.3 var(--mono)}
+.chief-compact{border-bottom:1px solid var(--border)}
+.chief-compact>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:16px 0;cursor:pointer}
+.chief-compact>summary::-webkit-details-marker{display:none}
+.chief-compact>summary b{font-size:14px}
+.chief-compact>summary span{color:var(--muted);font:10px/1.3 var(--mono)}
+.chief-compact>summary::after{content:"+";margin-left:auto;color:var(--muted)}
+.chief-compact[open]>summary::after{content:"−"}
+.chief-compact-body{padding:0 0 18px}
+.chief-compact-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.chief-compact-actions button{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  min-height:32px;padding:6px 10px;font-size:11px;font-weight:650;cursor:pointer}
+.chief-compact-actions button:hover{border-color:var(--text)}
+.chief-doc-list{display:grid;gap:0}
+.chief-doc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;
+  padding:10px 0;border-top:1px solid var(--hairline)}
+.chief-doc b{font-size:12px;line-height:1.35}
+.chief-doc small{grid-column:1;color:var(--faint);font:9px/1.35 var(--mono);overflow-wrap:anywhere}
+.chief-doc a,.chief-doc button{grid-column:2;grid-row:1/3;border:0;background:none;color:var(--text);
+  padding:3px 0;font-size:10.5px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.chief-doc .unavailable{color:var(--faint);text-decoration:none;cursor:help}
+.chief-talk-float{position:fixed;right:28px;bottom:24px;z-index:42;border:1px solid var(--text);
+  background:var(--text);color:var(--bg);padding:11px 18px;border-radius:24px;cursor:pointer;
+  font-size:12.5px;font-weight:700;box-shadow:0 12px 30px color-mix(in srgb,#0d3526 24%,transparent)}
+.chief-talk-float:hover{transform:translateY(-1px)}
+.chief-home .chief-sessions{grid-template-columns:190px minmax(0,1fr);min-height:420px}
+.chief-home .chief-session-rows{max-height:410px}
+
+@media(max-width:900px){
+  body[data-view="chief"] main{padding:10px 28px 70px}
+  .chief-home{grid-template-columns:1fr;gap:14px}
+  .chief-return{padding-top:16px}
+  .chief-right{padding-top:0;border-top:1px solid var(--border)}
+}
+@media(max-width:600px){
+  body[data-view="chief"] .hrow1{padding:18px 18px}
+  body[data-view="chief"] main{padding:0 18px 76px}
+  .chief-return{padding:18px 0 30px}
+  .chief-return h1{font-size:46px}
+  .chief-block{padding:30px 0}
+  .chief-trail{grid-template-columns:1fr}
+  .chief-accordion-body{padding-left:0}
+  .chief-home .chief-sessions{grid-template-columns:1fr}
+  .chief-talk-float{right:18px;bottom:16px}
+}
 </style>
 </head>
 <body>
 <header>
   <div class="hrow1">
-    <div class="brand"><span class="dot"></span>Chief</div>
-    <div class="tabs daily-tabs" aria-label="Chief daily navigation">
-      <button data-chief-nav="brief" class="active">Brief</button>
-      <button data-chief-nav="work">Work</button>
-      <button data-chief-nav="release">Release</button>
-      <button data-chief-nav="reports">Reports</button>
-      <button data-chief-nav="relations">Relations</button>
-      <button data-chief-nav="sessions">Sessions</button>
-      <button class="talk-chief" data-chief-talk>Talk to Chief</button>
-    </div>
+    <button class="brand" data-chief-home><span class="dot"></span>Element Energy</button>
     <div class="advanced-nav">
       <button class="advanced-toggle" data-advanced-toggle aria-expanded="false">Advanced</button>
       <div class="advanced-menu" id="advanced-menu" hidden>
@@ -2748,7 +2880,7 @@ let catalog = [], graph = null, auditCache = null, TRANS = {}, projects = [];
 let tab = "chief", selectedDoc = null, selectedStream = null;
 let chiefData = null, chiefError = "", chiefLoading = false, chiefProject = "";
 let chiefReportReturn = null, chiefReportOverflow = "";
-let chiefDaily = "brief", advancedOpen = false;
+let chiefDaily = "brief", advancedOpen = false, chiefScopeOpen = false;
 let chiefSessions = null, chiefSessionsLoading = false, chiefSessionsError = "";
 let chiefSelectedSession = "", chiefThread = null, chiefThreadLoading = false, chiefSending = false;
 let chiefNotice = "", chiefRuns = {};
@@ -3951,11 +4083,31 @@ function chiefCloseReport(){
   if (!reader || reader.hidden) return;
   reader.hidden = true;
   $("#chief-report-frame").src = "about:blank";
+  $("#chief-report-frame").srcdoc = "";
   $("#chief-report-loading").hidden = false;
   document.body.style.overflow = chiefReportOverflow;
   const back = chiefReportReturn;
   chiefReportReturn = null;
   if (back && back.isConnected) requestAnimationFrame(() => back.focus());
+}
+async function chiefOpenNativeDoc(id,title,trigger){
+  if (!id) return;
+  const reader = $("#chief-report-reader"), frame = $("#chief-report-frame");
+  const loading = $("#chief-report-loading"), external = $("#chief-report-external");
+  chiefReportReturn = trigger || document.activeElement;
+  chiefReportOverflow = document.body.style.overflow;
+  $("#chief-report-title").textContent = title || id;
+  external.href = new URL(`#docs/${id}`,location.href).toString();
+  loading.hidden = false; reader.hidden = false; document.body.style.overflow = "hidden";
+  requestAnimationFrame(() => reader.querySelector("[data-chief-report-close]").focus());
+  try{
+    const res = await fetch(`/api/doc?id=${encodeURIComponent(id)}&${meQ()}`,{cache:"no-store"});
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    frame.removeAttribute("src");
+    frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:36px 42px;background:#f7f5ef;color:#0d3526;font:15px/1.65 system-ui,sans-serif}article{max-width:900px;margin:auto}h1,h2,h3{font-family:Georgia,serif;line-height:1.2}pre,code{font-family:ui-monospace,monospace}pre{white-space:pre-wrap;background:#edf2e9;padding:14px}a{color:#18794e}@media(max-width:600px){body{padding:22px 18px}}</style></head><body><article><p><small>${esc(id)}</small></p><h1>${esc(d.meta && d.meta.title || title || id)}</h1><div>${md2html(d.body || "")}</div></article></body></html>`;
+    frame.onload = () => { loading.hidden = true; };
+  }catch(e){ frame.srcdoc = `<p style="padding:32px;font-family:system-ui">Could not open ${esc(id)}: ${esc(e.message || e)}</p>`; loading.hidden = true; }
 }
 function chiefProxyRoot(){
   const m = location.pathname.match(/^(.*?)\/app\/[^/]+(?:\/|$)/);
@@ -4090,7 +4242,7 @@ function chiefSessionProject(row){
 async function chiefRefreshSessions(){
   if (chiefSessionsLoading) return;
   chiefSessionsLoading = true; chiefSessionsError = "";
-  if (tab === "chief" && chiefDaily === "sessions") renderChief();
+  if (tab === "chief") renderChief();
   try{
     const res = await fetch(chiefGet("project-sessions?refresh=1"),{cache:"no-store"});
     const body = await res.json();
@@ -4102,7 +4254,7 @@ async function chiefRefreshSessions(){
       status:s.state || s.status || "recorded",
     })));
   }catch(e){ chiefSessionsError = e.message || String(e); if (!chiefSessions) chiefSessions = []; }
-  finally{ chiefSessionsLoading = false; if (tab === "chief" && chiefDaily === "sessions") renderChief(); }
+  finally{ chiefSessionsLoading = false; if (tab === "chief") renderChief(); }
 }
 async function chiefOpenThread(sessionKey){
   if (!sessionKey) return;
@@ -4116,13 +4268,14 @@ async function chiefOpenThread(sessionKey){
     if (!res.ok || body.ok === false) throw new Error(body.error || `HTTP ${res.status}`);
     chiefThread = body;
   }catch(e){ chiefThread = {name:sessionKey,messages:[],error:e.message || String(e)}; }
-  finally{ chiefThreadLoading = false; if (tab === "chief" && chiefDaily === "sessions") renderChief(); }
+  finally{ chiefThreadLoading = false; if (tab === "chief") renderChief(); }
 }
 async function chiefTalk(){
   tab = "chief"; chiefDaily = "sessions"; advancedOpen = false; chiefSelectedSession = "__chief__";
   pushRoute(); syncChiefNav(); render();
   try{ await chiefPost("chatSession",{}); }catch(e){ chiefNotice = `Chief conversation could not open: ${e.message || e}`; }
   await chiefOpenThread("__chief__");
+  requestAnimationFrame(() => $("#chief-sessions-disclosure")?.scrollIntoView({behavior:"smooth",block:"start"}));
 }
 async function chiefSendMessage(){
   const ta = $("#chief-session-message"), text = ta && ta.value.trim();
@@ -4137,7 +4290,7 @@ async function chiefSendMessage(){
     chiefNotice = chiefSelectedSession === "__chief__" ? "Chief received your message." : "The T3 project session received your order.";
     await chiefOpenThread(chiefSelectedSession);
   }catch(e){ chiefNotice = `Message was not delivered: ${e.message || e}`; }
-  finally{ chiefSending = false; if (tab === "chief" && chiefDaily === "sessions") renderChief(); }
+  finally{ chiefSending = false; if (tab === "chief") renderChief(); }
 }
 function chiefSessionsHTML(){
   if (chiefSessions === null && !chiefSessionsLoading) setTimeout(chiefRefreshSessions,0);
@@ -4153,6 +4306,8 @@ function chiefSessionsHTML(){
   const selectedRow = chiefArr(chiefSessions).find(s => String(s.session_key) === String(chiefSelectedSession));
   const threadName = chiefSelectedSession === "__chief__" ? "Chief" : selectedRow && selectedRow.name || chiefSelectedSession;
   const messages = chiefArr(chiefThread && chiefThread.messages).slice(-24);
+  const t3Url = selectedRow && selectedRow.open_url || chiefThread && chiefThread.open_url ||
+    ((selectedRow && selectedRow.thread_id || chiefThread && chiefThread.thread_id) ? "t3code://app/" : "");
   return `<section id="chief-sessions"><div class="chief-section-head"><h2>Project sessions</h2><div class="chief-section-actions"><p>${rows.length} conversation${rows.length === 1 ? "" : "s"}${chiefProject ? " in this project" : " across projects"}</p><button class="chief-new-session" data-chief-new-session data-chief-project="${esc(chiefProject)}" ${!chiefProject || remoteHost ? `disabled title="${esc(remoteHost ? `Use ${remoteHost} T3 for this project` : "Select one project first")}"` : ""}>${remoteHost ? `Use ${esc(remoteHost)} T3` : "New T3 Codex session"}</button></div></div>
     <div class="chief-sessions"><aside class="chief-session-list"><header><h3>Conversations</h3><button class="chief-new-session" data-chief-refresh-sessions ${chiefSessionsLoading ? "disabled" : ""}>${chiefSessionsLoading ? "Refreshing…" : "Refresh"}</button></header><div class="chief-session-rows">
       ${chiefSessionsError ? `<div class="chief-empty">Session source unavailable: ${esc(chiefSessionsError)}</div>` : sessionRows.length ? sessionRows.map(s => {
@@ -4161,7 +4316,7 @@ function chiefSessionsHTML(){
         return `<button class="chief-session-row" data-chief-session="${esc(key)}" aria-pressed="${key === chiefSelectedSession}"><b>${esc(s.name === "__chief__" ? "Chief" : s.name)}<span>${esc(s.status || (s.running ? "running" : "recorded"))}</span></b><p>${esc(p ? `${p.title} · ${chiefShort(s.preview || s.jira || "No recent message",105)}` : chiefShort(s.preview || "Cross-project conversation",120))}</p></button>`;
       }).join("") : `<div class="chief-empty">No project sessions are recorded for this scope.</div>`}
     </div></aside>
-    <section class="chief-thread"><header><h3>${esc(threadName || "Choose a conversation")}</h3><p>${chiefThreadLoading ? "Loading messages…" : chiefThread && chiefThread.error ? esc(chiefThread.error) : chiefSelectedSession ? "Open, read and steer without leaving Chief." : "Select a session on the left."}</p></header>
+    <section class="chief-thread"><header><div><h3>${esc(threadName || "Choose a conversation")}</h3><p>${chiefThreadLoading ? "Loading messages…" : chiefThread && chiefThread.error ? esc(chiefThread.error) : chiefSelectedSession ? "Open, read and steer without leaving Chief." : "Select a session on the left."}</p></div>${t3Url ? `<a href="${esc(t3Url)}">Open T3 Code</a>` : ""}</header>
       <div class="chief-messages">${chiefThreadLoading ? `<div class="chief-empty">Loading this conversation…</div>` : messages.length ? messages.map(m => `<article class="chief-message ${m.role === "jade" ? "jade" : "agent"}"><small>${esc(m.role || "agent")} · ${esc(m.ts || "")}</small>${esc(chiefShort(m.text,1800))}</article>`).join("") : `<div class="chief-empty">${chiefSelectedSession ? "No readable messages in this session." : "Choose a project conversation to read it here."}</div>`}</div>
       <form class="chief-compose" data-chief-compose><textarea id="chief-session-message" placeholder="${chiefSelectedSession ? `Steer ${threadName}…` : "Choose a session first"}" ${chiefSelectedSession ? "" : "disabled"}></textarea><button type="submit" ${chiefSelectedSession && !chiefSending ? "" : "disabled"}>${chiefSending ? "Sending…" : "Send"}</button></form>
     </section></div></section>`;
@@ -4228,16 +4383,16 @@ function chiefReleaseHTML(row){
   const acceptance = row.runtime_acceptance;
   let action = "", label = "", href = "";
   if (acceptance && chiefNorm(acceptance.status) !== "passed") { action = "verify_live"; label = "Check live"; }
-  else if (["building","blocked"].includes(state)) { action = "merge_dev"; label = "Run through dev"; }
+  else if (["building","blocked"].includes(state)) { action = "merge_dev"; label = "Check + merge feature PRs to dev"; }
   else if (state === "ready_for_human" && row.promotion && chiefNorm(row.promotion.remote_state) === "open") { href = row.promotion.url || ""; label = "Review production PR"; }
   else if (state === "ready_for_human") { action = "prepare_prod"; label = "Prepare production PR"; }
   const runKey = action ? `release:${row.id}:${action}` : "", running = runKey && chiefRunActive(chiefRuns[runKey]);
-  const run = runKey ? chiefRuns[runKey] : null;
-  const sessionReport = run && run.run_id && !running ? chiefGet(`session/report?id=${encodeURIComponent(run.run_id)}`) : "";
+  const run = (runKey ? chiefRuns[runKey] : null) || row.autopilot || null;
+  const sessionReport = run && run.run_id && !chiefRunActive(run) ? chiefGet(`session/report?id=${encodeURIComponent(run.run_id)}`) : "";
   return `<article class="chief-release">
     <div><h3>${esc(row.project || row.repo || "Unfiled release")}</h3>
       <p>${esc(row.target || "dev")} → ${esc(row.promotion_target || "production")} · ${open} open PR${open === 1 ? "" : "s"}</p></div>
-    <div class="chief-release-state ${esc(state)}">${esc(chiefStatusText(row.status || "Unknown"))}${report ? `<br><a href="${esc(report)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · release report`)}">report</a>` : ""}${sessionReport ? `<br><a href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · agent result`)}">agent report</a>` : ""}${href ? `<br><a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>` : action ? `<br><button class="chief-text-action" data-chief-release="${esc(row.id)}" data-chief-release-action="${esc(action)}" data-chief-title="${esc(`${row.project || row.repo} · ${label}`)}" aria-busy="${running ? "true" : "false"}" ${running ? "disabled" : ""}>${running ? "Working…" : esc(label)}</button>` : ""}</div>
+    <div class="chief-release-state ${esc(state)}">${esc(chiefStatusText(row.status || "Unknown"))}${report ? `<br><a href="${esc(report)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · release report`)}">Release report</a>` : ""}${sessionReport ? `<br><a href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · agent result`)}">Agent report</a>` : ""}${href ? `<br><a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>` : action ? `<br><button class="chief-text-action" data-chief-release="${esc(row.id)}" data-chief-release-action="${esc(action)}" data-chief-title="${esc(`${row.project || row.repo} · ${label}`)}" aria-busy="${running ? "true" : "false"}" ${running ? "disabled" : ""}>${running ? "Working…" : esc(label)}</button>` : ""}</div>
   </article>`;
 }
 function chiefReportHTML(row){
@@ -4245,6 +4400,20 @@ function chiefReportHTML(row){
   return `<article class="chief-report"><div><h3>${esc(row.title || row.source || "Report")}</h3>
     <p>${esc(row.project_title || row.project || row.authority || "Chief")} · ${esc(row.updated || row.status || "recorded")}</p></div>
     ${href ? `<a href="${esc(href)}" data-chief-report-open data-chief-report-title="${esc(row.title || row.source || "Report")}">Open report</a>` : `<span class="chief-report-pending">link pending</span>`}</article>`;
+}
+function chiefAccordionRows(rows,lane){
+  const shown = rows.slice(0,3);
+  if (!shown.length) return `<div class="chief-daily-empty"><div><b>Nothing here.</b>This section is clear for the current scope.</div></div>`;
+  return shown.map(row => {
+    const ref = row.jira || row.work_order || row.id || "Work";
+    const run = chiefRuns[row.id], running = chiefRunActive(run);
+    const act = running ? "Working…" : lane === "needs" ? "Review" : lane === "progress" ? "Continue" : "Evidence";
+    return `<article class="chief-accordion-item"><h3>${esc(row.title || ref)}</h3><p>${esc(chiefShort(row.next || row.outcome || row.goal || row.why || "No movement note recorded."))}</p><footer><span>${esc(ref)}${row.project ? ` · ${esc(row.project)}` : ""}</span><button class="chief-text-action" data-chief-action="${esc(lane)}" data-chief-work="${esc(row.id || "")}" data-chief-title="${esc(row.title || ref)}" ${running ? "disabled" : ""}>${act}</button></footer></article>`;
+  }).join("");
+}
+function chiefTrailStep(label,value,href){
+  const text = value ? esc(chiefShort(value,170)) : "Not recorded yet";
+  return `<li class="chief-trail-step"><b>${esc(label)}</b>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${text}</a>` : `<span class="${value ? "" : "unknown"}">${text}</span>`}</li>`;
 }
 function renderChief(){
   const view = $("#view");
@@ -4263,10 +4432,6 @@ function renderChief(){
   const doneIds = new Set(lanes.done.map(r => r.id).filter(Boolean));
   if (!chiefProject) chiefArr(chiefData.done).forEach(r => { if (!doneIds.has(r.id)) lanes.done.push({...r,status:"done",project_title:"Recent outcome"}); });
   const allProjects = chiefArr(chiefData.projects);
-  const projectsHTML = [{id:"",title:"All projects",items:chiefArr(chiefData.portfolio).length,
-    needs:chiefData.counts && chiefData.counts.blocked || 0,in_progress:chiefData.counts && chiefData.counts.doing || 0}, ...allProjects]
-    .map(p => `<button class="chief-project" data-chief-project="${esc(p.id || "")}" aria-pressed="${chiefNorm(chiefProject) === chiefNorm(p.id || "")}"><b>${esc(p.title || p.id || "Unfiled")}</b>
-      <span>${p.items || 0} work</span><span class="${p.needs ? "attention" : p.in_progress || p.working ? "moving" : ""}">${p.needs ? `${p.needs} need you` : p.in_progress || p.working ? `${p.in_progress || p.working} moving` : "clear"}</span></button>`).join("");
   const releases = chiefArr(chiefData.releases).filter(r => !chiefProject ||
     [r.project_id,r.repo,r.project].some(v => chiefNorm(v) === chiefNorm(chiefProject)));
   const reports = chiefArr(chiefData.evidence).filter(r => r.kind === "report" && chiefInProject(r)).slice(0, 6);
@@ -4276,27 +4441,71 @@ function renderChief(){
     needs:lanes.needs.filter(r => r.jira),progress:lanes.progress.filter(r => r.jira),
     ready:lanes.ready.filter(r => r.jira),done:lanes.done.filter(r => r.jira),
   } : lanes;
-  const projectDesk = selectedProject ? `<section class="chief-project-desk" aria-label="${esc(selectedProject.title || selectedProject.id)} project workspace">
-    <div><p class="chief-kicker">Project workspace</p><h2>${esc(selectedProject.title || selectedProject.id)}</h2></div>
-    <nav aria-label="Project destinations">
-      <button class="chief-project-entry" data-chief-nav="work"><b>Jira work</b><span>${jiraCount} linked · ${rows.length} total</span></button>
-      <button class="chief-project-entry" data-chief-nav="release"><b>Release</b><span>${releases.length ? `${releases.length} release record${releases.length === 1 ? "" : "s"}` : "No release recorded"}</span></button>
-      <button class="chief-project-entry" data-chief-nav="reports"><b>Reports</b><span>${reports.length ? `${reports.length} durable report${reports.length === 1 ? "" : "s"}` : "Create the first report"}</span></button>
-      <button class="chief-project-entry" data-chief-nav="relations"><b>Relations</b><span>Explicit cross-project links</span></button>
-      <button class="chief-project-entry" data-chief-nav="sessions"><b>Sessions</b><span>Open or steer conversations</span></button>
-    </nav></section>` : "";
   const total = rows.length;
-  const projectScope = `<nav class="chief-projects" aria-label="Chief projects">${projectsHTML}</nav>${projectDesk}`;
-  const hero = `<section id="chief-brief" class="chief-top"><div><p class="chief-kicker">Chief · portfolio</p><h1>${lanes.needs.length ? `${lanes.needs.length} thing${lanes.needs.length === 1 ? "" : "s"} need your call.` : total ? "Work is moving without noise." : "There is no current work."}</h1>
-      <p>${lanes.progress.length} moving · ${lanes.ready.length} ready · ${lanes.done.length} recently done${chiefProject ? " in this project" : " across the portfolio"}.${chiefNotice ? ` ${esc(chiefNotice)}` : ""}</p></div>
-      <div class="chief-source"><strong>${chiefLoading ? "Refreshing…" : "Source connected"}</strong>${esc(chiefData.generated_at || "time not recorded")}<br><button class="chief-refresh" data-chief-sync aria-busy="${chiefLoading ? "true" : "false"}" ${chiefLoading ? "disabled" : ""}>${chiefLoading ? "Syncing Chief…" : "Sync Chief"}</button></div></section>`;
-  const next = lanes.needs[0] || lanes.progress[0] || lanes.ready[0];
-  const brief = `${hero}${projectScope}<section class="chief-brief-grid">${next ? `<article class="chief-next"><p class="chief-kicker">Your next move</p><h2>${esc(next.title)}</h2><p>${esc(chiefShort(next.next || next.goal || next.why || "Open Work for the durable context."))}</p></article>` : `<article class="chief-next"><p class="chief-kicker">Clear</p><h2>No immediate work needs your call.</h2><p>Open Work, Release, or Reports when you want to go deeper.</p></article>`}<button class="chief-brief-link" data-chief-nav="work"><b>Work</b><span>${jiraCount} Jira-linked in scope</span></button><button class="chief-brief-link" data-chief-nav="release"><b>Release</b><span>${releases.length} release records</span></button><button class="chief-brief-link" data-chief-nav="sessions"><b>Sessions</b><span>Open or steer project conversations</span></button></section>`;
-  const work = `${projectScope}<section id="chief-work"><div class="chief-section-head"><h2>${selectedProject ? "Jira work" : "Jira-backed work"}</h2><div class="chief-section-actions"><p>${selectedProject ? `${jiraCount} Jira-linked · ` : ""}three per lane</p><button class="chief-add-work" data-chief-add-work data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Add work</button></div></div><div class="chief-lanes">${chiefLaneHTML("needs","Needs you",jiraLanes.needs)}${chiefLaneHTML("progress","In progress",jiraLanes.progress)}${chiefLaneHTML("ready","Ready",jiraLanes.ready)}${chiefLaneHTML("done","Done",jiraLanes.done)}</div></section>`;
-  const release = `${projectScope}<section id="chief-release"><div class="chief-section-head"><h2>Release</h2><p>${releases.length} record${releases.length === 1 ? "" : "s"}</p></div><div class="chief-release-list">${releases.length ? releases.map(chiefReleaseHTML).join("") : `<div class="chief-empty">No release record for this scope.</div>`}</div></section>`;
-  const report = `${projectScope}<section id="chief-reports"><div class="chief-section-head"><h2>Reports</h2><div class="chief-section-actions"><p>durable evidence</p><button class="chief-create-report" data-chief-create-report data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Create meeting report</button></div></div><div class="chief-report-list">${reports.length ? reports.map(chiefReportHTML).join("") : `<div class="chief-empty">No report has been attached yet.</div>`}</div></section>`;
-  const bodies = {brief,work,release,reports:report,relations:`${projectScope}${chiefRelationsHTML()}`,sessions:`${projectScope}${chiefSessionsHTML()}`};
-  view.innerHTML = `<div class="chief">${bodies[chiefDaily] || brief}</div>`;
+  const flow = chiefData.flow || {};
+  const flowNext = flow.next_move || null;
+  const useFlow = !chiefProject;
+  const next = (flowNext && rows.find(r => r.id === flowNext.id)) || (useFlow ? flowNext : null) || lanes.needs[0] || lanes.progress[0] || lanes.ready[0];
+  if (chiefSessions === null && !chiefSessionsLoading) setTimeout(chiefRefreshSessions,0);
+  const nextProject = next && (next.project || next.project_id);
+  const nextSession = chiefArr(chiefSessions).find(s => {
+    const p = chiefSessionProject(s); return nextProject && p && chiefNorm(p.id) === chiefNorm(nextProject);
+  }) || chiefArr(chiefSessions)[0];
+  const nextRelease = releases.find(r => nextProject && [r.project_id,r.repo,r.project].some(v => chiefNorm(v) === chiefNorm(nextProject))) || releases[0];
+  const hour = new Date().getHours(), greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const dateLabel = new Intl.DateTimeFormat("en-US",{weekday:"long",month:"short",day:"numeric"}).format(new Date()).toUpperCase();
+  const scopeRows = [{id:"",title:"All projects",items:chiefArr(chiefData.portfolio).length},...allProjects];
+  const scopeTitle = selectedProject ? selectedProject.title : "All projects";
+  const scope = `<div class="chief-scope"><button class="chief-scope-toggle" data-chief-scope-toggle aria-expanded="${chiefScopeOpen}"><span>Scope</span>${esc(scopeTitle)}</button><div class="chief-scope-drawer" id="chief-scope-drawer" ${chiefScopeOpen ? "" : "hidden"}>${scopeRows.map(p => `<button data-chief-project="${esc(p.id || "")}" aria-pressed="${chiefNorm(chiefProject) === chiefNorm(p.id || "")}"><b>${esc(p.title || p.id)}</b><small>${p.items || 0} work${p.needs ? ` · ${p.needs} need you` : ""}</small></button>`).join("")}</div></div>`;
+  const nextLane = next ? chiefLane(next) : "ready";
+  const nextRun = next && chiefRuns[next.id], nextRunning = chiefRunActive(nextRun);
+  const nextAction = nextRunning ? "Working…" : nextLane === "needs" ? "Review" : nextLane === "progress" ? "Continue work" : "Start work";
+  const nextMarkup = next ? `<div class="chief-next-editorial"><div class="chief-next-mark">1</div><div><h2>${esc(next.title)}</h2><p>${esc(chiefShort(next.next || next.goal || next.why || "Open the durable work record for the current boundary.",260))}</p><div class="chief-work-actions"><button class="chief-text-action" data-chief-action="${esc(nextLane)}" data-chief-work="${esc(next.id || "")}" data-chief-title="${esc(next.title || "Next work")}" ${nextRunning ? "disabled" : ""}>${nextAction}</button>${next.report_file ? `<a href="${esc(chiefGet(`report?f=${encodeURIComponent(next.report_file)}`))}" data-chief-report-open data-chief-report-title="${esc(next.title)}">Open report</a>` : ""}</div></div></div>` : `<div class="chief-next-editorial"><div class="chief-next-mark">0</div><div><h2>No immediate work needs your call.</h2><p>Select a project scope or add Jira-backed work when a new outcome appears.</p></div></div>`;
+  const flowChanges = useFlow ? chiefArr(flow.changes) : [
+    next && {kind:"work",title:next.title,summary:next.next || next.outcome || next.goal,at:next.updated},
+    nextSession && {kind:"session",title:nextSession.name,summary:nextSession.preview || nextSession.status,at:nextSession.last},
+    nextRelease && {kind:"release",title:`${nextRelease.project} release`,summary:chiefStatusText(nextRelease.status),at:nextRelease.updated},
+  ].filter(Boolean);
+  const changed = `<div class="chief-changed">${flowChanges.length ? flowChanges.slice(0,4).map(c => `<div class="chief-change"><b>${esc(c.kind || "Change")}</b><div class="chief-change-value"><strong>${esc(chiefShort(c.title || "Recorded change",150))}</strong><br>${esc(chiefShort(c.summary || "Saved evidence changed.",220))}${c.at ? `<small>${esc(c.at)}</small>` : ""}</div></div>`).join("") : `<div class="chief-change"><b>Saved state</b><div class="chief-change-value">No interpreted changes were returned for this scope.</div></div>`}</div>`;
+  const trailRows = useFlow ? chiefArr(flow.trail) : [
+    next && {kind:"source",label:next.request_path || next.source || next.id,detail:"Saved request"},
+    next && next.jira && {kind:"jira",label:next.jira,detail:next.jira_status || "Linked work"},
+    next && {kind:"project",label:next.project_title || next.project,detail:next.work_order || "Project context"},
+    nextSession && {kind:"session",label:nextSession.name,detail:`${nextSession.host || "local"} · ${nextSession.status || "recorded"}`},
+    next && (next.pr_url || next.pr_status) && {kind:"pr",label:next.pr_url || "PR / dev",detail:next.pr_status,ref:next.pr_url},
+    nextRelease && {kind:"release",label:nextRelease.project,detail:chiefStatusText(nextRelease.status),ref:nextRelease.source_url},
+    next && {kind:"next",label:next.next || next.outcome,detail:"Recorded next checkpoint"},
+  ].filter(Boolean), trailKind = k => trailRows.find(t => t.kind === k);
+  const sourceTrail = trailKind("source"), jiraTrail = trailKind("jira"), projectTrail = trailKind("project"), orderTrail = trailKind("work_order"), sessionTrail = trailKind("session"), prTrail = trailKind("pr"), releaseTrail = trailKind("release"), nextTrail = trailKind("next");
+  const trailValue = row => row && [row.label,row.detail].filter(Boolean).join(" · ");
+  const trailHref = row => row && /^https?:\/\//.test(row.ref || "") ? row.ref : "";
+  const relationProjectDoc = catalog.find(r => r.type === "project" && [r.project,r.slug,r.title,r.id]
+    .some(v => chiefNorm(v) === chiefNorm(nextProject || chiefProject)));
+  const relationFocusId = relationProjectDoc && relationProjectDoc.id || (next && catalog.some(r => r.id === next.id) ? next.id : "");
+  const trail = `<ol class="chief-trail">${chiefTrailStep("Source ask",trailValue(sourceTrail),trailHref(sourceTrail))}${chiefTrailStep("Jira",trailValue(jiraTrail),trailHref(jiraTrail))}${chiefTrailStep("Project / work order",[trailValue(projectTrail),trailValue(orderTrail)].filter(Boolean).join(" · "))}${chiefTrailStep("T3 session",trailValue(sessionTrail),trailHref(sessionTrail))}${chiefTrailStep("PR / dev",trailValue(prTrail),trailHref(prTrail))}${chiefTrailStep("Release",trailValue(releaseTrail),trailHref(releaseTrail))}${chiefTrailStep("Next / follow-up",trailValue(nextTrail) || (useFlow ? flow.next_work : next && next.next))}</ol><p class="chief-relation-note">${esc((useFlow && flow.relation_note) || chiefData.relation_note || "Only explicit recorded links are shown.")}</p><button class="chief-relation-map" data-chief-relation-map data-chief-doc="${esc(relationFocusId)}">Open full relation map</button>`;
+  const documents = [], docKeys = new Set();
+  const addDoc = d => { const k = `${d.kind}:${d.ref || d.id || d.title}`; if (!docKeys.has(k)){ docKeys.add(k); documents.push(d); } };
+  const flowDocs = useFlow ? chiefArr(flow.documents) : [];
+  flowDocs.forEach(d => addDoc({kind:"report",title:d.title || d.kind || "Document",
+    ref:d.report_file || d.path,href:d.report_file ? chiefGet(`report?f=${encodeURIComponent(d.report_file)}`) :
+      d.path ? chiefGet(`document?path=${encodeURIComponent(d.path)}`) : ""}));
+  if (!flowDocs.length){
+    const nativeNext = next && catalog.find(r => r.id === next.id);
+    if (relationProjectDoc) addDoc({kind:"native",title:"Project context",id:relationProjectDoc.id,ref:relationProjectDoc.id});
+    if (nativeNext) addDoc({kind:"native",title:"Section9 request",id:nativeNext.id,ref:nativeNext.id});
+    if (sourceTrail && sourceTrail.ref) addDoc({kind:"report",title:"Chief request / source ask",ref:sourceTrail.ref,href:chiefGet(`document?path=${encodeURIComponent(sourceTrail.ref)}`)});
+    const workOrderRef = orderTrail && (orderTrail.ref || orderTrail.label) || next && next.work_order;
+    if (workOrderRef) addDoc({kind:"report",title:"Work order",ref:workOrderRef,href:chiefGet(`document?path=${encodeURIComponent(workOrderRef)}`)});
+    if (next && next.report_file) addDoc({kind:"report",title:"Work report",ref:next.report_file,href:chiefGet(`report?f=${encodeURIComponent(next.report_file)}`)});
+    releases.filter(r => r.report_file).slice(0,2).forEach(r => addDoc({kind:"report",title:`${r.project} release report`,ref:r.report_file,href:chiefGet(`report?f=${encodeURIComponent(r.report_file)}`)}));
+    const agentRun = (nextRun && nextRun.run_id && !nextRunning) ? nextRun : (nextRelease && nextRelease.autopilot && nextRelease.autopilot.run_id ? nextRelease.autopilot : null);
+    if (agentRun) addDoc({kind:"report",title:"Latest agent/session report",ref:agentRun.run_id,href:chiefGet(`session/report?id=${encodeURIComponent(agentRun.run_id)}`)});
+  }
+  const documentsMarkup = `<div class="chief-doc-list">${documents.length ? documents.map(d => `<article class="chief-doc"><b>${esc(d.title)}</b><small>${esc(d.ref || d.id || "Recorded source")}</small>${d.kind === "native" ? `<button data-chief-native-doc="${esc(d.id)}" data-chief-native-title="${esc(d.title)}">Open</button>` : d.href ? `<a href="${esc(d.href)}" data-chief-report-open data-chief-report-title="${esc(d.title)}">Open</a>` : `<button class="unavailable" data-chief-document-ref="${esc(d.ref || "")}" data-chief-document-title="${esc(d.title)}">Source path</button>`}</article>`).join("") : `<div class="chief-daily-empty"><div><b>No durable documents were returned.</b>The source trail remains visible above.</div></div>`}</div>`;
+  const releaseCompact = releases.length ? releases.slice(0,3).map(chiefReleaseHTML).join("") : `<div class="chief-daily-empty"><div><b>No release in scope.</b>Select another project or wait for the first PR.</div></div>`;
+  const releaseNeedsDev = releases.some(r => ["building","blocked"].includes(chiefNorm(r.status)));
+  const reportsCompact = reports.length ? reports.slice(0,4).map(chiefReportHTML).join("") : `<div class="chief-daily-empty"><div><b>No report attached.</b>Create the first meeting report for this project.</div></div>`;
+  view.innerHTML = `<div class="chief-shell">${scope}<div class="chief-home"><section class="chief-left"><section class="chief-return"><p class="chief-date">${esc(dateLabel)}</p><h1>${greeting},<br>Jade</h1><p>Your context has been rebuilt from saved work, Jira, project records, sessions, PRs and releases. ${lanes.needs.length} need you; ${lanes.progress.length} are moving.</p></section><section class="chief-block"><p class="chief-block-cap">Your next move</p>${nextMarkup}</section><section class="chief-block"><p class="chief-block-cap">What changed since your last visit</p>${changed}</section><section class="chief-block"><p class="chief-block-cap">Context trail</p>${trail}</section></section><aside class="chief-right"><details class="chief-accordion needs"><summary><span class="chief-accordion-mark">!</span><b>Needs you</b><span>${jiraLanes.needs.length}</span></summary><div class="chief-accordion-body"><div class="chief-compact-actions"><button data-chief-add-work data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Add work</button></div>${chiefAccordionRows(jiraLanes.needs,"needs")}</div></details><details class="chief-accordion working" ${releaseNeedsDev ? "" : "open"}><summary><span class="chief-accordion-mark">W</span><b>Working</b><span>${jiraLanes.progress.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.progress,"progress")}</div></details><details class="chief-accordion done"><summary><span class="chief-accordion-mark">D</span><b>Recent done</b><span>${jiraLanes.done.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.done,"done")}</div></details><details class="chief-compact" ${releaseNeedsDev ? "open" : ""}><summary><b>Release</b><span>${releases.length} records${releaseNeedsDev ? " · dev action ready" : ""}</span></summary><div class="chief-compact-body">${releaseCompact}</div></details><details class="chief-compact"><summary><b>Reports</b><span>${reports.length} durable</span></summary><div class="chief-compact-body"><div class="chief-compact-actions"><button data-chief-create-report data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Create meeting report</button></div>${reportsCompact}</div></details><details id="chief-sessions-disclosure" class="chief-compact" ${chiefSelectedSession ? "open" : ""}><summary><b>Sessions</b><span>${chiefArr(chiefSessions).length} conversations</span></summary><div class="chief-compact-body">${chiefSessionsHTML()}</div></details><details class="chief-compact"><summary><b>Documents</b><span>${documents.length} sources</span></summary><div class="chief-compact-body">${documentsMarkup}</div></details></aside></div><button class="chief-talk-float" data-chief-talk>Talk to Chief</button></div>`;
 }
 async function refreshChief(rerender=false){
   if (chiefLoading) return;
@@ -7909,7 +8118,7 @@ async function sendChat(){
 /* ------- graph (Obsidian-style: live physics, drag, pan/zoom, hover focus) ------- */
 let ganim = null;
 let gGen = 0;                       // 그래프 판의 세대 — 진단이 죽은 판을 재지 않게
-let graphPos = {}, graphTf = null;  // auto refresh 시 배치/줌 보존
+let graphPos = {}, graphTf = null, graphFocusId = "";  // auto refresh 시 배치/줌 보존
 let graphLayout = (() => {         // force(자유 물리) | dag(계층 — 병목 파악용)
   try{ return localStorage.getItem("s9glayout") || "force"; }catch(e){ return "force"; }
 })();
@@ -8237,6 +8446,14 @@ async function renderGraph(rows){
                       : restored > nodes.length * 0.6 ? 0.12 : 1,
                hover:null, drag:null, pan:null, moved:0,
                dx:0, dy:0, lastTouch: performance.now() };
+  // Chief context-trail drill-down: keep the complete relation map, but put the
+  // current flow document at the visual center when that document exists here.
+  if (graphFocusId && byId[graphFocusId]){
+    const focus = byId[graphFocusId], k = 1.18;
+    st.tf = {k,x:W/2 - focus.x*k,y:H/2 - focus.y*k};
+    st.hover = focus;
+  }
+  graphFocusId = "";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   // 깊이 투영: 팬 오프셋을 깊이에 가중(전경이 더 크게 흐름) — 팬/줌 시 노드 사이
   // 상대 이동(운동 시차)이 생겨 구름이 부피로 읽힌다. 줌 k는 전 깊이 공통(역변환 단순).
@@ -9193,6 +9410,9 @@ document.addEventListener("drop", e => {
 
 /* ---------------- events ---------------- */
 document.addEventListener("click", async e => {
+  if (e.target.closest("[data-chief-home]")){
+    tab = "chief"; chiefDaily = "brief"; advancedOpen = false; pushRoute(); render(); return;
+  }
   const dailyNav = e.target.closest("[data-chief-nav]");
   if (dailyNav){
     tab = "chief"; chiefDaily = dailyNav.dataset.chiefNav || "brief"; advancedOpen = false;
@@ -9212,13 +9432,31 @@ document.addEventListener("click", async e => {
     chiefOpenReport(chiefReport.getAttribute("href"),chiefReport.dataset.chiefReportTitle || "Report",chiefReport);
     return;
   }
+  const nativeDoc = e.target.closest("[data-chief-native-doc]");
+  if (nativeDoc){ chiefOpenNativeDoc(nativeDoc.dataset.chiefNativeDoc || "",nativeDoc.dataset.chiefNativeTitle || "Document",nativeDoc); return; }
+  const sourceDoc = e.target.closest("[data-chief-document-ref]");
+  if (sourceDoc){
+    s9dlg({kind:"alert",cap:"Durable source",title:sourceDoc.dataset.chiefDocumentTitle || "Document",
+      desc:`The source remains traceable at ${sourceDoc.dataset.chiefDocumentRef || "an unrecorded path"}. This scoped fallback has no reader route yet; no content was guessed or copied.`,ok:"Close"});
+    return;
+  }
   const chiefRefresh = e.target.closest("[data-chief-refresh]");
   if (chiefRefresh){ refreshChief(true); return; }
   const chiefSync = e.target.closest("[data-chief-sync]");
   if (chiefSync){ chiefManualSync(); return; }
+  const scopeToggle = e.target.closest("[data-chief-scope-toggle]");
+  if (scopeToggle){ chiefScopeOpen = !chiefScopeOpen; renderChief(); return; }
+  const relationMap = e.target.closest("[data-chief-relation-map]");
+  if (relationMap){
+    graphFocusId = relationMap.dataset.chiefDoc || "";
+    gtypes.add("request"); tab = "graph"; advancedOpen = false; graphTf = null;
+    document.querySelectorAll("[data-tab]").forEach(b => b.classList.toggle("active",b.dataset.tab === "graph"));
+    pushRoute(); render(); return;
+  }
   const chiefProj = e.target.closest("[data-chief-project]");
   if (chiefProj){
     chiefProject = chiefProj.dataset.chiefProject || "";
+    chiefScopeOpen = false;
     if (chiefDaily === "sessions"){ chiefSelectedSession = ""; chiefThread = null; }
     renderChief(); return;
   }
