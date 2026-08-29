@@ -4141,6 +4141,10 @@ async function chiefSendMessage(){
 }
 function chiefSessionsHTML(){
   if (chiefSessions === null && !chiefSessionsLoading) setTimeout(chiefRefreshSessions,0);
+  const selectedProject = chiefArr(chiefData && chiefData.projects).find(p =>
+    chiefNorm(p.id) === chiefNorm(chiefProject));
+  const remoteHost = selectedProject && selectedProject.host &&
+    chiefNorm(selectedProject.host) !== "local" ? selectedProject.host : "";
   const rows = chiefArr(chiefSessions).filter(s => {
     const p = chiefSessionProject(s);
     return !chiefProject || (p && chiefNorm(p.id) === chiefNorm(chiefProject));
@@ -4149,7 +4153,7 @@ function chiefSessionsHTML(){
   const selectedRow = chiefArr(chiefSessions).find(s => String(s.session_key) === String(chiefSelectedSession));
   const threadName = chiefSelectedSession === "__chief__" ? "Chief" : selectedRow && selectedRow.name || chiefSelectedSession;
   const messages = chiefArr(chiefThread && chiefThread.messages).slice(-24);
-  return `<section id="chief-sessions"><div class="chief-section-head"><h2>Project sessions</h2><div class="chief-section-actions"><p>${rows.length} conversation${rows.length === 1 ? "" : "s"}${chiefProject ? " in this project" : " across projects"}</p><button class="chief-new-session" data-chief-new-session data-chief-project="${esc(chiefProject)}" ${chiefProject ? "" : "disabled title=\"Select one project first\""}>New T3 Codex session</button></div></div>
+  return `<section id="chief-sessions"><div class="chief-section-head"><h2>Project sessions</h2><div class="chief-section-actions"><p>${rows.length} conversation${rows.length === 1 ? "" : "s"}${chiefProject ? " in this project" : " across projects"}</p><button class="chief-new-session" data-chief-new-session data-chief-project="${esc(chiefProject)}" ${!chiefProject || remoteHost ? `disabled title="${esc(remoteHost ? `Use ${remoteHost} T3 for this project` : "Select one project first")}"` : ""}>${remoteHost ? `Use ${esc(remoteHost)} T3` : "New T3 Codex session"}</button></div></div>
     <div class="chief-sessions"><aside class="chief-session-list"><header><h3>Conversations</h3><button class="chief-new-session" data-chief-refresh-sessions ${chiefSessionsLoading ? "disabled" : ""}>${chiefSessionsLoading ? "Refreshing…" : "Refresh"}</button></header><div class="chief-session-rows">
       ${chiefSessionsError ? `<div class="chief-empty">Session source unavailable: ${esc(chiefSessionsError)}</div>` : sessionRows.length ? sessionRows.map(s => {
         const p = s.name === "__chief__" ? null : chiefSessionProject(s);
