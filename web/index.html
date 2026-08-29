@@ -316,6 +316,16 @@ main{padding:18px 22px}
 .stat .cdot{width:7px;height:7px;background:var(--sc)}
 .stat:hover{background:var(--accent-soft)}
 .stat.on{box-shadow:inset 0 -2px 0 var(--text);color:var(--text)}
+.board-engine-picker{display:flex;align-items:center;gap:2px;margin-left:auto;padding:3px;
+  border-left:1px solid var(--hairline);background:var(--panel)}
+.board-engine-picker>span{padding:0 6px;color:var(--faint);font:9px/1 var(--mono);
+  letter-spacing:.06em;text-transform:uppercase}
+.board-engine-picker button{border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);
+  min-height:28px;padding:4px 7px;font-size:9.5px;font-weight:600;cursor:pointer}
+.board-engine-picker button:hover{color:var(--text)}
+.board-engine-picker button[aria-pressed="true"]{color:var(--c-done);border-bottom-color:var(--c-done);font-weight:750}
+.board-engine-picker button:focus-visible{outline:2px solid var(--text);outline-offset:1px}
+@media(max-width:700px){.board-engine-picker{width:100%;margin-left:0;border-left:0;border-top:1px solid var(--hairline)}}
 
 /* ------- board: hairline 레저 ------- */
 .board{display:flex;gap:0;align-items:flex-start;overflow-x:auto;padding-bottom:10px;
@@ -350,6 +360,22 @@ main{padding:18px 22px}
 .card.picked{box-shadow:inset 0 0 0 1px var(--text)}
 .card.picked .pickdoc{display:block;background:var(--text);color:var(--bg);
   border-color:var(--text)}
+.board-card-actions{display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:8px;
+  border-top:1px solid var(--hairline)}
+.board-card-actions .pickdoc{position:static;display:inline-flex;align-items:baseline;gap:5px;
+  background:none;border:0;border-bottom:1px solid var(--border);padding:3px 1px;color:var(--muted);
+  font-family:inherit;font-size:10.5px;letter-spacing:0}
+.board-card-actions .pickdoc span{color:var(--faint);font:9px/1 var(--mono)}
+.board-card-actions .pickdoc:hover{background:none;color:var(--text);border-color:var(--text)}
+.board-start{display:inline-flex;align-items:baseline;gap:6px;border:1px solid var(--border);
+  background:var(--panel);color:var(--c-done);min-height:28px;padding:4px 8px;cursor:pointer;
+  box-shadow:0 3px 9px color-mix(in srgb,var(--text) 4%,transparent)}
+.board-start b{font-size:10.5px}
+.board-start span{color:var(--muted);font:9px/1 var(--mono)}
+.board-start:hover{border-color:var(--text);color:var(--text)}
+.board-start:disabled{cursor:progress;color:var(--faint);border-color:var(--hairline);box-shadow:none}
+.board-start:focus-visible,.board-card-actions .pickdoc:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.board-start-error{margin:6px 0 0;color:var(--c-blocked);font:10px/1.45 var(--mono)}
 .card .id{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.02em}
 /* 우선순위 표기 (REQ-20260827-029 재작업 — REQ-20260826-005의 계약은 유지).
    지켜야 하는 것: 기본값 50도 반드시 그린다. 값이 기본과 다를 때만 찍었더니
@@ -2897,6 +2923,7 @@ let chiefReportReturn = null, chiefReportOverflow = "";
 let chiefDaily = "brief", advancedOpen = false, chiefScopeOpen = false;
 let chiefSessions = null, chiefSessionsLoading = false, chiefSessionsError = "";
 let chiefSelectedSession = "", chiefThread = null, chiefThreadLoading = false, chiefSending = false;
+let boardStartState = {};
 const CHIEF_ENGINES = {
   t3:{label:"T3 Code",note:"Project T3 default"},
   codex:{label:"Codex",note:"Codex provider inside T3"},
@@ -4175,6 +4202,9 @@ const chiefRunActive = run => run && ["starting","running","waiting_result","unk
 function chiefEnginePickerHTML(){
   return `<div class="chief-engine-picker"><span>New sessions</span><div class="chief-engine-options" role="group" aria-label="Choose the engine for new work, release, and project sessions">${Object.entries(CHIEF_ENGINES).map(([value,meta]) => `<button type="button" data-chief-engine="${value}" aria-pressed="${value === chiefEngine}" aria-label="${esc(`${meta.label} — ${meta.note}`)}" title="${esc(meta.note)}">${esc(meta.label)}</button>`).join("")}</div></div>`;
 }
+function boardEnginePickerHTML(){
+  return `<div class="board-engine-picker" role="group" aria-label="Engine for new Board work"><span>Start with</span>${Object.entries(CHIEF_ENGINES).map(([value,meta]) => `<button type="button" data-chief-engine="${value}" aria-pressed="${value === chiefEngine}" aria-label="${esc(`${meta.label} — ${meta.note}`)}" title="${esc(meta.note)}">${esc(meta.label)}</button>`).join("")}</div>`;
+}
 async function chiefPollRun(key,runId){
   if (!runId) return;
   try{
@@ -4605,8 +4635,37 @@ function render(){
 }
 
 /* ---------------- board ---------------- */
+async function boardStartWork(id){
+  if (!id || boardStartState[id]?.status === "starting") return;
+  const engine = chiefEngineValue(chiefEngine);
+  boardStartState[id] = {status:"starting",engine,error:""};
+  render();
+  try{
+    const res = await fetch("/api/work/start",{method:"POST",cache:"no-store",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({id,engine})});
+    const raw = await res.text();
+    let body;
+    try{ body = JSON.parse(raw); }catch(_e){ throw new Error(`HTTP ${res.status}: response was not JSON`); }
+    if (!res.ok || body.error) throw new Error(body.error || body.detail || `HTTP ${res.status}`);
+    boardStartState[id] = {status:"started",engine,error:""};
+    await refreshCatalog(true);
+    if (tab === "board") render();
+  }catch(e){
+    boardStartState[id] = {status:"error",engine,error:e.message || String(e)};
+    if (tab === "board") render();
+  }
+}
 function cardHTML(r){
   const isReq = r.type === "request";
+  const startState = boardStartState[r.id] || {};
+  const startBusy = startState.status === "starting", startDone = startState.status === "started";
+  const contextPick = `<button type="button" class="pickdoc" data-pick="${esc(r.id)}"
+      aria-label="${esc(shortId(r.id))} context only — 이어 말하기">이어 말하기 <span>context only</span></button>`;
+  const boardActions = isReq && r.status === "open" ? `<div class="board-card-actions">
+      <button type="button" class="board-start" data-board-start="${esc(r.id)}" data-board-engine="${esc(chiefEngine)}"
+        aria-label="${esc(`${shortId(r.id)} — Start work with ${CHIEF_ENGINES[chiefEngine].label}`)}" aria-busy="${startBusy}"
+        ${startBusy || startDone ? "disabled" : ""}><b>${startBusy ? "Starting…" : startDone ? "Started" : "Start work"}</b><span>${esc(CHIEF_ENGINES[chiefEngine].label)}</span></button>${contextPick}</div>
+      ${startState.error ? `<p class="board-start-error" role="alert">Could not start: ${esc(startState.error)}</p>` : ""}` : contextPick;
   // "무엇을 기다리는가" 한 줄 (REQ-20260826-009). blocked 전용이 아니다 —
   // open/in-progress 카드도 안 끝난 선행을 가질 수 있고, 사용자가 알고 싶었던
   // 것이 바로 그 경우다. 카드에선 선행 1건 제목 + 외 N건까지만; 전부와 이동
@@ -4640,8 +4699,6 @@ function cardHTML(r){
          : `<span class="livedot off" title="in-progress지만 스트림 조용함 — 실제 동작 아닐 수 있음"></span>`)
     : "";
   return `<div class="card" ${isReq ? 'draggable="true"' : ""} tabindex="0" role="button" style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
-    <button type="button" class="pickdoc" data-pick="${esc(r.id)}"
-      aria-label="${esc(shortId(r.id))} 에 이어 말하기">→ 이어 말하기</button>
     <div class="id">${liveDot}${esc(shortId(r.id))}</div>
     <div class="t">${esc(r.title)}</div>
     <div class="m">
@@ -4650,7 +4707,7 @@ function cardHTML(r){
       ${r.size ? `<span class="size">${esc(r.size)}</span>` : ""}
       ${r.tdd ? `<span class="tdd${r.tdd.passed===r.tdd.total?" full":""}" title="TDD 시나리오 ${r.tdd.passed}/${r.tdd.total} 통과">TDD ${r.tdd.passed}/${r.tdd.total}</span>` : ""}
       ${(r.tags||[]).filter(t=>!SYS_TAGS.has(t)).slice(0,2).map(t=>`<span class="tag" style="--th:${tagHue(t)}">#${esc(t)}</span>`).join("")}
-    </div>${acts}${dep}
+    </div>${acts}${dep}${boardActions}
     ${r.status_since ? `<span class="elapsed" data-since="${esc(r.status_since)}" title="현재 상태(${esc(r.status)}) 시작 이후 경과">${fmtElapsed(r.status_since)}</span>` : ""}</div>`;
 }
 
@@ -4751,7 +4808,7 @@ function renderBoard(rows){
     <span class="stat${cur===""?" on":""}" data-statf=""><b>${onBoard.length}</b> 전체 요청</span>` +
     STATUSES.filter(s => counts[s]).map(s =>
       `<span class="stat${cur===s?" on":""}" data-statf="${s}" style="--sc:${SCOLOR[s]}">
-        <span class="cdot"></span>${s} <b>${counts[s]}</b></span>`).join("") + `</div>`;
+        <span class="cdot"></span>${s} <b>${counts[s]}</b></span>`).join("") + boardEnginePickerHTML() + `</div>`;
   // 병목 한 줄 (REQ-20260826-009 2차): 카드마다 "선행 대기" 줄은 이미 있다 —
   // 카드가 말할 수 없는 것, 즉 "한 선행이 여러 건을 붙잡고 있다"일 때만 띄운다.
   // 그 외에는 같은 사실을 두 번 말하는 것이라 보드를 그대로 둔다.
@@ -9442,11 +9499,13 @@ document.addEventListener("drop", e => {
 
 /* ---------------- events ---------------- */
 document.addEventListener("click", async e => {
+  const boardStart = e.target.closest("[data-board-start]");
+  if (boardStart){ e.stopPropagation(); await boardStartWork(boardStart.dataset.boardStart || ""); return; }
   const engineChoice = e.target.closest("[data-chief-engine]");
   if (engineChoice){
     chiefEngine = chiefEngineValue(engineChoice.dataset.chiefEngine);
     try{ localStorage.setItem("chief-session-engine",chiefEngine); }catch(_e){}
-    renderChief();
+    tab === "chief" ? renderChief() : render();
     requestAnimationFrame(() => document.querySelector(`[data-chief-engine="${chiefEngine}"]`)?.focus());
     return;
   }

@@ -71,10 +71,16 @@ class FakeChief(http.server.BaseHTTPRequestHandler):
                          "/api/work/investigate", "/api/project-session/start", "/api/project-session/message", "/api/chief-chat/session",
                          "/api/chief-chat/message", "/api/order",
                          "/api/release/autopilot/ensure"}:
-            return self.send_body(200, "application/json", json.dumps({
+            result = {
                 "ok": True, "path": self.path, "received": body,
                 "test": self.headers.get("X-Chief-Test") == "1",
-            }))
+            }
+            if self.path == "/api/project-session/start":
+                result.update(thread_id="thread-test-1", title=body.get("title"),
+                              state="idle", provider=body.get("engine"))
+            if self.path == "/api/project-session/message":
+                result.update(sent=True, state="requested")
+            return self.send_body(200, "application/json", json.dumps(result))
         self.send_body(404, "application/json", '{"error":"not found"}')
 
 
@@ -117,6 +123,14 @@ class TestChiefAdapter(unittest.TestCase):
                 return response.status, response.headers.get_content_type(), response.read()
         except urllib.error.HTTPError as error:
             return error.code, error.headers.get_content_type(), error.read()
+
+    @classmethod
+    def new_request(cls, title, body):
+        made = subprocess.run(
+            [S9, "new", "request", "--title", title, "--goal", "Observable result",
+             "--project", "argon", "--body", body], env=cls.env,
+            check=True, capture_output=True, text=True, timeout=10)
+        return made.stdout.split()[0]
 
     def test_work_and_now_are_live_chief_reads(self):
         code, ctype, raw = self.call("/api/chief/work")
@@ -178,6 +192,50 @@ class TestChiefAdapter(unittest.TestCase):
             "/api/chief/project-session/message", {"thread_id": "t-1", "text": "continue"})
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(raw)["path"], "/api/project-session/message")
+
+    def test_board_start_uses_linked_jira_work_session_then_transitions(self):
+        request_id = self.new_request("Start linked work", "Jira BDA-9999")
+        code, _ctype, raw = self.call(
+            "/api/work/start", {"id": request_id, "engine": "codex"})
+        result = json.loads(raw)
+
+        self.assertEqual(code, 200)
+        self.assertEqual(result["status"], "in-progress")
+        self.assertEqual(result["engine"], "codex")
+        self.assertIn(("POST", "/api/work-session/start", {
+            "work_id": "BDA-9999", "engine": "codex", "order": result["order"]}),
+            FakeChief.calls)
+        shown = subprocess.run([S9, "show", request_id, "--meta"], env=self.env,
+                               check=True, capture_output=True, text=True).stdout
+        self.assertIn("status: in-progress", shown)
+
+    def test_board_start_without_jira_starts_project_session_with_documents(self):
+        request_id = self.new_request("Start native work", "No external ticket yet")
+        code, _ctype, raw = self.call(
+            "/api/work/start", {"id": request_id, "engine": "t3"})
+        result = json.loads(raw)
+
+        self.assertEqual(code, 200)
+        self.assertEqual(result["thread_id"], "thread-test-1")
+        self.assertIn(("POST", "/api/project-session/start", {
+            "project": "argon", "title": "Start native work", "engine": "t3", "fresh": True}),
+            FakeChief.calls)
+        message_call = next(call for call in reversed(FakeChief.calls)
+                            if call[0:2] == ("POST", "/api/project-session/message"))
+        self.assertEqual(message_call[2]["thread_id"], "thread-test-1")
+        self.assertIn(request_id, message_call[2]["text"])
+        self.assertIn("projects/argon/CONTEXT.md", message_call[2]["text"])
+
+    def test_board_start_rejects_unknown_engine_without_transition(self):
+        request_id = self.new_request("Reject bad engine", "Remain open")
+        code, _ctype, raw = self.call(
+            "/api/work/start", {"id": request_id, "engine": "mystery"})
+
+        self.assertEqual(code, 400)
+        self.assertIn("t3, codex, or claude", json.loads(raw)["error"])
+        shown = subprocess.run([S9, "show", request_id, "--meta"], env=self.env,
+                               check=True, capture_output=True, text=True).stdout
+        self.assertIn("status: open", shown)
 
     def test_dry_run_provenance_header_reaches_chief(self):
         code, _ctype, raw = self.call("/api/chief/session/start",
