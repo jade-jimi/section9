@@ -214,6 +214,9 @@ const expanded = new Set();
 const tagHue = () => 0, prioHTML = () => "", fmtElapsed = () => "0s";
 const fmtWhen = iso => "오늘 16:45";
 const rvClamped = (cap, tx) => `<div class="rvpt">${cap}</div>`;
+// 작업 자리 칩(REQ-20260829-030)은 이 시험의 관심사가 아니다 — prioHTML 과 같이
+// 비워 둔다. 자리 표시의 계약은 tests/test_workspace_chip.py 가 따로 붙잡는다.
+const wsChip = () => "";
 const rvLabel = s => s;
 const DEP_DEAD = new Set(["done", "cancelled"]);
 let CAT = [];

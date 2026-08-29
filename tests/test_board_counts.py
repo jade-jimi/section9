@@ -63,10 +63,18 @@ class BoardCounts(unittest.TestCase):
     # ---------- ① 같은 집합에서 센다 ----------
 
     def test_the_column_head_counts_what_the_column_holds(self):
-        """열 머리가 세는 대상 = 그 열이 담는 대상."""
+        """열 머리가 세는 대상 = 그 열이 담는 대상.
+
+        하루 자르기는 이름 있는 자리(colLive)로 옮겼다 — 판이 "이 열을 세울까"를
+        물을 때와 열이 "무엇을 그릴까"를 물을 때가 같은 답을 봐야 하기 때문이다
+        (REQ-20260829-031). 열 머리가 그 결과를 센다는 계약은 그대로다."""
         col = self._grab(self.src, "colHTML")
-        self.assertIn("TERMINAL_WINDOW_MS", col, "하루 자르기를 적용하지 않는다")
-        self.assertIn("termAt(r)", col, "카드가 쓰는 그 시각으로 자르지 않는다")
+        live = re.search(r"const colLive = [^;]*;", self.src)
+        self.assertTrue(live, "colLive 를 못 찾았다")
+        self.assertIn("colLive(key, grp)", col, "하루 자르기를 적용하지 않는다")
+        self.assertIn("TERMINAL_WINDOW_MS", live.group(0))
+        self.assertIn("termAt(r)", live.group(0),
+                      "카드가 쓰는 그 시각으로 자르지 않는다")
         self.assertIn('<span class="n">${live.length}</span>', col,
                       "열 머리가 자르기 전 수를 보여 준다")
 

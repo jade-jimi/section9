@@ -9,9 +9,8 @@
  "ended": "1",
  "worker": "1",
  "active_reqs": [],
- "claim_at": {
-  "REQ-20260828-041-62x6": "2026-08-29T17:36:32+09:00"
- },
+ "claim_at": {},
  "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/0755c082-ce11-4626-b104-00f71d4b528a.jsonl",
- "cwd": "/home/sjpark1/section9"
+ "cwd": "/home/sjpark1/section9",
+ "last_req": ""
 }

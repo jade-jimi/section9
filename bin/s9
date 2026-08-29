@@ -1509,8 +1509,141 @@ def _merge_session_stamp(meta, session):
     return True
 
 
+def _release_session_stamp(meta, session):
+    """`_merge_session_stamp` 의 역연산 — 반환 (변경여부, 남은 소유자 리스트).
+
+    쓰기는 호출자 몫이다(merge 와 같은 계약). 소유자 목록의 불변식도 merge 가
+    세운 그대로 지킨다: `sessions` 는 현재 `session` 을 포함하는 이력이고,
+    한 명 이하로 줄면 키 자체가 사라진다."""
+    session = (session or "")[:8]
+    cur = str(meta.get("session") or "")[:8]
+    hist = [str(x)[:8] for x in (meta.get("sessions") or []) if x]
+    if cur and cur not in hist:
+        hist.append(cur)
+    if not session or session not in hist:
+        return False, hist
+    rest = [x for x in hist if x != session]
+    # 단수 포인터가 풀린 그 세션이면 **남은 이력의 마지막**(가장 최근 승계자)
+    # 에게 넘긴다 — 비우면 그 문서는 소유자 없는 상태가 되고, `_session_owns`
+    # 의 하위호환 규칙(도장 없는 구문서는 소유로 간주)이 다시 열린다.
+    meta["session"] = cur if cur != session else (rest[-1] if rest else "")
+    if len(rest) > 1:
+        meta["sessions"] = rest
+    else:
+        meta.pop("sessions", None)
+    return True, rest
+
+
+def release_doc_session(doc_id, session, user="", reason=""):
+    """문서에 남은 클레임 도장 하나를 걷는다 (REQ-20260829-033-62x6).
+
+    `s9 claim` 에는 푸는 짝이 없었다. 실사고 2026-08-29 17:36: 우발적으로 뜬
+    무인 워커가 클레임하고 확인만 하고 물러났다 — 세션은 죽었는데 문서에는
+    도장이 남았고, 사람이 되돌릴 길은 파일을 직접 여는 것뿐이었다. 그 사이
+    캡처 귀속(`_session_owns`)은 죽은 세션을 영구 소유자로 들고 있었다.
+
+    **지우는 것이 아니라 옮기는 것이다** — 도장은 프론트매터에서 걷히되 근거
+    한 줄이 History 에 남는다(누가·언제·어느 세션·남은 소유자). 근거가 없으면
+    다음 사람은 "이 문서에 왜 주인이 없나"를 판정할 수 없다.
+
+    `updated` 는 건드리지 않는다 (REQ-20260829-034-62x6 과 대칭): 클레임을
+    거는 것이 진전이 아니듯 푸는 것도 진전이 아니다. 되돌리는 명령이 멈춤
+    경보를 15분 끄면, 되돌릴 수 없는 상태를 하나 더 만드는 셈이다.
+
+    반환: {"ok", "id", "released", "session", "owners", "message"}
+    `ok=False` 는 실패가 아니라 **풀 것이 없었다**는 뜻이다(멱등).
+    """
+    session = (session or "")[:8]
+    path = locate(doc_id) or locate(canon_id(doc_id))
+    if not path:
+        raise ValueError(f"document not found: {doc_id}")
+    meta, body = read_doc(path)
+    if meta.get("type") != "request":
+        raise ValueError(
+            f"클레임 도장은 요청 문서에만 있다 ({meta.get('type') or '타입 미상'})")
+    cid = meta.get("id") or canon_id(doc_id)
+    changed, owners = _release_session_stamp(meta, session)
+    if not changed:
+        return {"ok": False, "id": cid, "released": "", "session": session,
+                "owners": owners,
+                "message": f"{cid}: {session or '(세션 미지정)'} 의 클레임이 없다 "
+                           f"— 현재 소유자: {', '.join(owners) or '(없음)'}"}
+    ts = now_iso()
+    user = user or resolve_user()
+    suffix = f"; 사유: {reason}" if reason else ""
+    entry = (f"- {ts} claim release {session} (by {user}) — 남은 소유자: "
+             f"{', '.join(owners) or '(없음)'}{suffix}\n")
+    if "## History" in body:
+        body = body.rstrip("\n") + "\n" + entry
+    else:
+        body = body.rstrip("\n") + "\n\n## History\n" + entry
+    acquire_lock()
+    try:
+        write_doc(path, meta, body)
+        rebuild_index(quiet=True)
+        _release_binding_claim(cid, session)
+    finally:
+        release_lock()
+    return {"ok": True, "id": cid, "released": session, "session": session,
+            "owners": owners,
+            "message": f"{cid}: {session} 클레임 해제 — 남은 소유자: "
+                       f"{', '.join(owners) or '(없음)'}"}
+
+
+def _release_binding_claim(doc_id, session):
+    """그 세션의 바인딩에서도 이 REQ 를 걷는다 (락은 호출자가 잡고 있다).
+
+    문서의 도장만 걷고 바인딩을 두면 절반만 풀린다: `active_reqs` 는 live 판정
+    (`catalog_with_live`)과 중복 스폰 차단(`rework_claimed`)의 근거라, 죽은
+    세션이 계속 그 REQ 를 붙들고 있는 것으로 읽힌다. 머신은 가리지 않는다 —
+    세션 식별자가 곧 그 바인딩의 이름이고, 남의 세션은 건드리지 않는다."""
+    import glob as _glob
+    mine = canon_id(doc_id)
+    for bp in _glob.glob(os.path.join(STATE, "*.json")):
+        try:
+            with open(bp, encoding="utf-8") as f:
+                b = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if str(b.get("session") or "")[:8] != session or not b.get("machine"):
+            continue      # 이름을 잃은 바인딩은 다시 쓰지 않는다 (경로가 없다)
+        ar = [x for x in (b.get("active_reqs") or [])
+              if canon_id(x) != mine]
+        cat = {k: v for k, v in (b.get("claim_at") or {}).items()
+               if canon_id(k) != mine}
+        last = "" if canon_id(b.get("last_req") or "") == mine \
+            else b.get("last_req", "")
+        if ar == (b.get("active_reqs") or []) and \
+                cat == (b.get("claim_at") or {}) and \
+                last == b.get("last_req", ""):
+            continue
+        b["active_reqs"], b["claim_at"] = ar, cat
+        b["last_req"] = last
+        write_binding(b)
+
+
 def stamp_doc_session(doc_id, session):
-    """REQ 문서에 현재 작업 세션을 승계 기록 (s9 last 등 전이 외 경로용)."""
+    """REQ 문서에 현재 작업 세션을 승계 기록 (s9 last 등 전이 외 경로용).
+
+    **`updated` 는 건드리지 않는다** (REQ-20260829-034-62x6). 이 저장소에서
+    `updated` 는 파일이 바뀐 시각이 아니라 **진전의 시계**다 — `stall_mins()`
+    가 그것 하나로 "이 요청에 진전이 있나"를 판정한다. 클레임은 "내가 하겠다"
+    는 도장이지 진전이 아니다.
+
+    실사고 2026-08-29: ① 사람이 멈춘 카드를 깨운다 → ② 워커가 뜨자마자
+    프롬프트 지시대로 `s9 last <id> --add` 로 클레임한다 → ③ 워커가 아무것도
+    못 하고 죽는다 → ④ 카드는 15분 동안 "아직 멈춘 게 아니다 — 방금 문서가
+    움직였다"로 거절한다. **한 일이 없는데 경보만 꺼졌다.** 사용자가 그날
+    "깨우기가 안 된다"고 두 번 반려한 것이 이 뿌리다.
+
+    후보였던 다른 길(진전의 시계를 '실질 진전'으로 좁혀 축을 하나 더 세운다)을
+    버린 이유: 그 축이 어느 쓰기 자리 하나를 빠뜨리면 **일하는 손 위에 두 번째
+    손이 붙는다**. 여기서 bump 를 빼는 쪽은 손대지 않은 모든 경로가 지금
+    동작(넓은 쪽 = 안전한 쪽)을 그대로 지킨다.
+
+    잃는 것은 없다: 클레임 시각은 세션 바인딩의 `claim_at` 에 남고(REQ-20260828-005),
+    파일이 바뀐 시각은 파일 자신의 mtime 에 있다.
+    """
     path = locate(doc_id)
     if not path:
         return False
@@ -1519,7 +1652,6 @@ def stamp_doc_session(doc_id, session):
         return False
     if not _merge_session_stamp(meta, session):
         return False
-    meta["updated"] = now_iso()
     acquire_lock()
     try:
         write_doc(path, meta, body)
@@ -9141,9 +9273,21 @@ def cmd_claim(args):
     병렬 진행이 대시보드에 전혀 드러나지 않았다 (REQ-20260825-086). 위임 직후
     한 줄로 등록하는 경로:
         s9 claim <REQ-id> --agent-transcript <에이전트 output 경로>
+
+    푸는 짝은 같은 명령의 한 갈래다 (REQ-20260829-033-62x6) — 거는 자리와 푸는
+    자리가 갈리면 한쪽만 고쳐진다:
+        s9 claim <REQ-id> --release [--session <8자>] [--reason '...']
     """
     session = args.session or os.environ.get("S9_SESSION") or die(
         "session id 필요: S9_SESSION 환경변수 또는 --session")
+    if getattr(args, "release", False):
+        try:
+            res = release_doc_session(args.id, session,
+                                      reason=getattr(args, "reason", "") or "")
+        except ValueError as e:
+            die(str(e))
+        print(res["message"])
+        return
     atp = getattr(args, "agent_transcript", "") or ""
     rid = _claim_req(current_machine(), session, args.id, atp)
     print(f"claim {rid}" + (f" + agent transcript {atp}" if atp else ""))
@@ -14793,11 +14937,18 @@ def main():
     la.add_argument("--pause", action="store_true",
                     help="last_req는 유지하되 응답 캡처만 일시중지 (Question/Nothing 턴)")
     cl = sub.add_parser("claim",
-                        help="REQ 클레임 + 위임 에이전트 transcript 등록")
+                        help="REQ 클레임 + 위임 에이전트 transcript 등록 "
+                             "(--release 로 해제)")
     cl.add_argument("id")
     cl.add_argument("--agent-transcript", metavar="PATH",
                     help="위임한 에이전트의 transcript/output 경로 (리스트로 누적)")
     cl.add_argument("--session")
+    cl.add_argument("--release", action="store_true",
+                    help="클레임 해제 — 문서의 세션 도장과 그 세션의 바인딩 "
+                         "등록을 걷고 근거를 History 에 남긴다 "
+                         "(죽은 세션이 남긴 클레임 정리)")
+    cl.add_argument("--reason", metavar="TEXT",
+                    help="--release 의 사유 (History 에 함께 남는다)")
     cl.set_defaults(fn=cmd_claim)
 
     ct = sub.add_parser("contrib",

@@ -186,6 +186,11 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
 .svchip .sv-warn .sv-m{color:var(--c-inprogress)}
 .svchip .sv-bad{color:var(--c-blocked)}
 .svchip .sv-bad .sv-m{color:var(--c-blocked)}
+/* 경고가 아닌 사실도 이 칩에 선다 (REQ-20260829-030). 색을 주지 않는 것이
+   설계다 — 무인 작업자가 본 저장소에 앉은 것은 고장이 아니라 상태라, 경고색을
+   입히면 옆의 진짜 경고(▲)와 층위가 같아져 둘 다 안 읽힌다. 마크만 한 급
+   흐리게 두고 낱말이 말하게 한다. */
+.svchip .sv-note .sv-m{color:var(--faint)}
 /* 도는 중이라는 표시 (REQ-20260827-079 반려) — 세션을 다시 여는 동안 이 칩이
    가만히 있으면 멈춘 것으로 읽힌다. 낱말은 그대로 두고(aria-live 영역이라
    글자가 바뀌면 매초 다시 읽힌다) 마크만 돈다. 대기 상태의 반복 애니메이션은
@@ -470,6 +475,18 @@ main{padding:18px 22px}
 .badge::before{content:"@"}
 .size{color:var(--faint)}
 .tag{color:var(--faint)}
+/* 작업 자리 (REQ-20260829-030) — 무인 작업자가 워크트리에 앉았나 본 저장소에
+   앉았나. **새 줄을 주지 않는다**: 이 화면의 규칙은 "줄은 사람의 손을 요구하는
+   사실에만 준다"(REQ-20260827-017)이고, 자리는 읽고 나서 대개 할 일이 없는
+   사실이다. 할 일이 있는 경우(미커밋 코드 때문에 격리가 꺼진 상태)는 카드마다
+   되풀이할 것이 아니라 저장소 하나의 사실이라, 헤더 칩이 한 번만 말한다.
+   재질은 메타 줄의 어휘 그대로 — 색면·테두리 없는 mono 소형 글자다.
+   본 저장소는 한 급 진한 잉크로 둔다: 격리 없이 도는 자리라 눈에 먼저
+   걸려야 하지만, 낱말이 이미 둘을 가르므로 색이 유일한 단서는 아니다. */
+.wsat{font-family:var(--mono);font-size:10px;letter-spacing:.02em;color:var(--faint);
+  white-space:nowrap}
+.wsat.here{color:var(--muted)}
+.viewer .dtitle .wsat{align-self:center}
 .col .more{padding-left:14px}
 
 /* ------- docs ------- */
@@ -2820,6 +2837,14 @@ tr.rowoff td{opacity:.45}
   color:var(--text);word-break:keep-all}
 .dlgbox .dlgs{margin:6px 0 0;font-size:12px;line-height:1.6;color:var(--muted);
   word-break:keep-all}
+/* 사유별 한 줄 (REQ-20260829-030). 목록 기호도 색면도 두지 않는다 — 앞머리의
+   문서 주소(mono 흐린 글자)가 이미 줄의 시작을 표시한다. */
+.dlgbox .wsrow{margin-top:7px}
+.dlgbox .wsrow .path{margin-right:5px}
+/* 푸는 법은 사유 아래에 한 번만 선다. 잉크도 띠도 올리지 않는다 — 한 창의
+   강조는 주 행동 버튼 하나뿐이라(s9-design 2), 이 줄은 들여쓰기와 여백으로만
+   갈린다. 사유가 여럿이면 그 아래 한 줄이 셋을 받는다. */
+.dlgbox .wsfix{margin:3px 0 12px;padding-left:12px}
 /* 제목 문장 속의 상태 **이름** (REQ-20260828-007 반려). 승인하면 무엇이 되는지는
    마우스를 올려야 보이는 귀띔이 아니라 창 안 문장에 있어야 한다. 색을 더하지
    않는다 — 한 창의 강조는 주 행동 버튼 하나뿐이고, 이름이라는 사실은 mono 가
@@ -4039,13 +4064,20 @@ function renderSvChip(){
         + (ev.reason ? ` (${ev.reason})` : "") + " — 눌러서 기록 보기",
       act: () => { gwOpen = !gwOpen; renderGuard(); }});
   }
+  /* 자리 이야기는 **맨 뒤**다 (REQ-20260829-030). 고장이 아니라 상태라, 위의
+     경고들보다 앞에 서면 급한 것을 밀어낸다. 손이 드는 자리가 하나도 없으면
+     아무 말도 하지 않는다 — 018 이 이 칩에 세운 규칙 그대로다. */
+  const ws = wsBoardNote();
+  if (ws) items.push(ws);
   // 같은 내용 재작성 금지 — aria-live 영역을 다시 쓰면 화면 낭독이 되풀이된다
   const sig = items.map(it => it.tone + it.label).join("|");
   if (sig === svSig) return;
   svSig = sig;
   if (!items.length){ el.innerHTML = ""; return; }
   el.innerHTML = items.map((it, i) =>
-    `<button class="${it.tone}" data-svi="${i}" title="${esc(it.title)}">`
+    `<button class="${it.tone}" data-svi="${i}"`
+    + (it.key ? ` data-svk="${esc(it.key)}"` : "")
+    + ` title="${esc(it.title)}">`
     + `<span class="sv-m${it.spin ? " sv-spin" : ""}" aria-hidden="true">`
     + `${it.mark}</span> ${esc(it.label)}</button>`
   ).join("");
@@ -4659,6 +4691,8 @@ async function refreshCatalog(rerender){
     return Array.isArray(j) ? j : null;
   }, {tries: rerender ? 2 : 3});
   stallProbe(fresh);   // ?stall= 진단 — 평소에는 아무 일도 하지 않는다
+  wsProbe(fresh);      // ?ws= 진단 (REQ-20260829-030)
+  cancelProbe(fresh);  // ?cancelfresh 진단 (REQ-20260829-031)
   /* 전이표를 못 받은 채로 도는 화면을 배경 갱신이 조용히 메운다 — 보드의
      드롭 대상 표시(.dropok)도 같은 표를 읽는다 (REQ-20260828-027).
      방금 실패한 직후에는 손대지 않는다(10초 유예): 부트가 막 세 번 실패하고
@@ -4675,6 +4709,10 @@ async function refreshCatalog(rerender){
                || JSON.stringify(projects) !== before;
   catalog = fresh;
   rebuildIdMap();   // uid 축약 표시의 겹침 판정 갱신 (REQ-20260825-031)
+  // 헤더 칩의 자리 이야기는 카탈로그에서 나온다 (REQ-20260829-030) — 값이
+  // 바뀌었을 때만 다시 그리면 되지만, 칩 자신이 같은 내용을 걸러 내므로
+  // 여기서는 부르기만 한다.
+  renderSvChip();
   if (changed){ fillFilters(); graph = null; }
   // Settings는 폼 입력 중일 수 있다 — 폴링발 재렌더로 DOM(입력값)을 파괴하지
   // 않는다. 탭을 떠날 때 render()가 최신 catalog로 다시 그린다 (REQ-055 E7).
@@ -5096,6 +5134,164 @@ function stallProbe(rows){
   }
   return rows;
 }
+/* ---- 작업 자리 (REQ-20260829-030) ----------------------------------------
+
+   무인 작업자는 워크트리(격리된 사본)에 앉는 것이 기본이지만, 아직 커밋되지
+   않은 코드가 있으면 그 사본이 **낡은 자리**가 되므로 본 저장소에 앉는다
+   (REQ-20260829-028). 말없이 다르게 동작하면 다음 사람이 또 헤맨다 — 워크트리
+   에서 고친 화면은 지금 도는 서버(9909)에 영영 안 나타나므로, 무엇을 어디서
+   확인할지가 자리에 달려 있다.
+
+   **화면은 판정하지 않는다.** 서버가 행에 실어 준 `workspace{kind,reason,wt,at}`
+   를 옮길 뿐이다 — 멈춤 줄이 이미 세운 규칙이다(REQ-20260828-036: 화면이 스스로
+   재기 시작하면 CLI 와 다른 말을 하게 된다). 여기에 판정을 한 줄이라도 적으면
+   서버의 `workspace_decision` 과 두 벌이 되고, 그때부터 한 벌만 고쳐진다.
+
+   **키는 없을 수 있다.** 그 문서에 새 코드로 스폰이 아직 없으면 서버가 키
+   자체를 안 싣는다. 없으면 아무것도 그리지 않는다 — 빈 칸도, "미상"도 아니다.
+   모르는 것에 자리를 주면 판이 매일 그 자리를 먹는다(같은 규칙을 취소 열에서
+   한 번 더 쓴다 — REQ-20260829-031). */
+const WS_PLACE = {main: "본 저장소", worktree: "워크트리"};
+/* 사유 → [사람 말, 사람이 무엇을 하면 풀리는가].
+
+   둘째 칸은 **비어 있어도 된다.** 풀 것이 없는 자리에 할 일을 지어내면 그
+   문장은 매번 참이라 곧 안 읽히고, 진짜로 손이 필요한 자리까지 함께 묻힌다.
+   실제로 손이 드는 것은 둘뿐이다 — 미커밋 코드(커밋)와 워크트리 쌓임(거두기). */
+const WS_FIX_COMMIT = "커밋하면 다음 작업자부터 다시 워크트리로 간다";
+const WS_FIX_SWEEP = "다 쓴 워크트리를 거두면 다시 워크트리로 간다";
+const WS_WHY = {
+  "off": ["워크트리를 쓰지 않도록 설정돼 있다", ""],
+  "fresh": ["미커밋 코드가 없어 새 워크트리를 냈다", ""],
+  "fresh-outside": ["미커밋 코드가 이 요청이 고칠 범위 밖이라 워크트리를 냈다", ""],
+  "worktree-exists": ["이 요청의 워크트리가 이미 살아 있어 둘째를 만들지 않았다", ""],
+  "worktree-pile": ["워크트리가 한도까지 쌓여 더 만들지 않는다", WS_FIX_SWEEP],
+  "dirty-spine": ["모두가 쓰는 파일이 아직 커밋되지 않아, 워크트리에 앉히면 "
+                  + "그 코드가 빠진 낡은 사본에서 일하게 된다", WS_FIX_COMMIT],
+  "dirty-overlap": ["이 요청이 고칠 파일이 아직 커밋되지 않았다", WS_FIX_COMMIT],
+  "dirty-unknown": ["아직 커밋되지 않은 코드가 있고, 이 요청이 어느 파일을 "
+                    + "고칠지는 문서에 적혀 있지 않다", WS_FIX_COMMIT],
+  // 문장 안에 줄표를 넣지 않는다 — 손 위의 문장이 이미 줄표로 사유를 잇는다.
+  // 한 문장에 줄표가 둘이면 어디까지가 사유인지 눈이 다시 훑는다.
+  "live-verify": ["살아 있는 서버로 확인해야 하는 작업이라서다(워크트리에서 고친 "
+                  + "화면은 그 서버에 나타나지 않는다)", ""],
+  "self-edit": ["작업 도구 자신을 고치는 일이라서다(워크트리에서는 그 도구가 잘린다)", ""],
+  "create-failed": ["워크트리를 만들지 못했다", ""],
+};
+/* 반환 null(그릴 것이 없다) 또는 {kind, wt, place, why, fix}.
+   조건은 stallState 와 같은 자리에 둔다 — 카드와 문서 화면이 각자 관문을 가지면
+   같은 요청이 두 자리에서 다른 말을 한다(REQ-20260828-041 2차가 그 병이었다). */
+function wsState(r){
+  if (!r || r.type !== "request" || r.status !== "in-progress") return null;
+  const w = r.workspace;
+  if (!w || !WS_PLACE[w.kind]) return null;   // 없는 것은 그리지 않는다
+  const why = WS_WHY[w.reason] || ["", ""];
+  return {kind: w.kind, wt: w.wt || "", place: WS_PLACE[w.kind],
+          why: why[0], fix: why[1]};
+}
+// 손 위의 문장도 한 곳에서 짓는다 — 칩·창·헤더가 같은 말을 쓴다.
+function wsTitle(s){
+  // 낱말은 WS_PLACE 한 곳에서 온다 — 여기에 다시 적으면 자리 이름이 두 벌이 된다.
+  // 워크트리는 **어느 워크트리인지**까지 말한다(사람이 cd 해서 볼 자리다).
+  // `wt` 는 kind 가 main 일 때도 실릴 수 있어서(이미 있는 워크트리를 두고 본
+  // 저장소로 간 경우) 이름을 붙이는 조건은 kind 로 본다.
+  const where = s.kind === "worktree" && s.wt ? `${s.place} ${s.wt}` : s.place;
+  return `이 요청을 이어받는 무인 작업자가 ${where}에서 돈다`
+    + (s.why ? ` — ${s.why}` : "") + (s.fix ? `. ${s.fix}` : "");
+}
+function wsChip(r){
+  const s = wsState(r);
+  if (!s) return "";
+  return `<span class="wsat${s.kind === "main" ? " here" : ""}"`
+    + ` title="${esc(wsTitle(s))}">${esc(s.place)}</span>`;
+}
+/* 저장소 하나의 사실은 카드마다 되풀이하지 않는다 (REQ-20260829-030).
+
+   "커밋하면 격리가 돌아온다"는 이 요청 한 건의 사정이 아니라 **저장소의
+   사정**이다. 카드 아홉 장에 같은 문장을 아홉 번 적으면 그건 아홉 개의 사실이
+   아니라 배경이 된다. 그래서 손이 드는 자리만 골라 헤더 칩 하나로 모은다 —
+   자리는 이미 있고(#sv-chip), 헤더는 한 픽셀도 높아지지 않는다. */
+function wsBoardNote(){
+  const hit = [];
+  for (const r of catalog){
+    const s = wsState(r);
+    if (s && s.kind === "main" && s.fix) hit.push([r.id, s]);
+  }
+  if (!hit.length) return null;
+  /* **푸는 법으로 묶는다** (사유로 묶지 않는다). 미커밋 코드에는 사유가 셋
+     있는데(등뼈·겹침·모름) 셋 다 답은 "커밋하면 된다" 하나다 — 사유별로 늘어
+     놓으면 같은 문장이 세 번 적히고, 세 번 적힌 문장은 한 번도 안 읽힌다. */
+  const byFix = new Map();
+  for (const [id, s] of hit){
+    const g = byFix.get(s.fix) || new Map();
+    g.set(s.why, (g.get(s.why) || []).concat([id]));
+    byFix.set(s.fix, g);
+  }
+  const n = hit.length;
+  const line = `요청 ${n}건이 워크트리 대신 본 저장소에서 돌고 있습니다`;
+  return {key: "ws", tone: "sv-note", mark: "◇",
+    label: `본 저장소에서 ${n}건`,
+    title: `${line} — 눌러서 이유와 푸는 법 보기`,
+    act: () => s9dlg({kind: "alert", cap: "작업 자리", stop: false, title: line,
+      descHtml: [...byFix.entries()].map(([fix, whys]) =>
+          [...whys.entries()].map(([why, ids]) =>
+            `<div class="wsrow"><span class="path">`
+            + ids.map(id => esc(shortId(id))).join(" · ")
+            + `</span> ${esc(why)}.</div>`).join("")
+          + `<div class="wsfix">${esc(fix)}.</div>`).join("")
+        + `<div class="wsrow">본 저장소에서 도는 동안에도 일은 그대로 진행되고,`
+        + ` 고친 것은 지금 보고 있는 이 화면에 바로 나타납니다.</div>`,
+      ok: "닫기"})};
+}
+/* ?ws[=main/dirty-spine,worktree/fresh,…] — 자리 표시를 **진짜로 세운다**.
+
+   서버가 이 값을 싣기 시작하는 것은 그 문서에 새 코드로 스폰이 한 번 일어난
+   뒤부터라, 오늘 이 저장소에는 값을 가진 카드가 하나도 없다. 손잡이 하나가
+   두 번 고쳐 올려지는 동안 한 번도 눈으로 확인된 적이 없던 일이 이미
+   있었다(REQ-20260828-041) — 같은 일을 되풀이하지 않는다.
+
+   그림을 따로 만들지 않는다: 서버가 줬을 값을 행에 얹고, 그다음은 평소 그리던
+   길(cardHTML → wsChip · renderSvChip)이 그대로 그린다. 자리 판정은 여기서도
+   하지 않는다 — 어느 사유가 어느 자리로 가는지는 서버가 아는 것이라, 진단은
+   `kind/reason` 을 그대로 받아 적을 뿐 사유에서 자리를 유추하지 않는다. */
+const WS_DEMO = ["main/dirty-spine", "worktree/fresh", "main/worktree-pile",
+                 "main/self-edit", "worktree/fresh-outside", "main/dirty-overlap",
+                 "main/live-verify", "main/dirty-unknown", "main/worktree-exists"];
+function wsProbe(rows){
+  const m = /[?&]ws(?:=([\w,/-]*))?(?:&|$)/.exec(location.search);
+  if (!m || !Array.isArray(rows)) return rows;
+  const spec = (m[1] || "").split(",").filter(Boolean);
+  const list = spec.length ? spec : WS_DEMO;
+  let n = 0;
+  for (const r of rows){
+    if (r.type !== "request" || r.status !== "in-progress") continue;
+    if (r.workspace) continue;               // 진짜 값이 있으면 덮지 않는다
+    const [a, b] = list[n % list.length].split("/");
+    const kind = b ? a : "main", reason = b || a;
+    r.workspace = {kind, reason,
+      wt: kind === "worktree" ? "w-" + String(r.id).slice(-12) : "",
+      at: new Date().toISOString()};
+    n++;
+  }
+  return rows;
+}
+/* ?cancelfresh[=N] — 취소 열이 **서는 날**을 세운다 (REQ-20260829-031).
+
+   이 저장소의 취소 다섯 건은 전부 이틀이 넘었다. 그래서 "취소된 것이 있는
+   날에는 반드시 보인다"는 쪽은 평소에 눈으로 볼 길이 없다 — 안 보이는 것만
+   확인하고 마치면 감춘 것이 아니라 잃은 것일 수 있다. 새 문서를 지어내지 않고
+   있는 취소 문서의 시각만 오늘로 당긴다. */
+function cancelProbe(rows){
+  const m = /[?&]cancelfresh(?:=(\d+))?/.exec(location.search);
+  if (!m || !Array.isArray(rows)) return rows;
+  let left = m[1] ? +m[1] : 2;
+  for (const r of rows){
+    if (left <= 0) break;
+    if (r.type !== "request" || r.status !== "cancelled") continue;
+    r.status_since = new Date(Date.now() - 3600 * 1000).toISOString();
+    left--;
+  }
+  return rows;
+}
 /* 눌린 순간 화면이 먼저 답한다 — 서버 왕복(수백 ms)과 다음 폴링을 기다리면
    사람은 버튼이 죽은 줄 안다. 카드와 문서 화면에 같은 id 가 동시에 떠 있을 수
    있으므로 전부 고친다. */
@@ -5140,9 +5336,23 @@ async function wakeDoc(id){
     return;
   }
   if (!d.ok){ wokeAt.delete(id); paintWake(id); }
-  s9dlg({kind: "alert", cap: d.ok ? "깨움" : "깨우지 않음", stop: false,
-    doc: shortId(id), title: d.message, ok: "닫기"});
+  wakeDlg(id, d);
   if (d.ok) refreshCatalog(true);
+}
+/* 깨우기의 답을 창으로 옮기는 자리는 **하나다** (REQ-20260829-030). 진단
+   (`?dlg=wakewait`·`?dlg=wakespawn`)도 이 함수를 부른다 — 창을 따로 지으면 보고
+   고친 것이 사람이 보는 창이 아니게 된다.
+
+   **화면이 읽는 것은 `ok` 와 `message` 둘뿐이다.** 서버에 `action` 값이 하나
+   늘어도(028 이 더한 `waiting`) 여기는 그대로다 — 값마다 문구를 갈라 쓰기
+   시작하면 같은 말이 서버와 화면 두 벌이 되고, 그때부터 한 벌만 고쳐진다.
+
+   `ok=false` 는 **오류가 아니라 설명이다**. `waiting`(누가 무엇을 잡고 있어
+   차례를 기다린다)·`busy`·`capped`·`moving` 이 전부 정상적인 답이라 창머리
+   잉크를 붉히지 않는다(stop:false). 대기는 고장이 아니라 차례다. */
+function wakeDlg(id, d){
+  return s9dlg({kind: "alert", cap: d.ok ? "깨움" : "깨우지 않음", stop: false,
+    doc: shortId(id), title: d.message, ok: "닫기"});
 }
 
 /* 카드가 내주는 긴 글 한 덩어리 — 세 줄 + (잘렸으면) 그 자리에서 펴는 손잡이
@@ -5277,6 +5487,7 @@ function cardHTML(r){
       ${prioHTML(r)}
       ${r.size ? `<span class="size">${esc(r.size)}</span>` : ""}
       ${r.tdd ? `<span class="tdd${r.tdd.passed===r.tdd.total?" full":""}" title="TDD 시나리오 ${r.tdd.passed}/${r.tdd.total} 통과">TDD ${r.tdd.passed}/${r.tdd.total}</span>` : ""}
+      ${wsChip(r)}
       ${(r.tags||[]).filter(t=>!SYS_TAGS.has(t)).slice(0,2).map(t=>`<span class="tag" style="--th:${tagHue(t)}">#${esc(t)}</span>`).join("")}
     </div>${acts}${dep}${stall}
     ${r.status_since ? `<span class="elapsed" data-since="${esc(r.status_since)}" title="현재 상태(${esc(r.status)}) 시작 이후 경과">${fmtElapsed(r.status_since)}</span>` : ""}</div>`;
@@ -5467,12 +5678,42 @@ const EMPTY_COL = {
 // 가려진 것은 잘린 것이 아니라 하루가 지난 것이다.
 const TERM_WORD = {done: "완료", cancelled: "취소"};
 
+/* 이 열이 지금 담고 있는 것 — 끝난 열은 하루가 지난 것을 내린다
+   (REQ-20260827-057). 판이 "이 열을 세울까"를 묻는 자리(colStanding)와 열이
+   "무엇을 그릴까"를 묻는 자리(colHTML)가 같은 답을 봐야 한다: 두 벌이면 열이
+   섰는데 안이 비거나, 안에 있는데 열이 안 서는 조합이 생긴다. */
+const colLive = (key, grp) => TERMINAL.has(key)
+  ? grp.filter(r => termAt(r) >= Date.now() - TERMINAL_WINDOW_MS) : grp;
+/* 판에서 한 칸을 받을 열인가 (REQ-20260829-031).
+
+   사용자: "이걸 보여줄 필요가 있나?" — 취소 열이 `하루 안에 취소된 요청 없음`
+   한 줄만 담은 채 한 칸을 통째로 쓰고 있었다.
+
+   이 파일이 이미 적어 둔 규칙이 있다(아래 colHTML): "0건이면 아예 안 나온다 —
+   매번 참인 문장은 곧 안 읽히고, 없는 것을 굳이 말하는 자리가 늘면 있는 것이
+   묻힌다." 취소 열이 그 규칙의 예외로 남아 있었다.
+
+   **다른 열과 가르는 근거는 '비어 있음이 정보인가'다.** open·in-progress·
+   review·blocked 는 비어 있음 자체가 사람이 확인하러 오는 값이다("판정 대기
+   0"). done 은 "오늘 무엇을 끝냈나"라 매일 보는 값이라 비어도 선다. 취소는
+   예외적 사건이라 **비어 있는 것이 기본값**이고, 기본값을 매일 한 칸으로
+   말할 이유가 없다.
+
+   감추는 것이지 잃는 것이 아니다: 취소된 것이 생긴 날에는 그대로 서고(그 열의
+   접기·개수도 그대로다), 하루가 지나 내려간 것은 done 과 똑같이 Docs 에 있다.
+   딸려 오는 값 하나 — 열이 없는 날에는 **끌어다 취소하는 자리도 없다.** 취소는
+   문서 화면의 `→ cancelled` 로 늘 갈 수 있고 되돌릴 수도 있어서, 매일 한 칸을
+   내주고 지킬 만큼의 지름길은 아니라고 봤다. */
+const COL_ALWAYS = ["open", "in-progress", "review", "done"];
+const colStanding = (key, grp) => key === "cancelled"
+  ? colLive(key, grp).length > 0
+  : (grp.length > 0 || COL_ALWAYS.includes(key));
+
 function colHTML(key, label, color, grp){
   const term = TERMINAL.has(key);
   const word = TERM_WORD[key] || "완료";
   // ① 내린다 — 하루가 지난 끝난 요청은 이 열에 없다. 접은 안쪽에도 없다.
-  const live = term
-    ? grp.filter(r => termAt(r) >= Date.now() - TERMINAL_WINDOW_MS) : grp;
+  const live = colLive(key, grp);
   const cut = grp.length - live.length;
   // ② 남은 것에 원래 접기를 그대로 — 끝난 열 3건, 나머지 7건.
   const limit = term ? COL_LIMIT_TERMINAL : COL_LIMIT;
@@ -5574,7 +5815,8 @@ function renderBoard(rows){
     // 주요 컬럼은 비어도 자리를 지킨다 — 드롭 대상이자 상태 안내 자리(ux-craft)
     // 필터가 사라졌으니 "걸러서 빈 것"과 "원래 빈 것"을 가를 일도 없다
     // (REQ-20260827-070 2차) — 주요 네 열은 비어도 자리를 지킨다.
-    if (!grp.length && !["open","in-progress","review","done"].includes(st)) continue;
+    // 취소 열만 잣대가 다르다 — 판정은 colStanding 한 곳에 있다 (REQ-20260829-031).
+    if (!colStanding(st, grp)) continue;
     html += colHTML(st, st, SCOLOR[st], grp);
   }
   html += `</div>`;
@@ -6062,6 +6304,7 @@ async function loadDoc(id, bg){
     <div class="path dpath">${esc(d.path)}</div>
     <h1 class="dtitle">${esc(m.title)}
       <span class="did" title="${esc(m.id)}">${esc(shortId(m.id))}</span>
+      ${wsChip(catFind(m.id))}
       <span class="dst" style="--sc:${SCOLOR[m.status] || "var(--muted)"}">${esc(statusLabel(m))}</span>
     </h1>${reviewActs}${stallRow}${gate}
     <table class="metatbl">${fields.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td></tr>`).join("")}</table>
@@ -14437,6 +14680,36 @@ boot();
     acctcmd: acctAddShape({ok:true, mode:"manual",
       reason:"이 환경에서는 창을 열 수 없다", cmd:"cd ~/section9 && bin/s9 account add"}),
   };
+  /* ?dlg=wslive — 자리 창도 그림이 아니라 **진짜**로 연다 (REQ-20260829-030).
+     `?ws=…&dlg=wslive` 로 자리를 세운 다음 **헤더 칩을 실제로 누른다** — 칩이
+     정말 그 창을 여는지까지가 한 번에 확인된다. 손이 없는 환경에서 누르지
+     않으면 볼 수 없는 화면은 이 길로만 캡처된다. */
+  if (m[1] === "wslive"){
+    const t = setInterval(() => {
+      const b = document.querySelector('#sv-chip button[data-svk="ws"]');
+      if (!b) return;
+      clearInterval(t); b.click();
+    }, 400);
+    setTimeout(() => clearInterval(t), 12000);
+    return;
+  }
+  /* ?dlg=wakewait|wakespawn — 깨우기의 답이 어떤 얼굴로 서는지 (REQ-20260829-030).
+     `waiting` 은 서버가 새로 더한 답이고 **고장이 아니라 차례**라, 붉은 실패
+     창으로 서면 안 된다. 이 화면은 손이 있어야 열리는 데다 `waiting` 은 남이
+     같은 파일을 잡고 있을 때만 나오므로, 겨냥해서 만나기가 사실상 불가능하다.
+     그래서 **서버가 줬을 답**만 고정해 두고 창을 짓는 함수(wakeDlg)는 사람이
+     누를 때와 똑같은 것을 부른다 — stallProbe 가 낸 선례와 같은 자리다. */
+  if (m[1] === "wakewait" || m[1] === "wakespawn"){
+    const fx = m[1] === "wakewait"
+      ? {ok: false, action: "waiting",
+         message: "REQ-20260829-028-62x6 가 bin/s9 를 잡고 있다 — 차례를 "
+                + "기다린다(30초마다 다시 본다)."}
+      : {ok: true, action: "spawned",
+         message: "REQ-20260829-030-62x6 를 깨웠다 — 무인 작업자가 본 저장소"
+                + "에서 이어받는다. 진행은 카드의 점과 Stream 에서 보인다."};
+    setTimeout(() => wakeDlg("REQ-20260829-030-62x6", fx), 900);
+    return;
+  }
   /* ?dlg=acctlive — 그림이 아니라 **진짜 창**을 연다. 위 셋은 서버 없이도 판을
      보게 해 주지만, 서버가 준 계정이 제대로 줄이 되는지는 실제로 받아 봐야
      안다(그 길이 이 재작업에서 통째로 바뀐 자리다). 손이 없는 환경에서

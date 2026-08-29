@@ -91,6 +91,10 @@ class BoardDoneWindow(unittest.TestCase):
         cls.lim = grab(cls.src, r"const COL_LIMIT = [^\n]*;", "COL_LIMIT")
         cls.col = grab(cls.src, r"^function colHTML\(key, label, color, grp\)\{.*?^\}",
                        "colHTML")
+        # 하루 잣대는 이름 있는 자리(colLive)로 옮겼다 — 판이 "이 열을 세울까"를
+        # 물을 때와 열이 "무엇을 그릴까"를 물을 때가 같은 답을 봐야 하기 때문이다
+        # (REQ-20260829-031). 열을 실행하려면 그 잣대도 함께 실어야 한다.
+        cls.live = grab(cls.src, r"const colLive = [^;]*;", "colLive")
         # 열 머리의 '멈춤 N' 은 카드와 같은 술어를 쓴다 (REQ-20260828-041 2차) —
         # 그래서 이 열을 실행하려면 그 술어도 함께 실어야 한다.
         cls.stallstate = grab(cls.src, r"^function stallState\(r\)\{.*?^\}",
@@ -107,7 +111,7 @@ class BoardDoneWindow(unittest.TestCase):
             self.skipTest("node 없음 — 실행 검증 생략 (소스 계약은 별도 검사)")
         script = "\n".join([
             'const TERMINAL = new Set(["done","cancelled"]);',
-            self.lim, self.win, self.at, self.word, self.stallstate,
+            self.lim, self.win, self.at, self.word, self.live, self.stallstate,
             "const cardHTML = r => `<c>${r.id}</c>`;",
             'const EMPTY_COL = {"in-progress": \'<div class="colempty">진행 중인 요청 없음</div>\','
             ' done: \'<div class="colempty">완료된 요청 없음</div>\'};',
@@ -267,17 +271,25 @@ class BoardDoneWindow(unittest.TestCase):
     # ---------- 소스 계약 (node 유무와 무관) ----------
 
     def test_c1_window_is_one_day_and_named(self):
-        """C1. 하루라는 값이 코드 안에 흩어지지 않는다."""
+        """C1. 하루라는 값이 코드 안에 흩어지지 않는다.
+
+        잣대가 사는 곳은 이제 colLive 다(REQ-20260829-031) — colHTML 은 그것을
+        부른다. 값이 두 곳에 적히지만 않으면 이 계약은 그대로다."""
         self.assertRegex(self.win, r"24 \* 60 \* 60 \* 1000")
-        self.assertIn("TERMINAL_WINDOW_MS", self.col,
-                      "colHTML 이 그 상수를 안 쓴다")
+        self.assertIn("TERMINAL_WINDOW_MS", self.live,
+                      "하루 잣대가 그 상수를 안 쓴다")
+        self.assertIn("colLive(key, grp)", self.col,
+                      "colHTML 이 그 잣대를 안 쓴다")
+        self.assertNotIn("TERMINAL_WINDOW_MS", self.col,
+                         "하루 잣대가 두 곳에 적혀 있다")
 
     def test_c2_uses_the_shared_terminal_set(self):
         """C2. '끝났다'의 정의를 새로 적지 않는다 — done 만 적으면 cancelled 가
         빠지고, 그 순간 같은 질문에 두 가지 답이 생긴다 (test_board_done_order B2)."""
-        self.assertIn("TERMINAL.has(key)", self.col)
-        self.assertNotIn('key === "done"', self.col,
-                         "끝난 상태를 손으로 다시 적었다")
+        self.assertIn("TERMINAL.has(key)", self.live)
+        for src in (self.col, self.live):
+            self.assertNotIn('key === "done"', src,
+                             "끝난 상태를 손으로 다시 적었다")
 
     def test_c3_cuts_by_the_clock_the_card_shows(self):
         """C3. 자르는 자와 카드가 보여주는 시계가 같아야 한다 — 정렬에서 이미

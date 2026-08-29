@@ -52,7 +52,10 @@ class WakeHandle(unittest.TestCase):
         with open(INDEX, encoding="utf-8") as f:
             cls.src = f.read()
         cls.stall = _grab(cls.src, "stallHTML")
-        cls.wake = _grab(cls.src, "wakeDoc")
+        # 답을 창으로 옮기는 자리가 wakeDlg 로 갈라졌다 (REQ-20260829-030) —
+        # 진단(`?dlg=wakewait`)이 사람이 누를 때와 **같은 함수**를 부르게 하려는
+        # 것이라, 이 시험이 보는 "깨우기의 길"은 그 둘을 합한 것이다.
+        cls.wake = _grab(cls.src, "wakeDoc") + "\n" + _grab(cls.src, "wakeDlg")
         cls.card = _grab(cls.src, "cardHTML")
         cls.doc = _grab(cls.src, "openDoc") if "function openDoc(" in cls.src \
             else cls.src
