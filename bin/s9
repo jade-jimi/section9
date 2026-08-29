@@ -626,6 +626,22 @@ def next_id(prefix, subdir):
     for dirpath, _dirs, files in os.walk(base):
         for fn in files:
             m = pat.match(fn)
+            # Project records use their durable slug as the filename
+            # (vault/projects/<slug>.md), so filename-only scanning would
+            # issue PRJ-...-001 for every project. Fall back to the document
+            # id in frontmatter for any markdown file whose name is not an id.
+            if not m and fn.endswith(".md"):
+                try:
+                    with open(os.path.join(dirpath, fn), encoding="utf-8") as f:
+                        for line in list(f)[:32]:
+                            if line.startswith("id:"):
+                                candidate = line.split(":", 1)[1].strip()
+                                m = re.fullmatch(
+                                    rf"{prefix}-{ymd}-(\d{{3,}})(?:-([0-9a-z]{{4}}))?",
+                                    candidate)
+                                break
+                except OSError:
+                    pass
             if m and (not m.group(2) or m.group(2) == fp):
                 seq = max(seq, int(m.group(1)))
     return f"{prefix}-{ymd}-{seq + 1:03d}-{fp}"
