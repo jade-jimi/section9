@@ -17,11 +17,12 @@ Section9 as `/app/chief-mobile/`; the old frontend remains reachable as `chief-c
 The operational instance lives in `/home/jade/section9-chief` on branch `chief/clean-runtime`;
 `/home/jade/repo/section9` remains the product/source checkout used for upgrades.
 
-The clean native ledger contains Jade's real workspaces rather than Section9's development history:
-Chief, Argon, Bismuth, BT2 Cycle Upload API, BT2 Stations, CIA Deep Investigations, Cobalt,
-GCP FinOps, IP SFTP Upload, IP SOX, Zinc, and Dataform / BQ Inertia. Chief is the default
-cross-project surface. Current Jira/work/release state remains attached live from Chief rather than
-being duplicated into those native project records.
+The clean native ledger contains Jade's real workspaces rather than Section9's development history.
+It includes the active product repositories plus BT2 Core, IP Web Backend, Slot Analysis,
+CMA Screening, Cloud Alarms, Data Access Governance, Fleet Network, GCP FinOps, CIA, and the
+cross-project Meeting Reports workspace. Chief is the default surface. Each selected project exposes
+project-scoped Jira work, release state (or an honest no-release state), reports, and meeting-report
+assignment. Current Jira/work/release state remains attached live from Chief rather than duplicated.
 
 ## Authority boundary
 
