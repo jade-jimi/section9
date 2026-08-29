@@ -7,13 +7,21 @@ release, report and session state would otherwise have two writable authorities.
 ## Runtime
 
 ```bash
-S9_ROOT=/home/jade/repo/section9 \
+S9_ROOT=/home/jade/section9-chief \
 S9_CHIEF_API=http://127.0.0.1:14098 \
-  /home/jade/repo/section9/bin/s9 serve --supervise --host 127.0.0.1 --port 9909
+  /home/jade/section9-chief/bin/s9 serve --supervise --host 127.0.0.1 --port 9909
 ```
 
 The existing Chief backend remains on `127.0.0.1:14098`. The dashboard reverse proxy exposes
 Section9 as `/app/chief-mobile/`; the old frontend remains reachable as `chief-classic` for rollback.
+The operational instance lives in `/home/jade/section9-chief` on branch `chief/clean-runtime`;
+`/home/jade/repo/section9` remains the product/source checkout used for upgrades.
+
+The clean native ledger contains Jade's real workspaces rather than Section9's development history:
+Chief, Argon, Bismuth, BT2 Cycle Upload API, BT2 Stations, CIA Deep Investigations, Cobalt,
+GCP FinOps, IP SFTP Upload, IP SOX, Zinc, and Dataform / BQ Inertia. Chief is the default
+cross-project surface. Current Jira/work/release state remains attached live from Chief rather than
+being duplicated into those native project records.
 
 ## Authority boundary
 
