@@ -506,8 +506,11 @@ class JudgeDialog(unittest.TestCase):
         self.assertNotIn('"승인: "', ja, "화면이 아직 접두어를 짓는다")
         self.assertNotIn('"반려: "', ja, "화면이 아직 접두어를 짓는다")
         self.assertNotIn("대시보드 승인", self.code, "장소를 내용인 양 적는다")
-        self.assertIn('postStatus(id, "done", memo)', ja)
-        self.assertIn('postStatus(id, "in-progress", why)', ja)
+        # 원문 그대로 넘기는지만 본다 — 붙임이 생기면서 인자가 하나 늘었다
+        # (REQ-20260829-015). 계약은 "접두어를 화면이 짓지 않는다"이지
+        # 인자 개수가 아니다.
+        self.assertRegex(ja, r'postStatus\(id, "done", memo(\.text)?[,)]')
+        self.assertRegex(ja, r'postStatus\(id, "in-progress", why(\.text)?[,)]')
 
 
     # ---------- helpers ----------

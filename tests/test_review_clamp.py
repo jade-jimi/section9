@@ -16,6 +16,19 @@
    승인·반려 버튼이 긴 글에 밀려 화면 밖으로 나가지 않는다.
 ③ 잘렸다는 사실은 **카드가 직접 말한다** — 잘렸을 때만 뜨는 한 줄 손잡이.
    말줄임표는 "끊겼다"만 말하고 "나머지가 어디 있는지"는 말하지 않는다.
+
+   그 손잡이가 **Docs 로 보내던 것**은 반려됐다. 사용자: "전문 보기 기능은
+   의미 없다. 그냥 카드를 클릭하면 전문이 있는 문서로 가는데 굳이?? 전문 보기를
+   눌러서 보드탭의 카드에서 전문을 다 보이는거면 모를까, docs 탭으로 이동이
+   되는 전문 보기는 쓸데없는 기능같다." 맞는 말이다 — 카드 전체가 이미 그
+   목적지의 손잡이라, 같은 자리에 같은 목적지가 둘이면 하나는 없느니만 못하다.
+   그래서 손잡이는 **카드 안에서 그 자리에 편다.**
+
+   펴되 셋을 지킨다. ⓐ **눌러서 열고 눌러서 닫는다** — 스치기만 해도 열리던
+   호버 전개로 돌아가지 않는다(그게 애초의 결함이었다). ⓑ **펼친 글은 자기
+   상자 안에서 스크롤한다** — 카드 높이에 천장이 있어야 열의 리듬이 서고
+   승인·반려 버튼이 카드 밖으로 밀려나지 않는다. ⓒ **펼 것이 없으면 손잡이도
+   없다.**
 ④ **호버로 펼치지 않는다.** 마우스를 얹으면 클램프를 풀던 규칙(calm)이
    사용자가 신고한 바로 그 화면을 만든다: 스무 줄이 카드 안으로 돌아오고,
    아래 카드들이 통째로 밀리고, 마우스를 떼면 읽던 글이 사라진다.
@@ -34,6 +47,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.path.join(HERE, "..", "web", "index.html")
 
 
+def _rules(src, needle):
+    return [(m.group(1).strip(), m.group(2))
+            for m in re.finditer(r"(?m)^([^\n{}]+)\{([^{}]*)\}", src)
+            if needle in m.group(1)]
+
+
 def css_rule(src, selector):
     """스킨 블록이 아닌 **베이스** 규칙 본문을 돌려준다 (없으면 None)."""
     m = re.search(r"(?m)^" + re.escape(selector) + r"\s*(?:,[^{]*)?\{([^}]*)\}", src)
@@ -48,7 +67,7 @@ class ReviewClamp(unittest.TestCase):
         m = re.search(r"function cardHTML\(r\)\{(.+?)\n\}\n", cls.src, re.S)
         assert m, "cardHTML 을 찾지 못했다"
         cls.card = m.group(1)
-        m = re.search(r"function rvClamped\(cap, text\)\{(.+?)\n\}", cls.src, re.S)
+        m = re.search(r"function rvClamped\(cap, text, key, open\)\{(.+?)\n\}", cls.src, re.S)
         assert m, "rvClamped 를 찾지 못했다"
         cls.rv = m.group(1)
 
@@ -79,12 +98,54 @@ class ReviewClamp(unittest.TestCase):
 
     # --- ③ 잘렸다는 사실을 카드가 말한다 ---
 
-    def test_card_offers_the_full_text_elsewhere(self):
-        """잘렸을 때 갈 곳을 카드가 알려 준다."""
+    def test_card_offers_to_open_it_here(self):
+        """잘렸을 때 펴는 손잡이가 카드에 있다."""
         self.assertIn('class="rvmore"', self.rv,
-                      "잘린 글의 나머지를 어디서 보는지 카드가 말하지 않는다")
+                      "잘린 글을 펴는 손잡이가 없다")
         # 손잡이는 클램프 박스 **밖**이다 — 안에 넣으면 자기가 잘린다.
         self.assertLess(self.rv.index("</div>"), self.rv.index('class="rvmore"'))
+
+    def test_the_handle_opens_in_place_not_in_another_tab(self):
+        """카드 전체가 이미 Docs 로 가는 손잡이다 — 같은 자리에 같은 목적지가
+        둘이면 하나는 없느니만 못하다 (REQ-20260829-009 반려)."""
+        self.assertIn("data-expand", self.rv,
+                      "손잡이가 이 화면의 펼침 문법(data-expand)을 쓰지 않는다")
+        self.assertNotIn("data-doc-open", self.rv)
+        self.assertNotIn("docOpen", self.rv, "손잡이가 아직 문서로 건너뛴다")
+        self.assertNotIn("tab =", self.rv, "손잡이가 탭을 옮긴다")
+
+    def test_opening_survives_the_poll(self):
+        """15초 폴링이 보드를 다시 그린다 — 열어 둔 것이 그때마다 접히면
+        읽던 자리를 잃는다. 이 화면이 이미 쓰는 기억(expanded)에 얹는다."""
+        self.assertRegex(self.card, r'expanded\.has\("rv:"',
+                         "열림이 다시 그리면 사라진다")
+
+    def test_the_opened_text_scrolls_inside_its_own_box(self):
+        """카드 높이에 **천장**이 있어야 열의 리듬이 서고, 승인·반려 버튼이
+        긴 글에 밀려 카드 밖으로 나가지 않는다."""
+        rules = [css for sel, css in _rules(self.src, ".rvpt.open .rvtx")]
+        self.assertTrue(rules, "펼친 글의 상자 규칙이 없다")
+        flat = " ".join(rules).replace(" ", "")
+        self.assertIn("max-height:", flat, "펼치면 카드가 끝없이 자란다")
+        self.assertIn("overflow:auto", flat, "천장을 씌우고 나머지를 잘라 버렸다")
+        self.assertIn("line-clamp:unset", flat, "펼쳤는데 세 줄 그대로다")
+
+    def test_the_opened_box_is_scrollable_by_keyboard(self):
+        """마우스 휠만 되는 상자는 키보드 사용자에게 잘린 글이다 (WCAG 2.1.1) —
+        이 저장소가 첨부 발췌(.attx.open)에서 이미 세운 규칙이다."""
+        self.assertRegex(self.rv, r'tabindex="0"',
+                         "펼친 상자에 키보드가 닿지 않는다")
+        self.assertIn("aria-expanded", self.rv, "손잡이가 열림/닫힘을 말하지 않는다")
+
+    def test_the_open_card_can_be_seen_without_hands(self):
+        """펼친 화면은 눌러야만 생긴다 — 헤드리스로 확인할 길이 있어야
+        "코드상 맞다"로 끝나지 않는다 (`?dlg=`·`?pick=` 의 선례)."""
+        self.assertIn("[?&]rvopen=", self.src, "펼친 카드를 세워 볼 길이 없다")
+
+    def test_the_handle_stays_while_open_so_it_can_be_closed(self):
+        """열어 놓고 접을 수 없으면 여는 것이 파괴적 행동이 된다."""
+        self.assertRegex(self.src, r"\.rvpt\.open\s*\+\s*\.rvmore\{",
+                         "열린 상태에서 손잡이가 사라져 접을 수 없다")
 
     def test_more_handle_shows_only_when_actually_cut(self):
         """안 잘린 한 줄짜리 확인 요청에 손잡이가 붙으면 그건 소음이다."""

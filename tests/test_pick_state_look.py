@@ -147,10 +147,44 @@ class PickStateLook(unittest.TestCase):
                 if ".picked" in part and ":hover" not in part and ":focus" not in part:
                     self.fail("집힘이 hover 의 밑줄을 쓰고 있다: " + part.strip())
 
-    def test_the_selection_outline_stays(self):
-        """어디를 집었는지는 목록에서 잃지 않는다 — 테두리는 남는다 (REQ-20260827-064)."""
-        hit = [css for sel, css in rules_for(self.src, ".card.picked") if "outline:" in css]
-        self.assertTrue(hit, "집힌 카드의 테두리가 사라졌다")
+    def test_picked_does_not_wear_a_border_either(self):
+        """**테두리도 찰나의 재료다** (REQ-20260829-011 2차 반려).
+
+        사용자: "여전히 선택한 후에 카드의 테두리가 진하게 표시되고 있는 중이다."
+
+        1차에서 손잡이의 밑줄·잉크는 걷어냈지만 테두리는 남겨 뒀다. 그런데 이
+        화면에서 실선 잉크 테두리는 **키보드 포커스**의 말이고(카드·목록 행·
+        버튼·스크롤 상자가 전부 그것으로 "지금 여기 있습니다"를 말한다), 점선은
+        **드롭 자리**의 말이다(.col.dropok). 지속 상태가 그 재료를 빌리면
+        1차에서 고친 것과 똑같은 잘못이다 — 포커스를 옮겨도 안 풀리는 포커스로
+        읽힌다. 집힘은 낱말로만 말한다.
+
+        키보드 포커스 표시(.card:focus-visible)는 접근성이라 그대로 둔다."""
+        for sel, css in rules_for(self.src, ".card.picked"):
+            if ":focus" in sel:
+                continue
+            flat = css.replace(" ", "")
+            for prop in ("outline:", "border:", "box-shadow:"):
+                self.assertNotIn(prop, flat,
+                                 "집힘을 테두리로 그렸다: " + sel)
+
+    def test_keyboard_focus_still_shows(self):
+        """포커스 링은 접근성이다 — 집힘을 걷어내면서 함께 지우면 안 된다."""
+        hit = [css for sel, css in rules_for(self.src, ".card:focus-visible")
+               if "outline:" in css]
+        self.assertTrue(hit, "카드의 키보드 포커스 링이 사라졌다")
+
+    def test_the_word_is_loud_enough_to_find(self):
+        """테두리를 걷어냈으니 낱말 혼자 열 장 중에서 눈에 걸려야 한다 —
+        id 줄은 카드에서 가장 작고 흐린 줄이라, 거기 얹은 두 글자가 주변
+        글자와 같은 크기·굵기면 스캔에 안 걸린다."""
+        rules = dict(rules_for(self.src, ".pkst"))
+        base = [c for s2, c in rules.items() if s2.endswith(".pkst")]
+        self.assertTrue(base, ".pkst 규칙이 없다")
+        flat = base[0].replace(" ", "")
+        self.assertIn("font-weight:700", flat, "낱말이 주변 글자만큼 흐리다")
+        self.assertRegex(flat, r"font-size:1[12](\.\d+)?px",
+                         "낱말이 id 줄(10px)과 같은 크기라 눈에 걸리지 않는다")
 
 
 if __name__ == "__main__":

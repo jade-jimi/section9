@@ -133,6 +133,51 @@ class DocPinRelease(unittest.TestCase):
         self.assertIn("문서를 선택하세요", m.group(1),
                       "푼 뒤에 오른쪽이 무엇을 보여 주는지 정해지지 않았다")
 
+    # --- 못 박은 줄은 오른쪽 판과 **같은 문서**를 가리킨다 (반려 재작업) ---
+
+    def test_switching_documents_rebuilds_the_list(self):
+        """사용자: "지금 보고 있는 문서를 바꿨음에도 남아있다."
+
+        `docOpen` 이 Docs 탭에 **이미 있을 때만** 목록을 다시 그리지 않고
+        `loadDoc` 만 불렀다. `loadDoc` 은 행들의 `sel` 만 옮길 뿐 못 박은 줄은
+        다시 짓지 않는다 — 그래서 왼쪽 슬롯에는 지난 문서가, 그룹 안에는 새
+        문서가 표식을 달고 앉아 있었다. 머리글에 「지금 보는 문서」라고 이름을
+        붙인 순간 그 자리가 하던 거짓말이 글자로 드러난 것이다."""
+        m = re.search(r"function docOpen\(id\)\{(.+?)\n\}", self.src, re.S)
+        self.assertIsNotNone(m, "docOpen 을 찾지 못했다")
+        fn = m.group(1)
+        self.assertIn("render()", fn, "문서를 바꿔도 목록을 다시 그리지 않는다")
+        self.assertNotIn("loadDoc(", fn,
+                         "목록을 건너뛰고 뷰어만 갈아 끼우는 길이 남아 있다 — "
+                         "그 길이 못 박은 줄을 지난 문서에 붙들어 둔다")
+
+    def test_the_human_path_and_the_poll_path_stay_apart(self):
+        """사람이 누른 것은 위에서부터 새로 펴고, 15초 폴링은 읽던 자리를
+        지킨다 (REQ-20260823-071 이 가른 둘). 한 길로 합치면 폴링이 스크롤과
+        열어 둔 스트림을 매번 되감는다."""
+        self.assertRegex(self.src, r"(?m)^let docFresh",
+                         "사람이 고른 경로를 구별하는 표시가 없다")
+        m = re.search(r"async function renderDocs\(rows\)\{(.+?)\n\}\n", self.src, re.S)
+        self.assertIsNotNone(m)
+        rd = m.group(1)
+        self.assertRegex(rd, r"const fresh = docFresh; docFresh = false;",
+                         "겹친 렌더가 서로의 표시를 가져간다 — 맨 위에서 읽고 끈다")
+        self.assertIn("loadDoc(selectedDoc, !fresh)", rd,
+                      "사람이 고른 문서도 배경 갱신처럼 연다")
+
+    def test_the_switch_can_be_reproduced_without_hands(self):
+        """이 결함은 **누른 순간에만** 났다 — 주소로 곧장 연 화면은 늘 옳았다.
+        헤드리스로 갈아타 볼 길이 없으면 다음에 또 코드만 읽고 넘어간다."""
+        self.assertIn("[?&]swap=", self.src, "문서를 갈아탄 화면을 세워 볼 길이 없다")
+        self.assertRegex(self.src, r"docOpen\(r\.id\)")
+
+    def test_the_freeze_rule_is_untouched(self):
+        """목록 순서를 얼리는 조건은 건드리지 않는다 — 15초마다 순서가
+        뒤섞이면 REQ-20260828-009 가 고친 결함이 돌아온다."""
+        self.assertIn(
+            'const refreeze = !($("#view .docs .doclist") && $("#viewer"));',
+            self.src, "얼음 조건이 바뀌었다")
+
     # --- Esc 는 그 층이 아니다 ---
 
     def test_escape_does_not_drop_the_document(self):

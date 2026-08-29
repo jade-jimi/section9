@@ -232,9 +232,13 @@ class SourceContract(unittest.TestCase):
 
     # S5 — 같은 내용을 다시 붙이면 펼친다
     def test_paste_again_expands(self):
+        # **터미널 입력줄의** paste 핸들러를 본다. 판정 창도 그림을 받게 되면서
+        # (REQ-20260829-015) 파일 안에 `ta.addEventListener("paste"` 가 둘이 됐다 —
+        # 앞엣것을 집으면 이 계약이 엉뚱한 핸들러를 검사한다.
+        h = self.fn("termBindInput")
         m = re.search(r'ta\.addEventListener\("paste", e => \{(.*?)\n  \}\);',
-                      self.src, re.S)
-        self.assertIsNotNone(m, "paste 핸들러를 못 찾았다")
+                      h, re.S)
+        self.assertIsNotNone(m, "터미널 입력줄의 paste 핸들러를 못 찾았다")
         h = m.group(1)
         self.assertIn("termPasteFindChip", h,
                       "같은 내용을 다시 붙였는지 보지 않는다")
