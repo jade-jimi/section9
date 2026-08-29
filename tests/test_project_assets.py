@@ -52,6 +52,11 @@ class TestProjectAssets(unittest.TestCase):
             tpl = f.read()
         self.assertIn("Demo", tpl)
 
+    def test_project_ids_are_unique_with_slug_filenames(self):
+        first = self.cli("project", "add", "alpha", "--user", "alice")
+        second = self.cli("project", "add", "beta", "--user", "alice")
+        self.assertNotEqual(first.stdout.split()[0], second.stdout.split()[0])
+
     # S2. 기존 프로젝트에 scaffold 명령 — slug/PRJ id 양쪽으로 도달
     def test_scaffold_existing_project_by_slug_and_id(self):
         self.cli("project", "add", "web", "--user", "alice")
