@@ -677,9 +677,20 @@ def repo_verdict(r):
                   "저장소: 작업 트리를 찾지 못했다",
                   "이 자리가 git 저장소가 맞는지 확인하라 — 커밋 게이트도 "
                   "감사 기록도 여기에 기댄다.")
+    # 미커밋 코드가 있으면 무인 작업자가 워크트리 대신 본 저장소로 간다
+    # (REQ-20260829-028-62x6). 되찾는 값이 커밋이라는 것을 여기서도 말한다 —
+    # 강제가 아니라 유인이다. 고장이 아니므로 등급은 ok 그대로 둔다.
+    dirty = list(r.get("code_dirty") or [])
+    tail = ""
+    if dirty:
+        tail = (f" · 미커밋 코드 {len(dirty)}건({', '.join(dirty[:3])}"
+                + (" 외" if len(dirty) > 3 else "")
+                + ") — 그동안 무인 작업자는 워크트리 대신 본 저장소에 앉는다")
     return _v("repo", "저장소", "ok",
               f"저장소: {r.get('branch') or '?'} · "
-              f"워크트리 {r.get('worktrees') or 0}개")
+              f"워크트리 {r.get('worktrees') or 0}개" + tail,
+              ("커밋하면 작업자가 다시 자기 워크트리를 받는다."
+               if dirty else None))
 
 
 def deps_verdict(x):
@@ -884,9 +895,29 @@ def repo_info():
             return None
         return r.stdout.strip() if r.returncode == 0 else None
     wl = g("worktree", "list") or ""
+    # 데이터 자리(state/·vault/·users/·index/·streams/)는 세지 않는다 — 워커가
+    # S9_ROOT 로 본 저장소를 함께 쓰므로 워크트리 기준선과 무관하다.
+    shared = ("state/", "vault/", "users/", "index/", "streams/")
+    # `g()` 는 stdout 을 strip 하므로 첫 줄의 앞 공백이 사라진다 — porcelain 은
+    # 상태 두 글자가 자리로 의미를 갖는 형식이라 그대로 자르면 ` M bin/s9` 가
+    # `in/s9` 가 된다. 여기서는 안 깎은 원문을 쓴다.
+    code = []
+    try:
+        raw = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
+                             capture_output=True, text=True,
+                             timeout=20).stdout
+    except Exception:
+        raw = ""
+    for line in raw.splitlines():
+        f = line[3:].strip().strip('"') if len(line) > 3 else ""
+        if " -> " in f:
+            f = f.split(" -> ", 1)[1]
+        if f and not f.startswith(shared):
+            code.append(f)
     return {"is_bare": g("rev-parse", "--is-bare-repository") == "true",
             "worktree_ok": g("rev-parse", "--is-inside-work-tree") == "true",
             "branch": g("rev-parse", "--abbrev-ref", "HEAD") or "",
+            "code_dirty": code,
             "worktrees": len([l for l in wl.splitlines() if l.strip()])}
 
 

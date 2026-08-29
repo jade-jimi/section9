@@ -1982,6 +1982,82 @@ def _auto_mark_pid(doc_id, proc):
         pass
 
 
+def _auto_mark_workspace(doc_id, kind, reason, wt=""):
+    """어느 자리에 앉혔는지를 스폰 마커에 적는다 (REQ-20260829-028-62x6 V2).
+
+    `_worker_spawn_targets`·`catalog_with_live` 가 이미 이 파일을 읽으므로
+    화면까지 새 통로가 필요 없다 — 있는 통로에 사실 하나를 더 싣는다.
+    """
+    pf = os.path.join(_auto_dir(), safe_name(doc_id) + ".json")
+    try:
+        with open(pf) as f:
+            p = json.load(f)
+    except (OSError, ValueError):
+        p = {}
+    p["workspace"] = {"kind": kind, "reason": reason, "wt": wt,
+                      "at": now_iso()}
+    try:
+        with open(pf, "w") as f:
+            json.dump(p, f)
+    except OSError:
+        pass
+
+
+WORKSPACE_WHY = {
+    "dirty-spine": "미커밋 코드가 이 저장소의 등뼈에 걸쳐 있어 워크트리 "
+                   "기준선이 낡았다",
+    "dirty-unknown": "미커밋 코드가 있는데 이 요청이 만질 파일을 문서가 "
+                     "이름으로 대지 않았다",
+    "dirty-overlap": "이 요청이 만질 파일이 지금 미커밋이다 — 사본에는 그것이 없다",
+    "live-verify": "화면 작업이라 살아 있는 서버가 읽는 자리에서 해야 한다",
+    "self-edit": "자기 도구를 고치는 일이라 샌드박스가 사본에서 범위를 자른다",
+    "worktree-exists": "이 요청의 워크트리에 아직 합치지 않은 것이 남아 있다",
+    "worktree-pile": "워크트리가 천장까지 쌓였다 — 먼저 거둬야 한다",
+}
+
+
+def _workspace_note(doc_id, kind, reason, dec):
+    """자리 선택이 **지난번과 달라졌을 때만** 문서에 한 줄 (V3).
+
+    매번 남기면 소음이고, 안 남기면 다음 사람이 또 문서를 뒤진다. 사람이
+    나중에 다시 보는 자리는 로그가 아니라 문서다.
+    """
+    import subprocess
+    why = WORKSPACE_WHY.get(reason)
+    if kind != "main" or not why:
+        return
+    pf = os.path.join(_auto_dir(), safe_name(doc_id) + ".json")
+    try:
+        with open(pf) as f:
+            prev = (json.load(f).get("workspace_noted") or "")
+    except (OSError, ValueError):
+        prev = ""
+    if prev == reason:
+        return
+    try:
+        with open(pf) as f:
+            p = json.load(f)
+    except (OSError, ValueError):
+        p = {}
+    p["workspace_noted"] = reason
+    try:
+        with open(pf, "w") as f:
+            json.dump(p, f)
+    except OSError:
+        pass
+    text = (f"본 저장소에서 이어받는다 — {why}. 커밋하면 다음 라운드부터 "
+            f"작업자가 다시 자기 워크트리를 받는다.")
+    try:
+        r = subprocess.run([os.path.join(ROOT, "bin", "s9"), "note", doc_id,
+                            text, "--label", "workspace"],
+                           capture_output=True, text=True, timeout=30)
+        if r.returncode != 0:
+            _auto_log(f"WORKSPACE-NOTE-FAIL {doc_id} "
+                      f"{' '.join((r.stderr or r.stdout or '').split())[:120]}")
+    except (OSError, subprocess.SubprocessError) as e:
+        _auto_log(f"WORKSPACE-NOTE-FAIL {doc_id} {type(e).__name__}: {e}")
+
+
 def _worker_spawn_targets():
     """무인 워커 pid -> 그 워커가 맡은 REQ id (REQ-20260827-027-62x6).
 
@@ -2107,12 +2183,101 @@ def live_workers():
     return rows
 
 
+def _session_claims(doc_id, session):
+    """이 세션이 그 문서를 집었나 — 클레임 판정은 이미 있는 것을 쓴다."""
+    if not session:
+        return False
+    b = read_binding(current_machine(), session)
+    if not b or b.get("ended"):
+        return False
+    return canon_id(doc_id) in binding_req_ids(b)
+
+
+def _stop_note(doc_id, text):
+    import subprocess
+    subprocess.run([os.path.join(ROOT, "bin", "s9"), "note", doc_id, text,
+                    "--label", "stop"], capture_output=True, text=True,
+                   timeout=30)
+
+
+def worker_stop(doc_id, session="", why="", claims=None, kill=None,
+                alive=None, wait=None, note=None, grace=5.0):
+    """리드가 무인 작업자를 세운다 (REQ-20260829-021-62x6).
+
+    여는 것은 "아무 프로세스나 죽이는 권한"이 아니라 **문 하나**다. 그래서
+    pid 를 호출자에게 받지 않는다 — 스폰 마커에 적힌 것만 쓴다. 그 문서를
+    지금 집은 세션만 세울 수 있고, 이유가 없으면 거부한다(이유 없는 중단은
+    나중에 아무도 판정할 수 없다). 없는 작업자를 세우는 것은 오류가 아니다.
+    반환: {"ok","stopped","reason","pid","message"}.
+    """
+    import signal as _sig
+    import time as _t
+    claims = _session_claims if claims is None else claims
+    kill = os.kill if kill is None else kill
+    alive = _worker_alive if alive is None else alive
+    wait = _t.sleep if wait is None else wait
+    note = _stop_note if note is None else note
+
+    def no(reason, msg):
+        return {"ok": False, "stopped": False, "reason": reason, "pid": 0,
+                "message": msg}
+
+    if not (why or "").strip():
+        return no("이유가 없다", "왜 세우는지 적어라 — `--why '<이유>'`. "
+                                "이유 없는 중단은 나중에 판정할 수 없다.")
+    if not claims(doc_id, session):
+        return no("클레임 없음", f"{doc_id} 를 집지 않은 세션은 그 작업자를 "
+                                f"세울 수 없다 — 먼저 `s9 last {doc_id} --add` "
+                                f"로 집어라.")
+    pf = os.path.join(_auto_dir(), safe_name(doc_id) + ".json")
+    try:
+        with open(pf) as f:
+            pid = int(json.load(f).get("pid") or 0)
+    except (OSError, ValueError, TypeError):
+        pid = 0
+    if not pid:
+        return {"ok": True, "stopped": False, "reason": "", "pid": 0,
+                "message": f"{doc_id} 에 도는 무인 작업자가 없다."}
+    sent = False
+    if alive(pid):
+        kill(pid, _sig.SIGTERM)      # 먼저 물러나기를 청한다
+        sent = True
+        wait(grace)
+        if alive(pid):
+            kill(pid, _sig.SIGKILL)  # 안 물러나면 그때 회수한다
+    try:
+        os.remove(pf)                # 안 지우면 목록이 유령을 계속 보여 준다
+    except OSError:
+        pass
+    lease_release(doc_id)
+    _auto_log(f"STOP {doc_id} pid={pid} by={session or '?'} "
+              f"why={' '.join(str(why).split())[:120]}")
+    try:
+        note(doc_id, f"무인 작업자를 세웠다 (pid {pid}, 세션 "
+                     f"{session or '?'}) — {why}")
+    except Exception:
+        pass
+    return {"ok": True, "stopped": sent, "reason": "", "pid": pid,
+            "message": f"{doc_id} 의 무인 작업자를 세웠다 (pid {pid}). "
+                       f"사유는 문서에 남겼다."}
+
+
 def _when(sec):
     m = sec // 60
     return f"{m}분째" if m else f"{sec}초째"
 
 
 def cmd_workers(args):
+    if (getattr(args, "stop", "") or "").strip():
+        # 죽이는 자리는 하나다 — 명령이 자기 손으로 죽이면 게이트가 두 벌이
+        # 되고, 한 벌만 고쳐지는 사고가 시간 문제다 (REQ-20260829-021 W8).
+        res = worker_stop(args.stop.strip(),
+                          session=(os.environ.get("S9_SESSION") or ""),
+                          why=(getattr(args, "why", "") or ""))
+        print(res.get("message") or res.get("reason") or "")
+        if not res.get("ok"):
+            sys.exit(1)
+        return
     rows = live_workers()
     for r in rows:
         print(f"- {r['id']} (무인 작업자 pid {r['pid']}, {_when(r['age'])})")
@@ -4845,6 +5010,47 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
         return block("elsewhere",
                      f"이 요청은 다른 머신({meta.get('machine') or '미상'})의 "
                      f"것이다 — 여기({current_machine()})서는 띄우지 않는다")
+    # 캡은 **세지 않고 먼저 본다.** 아래 자리 판정이 git 을 두 번 부르는데,
+    # 어차피 한도에 막힐 후보에 30초마다 그 값을 치를 이유가 없다. 세는 것은
+    # 여전히 `_auto_caps_ok` 한 곳뿐이라 대기가 예산을 깎지 않는다(L6).
+    peek = _auto_cap_block(doc_id, cfg, reason=reason)
+    if peek:
+        _auto_log(f"SKIP(cap) {doc_id} {reason}")
+        return block("capped", peek)
+    # ⚠ 자리 판정과 대기는 **`_auto_caps_ok` 앞**에 선다 (REQ-20260829-028-62x6).
+    # 그 함수는 통과하면 일일·시간 카운터를 올린다. 뒤에 두면 대기 한 번마다
+    # 예산이 깎여 30분을 기다린 끝에 띄울 슬롯이 없다 — 기다림이 곧 굶주림이
+    # 되는 설계다. 계약 L6 이 이 순서를 붙잡는다.
+    dec = workspace_decision(doc_id, cfg)
+    scope = dec.get("scope") or set()
+    wait = None
+    if dec["kind"] == "main":
+        # 워크트리를 안 쓰면 격리가 사라진다. 대체물은 둘이다 — 동시에 도는
+        # 작업자 수의 천장과, 같은 파일에 두 손이 붙는 것을 막는 리스.
+        cap = int(cfg.get("auto_resume_max_inflight", 2) or 2)
+        mine = canon_id(doc_id)
+        inflight = [r for r in live_workers() if r.get("id") != mine]
+        if len(inflight) >= cap:
+            wait = ("inflight",
+                    f"무인 작업자 {len(inflight)}이 이미 본 저장소에서 돌고 있다")
+        elif scope:
+            hit = lease_conflict(doc_id, scope)
+            if hit:
+                wait = ("held", f"{hit[0][1]} 가 {hit[0][0]} 를 잡고 있다")
+    if wait:
+        # **거부가 아니라 대기다.** 워처가 30초마다 다시 부르므로 앞 작업자가
+        # 끝나면 저절로 뜬다. 거부는 이 저장소의 다른 병("멈춘 것이 계속 멈춰
+        # 있다")을 되살리지만 대기는 아니다. 다만 천장이 있다 — 천장 없는 큐는
+        # 교착의 다른 이름이다.
+        age = _wait_age(doc_id)
+        if age < LEASE_WAIT_MAX_SEC:
+            _wait_mark(doc_id, wait[0], wait[1])
+            _auto_log(f"DEFER {doc_id} reason={wait[0]} {wait[1]}")
+            return block("waiting", f"{wait[1]} — 차례를 기다린다"
+                                    f"(30초마다 다시 본다).")
+        _auto_log(f"WAIT-CEILING {doc_id} {int(age)}초 기다렸다 — "
+                  f"겹쳐도 띄운다 ({wait[1]})")
+    _wait_clear(doc_id)
     if not _auto_caps_ok(doc_id, cfg, reason):
         # 사유는 판정을 다시 물어 얻는다 — 문턱 수치를 여기 옮겨 적지 않는다.
         _auto_log(f"SKIP(cap) {doc_id} {reason}")
@@ -4853,7 +5059,20 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
     b = read_binding(meta.get("machine", ""), meta.get("session", "")) or {}
     cwd = b.get("cwd", "") if os.path.isdir(b.get("cwd", "") or "") else ROOT
     # 코드는 갈리고 데이터는 하나다 (REQ-20260828-011 2단계) — 켠 계정만.
-    cwd, wt_env, wt_name = worker_workspace(doc_id, cfg, cwd)
+    # 판정은 위에서 끝났다: 여기는 그 판정대로 자리를 만들기만 한다.
+    cwd, wt_env, wt_name = worker_workspace(doc_id, cfg, cwd, dec=dec)
+    kind = "worktree" if wt_name else "main"
+    why = dec["reason"] if (kind == dec["kind"]) else "create-failed"
+    _auto_log(f"WORKSPACE({kind}) {doc_id} reason={why}"
+              + (f" wt={wt_name}" if wt_name else "")
+              + (f" dirty={','.join((dec.get('blocking') or [])[:3])}"
+                 if dec.get("blocking") else ""))
+    _auto_mark_workspace(doc_id, kind, why, wt_name)
+    _workspace_note(doc_id, kind, why, dec)
+    if not wt_name and scope:
+        # 리스는 스폰 직전에 잡고 pid 는 Popen 뒤에 채운다 — 그 사이는
+        # LEASE_RESERVE_SEC 짜리 예약으로 본다.
+        lease_take(doc_id, sorted(scope))
     s9bin = os.path.join(ROOT, "bin", "s9")
     # 봉투: 기본 = DOC-20260823-003 심사 준수 allowlist(읽기 + s9).
     # 옵트인 적용 모드 = 편집 자동승인 + 검증 명령 허용 (캡·킬스위치 유지).
@@ -4906,6 +5125,14 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
             "덮지 말고 다른 이름을 쓰거나 물러나라 — 남의 작업이 흔적 없이 사라진다. "
             "③ `git checkout`·`git stash`·`git reset` 은 쓰지 마라: 남의 미커밋 "
             "작업을 지운다. ④ 커밋은 하지 마라(리드 몫).")
+        if scope:
+            # 리스가 스케줄러 안에만 있으면 워커는 그것을 모른다 — 알리지
+            # 않는 배정은 배정이 아니다 (REQ-20260829-028-62x6 계약 L7).
+            prompt = prompt + (
+                f"\n\n[네 차례] 이 라운드에 네가 받은 코드 파일은 "
+                f"{', '.join(sorted(scope))} 다. 그 밖의 코드 파일은 만지지 "
+                f"마라 — 다른 작업자가 잡고 있을 수 있다. 꼭 필요하면 고치지 "
+                f"말고 `{s9bin} note {doc_id} --label conflict` 로 남겨라.")
     env = dict(os.environ)
     env.update(wt_env)
     env["S9_AUTO_RESUME"] = "1"
@@ -4940,6 +5167,8 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
                               stdin=subprocess.DEVNULL, stdout=lf, stderr=lf,
                               start_new_session=True)
         _auto_mark_pid(doc_id, wp)   # 생존 확인 근거 (REQ-20260825-086)
+        if not wt_name and scope:
+            lease_set_pid(doc_id, getattr(wp, "pid", 0))
         if wt_name:
             # 주인을 적어 둔다 — 안 적으면 sweep 이 일하는 중인 자리를 거둔다.
             own = worktree_owner_read(wt_name)
@@ -5062,6 +5291,24 @@ def _ago_text(sec):
     return f"{sec // 3600}시간 {(sec % 3600) // 60}분 전"
 
 
+def _workspace_marker(doc_id):
+    """스폰 마커에 적힌 작업 자리 — {"kind","reason","wt","at"} 또는 {}."""
+    try:
+        with open(os.path.join(_auto_dir(),
+                               safe_name(doc_id) + ".json")) as f:
+            ws = json.load(f).get("workspace")
+    except (OSError, ValueError):
+        return {}
+    return ws if isinstance(ws, dict) else {}
+
+
+def _workspace_text(doc_id):
+    ws = _workspace_marker(doc_id)
+    if ws.get("kind") == "worktree":
+        return f"워크트리 {ws.get('wt') or ''}".strip()
+    return "본 저장소"
+
+
 def _wake_refusal(cid, row, win, updated, now):
     """왜 못 깨우는지 — 사람 말로 (REQ-20260828-041).
 
@@ -5181,9 +5428,13 @@ def wake_request(doc_id, actor="", win=None):
             actor)
     out = {}
     if _spawn_wake(cid, meta, mins=mins, by=actor, out=out):
+        # 어디에 앉혔는지를 함께 말한다 (REQ-20260829-028-62x6 V3). 자리가
+        # 다르면 사람이 확인할 자리도 다르다 — 워크트리에서 고친 화면은
+        # 9909 에 영영 안 나타난다.
         return _wake_audit({"ok": True, "id": cid, "action": "spawned",
                             "mins": mins,
                             "message": f"{cid} 를 깨웠다 — 무인 작업자가 "
+                                       f"{_workspace_text(cid)}에서 "
                                        f"이어받는다. 진행은 카드의 점과 "
                                        f"Stream 에서 보인다."}, actor)
     return _wake_audit(
@@ -7634,9 +7885,23 @@ def undelivered_requests():
             what.append(f"안 합친 커밋 {st['ahead']}")
         if st["dirty"]:
             what.append("미커밋")
+        # 얼마나 방치됐는지 · 자동 보존이 포기했는지 (REQ-20260829-028-62x6).
+        # "안 합친 커밋 1" 만으로는 방금 끝난 것과 하루 묵은 것이 같아 보이고,
+        # 자동 커밋이 게이트에 막혀 포기한 자리는 **사람이 손으로 커밋해야만**
+        # 풀리는데 그 사실이 어디에도 안 보였다.
+        import time as _t
+        age = _t.time() - float(own.get("created") or 0)
+        if own.get("created") and age >= 3600:
+            what.append(f"{int(age // 3600)}시간째 방치")
+        fix = f"s9 worktree merge {name}"
+        if int(own.get("autocommit_tries") or 0) >= AUTOCOMMIT_MAX_TRIES:
+            err = " ".join((own.get("autocommit_error") or "").split())[:80]
+            what.append("자동 보존 실패" + (f" ({err})" if err else ""))
+            fix = (f"cd {os.path.join(WORKTREE_HOME, name)} && git add -A && "
+                   f"git commit   # 자동 커밋이 막혔다 — 사람이 박아야 한다")
         out.append({"id": rid or f"(워크트리 {name})", "title": title,
                     "kind": "undelivered", "detail": " · ".join(what),
-                    "fix": f"s9 worktree merge {name}"})
+                    "fix": fix})
     return out
 
 
@@ -11785,6 +12050,12 @@ def catalog_with_live(stall_win=None):
         r["live"] = False
         if r.get("status") != "in-progress":
             continue
+        # 어느 자리에서 도는가 (REQ-20260829-028-62x6 V5). 워크트리에서 고친
+        # 화면은 살아 있는 서버에 안 나타나므로, 사람이 무엇을 확인할 수
+        # 있는지가 자리에 달려 있다. 통로는 이미 있는 스폰 마커다.
+        ws = _workspace_marker(r["id"])
+        if ws:
+            r["workspace"] = ws
         page = active.get(r["id"])                 # 실행 등록 경로 최근성
         sage = sess_age.get(r.get("session") or "")  # 소속 세션 최근성
         if page is not None and page < LIVE_WIN:
@@ -13610,18 +13881,374 @@ def repo_code_dirty(root=None):
     return out
 
 
-def worker_worktree_name(doc_id):
+# ---- 자리 판정 (REQ-20260829-028-62x6) ------------------------------------
+# 워크트리는 **마지막 커밋의 체크아웃**이지 작업 트리의 복사가 아니다. 미커밋
+# 작업이 쌓여 있을수록 그 자리는 과거다 — 2026-08-29 16:51 에 살아 있던 워크트리
+# 아홉이 전부 다섯 시간 전 커밋을 가리켰고, 그 위에 앉은 작업자 셋은 고칠 코드를
+# 자기 사본에서 찾지 못해 아무것도 못 하고 물러났다 (DOC-20260829-001-62x6).
+#
+# 그렇다고 "더러우면 스폰 거부"는 답이 아니다 — 이 저장소에서 미커밋은 상시라
+# 그 판정은 사실상 상수 True 이고, 그러면 무인 작업자가 영영 안 뜬다(그건 이
+# 저장소의 다른 병이다). 그래서 거부가 아니라 **자리를 바꾼다**.
+SPINE = ("bin/s9", "web/index.html")   # 이 저장소가 통째로 기대는 두 파일
+LIVE_VERIFY = ("web/",)                # 9909 서버·tests 의 ../web 상대경로
+SCOPE_DIRS = ("bin", "web", "tests", "harness", "docs")
+WORKTREE_MAX = 6                       # 이보다 쌓이면 새로 만들지 않는다
+WORKTREE_STALE_SEC = 24 * 3600         # 주인이 죽고 이만큼이면 사람 앞에 올린다
+AUTOCOMMIT_MAX_TRIES = 3               # 이만큼 실패하면 포기하고 기록한다
+LEASE_HOME = os.path.join(ROOT, "state", "file_leases")
+WAIT_HOME = os.path.join(ROOT, "state", "spawn_wait")
+LEASE_WAIT_MAX_SEC = 1800              # 기다림의 천장 — 넘으면 겹쳐도 띄운다
+LEASE_RESERVE_SEC = 120                # pid 가 채워지기 전 예약이 유효한 창
+_SCOPE_RE = re.compile(
+    r"(?<![\w/.-])((?:" + "|".join(SCOPE_DIRS) + r")/[A-Za-z0-9_./-]+)")
+
+
+def _proc_alive(pid):
+    try:
+        return bool(pid) and os.path.exists(f"/proc/{int(pid)}")
+    except (TypeError, ValueError):
+        return False
+
+
+def _strip_label_notes(body, label):
+    """`### <ts> <label> (...)` 로 시작하는 노트 구간을 들어낸다.
+
+    자리 판정이 자기가 남긴 노트를 다시 읽으면 판정이 자기를 먹인다: 「미커밋
+    `bin/s9` 때문에 본 저장소로 간다」는 한 줄이 다음 판정에서 "이 요청의
+    스코프는 bin/s9" 로 읽혀 영원히 self-edit 이 된다.
+    """
+    out, skip = [], False
+    for ln in (body or "").splitlines():
+        if ln.startswith("### "):
+            skip = bool(re.match(r"### \S+ " + re.escape(label) + r"\b", ln))
+        elif ln.startswith("## "):
+            skip = False
+        if not skip:
+            out.append(ln)
+    return "\n".join(out)
+
+
+def declared_scope(doc_id, text=None):
+    """이 요청이 만질 코드 파일 — **문서가 이름을 댄 것만**. 모르면 None.
+
+    추측하지 않는다. 모르면 모른다고 하고, 그때는 보수적으로 본 저장소를 고른다:
+    틀리는 방향이 비대칭이기 때문이다. 본 저장소로 잘못 보내면 보이는 충돌
+    하나지만, 워크트리로 잘못 보내면 2026-08-29 처럼 다섯 시간이 조용히 사라진다.
+    """
+    if text is None:
+        p = locate(doc_id) or locate(canon_id(doc_id))
+        if not p:
+            return None
+        try:
+            meta, body = read_doc(p)
+        except (OSError, ValueError):
+            return None
+        text = " ".join([meta.get("title") or "", meta.get("summary") or "",
+                         meta.get("goal") or "",
+                         _strip_label_notes(body, "workspace")])
+    got = set()
+    for m in _SCOPE_RE.finditer(text):
+        rel = m.group(1).rstrip(".,)`'\"·")
+        if os.path.isfile(os.path.join(ROOT, rel)):
+            got.add(rel)
+    return got or None
+
+
+def _doc_worktree(doc_id, rows=None):
+    """이 문서가 **이미 가진** 워크트리 — (이름, 주인정보). 없으면 ("", {}).
+
+    2026-08-29: `w-829-011-62x6-` 이 타임스탬프만 다른 채 넷 있었다. 이름에
+    시간을 넣으니 재스폰이 곧 새 워크트리였고, 아홉까지 늘어난 것은 sweep 이
+    게을러서가 아니라 **스폰이 무제한으로 만들었기 때문**이다.
+    """
+    want = canon_id(doc_id)
+    live = {os.path.basename(w["path"].rstrip("/"))
+            for w in (worktree_list() if rows is None else rows)}
+    try:
+        names = sorted(os.listdir(WORKTREE_OWNERS))
+    except OSError:
+        return "", {}
+    for fn in names:
+        if not fn.endswith(".json"):
+            continue
+        name = fn[:-len(".json")]
+        if name not in live:
+            continue
+        own = worktree_owner_read(name)
+        if canon_id(own.get("doc") or "") == want:
+            return name, own
+    return "", {}
+
+
+def workspace_decision(doc_id, cfg, scope=None, dirty=None):
+    """워크트리냐 본 저장소냐 — **판정은 여기 한 곳에만 있다**.
+
+    반환 {"kind": "main"|"worktree", "reason": 코드, "scope": set|None,
+          "blocking": [겹친 경로], "wt": 이미 있는 워크트리 이름}
+
+    핵심 통찰: **워크트리가 놓치는 것은 코드뿐이다.** `worker_workspace` 가
+    `S9_ROOT` 를 본 저장소로 못박으므로 vault/·state/·index/·users/ 의 미커밋은
+    기준선과 아무 상관이 없다 — 워커는 그것들을 본 저장소에서 읽는다. 그것까지
+    세면 이 저장소는 늘 더럽고 판정은 상수가 되지만, **코드만 세면 판정이 다시
+    살아난다.**
+    """
+    scope = declared_scope(doc_id) if scope is None else scope
+
+    def M(reason, blocking=()):
+        return {"kind": "main", "reason": reason, "scope": scope,
+                "blocking": sorted(blocking), "wt": ""}
+
+    def W(reason):
+        return {"kind": "worktree", "reason": reason, "scope": scope,
+                "blocking": [], "wt": ""}
+
+    if not (cfg or {}).get("worker_worktree"):
+        return M("off")
+    rows = worktree_list()
+    if len(rows) >= WORKTREE_MAX:
+        return M("worktree-pile")      # 쌓임 자체가 신호다 — 더 쌓지 않는다
+    name, own = _doc_worktree(doc_id, rows)
+    if name:
+        # R1 문서당 하나. 주인이 살아 있거나 남길 것이 있으면 둘째를 만들지
+        # 않는다 — 그 자리는 `s9 loose` 가 사람 앞에 올린다.
+        st = worktree_state(name)
+        if _proc_alive(own.get("pid")) or st["dirty"] or st["ahead"]:
+            d = M("worktree-exists")
+            d["wt"] = name
+            return d
+    if scope and any(p.startswith(LIVE_VERIFY) for p in scope):
+        # 살아 있는 서버(9909)는 본 저장소를 읽고 tests 는 ../web 를 읽는다 —
+        # 워크트리에서 고친 화면은 그 서버에 영영 안 나타난다.
+        return M("live-verify")
+    if scope and any(p == "bin/s9" or p.startswith("bin/s9-") for p in scope):
+        return M("self-edit")          # 샌드박스가 자기 도구를 자른다
+    dirty = repo_code_dirty() if dirty is None else dirty
+    if not dirty:
+        return W("fresh")
+    spine = [p for p in dirty if p in SPINE]
+    if spine:
+        # 등뼈가 미커밋이면 스코프가 겹치지 않아도 워크트리는 낡은 자리다:
+        # 시험이 `HERE/../bin/s9` 를 읽고 화면 검증이 9909 를 보기 때문에
+        # 검증 자체가 거짓말을 한다. **오늘의 사고를 정면으로 막는 줄이다.**
+        return M("dirty-spine", spine)
+    if scope is None:
+        return M("dirty-unknown", dirty)
+    overlap = set(scope) & set(dirty)
+    if overlap:
+        return M("dirty-overlap", overlap)
+    return W("fresh-outside")
+
+
+# ---- 파일 리스 — 본 저장소에서 여럿이 돌 때의 방벽 -------------------------
+# 워크트리를 안 쓰기로 하면 격리가 사라진다. 대체물 없이는 이 설계가 성립하지
+# 않는다. 본 저장소에 이미 있는 것은 복구(`snapshot_dirty`)와 반쪽 커밋
+# 차단(`s9-guard concurrent_gate`) 둘뿐이고, 빠진 것은 **예방**이다.
+#
+# 정직하게 적어 둔다: 리스는 스폰 시점의 추정이라 워커가 스코프 밖 파일을
+# 고치면 못 막는다. 그 잔여 위험은 위의 둘이 받는다 — 예방만 새로 세운다.
+
+
+def _lease_path(doc_id):
+    return os.path.join(LEASE_HOME, safe_name(canon_id(doc_id)) + ".json")
+
+
+def lease_read(doc_id):
+    try:
+        with open(_lease_path(doc_id), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def lease_prune():
+    """주인이 죽은 리스를 지운다 — 안 지우면 파일이 쌓이고, 쌓인 것은 조용하다."""
     import time as _time
-    return f"w-{safe_name(doc_id)[-12:]}-{int(_time.time())}"
+    now = _time.time()
+    try:
+        names = os.listdir(LEASE_HOME)
+    except OSError:
+        return 0
+    gone = 0
+    for fn in names:
+        if not fn.endswith(".json"):
+            continue
+        fp = os.path.join(LEASE_HOME, fn)
+        try:
+            with open(fp, encoding="utf-8") as f:
+                info = json.load(f)
+        except (OSError, ValueError):
+            info = {}
+        pid = (info or {}).get("pid") or 0
+        if pid and _proc_alive(pid):
+            continue
+        if not pid and now - float((info or {}).get("since") or 0) \
+                < LEASE_RESERVE_SEC:
+            continue
+        try:
+            os.remove(fp)
+            gone += 1
+        except OSError:
+            pass
+    return gone
 
 
-def worker_workspace(doc_id, cfg, cwd):
-    """워커가 일할 자리 (REQ-20260828-011 2단계).
+def lease_take(doc_id, paths, pid=0, reason="spawn"):
+    """이 라운드에 이 문서가 맡은 코드 파일을 적어 둔다."""
+    import time as _time
+    lease_prune()
+    info = {"doc": canon_id(doc_id), "pid": int(pid or 0),
+            "paths": sorted(set(paths or [])), "since": _time.time(),
+            "reason": reason}
+    try:
+        os.makedirs(LEASE_HOME, exist_ok=True)
+        with open(_lease_path(doc_id), "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False)
+    except OSError:
+        pass
+    return info
+
+
+def lease_set_pid(doc_id, pid):
+    info = lease_read(doc_id)
+    if not info:
+        return
+    info["pid"] = int(pid or 0)
+    try:
+        with open(_lease_path(doc_id), "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def lease_release(doc_id):
+    try:
+        os.remove(_lease_path(doc_id))
+    except OSError:
+        pass
+
+
+def lease_conflict(doc_id, scope, now=None):
+    """다른 문서가 잡고 있는 겹침 → [(경로, 잡은 문서)].
+
+    **죽은 손은 아무것도 잡지 못한다** — 주인 pid 가 죽었으면 그 리스는 없는
+    것으로 본다. 죽은 손이 파일을 영원히 쥐면 그건 방벽이 아니라 교착이다.
+    """
+    import time as _time
+    if not scope:
+        return []                # 모르면 붙잡히지도 않는다 (아래 주석 참조)
+    now = _time.time() if now is None else now
+    mine, hits = canon_id(doc_id), []
+    try:
+        names = sorted(os.listdir(LEASE_HOME))
+    except OSError:
+        return []
+    for fn in names:
+        if not fn.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(LEASE_HOME, fn), encoding="utf-8") as f:
+                info = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(info, dict) or info.get("doc") == mine:
+            continue
+        pid = info.get("pid") or 0
+        if pid:
+            if not _proc_alive(pid):
+                continue
+        elif now - float(info.get("since") or 0) >= LEASE_RESERVE_SEC:
+            continue             # pid 를 못 채운 예약은 창이 지나면 버린다
+        for p in (info.get("paths") or []):
+            if p in scope:
+                hits.append((p, info.get("doc") or "?"))
+    return sorted(hits)
+
+
+# ---- 대기 표식 — 거부가 아니라 차례 ---------------------------------------
+# 겹쳤을 때 거부하면 오늘의 다른 병("멈춘 것이 계속 멈춰 있다")이 되살아난다.
+# 워처가 30초마다 다시 부르므로 앞 작업자가 끝나면 저절로 뜬다. 다만 기다림에는
+# 천장이 있어야 한다 — **천장 없는 큐는 교착의 다른 이름이다.**
+
+
+def _wait_path(doc_id):
+    return os.path.join(WAIT_HOME, safe_name(canon_id(doc_id)) + ".json")
+
+
+def _wait_mark(doc_id, kind, why, since=None):
+    import time as _time
+    now = _time.time()
+    prev = {}
+    try:
+        with open(_wait_path(doc_id), encoding="utf-8") as f:
+            prev = json.load(f)
+    except (OSError, ValueError):
+        prev = {}
+    info = {"doc": canon_id(doc_id), "kind": kind, "why": why,
+            "since": float(since if since is not None
+                           else (prev.get("since") or now)), "last": now}
+    try:
+        os.makedirs(WAIT_HOME, exist_ok=True)
+        with open(_wait_path(doc_id), "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False)
+    except OSError:
+        pass
+    return info
+
+
+def _wait_age(doc_id, now=None):
+    import time as _time
+    try:
+        with open(_wait_path(doc_id), encoding="utf-8") as f:
+            since = float(json.load(f).get("since") or 0)
+    except (OSError, ValueError, TypeError):
+        return 0.0
+    return max(0.0, (_time.time() if now is None else now) - since)
+
+
+def _wait_clear(doc_id):
+    try:
+        os.remove(_wait_path(doc_id))
+    except OSError:
+        pass
+
+
+def worker_worktree_name(doc_id):
+    """문서당 하나 — **이름에 시간을 넣지 않는다** (REQ-20260829-028-62x6).
+
+    `int(time.time())` 을 붙이던 시절에는 재스폰이 곧 새 워크트리였다. 한
+    문서가 넷을 만들었고 아홉까지 쌓였다.
+    """
+    return f"w-{safe_name(canon_id(doc_id))[-12:]}"
+def _worktree_drop(name, force=False):
+    """워크트리 하나를 자리째 거둔다 (가지·주인 기록까지). 반환: 거뒀나."""
+    import subprocess
+    st = worktree_state(name)
+    if not os.path.isdir(st["path"]):
+        _worktree_forget(name)
+        return True
+    argv = ["git", "worktree", "remove"] + (["--force"] if force else []) + \
+        [st["path"]]
+    r = subprocess.run(argv, capture_output=True, text=True, cwd=ROOT,
+                       timeout=60)
+    if r.returncode != 0:
+        return False
+    subprocess.run(["git", "branch", "-D", st["branch"]],
+                   capture_output=True, text=True, cwd=ROOT, timeout=60)
+    _worktree_forget(name)
+    return True
+
+
+def worker_workspace(doc_id, cfg, cwd, dec=None):
+    """워커가 일할 자리 (REQ-20260828-011 2단계 · REQ-20260829-028 판정).
 
     기본은 지금까지와 같다 — 담당 세션의 작업 디렉터리(본 저장소). 계정 설정
-    `worker_worktree` 를 켜면 워커마다 자기 워크트리를 준다. 그러면 남의 미커밋
-    편집을 **볼 수도 덮을 수도 없고**, 겹치면 합칠 때 충돌로 드러난다 — 이
-    저장소가 네 번 겪은 조용한 소실이 보이는 충돌로 바뀐다.
+    `worker_worktree` 를 켜면 **기준선이 신선할 때만** 워커에게 자기 워크트리를
+    준다. 그러면 남의 미커밋 편집을 **볼 수도 덮을 수도 없고**, 겹치면 합칠 때
+    충돌로 드러난다 — 이 저장소가 네 번 겪은 조용한 소실이 보이는 충돌로 바뀐다.
+
+    판정은 여기 있지 않다(`workspace_decision`). 여기는 **만들기만** 한다 —
+    판정이 두 벌이면 한 벌만 고쳐진다.
 
     `S9_ROOT` 는 언제나 본 저장소로 못박는다. 데이터까지 갈리면 워커가 남긴
     노트를 대시보드가 못 보고 클레임·live 판정이 서로 다른 상태를 본다 —
@@ -13630,20 +14257,25 @@ def worker_workspace(doc_id, cfg, cwd):
     못 만들면 조용히 원래 자리로 물러난다. 갈라 주는 것은 편의지 전제가 아니다.
     반환: (cwd, env 추가분, 워크트리 이름).
     """
-    if not (cfg or {}).get("worker_worktree"):
-        return cwd, {}, ""
-    dirty = repo_code_dirty()
-    if dirty:
-        # 오늘 만든 것이 사본에 없다 — 갈라 주면 워커는 고칠 코드가 없는
-        # 자리에 앉는다 (REQ-20260828-041 라운드1). 갈라 주는 것은 편의지
-        # 전제가 아니므로, 여기서는 본 저장소로 물러난다(동시 작업 규율은
-        # _spawn_worker 의 비-워크트리 프롬프트가 그대로 건다).
-        _auto_log(f"WT-SKIP(dirty) {doc_id} 미커밋 코드 {len(dirty)}건 "
-                  f"({', '.join(dirty[:3])}) — 본 저장소에 앉힌다")
-        return cwd, {}, ""
     import time as _time
+    dec = workspace_decision(doc_id, cfg) if dec is None else dec
+    if dec["kind"] != "worktree":
+        if dec["reason"].startswith("dirty"):
+            # 이 토큰은 그대로 둔다 — 운영 grep 과 기존 시험이 읽는다.
+            blocking = dec.get("blocking") or []
+            _auto_log(f"WT-SKIP(dirty) {doc_id} 미커밋 코드 {len(blocking)}건 "
+                      f"({', '.join(blocking[:3])}) — 본 저장소에 앉힌다")
+        return cwd, {}, ""
     name = worker_worktree_name(doc_id)
-    path, _branch = worktree_add(name, owner={"doc": doc_id, "pid": 0,
+    old, _own = _doc_worktree(doc_id)
+    if old:
+        # 여기까지 왔다는 것은 판정이 "잃을 것이 없다"고 말한 것이다
+        # (주인은 죽었고 clean·not-ahead). 그 자리를 거두고 새로 만든다 —
+        # 낡은 기준선을 재활용하면 이 판정이 막으려던 그 일이 된다.
+        if not _worktree_drop(old):
+            return cwd, {}, ""
+    path, _branch = worktree_add(name, owner={"doc": canon_id(doc_id),
+                                              "pid": 0,
                                               "created": _time.time()})
     if not path:
         return cwd, {}, ""
@@ -13689,12 +14321,23 @@ def _worktree_autocommit(name, own=None):
     """주인이 떠난 워크트리의 미커밋을 그 가지에 박는다 (REQ-20260828-025).
 
     거두지 않고 남긴다 — 박은 뒤에는 "안 합친 커밋" 이 되어 리드가
-    `s9 worktree ls` 에서 보고 합친다. 실패해도 조용히 넘긴다: 못 박으면
-    그냥 미커밋으로 남고, 그건 지금까지와 같은 상태라 더 나빠지지 않는다.
+    `s9 worktree ls` 에서 보고 합친다.
+
+    **실패를 삼키지 않는다** (REQ-20260829-028-62x6). 종전에는 `git commit` 의
+    반환코드를 안 보고 stderr 를 버렸다. 그래서 pre-commit 게이트가 거부해도
+    성공처럼 보였고, sweep 이 30초 뒤에 또 불렀다 — 2026-08-29 16:51 부터
+    `WT-AUTOCOMMIT` 두 줄이 30초 간격으로 끝없이 찍히며 진짜 신호를 덮었고,
+    그 워크트리들은 여전히 미커밋인 채였다. **실패가 안 보이는 자동 커밋은
+    장치가 아니라 거짓말이다.** 세 번 실패하면 그만두고 `s9 loose` 에 올린다.
+    반환: 박았나.
     """
     import subprocess
+    own = worktree_owner_read(name) if own is None else own
+    tries = int(own.get("autocommit_tries") or 0)
+    if tries >= AUTOCOMMIT_MAX_TRIES:
+        return False          # 포기한 자리다 — 사람이 손으로 커밋해야 한다
     path = os.path.join(WORKTREE_HOME, name)
-    doc = (own or {}).get("doc") or ""
+    doc = own.get("doc") or ""
     msg = (f"워커 작업 자동 보존: {doc or name}\n\n"
            "무인 작업자가 커밋하지 않고 끝나 리드 쪽 장치가 대신 박았다.\n"
            "커밋 없는 워크트리는 소실 장치다 — 거두는 순간 사라진다.\n"
@@ -13704,14 +14347,38 @@ def _worktree_autocommit(name, own=None):
         env.setdefault("S9_USER", resolve_user(None))
     except Exception:
         pass
+    err = ""
     try:
         subprocess.run(["git", "add", "-A"], cwd=path, capture_output=True,
                        timeout=60)
-        subprocess.run(["git", "commit", "-q", "-m", msg], cwd=path, env=env,
-                       capture_output=True, timeout=120)
-    except (OSError, subprocess.SubprocessError):
-        pass
+        chk = subprocess.run(["git", "status", "--porcelain"], cwd=path,
+                             capture_output=True, text=True, timeout=60)
+        if chk.returncode == 0 and not (chk.stdout or "").strip():
+            return True        # 박을 것이 없다 — 실패가 아니다
+        r = subprocess.run(["git", "commit", "-q", "-m", msg], cwd=path,
+                           env=env, capture_output=True, text=True,
+                           timeout=120)
+        if r.returncode != 0:
+            err = ((r.stderr or "") + (r.stdout or "")).strip()[:300] \
+                or f"git commit 이 {r.returncode} 로 끝났다"
+    except (OSError, subprocess.SubprocessError) as e:
+        err = f"{type(e).__name__}: {e}"[:300]
+    if err:
+        own["autocommit_tries"] = tries + 1
+        own["autocommit_error"] = err
+        worktree_owner_write(name, own)
+        _auto_log(f"WT-AUTOCOMMIT-FAIL {name} doc={doc or '?'} "
+                  f"try={tries + 1}/{AUTOCOMMIT_MAX_TRIES} "
+                  f"{' '.join(err.split())[:160]}")
+        if tries + 1 >= AUTOCOMMIT_MAX_TRIES:
+            _auto_log(f"WT-AUTOCOMMIT-GIVEUP {name} doc={doc or '?'} — "
+                      f"손으로 커밋해야 한다. s9 loose 에 올렸다")
+        return False
+    own.pop("autocommit_tries", None)
+    own.pop("autocommit_error", None)
+    worktree_owner_write(name, own)
     _auto_log(f"WT-AUTOCOMMIT {name} doc={doc or '?'}")
+    return True
 
 
 def _worktree_forget(name):
@@ -13719,6 +14386,52 @@ def _worktree_forget(name):
         os.remove(worktree_owner_path(name))
     except OSError:
         pass
+
+
+def _doc_is_terminal(doc_id):
+    """이 요청이 끝났나 (done·blocked) — R5. 합칠 것이 없는 자리는 즉시 거둔다.
+
+    끝난 요청의 빈 워크트리를 `WORKTREE_MIN_AGE` 만큼 붙들고 있을 이유가 없다.
+    """
+    if not doc_id:
+        return False
+    try:
+        for r in load_catalog():
+            if r["id"] == canon_id(doc_id):
+                return r.get("status") in ("done", "blocked")
+    except Exception:
+        pass
+    return False
+
+
+def _worktree_raise(name, own, age):
+    """묵은 워크트리를 **문서에** 한 번만 올린다 (R3).
+
+    `s9 loose` 는 리드가 볼 때만 보이고 로그는 흘러간다. 사람이 나중에 다시
+    보는 자리는 문서다 — 다만 한 번만 적는다. 30초마다 같은 줄을 붙이면
+    그건 알림이 아니라 소음이고, 소음은 진짜 신호를 덮는다.
+    """
+    import subprocess
+    doc = own.get("doc") or ""
+    if own.get("raised") or not doc:
+        return
+    own["raised"] = now_iso()
+    worktree_owner_write(name, own)
+    hours = int(age // 3600)
+    why = (own.get("autocommit_error") or "").strip()
+    text = (f"워크트리 {name} 에 합치지 않은 작업이 {hours}시간째 남아 있다 — "
+            f"주인은 떠났다. 자동 보존이 실패했다면 손으로 커밋해야 한다"
+            + (f" (사유: {' '.join(why.split())[:120]})" if why else "")
+            + f". 합치기: s9 worktree merge {name}")
+    try:
+        r = subprocess.run([os.path.join(ROOT, "bin", "s9"), "note", doc, text,
+                            "--label", "worktree"],
+                           capture_output=True, text=True, timeout=30)
+        if r.returncode != 0:
+            _auto_log(f"WT-RAISE-FAIL {name} doc={doc} "
+                      f"{' '.join((r.stderr or r.stdout or '').split())[:120]}")
+    except (OSError, subprocess.SubprocessError) as e:
+        _auto_log(f"WT-RAISE-FAIL {name} doc={doc} {type(e).__name__}: {e}")
 
 
 def worktree_sweep(now=None):
@@ -13746,9 +14459,16 @@ def worktree_sweep(now=None):
         pid = own.get("pid") or 0
         if pid and os.path.exists(f"/proc/{pid}"):
             continue                      # 아직 일하는 중
-        if nowt - float(own.get("created") or 0) < WORKTREE_MIN_AGE:
+        age = nowt - float(own.get("created") or 0)
+        if age < WORKTREE_MIN_AGE and not _doc_is_terminal(own.get("doc")):
             continue                      # 갓 만든 것 — pid 가 아직 안 적혔을 수 있다
         st = worktree_state(name)
+        if (st["dirty"] or st["ahead"]) and age >= WORKTREE_STALE_SEC:
+            # R3 — **지우지 않는다. 사람 앞에 올린다** (REQ-20260829-028-62x6).
+            # "남길 것이 있으면 남긴다"가 "조용히 쌓인다"와 동의어이던 부분만
+            # 바꾼다: 하루가 지나도록 아무도 안 가져간 자리는 문서에 한 번 적어
+            # 둔다. 지우는 것은 여전히 사람이 merge·rm 으로 한다.
+            _worktree_raise(name, own, age)
         if st["dirty"]:
             # **커밋은 규율이 아니라 장치여야 한다** (REQ-20260828-025).
             # 실사고 2026-08-28: 무인 작업자가 구현을 끝내고 문서에 완료 보고까지
@@ -13784,6 +14504,15 @@ def cmd_worktree(args):
     act = args.action
     if act == "ls":
         rows = worktree_list()
+        # 되찾는 값을 보인다 (REQ-20260829-028-62x6 V6). 강제가 아니라 유인이다:
+        # 미커밋 코드가 있는 동안은 워크트리가 낡은 자리라 작업자를 본 저장소로
+        # 보내는데, 그 이유와 되돌리는 값(커밋)이 어디에도 안 보였다.
+        dirty = repo_code_dirty()
+        if dirty:
+            print(f"지금 워크트리를 못 쓴다 — 미커밋 코드: "
+                  f"{', '.join(dirty[:5])}"
+                  + (f" 외 {len(dirty) - 5}건" if len(dirty) > 5 else "")
+                  + " (커밋하면 작업자가 다시 자기 자리를 받는다)")
         if not rows:
             print("(없음)")
             return
@@ -13979,6 +14708,9 @@ def main():
 
     wk = sub.add_parser("workers", help="지금 도는 무인 작업자 목록")
     wk.add_argument("--quiet", action="store_true")
+    wk.add_argument("--stop", metavar="문서id",
+                    help="그 문서의 무인 작업자를 세운다 (집은 세션만)")
+    wk.add_argument("--why", default="", help="세우는 이유 (--stop 에 필수)")
     wk.set_defaults(fn=cmd_workers)
 
     rv = sub.add_parser("review", help="확인 대기(review) 요청 목록")

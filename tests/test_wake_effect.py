@@ -374,7 +374,14 @@ class TheSpawnCommandIsWhatWeThink(unittest.TestCase):
         self.m._auto_mark_pid = lambda *a, **k: None
         self.m.read_binding = lambda *a, **k: {}
         self.m.resume_item_plan = lambda _i: {"pending": [], "prompt": ""}
-        self.m.worker_workspace = lambda _d, _c, cwd: (self.tmp, {}, "")
+        self.m.worker_workspace = lambda _d, _c, cwd, dec=None: (self.tmp,
+                                                                  {}, "")
+        # 자리 판정은 git 을 부른다(worktree list·status). 이 시험은 Popen 을
+        # 통째로 가로채므로 그 git 이 가짜 Popen 에 걸린다 — 여기서 보는 것은
+        # **실행되는 명령줄**이지 자리 판정이 아니다(그건 test_spawn_workspace).
+        self.m.workspace_decision = lambda _d, _c, **k: {
+            "kind": "main", "reason": "off", "scope": None,
+            "blocking": [], "wt": ""}
         self.meta = {"id": "REQ-20260828-041-62x6", "type": "request",
                      "status": "in-progress", "user": "tester",
                      "title": "멈춘 것을 사람이 깨운다",
