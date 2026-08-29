@@ -114,7 +114,6 @@ class CommitGate(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.m = _load("s9guard", GUARD)
-        cls.tmp = tempfile.mkdtemp(prefix="s9gate-")
 
     def _fresh_file(self, name="web/index.html"):
         p = os.path.join(self.m.ROOT, name)
