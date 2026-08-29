@@ -17,6 +17,7 @@ copying mutable work state into a second ledger.
 - Attached work: live Chief project/work/release/report/session projections, not copied Section9
   request documents.
 - Human gate: Jade's dev-to-production approval; agent actions may verify/repair/merge only to dev.
+- Default execution: Codex provider inside T3 Code; Claude remains an explicit fallback.
 - Main frontend: dashboard route `/app/chief-mobile/` after parity cutover.
 
 ## 핵심 링크

@@ -3879,7 +3879,9 @@ async function chiefStartWork(id,title){
       renderChief(); chiefPollRun(id,prior.run_id); return;
     }
     const order = `Continue this bounded work autonomously through a verified PR and integration to dev. Preserve the durable request/work order, create same-scope repair follow-ups when needed, update Jira and report evidence, and keep moving while safe progress remains. Stop only at a named external blocker or Jade's dev-to-production human gate. Never merge production.`;
-    const run = await chiefPost("session",{work_id:id,engine:"t3",order});
+    // Chief's "codex" engine is a Codex-provider thread inside T3 Code: durable,
+    // steerable in T3, and independent from a project's saved Claude default.
+    const run = await chiefPost("session",{work_id:id,engine:"codex",order});
     chiefRuns[id] = run; chiefNotice = `${title} is assigned. The agent owns safe work through dev.`;
     renderChief(); chiefPollRun(id,run.run_id);
   }catch(e){ chiefRuns[id] = {status:"failed",error:String(e)}; chiefNotice = `Could not start ${title}: ${e.message || e}`; renderChief(); }
@@ -3889,8 +3891,8 @@ async function chiefStartRelease(id,action,title){
   if (!id || chiefRunActive(chiefRuns[key])) return;
   chiefRuns[key] = {status:"starting"}; chiefNotice = `Starting ${title}…`; renderChief();
   try{
-    const payload = action === "merge_dev" ? {release_id:id,engine:"t3",explicit_start:true} :
-      {release_id:id,action,engine:"t3"};
+    const payload = action === "merge_dev" ? {release_id:id,engine:"codex",explicit_start:true} :
+      {release_id:id,action,engine:"codex"};
     const run = await chiefPost(action === "merge_dev" ? "release" : "session",payload);
     chiefRuns[key] = run; chiefNotice = `${title} is agent-owned. Production remains Jade's gate.`;
     renderChief(); if (run.run_id) chiefPollRun(key,run.run_id); else await refreshChief(true);

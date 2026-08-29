@@ -8,3 +8,4 @@ os_accounts: ["jade"]
 ---
 
 ## Notes
+- 2026-08-29T16:18:59+09:00 config agent_cli=t3-codex (by jade)

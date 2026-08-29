@@ -27,7 +27,7 @@ Section9 as `/app/chief-mobile/`; the old frontend remains reachable as `chief-c
 ## Automatic work boundary
 
 The Chief view is not a passive mirror. Assigning Ready/In-progress work starts or reuses a durable
-T3 session with an explicit contract to keep moving through implementation, safe same-scope repair,
+Codex-provider session inside T3 Code with an explicit contract to keep moving through implementation, safe same-scope repair,
 tests, PR evidence and integration to `dev`. A session stops only on a named external dependency or
 the dev-to-production human gate. Release actions use Chief's idempotent autopilot to verify/repair
 and merge passing PRs to dev, prepare the production-review PR, and perform read-only live
