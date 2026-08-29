@@ -49,6 +49,10 @@ class FakeChief(http.server.BaseHTTPRequestHandler):
             return self.send_body(200, "application/json", json.dumps({"status": "running"}))
         if self.path == "/api/chat/sessions":
             return self.send_body(200, "application/json", json.dumps({"sessions": [{"name": "argon"}]}))
+        if self.path.startswith("/api/project-sessions"):
+            return self.send_body(200, "application/json", json.dumps({"projects": [{"id": "argon", "sessions": []}]}))
+        if self.path.startswith("/api/project-session/messages"):
+            return self.send_body(200, "application/json", json.dumps({"thread_id": "t-1", "messages": []}))
         if self.path.startswith("/api/chat/messages?"):
             return self.send_body(200, "application/json", json.dumps({"name": "argon", "messages": []}))
         if self.path == "/api/chief-chat/messages":
@@ -61,8 +65,8 @@ class FakeChief(http.server.BaseHTTPRequestHandler):
         size = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(size) or b"{}")
         self.calls.append(("POST", self.path, body))
-        if self.path in {"/api/sync", "/api/work-session/start", "/api/work/done",
-                         "/api/work/investigate", "/api/chief-chat/session",
+        if self.path in {"/api/sync", "/api/work-session/start", "/api/work/create", "/api/work/done",
+                         "/api/work/investigate", "/api/project-session/start", "/api/project-session/message", "/api/chief-chat/session",
                          "/api/chief-chat/message", "/api/order",
                          "/api/release/autopilot/ensure"}:
             return self.send_body(200, "application/json", json.dumps({
@@ -134,6 +138,14 @@ class TestChiefAdapter(unittest.TestCase):
         self.assertEqual(result["path"], "/api/work-session/start")
         self.assertEqual(result["received"], payload)
 
+    def test_manual_work_creation_is_a_named_jira_backed_route(self):
+        payload = {"project": "argon", "title": "Check freshness", "goal": "Prove the feed is current"}
+        code, _ctype, raw = self.call("/api/chief/work/create", payload)
+        result = json.loads(raw)
+        self.assertEqual(code, 200)
+        self.assertEqual(result["path"], "/api/work/create")
+        self.assertEqual(result["received"], payload)
+
     def test_project_chat_and_orders_are_named_routes(self):
         code, _ctype, raw = self.call("/api/chief/chat/sessions")
         self.assertEqual(code, 200)
@@ -141,6 +153,23 @@ class TestChiefAdapter(unittest.TestCase):
         code, _ctype, raw = self.call("/api/chief/order", {"target": "argon", "text": "check"})
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(raw)["path"], "/api/order")
+
+    def test_project_sessions_are_named_routes(self):
+        code, _ctype, raw = self.call("/api/chief/project-sessions?project=argon&refresh=1&evil=x")
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(raw)["projects"][0]["id"], "argon")
+        self.assertIn(("GET", "/api/project-sessions?project=argon&refresh=1", None), FakeChief.calls)
+        code, _ctype, raw = self.call(
+            "/api/chief/project-session/start", {"project": "argon", "fresh": True})
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(raw)["path"], "/api/project-session/start")
+        code, _ctype, raw = self.call("/api/chief/project-session/messages?thread_id=t-1&evil=x")
+        self.assertEqual(code, 200)
+        self.assertIn(("GET", "/api/project-session/messages?thread_id=t-1", None), FakeChief.calls)
+        code, _ctype, raw = self.call(
+            "/api/chief/project-session/message", {"thread_id": "t-1", "text": "continue"})
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(raw)["path"], "/api/project-session/message")
 
     def test_dry_run_provenance_header_reaches_chief(self):
         code, _ctype, raw = self.call("/api/chief/session/start",
