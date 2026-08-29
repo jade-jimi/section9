@@ -17,3 +17,11 @@ visualizations, and the product-facing interpretation of telemetry and battery v
 
 - 프로젝트 문서(메타·멤버·이력): vault/projects/cobalt.md
 - 에셋(외부 파일): projects/cobalt/assets/
+
+## Future product backlog
+
+- `BDA-3050` — multi-tenant Cobalt administration and fail-closed tenant isolation.
+- `BDA-3051` — choose the engineering SaaS name, target users/MVP, Cobalt reuse boundary, and
+  dedicated project/repository before creating it.
+- These items relate, but neither has started. Do not create the new project or repository until
+  BDA-3051 records the naming and ownership decision.
