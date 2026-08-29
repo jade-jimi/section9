@@ -9,11 +9,13 @@
  },
  "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58.jsonl",
  "cwd": "/home/sjpark1/section9",
- "last_qst": "",
- "pending_qst": "",
+ "last_qst": "QST-20260829-001-62x6",
+ "pending_qst": [
+  "QST-20260829-001-62x6"
+ ],
  "ses_doc": "SES-20260828-007-62x6",
  "attach_pid": "908",
- "ended": "",
+ "ended": "1",
  "capture_paused": true,
  "agent_transcript_path": [
   "/tmp/claude-1000/-home-sjpark1-section9/b8fda8f9-2f2a-4671-9ce1-e59d1b9d0e58/tasks/a20a492838c78a7cc.output",
