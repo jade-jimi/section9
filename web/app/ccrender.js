@@ -24,16 +24,36 @@ function ccStrip(raw){                           // 접힘 미리보기용 — A
    규칙이 아예 없었고, 그래서 화면에 파이프와 해시가 원문 그대로 흘렀다.
    실제 CC 터미널은 같은 텍스트를 표·제목으로 그린다. */
 const CCTBL_DELIM = /^\s*(?=.*\|)\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/;
-const CCTBL_CELL = /(?<!\\)\|/;
 const CCHEAD = /^ {0,3}(#{1,6})[ \t]+(\S.*?)[ \t]*#*[ \t]*$/;
 /* 숫자만 든 열은 오른쪽 정렬 — 자릿수를 세로로 맞춰야 비교가 된다 */
 const CCNUM = /^[-+]?[\d,]+(?:\.\d+)?\s*(?:%|원|건|개|명|초|분|시간|ms|s|B|KB|MB|GB)?$/;
 
+/* 칸 가르기는 정규식이 아니라 글자를 훑는다 (REQ-20260829-038).
+
+   `\|` 는 칸 구분이 아니라 파이프 한 글자다. 그것을 `/(?<!\\)\|/` 로 적었었는데,
+   lookbehind 는 사파리 16.4 에서야 들어왔고 **그전 사파리는 문법 오류로 다룬다** —
+   런타임 오류가 아니라 문법 오류라 이 파일이 통째로 실행되지 않았다. 이 파일에
+   `mdTable` 이 있고 문서 렌더(`md2html`)가 그것을 모든 줄에 부르므로, 이 한 줄이
+   사파리에서 **문서 본문 전체**를 지웠다. 규칙은 tests/test_safari_syntax.py 에.
+
+   앞 글자를 offset 으로 보는 방식은 이 저장소가 이미 한 번 고른 답이다
+   (attach.js 의 맨 경로 규칙, REQ-20260829-008). 판정은 그때와 같다:
+   바로 앞 글자가 `\` 인가. `\\|` 를 두 글자로 세지 않는 것까지 전과 같다. */
+function ccSplitCells(t){                        // "a|b\|c" → ["a", "b\|c"]
+  const out = [];
+  let cur = "";
+  for (let i = 0; i < t.length; i++){
+    if (t[i] === "|" && t[i - 1] !== "\\"){ out.push(cur); cur = ""; continue; }
+    cur += t[i];
+  }
+  out.push(cur);
+  return out;
+}
 function ccCells(line){                          // 표 한 줄 → 칸 배열
   let t = line.trim();
   if (t.startsWith("|")) t = t.slice(1);
   if (/(?:^|[^\\])\|$/.test(t)) t = t.slice(0, -1);
-  return t.split(CCTBL_CELL).map(c => c.replace(/\\\|/g, "|").trim());
+  return ccSplitCells(t).map(c => c.replace(/\\\|/g, "|").trim());
 }
 function ccCell(tag, html, al){
   return `<${tag}${al ? ` style="text-align:${al}"` : ""}>${html}</${tag}>`;

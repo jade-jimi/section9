@@ -74,12 +74,15 @@ class WorkspaceChip(unittest.TestCase):
     def setUpClass(cls):
         cls.src = read(INDEX)
         cls.place = grab(cls.src, r"const WS_PLACE = \{[^\n]*\};", "WS_PLACE")
+        cls.mark = grab(cls.src, r"const WS_MARK = [^\n]*;", "WS_MARK")
         cls.fix = grab(cls.src, r"const WS_FIX_COMMIT = [^\n]*;\n"
                                 r"const WS_FIX_SWEEP = [^\n]*;", "WS_FIX_*")
+        cls.means = grab(cls.src, r"const WS_MEANS = \{.*?\};", "WS_MEANS")
         cls.why = grab(cls.src, r"const WS_WHY = \{.*?\n\};", "WS_WHY")
         cls.state = grab(cls.src, r"^function wsState\(r\)\{.*?^\}", "wsState")
         cls.title = grab(cls.src, r"^function wsTitle\(s\)\{.*?^\}", "wsTitle")
         cls.chip = grab(cls.src, r"^function wsChip\(r\)\{.*?^\}", "wsChip")
+        cls.open = grab(cls.src, r"^function wsOpen\(id\)\{.*?^\}", "wsOpen")
         cls.note = grab(cls.src, r"^function wsBoardNote\(\)\{.*?^\}", "wsBoardNote")
         cls.card = grab(cls.src, r"^function cardHTML\(r\)\{.*?^\}", "cardHTML")
         cls.wake = grab(cls.src, r"^async function wakeDoc\(id\)\{.*?^\}", "wakeDoc")
@@ -97,8 +100,9 @@ class WorkspaceChip(unittest.TestCase):
             "let dlgSeen = null;",
             "const s9dlg = o => { dlgSeen = o; return null; };",
             "let catalog = %s;" % json.dumps(rows or []),
-            self.place, self.fix, self.why,
-            self.state, self.title, self.chip, self.note,
+            "const catFind = id => catalog.find(r => r.id === id) || null;",
+            self.place, self.mark, self.fix, self.means, self.why,
+            self.state, self.title, self.chip, self.open, self.note,
             body,
         ])
         p = subprocess.run([NODE, "-e", script], capture_output=True,
@@ -202,7 +206,7 @@ class WorkspaceChip(unittest.TestCase):
         """자리는 서버가 준 `kind` 그대로다. 사유에서 자리를 유추하는 순간
         `workspace_decision` 과 두 벌이 되고, 그때부터 한 벌만 고쳐진다."""
         for fn, name in ((self.state, "wsState"), (self.chip, "wsChip"),
-                         (self.title, "wsTitle")):
+                         (self.title, "wsTitle"), (self.open, "wsOpen")):
             self.assertNotIn("dirty", fn, f"{name} 이 사유를 손으로 갈랐다")
             self.assertNotIn("worktree-pile", fn, f"{name} 이 사유를 손으로 갈랐다")
         self.assertIn("w.kind", self.state, "서버가 준 kind 를 안 읽는다")
@@ -266,6 +270,86 @@ class WorkspaceChip(unittest.TestCase):
         for banned in ("background", "border"):
             self.assertNotIn(banned, css.group(1),
                              "칩에 색면·테두리를 줬다 — 이 화면의 배지는 글자다")
+
+    # ---------- 2차 반려: "어떤 화면에서 확인하는지 설명을 봐도 모르겠다" ----------
+
+    # W14 — 낱말 앞에 **표**가 선다
+    def test_w14_the_chip_carries_a_mark(self):
+        """1차는 낱말만 세웠다. 메타 줄은 이름·급·크기·태그가 이미 서는 자리라
+        낱말 하나는 지나가는 태그로 읽혔고, 값이 붙은 카드가 실제로 보드에
+        있었는데도 사람이 못 찾았다. 표는 헤더 칩과 **같은 글자**여야 한다 —
+        표를 둘로 나누면 사람이 배울 것이 둘이 된다."""
+        mark = re.search(r'"(.+?)"', self.mark).group(1)
+        r = self.run_js(
+            "console.log(JSON.stringify({ main: wsChip(%s), wt: wsChip(%s),"
+            " note: wsBoardNote()}));" % (
+                json.dumps(self.row(workspace={"kind": "main",
+                                               "reason": "live-verify"})),
+                json.dumps(self.row(workspace={"kind": "worktree",
+                                               "reason": "fresh"}))),
+            rows=[self.row(workspace={"kind": "main", "reason": "dirty-spine"})])
+        self.assertIn(mark, r["main"], "카드의 자리에 표가 없다")
+        self.assertIn(mark, r["wt"])
+        self.assertEqual(r["note"]["mark"], mark,
+                         "카드와 헤더의 표가 다르다 — 둘이 한 가지라는 것을 못 잇는다")
+        # 표가 낱말을 밀어내지는 않는다 — 표만으로는 어느 자리인지 못 읽는다
+        self.assertIn("본 저장소", r["main"])
+
+    # W15 — 손 위의 글만으로는 못 찾은 사람에게 답이 안 된다: **누를 수 있다**
+    def test_w15_the_chip_can_be_pressed(self):
+        r = self.run_js("console.log(JSON.stringify(wsChip(%s)));" % json.dumps(
+            self.row(id="REQ-20260829-030-62x6",
+                     workspace={"kind": "main", "reason": "live-verify"})))
+        self.assertIn('data-wsat="REQ-20260829-030-62x6"', r)
+        # role/tabindex 가 있어야 이 화면의 Enter·Space 핸들러가 집는다
+        self.assertIn('role="button"', r)
+        self.assertIn('tabindex="0"', r)
+        # 손 위의 글은 **그대로 둔다** — 빠른 쪽은 여전히 얹기만 하면 된다
+        self.assertIn("title=", r)
+
+    def test_w15b_the_press_beats_the_card(self):
+        """카드 안의 손잡이는 카드가 아니다 (깨우기·세우기가 세운 규칙).
+        칩이 카드보다 늦게 잡히면 누를 때마다 문서가 열려 창을 못 본다."""
+        i_ws = self.src.index('closest("[data-wsat]")')
+        i_doc = self.src.index('closest("[data-doc]")')
+        self.assertLess(i_ws, i_doc, "카드가 칩보다 먼저 잡는다")
+        seg = self.src[i_ws:i_doc]
+        self.assertIn("stopPropagation", seg, "카드까지 이벤트가 올라간다")
+        self.assertIn("wsOpen(", seg, "누르는 길이 창으로 안 간다")
+
+    # W16 — 누르면 **그 카드 한 장**을 말한다
+    def test_w16_the_press_opens_that_one_request(self):
+        rows = [self.row(id="REQ-A", workspace={"kind": "main",
+                                                "reason": "dirty-overlap"}),
+                self.row(id="REQ-B", workspace={"kind": "worktree",
+                                                "reason": "fresh",
+                                                "wt": "w-829-030-62x6"})]
+        r = self.run_js(
+            "wsOpen('REQ-A'); const a = dlgSeen; wsOpen('REQ-B'); const b = dlgSeen;"
+            "console.log(JSON.stringify({a, b}));", rows=rows)
+        # 누른 것이 그 카드라 답도 그 카드다 — 옆 카드가 섞이면 무엇을 눌렀는지 흐려진다
+        self.assertIn("REQ-A", r["a"]["title"])
+        self.assertNotIn("REQ-B", r["a"]["title"] + r["a"]["descHtml"])
+        # 사유와 푸는 법이 **창 안 문장**으로 있다 (귀띔에만 있으면 못 찾은 사람에게 답이 아니다)
+        self.assertIn("커밋되지 않았다", r["a"]["descHtml"])
+        self.assertIn("커밋하면", r["a"]["descHtml"])
+        # 그래서 나에게 무슨 뜻인가 — 자리가 다르면 답도 달라야 한다
+        self.assertIn("바로 나타납니다", r["a"]["descHtml"])
+        self.assertIn("나타나지 않습니다", r["b"]["descHtml"])
+        # 워크트리는 어느 워크트리인지까지 말한다 (사람이 cd 해서 볼 자리다)
+        self.assertIn("w-829-030-62x6", r["b"]["title"])
+        # 풀 것이 없는 자리에 할 일을 지어내지 않는다
+        self.assertNotIn("커밋하면", r["b"]["descHtml"])
+        # 대기·자리는 고장이 아니다 — 붉은 눈썹을 달지 않는다
+        self.assertIs(r["a"]["stop"], False)
+
+    def test_w17_nothing_to_show_opens_nothing(self):
+        """값이 없으면 안 그린다는 계약은 **누른 뒤에도** 같다. 빈 창은 "모른다"를
+        한 번 더 말하는 자리일 뿐이다."""
+        r = self.run_js("wsOpen('REQ-A'); wsOpen('없는-문서');"
+                        "console.log(JSON.stringify({dlg: dlgSeen}));",
+                        rows=[self.row(id="REQ-A")])
+        self.assertIsNone(r["dlg"], "그릴 것이 없는데 창을 열었다")
 
     # W11 — 깨우기 창은 `ok` 와 `message` 둘만 읽는다
     def test_w11_wake_reads_only_ok_and_message(self):

@@ -244,7 +244,11 @@ class StallRendersTheSame(unittest.TestCase):
             STUBS,
             g("fmtStall"), g("fmtLast"),
             "const wokeAt = new Map(); const WOKE_HOLD = 180000;",
-            g("wokePending"), g("stallState"), g("stallHTML"), g("cardHTML"),
+            # 세우기 손잡이가 같은 함수 안에서 그려진다 (REQ-20260829-024) —
+            # 그리지 않는 행에는 빈 문자열이 오므로 이 시험의 판정은 그대로다.
+            "const stopAt = new Map(); const STOP_HOLD = 20000;",
+            g("wokePending"), g("stopPending"), g("stallState"),
+            g("workRowHTML"), g("stallHTML"), g("cardHTML"),
             "CAT = %s;" % json.dumps(rows),
             # 문서 화면이 짓는 자리와 **같은 표현식**
             "const out = CAT.map(r => ({id: r.id, card: cardHTML(r),"

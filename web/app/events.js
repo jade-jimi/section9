@@ -154,6 +154,16 @@ document.addEventListener("click", e => {
   // 아니다 (REQ-20260828-041). 보드 카드와 문서 화면이 같은 길로 들어온다.
   const wk = e.target.closest("[data-wake]");
   if (wk){ e.stopPropagation(); wakeDoc(wk.dataset.wake); return; }
+  // 세우기도 같은 자리에서 잡는다 (REQ-20260829-024) — 깨우기의 반대편이고,
+  // 카드 안의 손잡이는 카드가 아니라는 규칙도 그대로다.
+  const sp = e.target.closest("[data-stop]");
+  if (sp){ e.stopPropagation(); stopDoc(sp.dataset.stop); return; }
+  /* 작업 자리 칩 (REQ-20260829-030 2차) — 카드보다 먼저 잡는다. 카드 안의
+     손잡이는 카드가 아니라는 이 화면의 규칙 그대로다. 보드 카드와 문서 화면
+     제목 줄에 선 같은 칩이 이 한 길로 들어온다 — 두 자리가 각자 길을 가지면
+     언젠가 한쪽만 고쳐진다. */
+  const wa = e.target.closest("[data-wsat]");
+  if (wa){ e.stopPropagation(); wsOpen(wa.dataset.wsat); return; }
   /* 못 박은 줄을 놓는 손잡이 — 문서를 여는 길보다 **먼저** 잡는다
      (REQ-20260829-012). 이 손잡이는 못 박은 줄의 머리글 안에 있어 [data-doc]
      행 밖이지만, 손잡이가 행보다 앞에 서는 규칙은 이 화면 전체에 하나다. */

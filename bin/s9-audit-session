@@ -47,28 +47,92 @@ def mirror(tp):
 
 
 
+# 훅은 독립 실행 파일이라 s9 의 프로세스 조회를 로컬 복제한다. 복제는
+# 갈라지므로, 갈라지지 않는지를 시험이 못박는다 (tests/test_platform_live.py).
+# 갈래가 여기 없으면 맥에서 조용히 틀린다: `/proc` 은 리눅스에만 있다
+# (REQ-20260829-037).
+def _proc_backend():
+    forced = (os.environ.get("S9_PROC_BACKEND") or "").strip()
+    if forced in ("proc", "ps", "none"):
+        return forced
+    return "proc" if os.path.isdir("/proc/self") else "ps"
+
+
+def _proc_info(pid):
+    """(실행 파일 이름, 부모 pid) — 모르면 ("", 0)."""
+    if _proc_backend() == "proc":
+        try:
+            with open(f"/proc/{pid}/comm") as f:
+                comm = f.read().strip()
+            with open(f"/proc/{pid}/status") as f:
+                for ln in f:
+                    if ln.startswith("PPid:"):
+                        return comm, int(ln.split()[1])
+            return comm, 0
+        except (OSError, ValueError):
+            return "", 0
+    if _proc_backend() == "none":
+        return "", 0
+    try:
+        out = subprocess.run(["ps", "-o", "ppid=,comm=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=5).stdout
+    except Exception:
+        return "", 0
+    c = out.strip().split(None, 1)
+    if len(c) == 2 and c[0].isdigit():
+        # BSD 의 comm 은 절대경로다 — 이름만 뗀다.
+        return os.path.basename(c[1].strip()), int(c[0])
+    return "", 0
+
+
+# claude 를 실어 나르는 런타임들 — 맥에서 어떤 것으로 깔았는지 우리가 고를 수
+# 없으므로 이름을 좁게 잡으면 그 기계에서만 조용히 어긋난다.
+CLAUDE_COMMS = ("claude", "node", "bun", "deno")
+
+
+def _pid_alive(pid):
+    """그 pid 가 살아 있는가 — s9.pid_alive 의 로컬 복제.
+    윈도우 파이썬의 os.kill 은 시그널 0 에도 죽이므로 posix 에서만 쓴다."""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if _proc_backend() == "proc":
+        return os.path.exists(f"/proc/{pid}")
+    if _proc_backend() == "none" or os.name != "posix":
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
 def _claude_pid():
     """이 훅을 실행한 claude 프로세스 pid — getppid는 소멸성 중간 셸일 수 있어
     (REQ-20260824-065: 신생 유휴 세션이 attach 죽음+활동 0으로 미검출)
-    조상 체인을 걸어 올라가 comm이 claude/node인 첫 프로세스를 잡는다."""
+    조상 체인을 걸어 올라가 comm이 claude/node인 첫 프로세스를 잡는다.
+
+    이 값이 바인딩의 `attach_pid` 가 된다. 맥에서는 `/proc` 이 없어 첫 판독이
+    곧바로 실패했고, **언제나 중간 셸의 pid 가 적혔다** — 그 셸은 곧 죽으니
+    생존·계정·중단·재시작이 전부 그 하나 때문에 틀렸다 (REQ-20260829-037).
+    """
     pid = os.getppid()
     for _ in range(10):
         if pid <= 1:
             break
-        try:
-            with open(f"/proc/{pid}/comm") as f:
-                comm = f.read().strip()
-            if comm in ("claude", "node"):
-                return pid
-            with open(f"/proc/{pid}/status") as f:
-                for ln in f:
-                    if ln.startswith("PPid:"):
-                        pid = int(ln.split()[1])
-                        break
-                else:
-                    break
-        except OSError:
+        comm, ppid = _proc_info(pid)
+        if comm in CLAUDE_COMMS:
+            return pid
+        if not ppid:
             break
+        pid = ppid
     return os.getppid()
 
 def _detect_root(data):
@@ -301,7 +365,7 @@ def main():
                                 env=env, timeout=10)
             prev = (json.loads(bd.stdout or "{}") or {}).get("attach_pid")
             me_pid = _claude_pid()  # 조상 체인의 claude 프로세스
-            if prev and int(prev) != me_pid and os.path.exists(f"/proc/{prev}"):
+            if prev and int(prev) != me_pid and _pid_alive(prev):
                 dual_warn = (
                     f"⚠ 이 세션({session})은 다른 터미널(pid {prev})에서 이미 활성이다. "
                     f"동일 세션 이중 접속은 응답 캡처 오귀속·클레임 충돌·대화 이력 충돌을 "

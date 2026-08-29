@@ -234,6 +234,20 @@
     setTimeout(() => clearInterval(t), 12000);
     return;
   }
+  /* ?dlg=wsat — 카드의 자리 칩을 **진짜로 누른다** (REQ-20260829-030 2차 반려).
+     1차는 손 위의 글에만 설명이 있어 "어디서 확인하는지 모르겠다"는 반려를
+     받았다. 그 답으로 칩을 누를 수 있게 했으니, 눌린 화면 자체가 캡처로 남아야
+     한다 — 손이 없는 환경에서 누르지 않으면 볼 수 없는 화면은 이 길로만 남는다.
+     `?ws=main/dirty-overlap&dlg=wsat` 처럼 자리를 세워 놓고 쓴다. */
+  if (m[1] === "wsat"){
+    const t = setInterval(() => {
+      const b = document.querySelector(".card [data-wsat]");
+      if (!b) return;
+      clearInterval(t); b.click();
+    }, 400);
+    setTimeout(() => clearInterval(t), 12000);
+    return;
+  }
   /* ?dlg=wakewait|wakespawn — 깨우기의 답이 어떤 얼굴로 서는지 (REQ-20260829-030).
      `waiting` 은 서버가 새로 더한 답이고 **고장이 아니라 차례**라, 붉은 실패
      창으로 서면 안 된다. 이 화면은 손이 있어야 열리는 데다 `waiting` 은 남이
@@ -318,6 +332,21 @@
         + ` W${Math.round(r.width)} H${Math.round(r.height)}`;
     }, 60);
   }, 1200);
+})();
+
+/* ?oopsfake=<조각> — 조각이 죽었을 때의 알림을 세운다 (REQ-20260829-038).
+
+   `?dlg=`·`?ccsay=` 이 낸 선례와 같은 자리다: 이 알림은 사파리 16.4 미만에서만
+   서는데 여기엔 사파리가 없다. 그림을 따로 만들지 않고 **진짜 알림(oops.js 의
+   draw)** 에 죽은 조각 하나를 얹어 세운다 — 그림을 지어 보면 보고 고친 것이
+   화면이 아니게 된다. 기본값은 실제로 사파리를 죽였던 그 줄과 그 오류다. */
+(function oopsFake(){
+  const m = /[?&]oopsfake=([\w.-]+)/.exec(location.search);
+  if (!m || !window.__S9_OOPS) return;
+  window.__S9_OOPS.dead.push({
+    file: "app/" + m[1], line: 27,
+    msg: "SyntaxError: Invalid regular expression: invalid group specifier name"});
+  window.__S9_OOPS.draw();
 })();
 
 /* 조각이 다 왔다는 표식 — 마지막 파일의 마지막 줄이다. `web/index.html` 끝의

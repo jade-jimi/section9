@@ -23,6 +23,7 @@ import importlib.util
 import inspect
 import json
 import os
+import re
 import shutil
 import signal
 import tempfile
@@ -34,6 +35,13 @@ SRC = open(S9, encoding="utf-8").read()
 
 DOC = "REQ-20260829-999-62x6"
 PID = 424242
+
+
+def _fn(src, name):
+    """화면 조각에서 함수 한 덩어리를 집는다 (test_wake_handle 의 그 손)."""
+    m = re.search(r"function %s\([^)]*\)\{[\s\S]*?\n\}" % name, src)
+    assert m, name
+    return m.group(0)
 
 
 def _load(name="s9stop"):
@@ -239,6 +247,109 @@ class MixedWithTheAccountSwitch(unittest.TestCase):
         i = SRC.find("def cmd_workers(")
         self.assertIn("stop_all_workers", SRC[i:i + 1800],
                       "명령이 그 함수를 안 지난다")
+
+
+class TheHandleOnTheScreen(unittest.TestCase):
+    """S10~S14 — 손이 닿는 자리는 화면이다 (라운드3).
+
+    라운드2 가 연 것은 서버의 문이었다. 그 문에 손잡이가 안 붙으면 사용자에게
+    이 요청은 **없는 기능**이다 — 이 저장소가 깨우기에서 두 번 겪은 그 일이다
+    (기능은 있었고, 화면에 버튼이 없었다).
+
+    계약은 다섯이다.
+      S10 조건은 서버가 준 `worker` 하나다. 점(`live_kind`)으로 대신하면
+          클레임 뒤에 손잡이가 사라진다 — 정작 세울 것이 있을 때 없어진다.
+      S11 카드와 문서가 **한 함수**로 짓는다 (깨우기가 세운 규칙).
+      S12 되돌릴 수 없는 일은 먼저 묻는다. 깨우기에는 없던 걸음이다 —
+          깨우기는 아무 일도 안 하던 것을 굴리고, 세우기는 일하는 것을 끝낸다.
+      S13 화면이 이유를 짓지 않는다: 서버의 `message` 를 그대로 옮기고
+          `action` 으로 문구를 갈라 쓰지 않는다.
+      S14 계정·모델을 바꾸는 창이 도는 작업자를 알고, 사람이 고른 그 걸음을
+          같은 요청에 실어 보낸다.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from webasset import index_path
+        with open(index_path(), encoding="utf-8") as f:
+            cls.web = f.read()
+        cls.workrow = _fn(cls.web, "workRowHTML")
+        cls.stop = _fn(cls.web, "stopDoc")
+        cls.stall = _fn(cls.web, "stallHTML")
+        cls.restart = _fn(cls.web, "sessionRestart")
+
+    def test_s10_the_row_stands_on_the_server_fact(self):
+        self.assertIn("r.worker", self.workrow,
+                      "화면이 서버가 준 사실 말고 다른 것으로 손잡이를 세운다")
+        self.assertIn('data-stop="${esc(r.id)}"', self.workrow)
+        # 점으로 대신하면 클레임 뒤에 손잡이가 사라진다
+        self.assertNotIn("live_kind", self.workrow,
+                         "손잡이가 점의 값을 읽는다 — 클레임 뒤에 사라진다")
+        # 서버가 그 사실을 행에 싣는 자리도 하나여야 한다
+        i = SRC.find("def catalog_with_live(")
+        self.assertGreater(i, 0)
+        blk = SRC[i:SRC.find("\ndef ", i + 10)]
+        self.assertIn('r["worker"]', blk, "행이 도는 작업자를 안 나른다")
+        self.assertIn("worker_running(", blk,
+                      "판정을 새로 지었다 — 워처와 화면이 다른 말을 하게 된다")
+
+    def test_s11_board_and_document_grow_the_same_handle(self):
+        """문서 화면은 stallHTML 하나만 부른다 — 거기 없으면 문서엔 손잡이가 없다."""
+        self.assertIn("workRowHTML(r)", self.stall,
+                      "카드·문서가 함께 부르는 그 함수가 세우기를 안 짓는다")
+        self.assertEqual(len(re.findall(r'data-stop="\$\{esc\(', self.web)), 1,
+                         "손잡이를 그리는 자리가 여럿이다 — 한 벌만 고쳐진다")
+        self.assertIn("stopDoc(sp.dataset.stop)", self.web,
+                      "누른 것이 아무 데도 닿지 않는다")
+
+    def test_s12_an_irreversible_press_asks_first(self):
+        self.assertIn('kind: "confirm"', self.stop, "묻지 않고 세운다")
+        # 물음이 먼저다 — 확인 전에 요청이 나가면 묻는 시늉만 하는 창이다
+        self.assertLess(self.stop.find('kind: "confirm"'),
+                        self.stop.find('"/api/stop"'),
+                        "확인을 받기 전에 이미 요청이 나갔다")
+        self.assertIn("if (!go) return;", self.stop, "그만두기가 안 통한다")
+        self.assertIn("if (stopPending(id)) return;", self.stop, "연타가 막히지 않는다")
+        self.assertIn("STOP_HOLD", self.web, "잠금이 만료되지 않는다")
+
+    def test_s13_the_screen_says_the_server_sentence(self):
+        self.assertIn("title: d.message", self.stop, "서버 문장이 창에 안 선다")
+        self.assertNotIn("d.action", self.stop, "화면이 action 을 읽는다")
+        for a in ("stopped", "none", "not-request", "missing"):
+            self.assertNotIn('"%s"' % a, self.stop,
+                             "화면이 서버의 사유 낱말을 알고 있다: %s" % a)
+        self.assertIn("stop: false", self.stop, "거절이 붉은 실패의 옷을 입는다")
+        self.assertEqual(len(re.findall(r'"/api/stop"', self.web)), 1,
+                         "세우기를 부르는 자리가 여럿이다")
+
+    def test_s14_changing_the_account_can_stop_them_first(self):
+        self.assertIn("liveWorkerRows()", self.restart,
+                      "계정·모델 창이 도는 작업자를 모른다")
+        self.assertIn("stopWorkers: true", self.restart)
+        self.assertIn("if (!go) return;", self.restart,
+                      "물었는데 그만둘 자리가 없다")
+        self.assertIn("stop_workers: !!req.stopWorkers", self.web,
+                      "고른 것이 서버로 안 간다")
+
+    def test_s15_it_reuses_what_the_card_already_wears(self):
+        """새 층을 만들지 않는다 — 색면·띠 없이 있는 문법을 그대로 입는다."""
+        self.assertIn('class="acts stoprow"', self.workrow)
+        self.assertIn('class="deed stop"', self.workrow)
+        m = re.search(r"\.acts\.stoprow\{([^}]*)\}", self.web)
+        self.assertIsNotNone(m, ".acts.stoprow 규칙이 없다")
+        for banned in ("background", "animation", "border-left"):
+            self.assertNotIn(banned, m.group(1),
+                             "세우기 줄이 %s 로 새 층을 만든다" % banned)
+
+    def test_s16_the_handle_can_be_seen_on_purpose(self):
+        """도는 작업자는 캡처하려는 그 순간에 없다 — 진단으로 세울 수 있어야 한다.
+
+        깨우기가 두 번 고쳐 올려지는 동안 한 번도 눈으로 확인되지 못한 이유가
+        정확히 이것이었다 (REQ-20260828-041 반려)."""
+        probe = _fn(self.web, "workProbe")
+        self.assertIn("r.worker =", probe, "진단이 행에 값을 안 얹는다")
+        self.assertIn("workProbe(rows)", _fn(self.web, "stallProbe"),
+                      "진단이 화면 갱신 길에 서 있지 않다 — 아무 일도 안 한다")
 
 
 if __name__ == "__main__":

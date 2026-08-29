@@ -116,6 +116,11 @@ async function restartAfterStop(T, sid, req, what, cap){
 /* 부르는 자리는 둘(계정 창·모델 창)이고 들어오는 것은 세션 id 하나다.
    터미널 판(T)은 있으면 기록을 남기고 없으면 없는 대로 간다 — 예전에는 그것이
    없으면 아무 일도 일어나지 않았다. */
+/* 지금 도는 무인 작업자들 — 서버가 카탈로그 행에 실어 준 `worker` 하나가
+   조건이다 (REQ-20260829-024). 화면이 따로 세지 않는다. */
+function liveWorkerRows(){
+  return (catalog || []).filter(r => r.type === "request" && r.worker);
+}
 async function sessionRestart(sid, req, T, cap){
   const what = restartWhat(req.model, req.effort, req.account);
   if (!sid){
@@ -123,6 +128,29 @@ async function sessionRestart(sid, req, T, cap){
     await s9dlg({kind: "alert", cap: cap || "다시 시작",
       title: restartSay("세션 없음", what), ok: "닫기"});
     return;
+  }
+  /* 바꾸는 것은 **이 창 하나**다 (REQ-20260829-024).
+
+     사용자: "계정을 변경하면 기존에 진행 중이던 작업들을 중단하는게 맞지 싶다."
+     백그라운드에서 도는 무인 작업자는 이 재기동을 모른다 — 옛 계정·옛 모델로
+     계속 돈다. 요금이 어느 계정에 붙는지도, 어느 모델이 쓰는지도 그때부터
+     갈린다.
+
+     그래서 도는 것이 있을 때만 한 번 묻고, 사람이 누르면 그 걸음을 같은
+     요청에 실어 보낸다(서버가 거부 갈래를 다 지난 뒤에 세운다 — 못 바꾸면서
+     돌던 일만 죽으면 잃기만 한다). 물러날 자리는 그만두기 하나다: 되돌릴 수
+     없는 일이 두 개(세우기·재기동) 붙어 있는 창에서 Esc 가 그중 하나만 취소해
+     주는 것은 사람이 예상할 수 없는 답이다. */
+  const wk = liveWorkerRows();
+  if (wk.length){
+    const go = await s9dlg({kind: "confirm", cap: cap || "다시 시작", stop: false,
+      title: `도는 무인 작업자 ${wk.length}건을 세우고 ${what} 바꿉니다`,
+      desc: "이 재기동은 이 창만 바꿉니다 — 세우지 않으면 그 작업자들은 옛"
+        + " 설정 그대로 계속 돕니다. 세우면 각 문서에 세운 사실과 사유가"
+        + " 남고, 나중에 그 카드의 깨우기로 다시 굴릴 수 있습니다.",
+      ok: "세우고 바꾸기", cancel: "그만두기"});
+    if (!go) return;
+    req = Object.assign({}, req, {stopWorkers: true});
   }
   const d = await restartPost(sid, req);
   await restartTell(T, sid, req, d, what, cap || "다시 시작");

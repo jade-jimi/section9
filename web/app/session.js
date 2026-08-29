@@ -561,7 +561,10 @@ async function restartPost(sid, req){
     const r = await fetch("/api/session/restart", {method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({sid, model: req.model || "", effort: req.effort || "",
-                            account: req.account || ""})});
+                            account: req.account || "",
+                            // 바꾸며 세운다 (REQ-20260829-024) — 사람이 그 창에서
+                            // 고른 그대로 서버에 넘긴다. 기본은 거짓이다.
+                            stop_workers: !!req.stopWorkers})});
     // 404 = serve가 이 API 이전 버전 — bin/s9 갱신 후 serve 프로세스가 남아
     // 구 핸들러를 서빙하는 상태 (반려 재작업: "서버 연결 실패" 오진 방지)
     return r.status === 404

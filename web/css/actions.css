@@ -59,6 +59,20 @@
   border-color:var(--hairline);background:var(--panel)}
 .acts button.wake[disabled]:hover{background:var(--panel);color:var(--muted);
   border-color:var(--hairline)}
+/* 도는 작업자 한 줄과 그것을 세우는 손잡이 (REQ-20260829-024) — 멈춤 줄·깨우기의
+   반대편이다. 여기서도 **새 컴포넌트를 만들지 않는다**: 같은 한 줄 문법(.rvpt)과
+   같은 행동 줄(.acts .deed)을 그대로 입어야 열 몇 벌의 스킨이 따라온다.
+   캡션 잉크는 멈춤 줄과 같은 in-progress 색이다 — 둘이 말하는 것은 같은 상태의
+   두 얼굴(나아가는 중 / 나아가지 않는 중)이라 잉크를 갈라 쓸 이유가 없고,
+   한 카드에 둘이 함께 서는 일도 사실상 없다(도는 것은 멈춘 것이 아니다). */
+.rvpt.work{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rvpt.work .rvcap{color:var(--c-inprogress)}
+.acts.stoprow{margin-top:5px}
+/* 세우는 중에는 눌리지 않는다 — 깨우기와 같은 규칙, 같은 잉크. */
+.acts button.stop[disabled]{cursor:default;color:var(--muted);
+  border-color:var(--hairline);background:var(--panel)}
+.acts button.stop[disabled]:hover{background:var(--panel);color:var(--muted);
+  border-color:var(--hairline)}
 /* 키보드로 닿은 자리가 보여야 손이 간다 — 카드(.card:focus-visible)와 같은 잉크 링 */
 .card .acts button:focus-visible,.viewer .acts button:focus-visible{
   outline:2px solid var(--text);outline-offset:1px}

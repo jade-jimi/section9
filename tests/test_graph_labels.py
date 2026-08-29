@@ -35,7 +35,8 @@
 import os
 import re
 import unittest
-from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
+from webasset import index_path, part   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
+GRAPH = part("app/graph.js")   # 이 시험이 묻는 것은 그래프 조각의 draw 다
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = index_path()
@@ -179,7 +180,13 @@ class GraphLabels(unittest.TestCase):
     # ---------- 도구 ----------
 
     def _fn(self, name):
-        m = re.search(r"function %s\([^)]*\)\{[\s\S]*?\n  \}" % name, self.src)
+        """그래프 조각 **안에서만** 찾는다 (REQ-20260829-027 이후).
+
+        이어 붙인 한 장에서 찾으면 먼저 오는 조각의 같은 이름이 잡힌다 —
+        진단 조각(`app/oops.js`, 맨 앞)이 자기 `draw()` 를 두자 실제로 그것을
+        집었다. 제품은 멀쩡한데 시험만 빨개지는 실패라, 묻는 자리를 좁힌다.
+        """
+        m = re.search(r"function %s\([^)]*\)\{[\s\S]*?\n  \}" % name, GRAPH)
         self.assertIsNotNone(m, "%s() 를 찾지 못했다" % name)
         return m.group(0)
 

@@ -169,9 +169,17 @@ class StallJudgmentServer(unittest.TestCase):
 
     # S6. 화면으로 나가는 통로에 실린다
     def test_s6_reaches_the_screen(self):
+        """`/api/catalog` 가 live 판정을 거친다.
+
+        찾는 범위를 **바이트 수가 아니라 그 갈래의 끝까지**로 잡는다. 앞서는
+        400자 창이었는데, REQ-20260829-025 가 보관 판정을 그 자리에 넣으면서
+        주석 여섯 줄이 앞에 붙자 창 밖으로 밀려났다 — 계약은 그대로인데
+        시험만 빨개졌다. 창의 크기는 계약이 아니다.
+        """
         src = open(S9, encoding="utf-8").read()
         i = src.index('elif parsed.path == "/api/catalog"')
-        self.assertIn("catalog_with_live()", src[i:i + 400],
+        j = src.index('elif parsed.path ==', i + 10)   # 다음 갈래 직전까지
+        self.assertIn("catalog_with_live()", src[i:j],
                       "/api/catalog 가 live 판정을 거치지 않는다")
 
 

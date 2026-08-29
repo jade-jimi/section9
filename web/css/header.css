@@ -188,7 +188,7 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
    지도록 명시(REQ-20260826-006). Board에는 타입 축이 없다. */
 .hrow2 select[hidden]{display:none}
 .chk{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);
-  cursor:pointer;user-select:none}
+  cursor:pointer;user-select:none;-webkit-user-select:none}
 .chk input{accent-color:var(--text)}
 .chk:has(input:disabled){opacity:.45;cursor:not-allowed}
 

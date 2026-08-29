@@ -27,7 +27,7 @@
    이다. 보이는 것은 그대로 범례 글자여야 하므로 버튼의 기본 옷(회색 판·보더·
    자기 글꼴·패딩)을 벗긴다. 패딩만 조금 돌려주고 같은 크기의 음수 마진으로
    되갚아, 손가락이 닿는 면은 넓어지되 범례의 간격 리듬(gap 18px)은 그대로다. */
-.gtype{cursor:pointer;user-select:none;background:none;border:0;
+.gtype{cursor:pointer;user-select:none;-webkit-user-select:none;background:none;border:0;
   font:inherit;color:inherit;padding:3px 4px;margin:-3px -4px}
 /* 선행 대기 엣지 범례 — 획 자체를 보여준다(색 칩이 아니라). 잉크색 = 캔버스의 획과 같은 색 */
 .gedge{display:inline-flex;align-items:center;gap:8px;color:var(--text)}

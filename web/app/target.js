@@ -460,24 +460,42 @@ function termAgentOpen(T, id){
   out.hidden = true;
   av.hidden = false;
   T.unread = 0; termJumpSync(T);   // 판이 바뀌면 셈도 그 판의 것으로 (REQ-061)
+  // 여는 순간 그 에이전트의 "새 N줄"은 읽은 것이 된다 (REQ-20260829-014 2차)
+  if (T.subs && T.subs[id]) T.subs[id].new = 0;
   av.innerHTML = ccLine("⚙", "var(--cc-green)",
     `<b>${esc(meta.type || "agent")}</b> <span style="color:var(--cc-faint)">${esc(meta.desc || "")}` +
     ` — ← 또는 esc 로 main 복귀</span>`);
   const load = async () => {
     if (TERM !== T || !T.agv || T.agv.id !== id) return;
+    const first = !T.agv.off;
     const d = await ccFetch(
       `/api/agentstream?session=${encodeURIComponent(T.sid)}` +
       `&agent=${encodeURIComponent(id)}&after=${T.agv.off}`, 6000);
     if (TERM !== T || !T.agv || T.agv.id !== id || !d) return;
     T.agv.off = d.offset || T.agv.off;
-    if ((d.events || []).length){
+    // 처음 열 때는 최근 것부터 상한만큼 그린다 — 하루를 돈 에이전트의 전문을
+    // 통째로 그리면 여는 데 몇 초가 걸리고, 정작 지금 하는 말은 맨 아래에 있다.
+    // 자른 사실은 감추지 않는다(전문은 이 에이전트의 transcript 가 원본).
+    const all = d.events || [];
+    const evs = first ? subCap(all) : all;
+    const cut = all.length - evs.length;
+    if (evs.length){
       const nearBottom = termAtBottom(av);
-      const h = d.events.map(termAgvLine).filter(Boolean).join("");
+      const h = (cut > 0
+        ? ccLine("·", "var(--cc-faint)",
+            `<span style="color:var(--cc-faint)">이전 ${cut}줄 생략 — 최근 ${evs.length}줄부터 보입니다</span>`,
+            "ccdim")
+        : "") + evs.map(termAgvLine).filter(Boolean).join("");
       av.insertAdjacentHTML("beforeend", h);
       if (nearBottom) av.scrollTop = av.scrollHeight;
       else T.unread += termCountLines(h);
       termJumpSync(T);
     }
+    // 읽은 자리를 스트립의 셈과 맞춘다 — 보고 있는 동안 쌓인 줄이 닫는 순간
+    // "새 줄"로 되살아나지 않게.
+    if (T.subs) T.subs[id] = {...(T.subs[id] || {type: meta.type || "",
+                                                desc: meta.desc || ""}),
+                              off: T.agv.off, new: 0};
   };
   load();
   T.agv.timer = setInterval(() => { if (!document.hidden) load(); }, 2000);
@@ -486,7 +504,12 @@ function termAgentOpen(T, id){
 }
 
 function termAgentClose(T){
-  if (T.agv){ clearInterval(T.agv.timer); T.agv = null; }
+  if (T.agv){
+    // 닫을 때의 자리가 다음 셈의 기준선이다 (REQ-20260829-014 2차)
+    const s = T.subs && T.subs[T.agv.id];
+    if (s){ s.off = T.agv.off || s.off; s.new = 0; }
+    clearInterval(T.agv.timer); T.agv = null;
+  }
   const out = $("#ccout"), av = $("#cc-agview");
   if (av) av.hidden = true;
   if (out) out.hidden = false;

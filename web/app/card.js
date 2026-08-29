@@ -8,6 +8,18 @@ function wokePending(id){
   if (Date.now() - t > WOKE_HOLD){ wokeAt.delete(id); return false; }
   return true;
 }
+/* 세우기도 같은 기억을 쓴다 (REQ-20260829-024). 다만 잠금은 짧다 — 세우기는
+   서버가 SIGTERM 뒤 최대 5초를 기다렸다 답하고, 그 답이 오면 곧 행에서
+   `worker` 가 사라져 손잡이 자체가 없어진다. 깨우기의 3분은 "스폰이 조용히
+   죽어도 다시 누를 수 있게"라는 다른 사정에서 온 수라 그대로 쓰지 않는다. */
+const stopAt = new Map();          // REQ id → 누른 시각(ms)
+const STOP_HOLD = 20000;
+function stopPending(id){
+  const t = stopAt.get(id);
+  if (t == null) return false;
+  if (Date.now() - t > STOP_HOLD){ stopAt.delete(id); return false; }
+  return true;
+}
 /* **멈춤 술어는 화면에 하나뿐이다** (REQ-20260828-041 2차 반려).
 
    화면에는 갈래가 둘 남아 있었다. ① 카드만 `!bl.length` 관문을 가져, 선행 대기
@@ -41,15 +53,25 @@ function stallState(r){
           face: r.live_kind === "spawn_failed" ? "dead" : "mild",
           reason: r.live_reason || ""};
 }
-/* 멈춤 한 줄과 그 손잡이를 **한 함수**가 짓는다 (REQ-20260828-041).
+/* 이 요청에 지금 **사람이 할 수 있는 일**을 짓는 한 함수 (REQ-20260828-041,
+   REQ-20260829-024).
 
    보드 카드와 문서 화면이 각자 글자를 가지면 한쪽만 고쳐진다 — 판정 버튼이
    그 이유로 세 번 반려됐다 (REQ-20260828-007). 같은 함수를 부르면 갈라질 자리가
    없다. 안 멈춘 행에는 빈 문자열을 돌려준다 — 부르는 쪽이 조건을 따로 갖지
-   않게 하려는 것이다(그 조건이 갈래를 낳았다). */
+   않게 하려는 것이다(그 조건이 갈래를 낳았다).
+
+   손잡이는 이제 둘이다. 멈춘 것은 **깨우고**, 도는 것은 **세운다**. 둘을 한
+   함수에 둔 이유도 같다: 부르는 자리가 둘(카드·문서)인데 조건을 따로 두면
+   같은 요청이 한 자리에선 세워지고 다른 자리에선 안 세워진다 — 이 화면이
+   이미 한 번 겪은 갈래다. 둘은 사실상 배타적이다(도는 것은 멈춘 것이 아니다).
+   그래도 겹쳐 서는 순간이 있으면 그대로 둘 다 그린다: 서버가 그렇게 말한
+   것이고, 화면이 서버의 말을 지우는 자리는 두지 않는다. */
 function stallHTML(r){
+  const work = workRowHTML(r);
   const st = stallState(r);
-  if (!st) return "";
+  if (!st && !work) return "";
+  if (!st) return work;
   // 마지막 시각을 못 읽으면 그 조각만 빠진다 — "· 마지막 " 로 끝나는 줄은 값이
   // 있는데 못 그린 것처럼 보인다.
   const last = fmtLast(r.updated || r.status_since);
@@ -63,7 +85,35 @@ function stallHTML(r){
     + `<div class="acts wakerow"><button type="button" class="deed wake"`
     + ` data-wake="${esc(r.id)}"${going ? " disabled" : ""}`
     + ` title="무인 작업자가 이 요청을 이어받아 계속한다">`
-    + `${going ? "깨우는 중…" : "깨우기"}</button></div>`;
+    + `${going ? "깨우는 중…" : "깨우기"}</button></div>` + work;
+}
+/* 도는 작업자와 그 손잡이 — 깨우기의 반대편 (REQ-20260829-024).
+
+   사용자: "반대로 진행 중인 작업들을 강제로 중단하는 기능도 만들어라. 그래야
+   계정을 변경하거나 모델을 바꿀 때 그 기능을 같이 섞어서 사용할 수 있다."
+
+   **조건은 서버가 준 `worker` 하나다.** 점(`live_kind`)으로 대신하지 않는다:
+   그 값은 클레임 **전**(spawned)만 말하고, 작업자가 문서를 집는 순간 direct 로
+   덮여 "지금 돌고 있다"는 사실이 행에서 사라진다 — 정작 세울 것이 있는 카드에
+   손잡이가 안 서는 조합이다.
+
+   줄을 함께 세우는 이유: 버튼만 있으면 무엇을 세우는지가 안 적힌다. 점은
+   얹어야 읽히는 툴팁이고, 이 카드에서 세워지는 것은 **사람이 안 보는 곳에서
+   도는 프로세스**라 카드 위에 글자로 한 번은 서야 한다.
+
+   분은 서버가 준 초를 단위만 바꿔 옮긴다 — 화면이 스스로 시계를 대면 CLI 와
+   다른 수를 말하게 된다 (REQ-20260828-036). */
+function workRowHTML(r){
+  if (!r || r.type !== "request" || !r.worker) return "";
+  const going = stopPending(r.id);
+  const mins = fmtStall(Math.floor((+r.worker.age || 0) / 60));
+  return `<div class="rvpt work" title="무인 작업자(pid ${esc(String(r.worker.pid || "?"))})`
+    + ` 가 이 요청을 맡아 돌고 있다 — 세우면 그 프로세스가 끝나고 사유가 문서에 남는다">`
+    + `<span class="rvcap">작업 중</span>무인 작업자가 ${mins} 돌고 있다</div>`
+    + `<div class="acts stoprow"><button type="button" class="deed stop"`
+    + ` data-stop="${esc(r.id)}"${going ? " disabled" : ""}`
+    + ` title="도는 무인 작업자를 세운다 — 계정·모델을 바꾸기 전에 쓴다">`
+    + `${going ? "세우는 중…" : "세우기"}</button></div>`;
 }
 /* ?stall=<분>[&stallkind=stalled|spawn_failed][&stalldep][&stallhold] — 멈춤 줄과
    `깨우기` 를 **진짜로 세운다** (REQ-20260828-041 반려).
@@ -81,6 +131,9 @@ function stallHTML(r){
    다음은 평소 그리던 길(cardHTML → stallHTML)이 그대로 그린다. 진단이 하는
    일은 값 하나를 넣는 것뿐이다. */
 function stallProbe(rows){
+  // 한 카드의 두 손잡이는 부르는 자리를 하나로 둔다 — 진단이 늘어날 때마다
+  // 파이프라인에 줄이 붙으면, 어느 진단이 어느 화면을 세우는지 흩어진다.
+  workProbe(rows);
   const m = /[?&]stall=(\d+)/.exec(location.search);
   if (!m || !Array.isArray(rows)) return rows;
   const mins = Math.max(1, Math.min(9999, +m[1] || 20));
@@ -106,6 +159,32 @@ function stallProbe(rows){
   }
   return rows;
 }
+/* ?work[=<분>][&workhold] — `작업 중` 줄과 `세우기` 를 진짜로 세운다
+   (REQ-20260829-024).
+
+   깨우기가 두 번 고쳐 올려지는 동안 한 번도 눈으로 확인된 적이 없던 이유가
+   여기 그대로 있다: 이 손잡이는 **그 순간 무인 작업자가 돌고 있어야** 그려진다.
+   사람이 캡처를 찍으려는 바로 그때 도는 작업자가 없으면 화면을 볼 길이 없고,
+   그러면 또 "만들었다는데 본 적은 없는" 것이 된다.
+
+   그림을 따로 짓지 않는다 — 서버가 줬을 값(`worker`)을 행에 얹고, 그다음은
+   평소 그리던 길(cardHTML → stallHTML → workRowHTML)이 그대로 그린다. */
+function workProbe(rows){
+  const m = /[?&]work(?:=(\d+))?\b/.exec(location.search);
+  if (!m || !Array.isArray(rows)) return rows;
+  const mins = Math.max(0, Math.min(9999, +(m[1] || 12)));
+  const hold = /[?&]workhold\b/.test(location.search);
+  let n = 0;
+  for (const r of rows){
+    if (r.type !== "request" || r.status !== "in-progress") continue;
+    if (!r.worker) r.worker = {pid: 424242 + n, age: mins * 60 + 37 * n};
+    // 누른 직후의 잠긴 얼굴(`세우는 중…`)은 서버 왕복 중에만 보인다 — 한 칸
+    // 걸러 잠가 두 얼굴이 한 화면에 서게 한다 (?stallhold 가 낸 선례).
+    if (hold && n % 2 === 0) stopAt.set(r.id, Date.now());
+    n++;
+  }
+  return rows;
+}
 /* ---- 작업 자리 (REQ-20260829-030) ----------------------------------------
 
    무인 작업자는 워크트리(격리된 사본)에 앉는 것이 기본이지만, 아직 커밋되지
@@ -124,6 +203,13 @@ function stallProbe(rows){
    모르는 것에 자리를 주면 판이 매일 그 자리를 먹는다(같은 규칙을 취소 열에서
    한 번 더 쓴다 — REQ-20260829-031). */
 const WS_PLACE = {main: "본 저장소", worktree: "워크트리"};
+/* 자리에는 **표가 붙는다** (REQ-20260829-030 2차 반려: "어떤 화면에서 확인할 수
+   있는지 모르겠다"). 1차는 낱말만 세웠는데, 메타 줄은 이미 이름·급·크기·태그가
+   서는 자리라 낱말 하나는 지나가는 태그로 읽혔다 — 실제로 보드에 값이 붙은
+   카드가 있었는데도 사람이 못 찾았다. 표는 헤더 칩과 **같은 ◇** 다: 카드의
+   「◇ 본 저장소」와 헤더의 「◇ 본 저장소에서 4건」이 한 가지를 말한다는 것을
+   표 하나로 잇는다(표를 둘로 나누면 배울 것이 둘이 된다). */
+const WS_MARK = "◇";
 /* 사유 → [사람 말, 사람이 무엇을 하면 풀리는가].
 
    둘째 칸은 **비어 있어도 된다.** 풀 것이 없는 자리에 할 일을 지어내면 그
@@ -131,6 +217,12 @@ const WS_PLACE = {main: "본 저장소", worktree: "워크트리"};
    실제로 손이 드는 것은 둘뿐이다 — 미커밋 코드(커밋)와 워크트리 쌓임(거두기). */
 const WS_FIX_COMMIT = "커밋하면 다음 작업자부터 다시 워크트리로 간다";
 const WS_FIX_SWEEP = "다 쓴 워크트리를 거두면 다시 워크트리로 간다";
+/* 자리가 **나에게 무슨 뜻인가** — 자리 이름·사유보다 이것이 먼저 궁금하다.
+   사유는 왜 저기 앉았는지를 말할 뿐, 내가 지금 보고 있는 화면에서 그 작업을
+   확인할 수 있는지는 말하지 않는다. 그게 이 요청이 애초에 세우려던 사실이다.
+   자리 이름을 문장 안에 다시 적지 않는다 — 이름은 WS_PLACE 한 곳에서만 온다. */
+const WS_MEANS = {main: "고친 것은 지금 보고 있는 이 화면에 바로 나타납니다",
+  worktree: "고친 것은 따로 떼어 둔 사본에 있어, 커밋되기 전까지 이 화면에 나타나지 않습니다"};
 const WS_WHY = {
   "off": ["워크트리를 쓰지 않도록 설정돼 있다", ""],
   "fresh": ["미커밋 코드가 없어 새 워크트리를 냈다", ""],
@@ -170,11 +262,46 @@ function wsTitle(s){
   return `이 요청을 이어받는 무인 작업자가 ${where}에서 돈다`
     + (s.why ? ` — ${s.why}` : "") + (s.fix ? `. ${s.fix}` : "");
 }
+/* 표 + 낱말, 그리고 **누를 수 있다** (REQ-20260829-030 2차 반려).
+
+   1차는 손 위의 글(title)에만 설명을 뒀다. 손 위의 글은 찾은 사람에게만 열리는
+   문이라, 못 찾았다는 반려에 답이 되지 못한다 — 이 화면은 이미 같은 값을 두 번
+   치렀다(판정 창의 상태 이름을 귀띔에서 문장으로 내린 REQ-20260828-007 반려).
+   그래서 표를 붙여 찾게 하고, 누르면 창이 열려 읽게 한다. 손 위의 글은 그대로
+   둔다: 빠른 쪽은 여전히 얹기만 하면 된다.
+
+   `<span>` 이다. 버튼 요소로 세우면 지우개 규칙(배경·테두리 없애기)이 붙는데,
+   이 칩의 재질 계약은 "색면·테두리를 **주지 않는다**"라 지울 것도 없어야 맞다. */
 function wsChip(r){
   const s = wsState(r);
   if (!s) return "";
-  return `<span class="wsat${s.kind === "main" ? " here" : ""}"`
-    + ` title="${esc(wsTitle(s))}">${esc(s.place)}</span>`;
+  return `<span class="wsat${s.kind === "main" ? " here" : ""}" role="button"`
+    + ` tabindex="0" data-wsat="${esc(r.id)}"`
+    + ` title="${esc(wsTitle(s))} (눌러서 자세히)">`
+    + `<i class="wsm">${WS_MARK}</i>${esc(s.place)}</span>`;
+}
+/* 칩을 누르면 그 요청 **하나**의 자리를 편다 (REQ-20260829-030 2차).
+
+   헤더 칩(wsBoardNote)은 저장소 하나의 사정을 모아 말하고, 이 창은 눈앞의 카드
+   한 장을 말한다 — 사람이 누른 것이 그 카드라, 답도 그 카드여야 한다. 글은
+   새로 짓지 않는다: 자리·사유·푸는 법은 wsState 가 이미 고른 것이고, 여기서
+   더하는 것은 "그래서 나에게 무슨 뜻인가"(WS_MEANS) 한 줄뿐이다.
+
+   **뜻이 사유보다 먼저다** (3차 반려). 2차는 사유 → 뜻 → 푸는 법 순이었는데,
+   사람이 이 칩을 누르며 품은 질문은 "왜 저기 앉았나"가 아니라 "그래서 이걸
+   **어느 화면에서 확인하나**"다 — 반려문이 그대로 그 문장이었다. 창의 첫 줄이
+   질문의 답이 아니면 사람은 답을 못 찾은 채로 창을 닫는다. 사유는 답을 받은
+   뒤에 궁금해지는 것이라 둘째 줄로 내린다. */
+function wsOpen(id){
+  const s = wsState(catFind(id));
+  if (!s) return;
+  const where = s.kind === "worktree" && s.wt ? `${s.place} ${s.wt}` : s.place;
+  s9dlg({kind: "alert", cap: "작업 자리", stop: false,
+    title: `${shortId(id)} 를 이어받은 작업자는 ${where}에서 돕니다`,
+    descHtml: `<div class="wsrow wsans">${esc(WS_MEANS[s.kind] || "")}.</div>`
+      + (s.why ? `<div class="wsrow">${esc(s.why)}.</div>` : "")
+      + (s.fix ? `<div class="wsfix">${esc(s.fix)}.</div>` : ""),
+    ok: "닫기"});
 }
 /* 저장소 하나의 사실은 카드마다 되풀이하지 않는다 (REQ-20260829-030).
 
@@ -200,7 +327,7 @@ function wsBoardNote(){
   }
   const n = hit.length;
   const line = `요청 ${n}건이 워크트리 대신 본 저장소에서 돌고 있습니다`;
-  return {key: "ws", tone: "sv-note", mark: "◇",
+  return {key: "ws", tone: "sv-note", mark: WS_MARK,
     label: `본 저장소에서 ${n}건`,
     title: `${line} — 눌러서 이유와 푸는 법 보기`,
     act: () => s9dlg({kind: "alert", cap: "작업 자리", stop: false, title: line,
@@ -210,8 +337,8 @@ function wsBoardNote(){
             + ids.map(id => esc(shortId(id))).join(" · ")
             + `</span> ${esc(why)}.</div>`).join("")
           + `<div class="wsfix">${esc(fix)}.</div>`).join("")
-        + `<div class="wsrow">본 저장소에서 도는 동안에도 일은 그대로 진행되고,`
-        + ` 고친 것은 지금 보고 있는 이 화면에 바로 나타납니다.</div>`,
+        + `<div class="wsrow">격리 없이 도는 동안에도 일은 그대로 진행되고,`
+        + ` ${esc(WS_MEANS.main)}.</div>`,
       ok: "닫기"})};
 }
 /* ?ws[=main/dirty-spine,worktree/fresh,…] — 자리 표시를 **진짜로 세운다**.
@@ -325,6 +452,59 @@ async function wakeDoc(id){
 function wakeDlg(id, d){
   return s9dlg({kind: "alert", cap: d.ok ? "깨움" : "깨우지 않음", stop: false,
     doc: shortId(id), title: d.message, ok: "닫기"});
+}
+/* 눌린 순간 화면이 먼저 답한다 — 깨우기와 같은 규칙이다. */
+function paintStop(id){
+  const going = stopPending(id);
+  document.querySelectorAll(`[data-stop="${CSS.escape(id)}"]`).forEach(b => {
+    b.disabled = going;
+    b.textContent = going ? "세우는 중…" : "세우기";
+  });
+}
+/* 도는 작업자를 사람이 눌러 세운다 (REQ-20260829-024).
+
+   **먼저 묻는다.** 깨우기는 아무 일도 안 하던 것을 굴리는 일이라 되돌릴 것이
+   없지만, 세우기는 지금 일하고 있는 프로세스를 끝낸다 — 되돌릴 수 없는 쪽에는
+   한 걸음을 더 둔다(계정 창이 "멈추고 바꾸기"를 묻는 그 자리와 같은 규칙).
+   무엇을 잃는지도 함께 적는다: 하던 일은 문서에 적힌 데까지만 남는다.
+
+   답은 서버의 `message` 를 그대로 옮긴다 — `action` 으로 문구를 갈라 쓰면 같은
+   말이 서버와 화면 두 벌이 되고, 그때부터 한 벌만 고쳐진다(깨우기가 세운
+   규칙). 화면이 읽는 것은 `ok` 와 `message` 둘뿐이다. */
+async function stopDoc(id){
+  if (stopPending(id)) return;              // 연타 — 이미 세우는 중이다
+  const go = await s9dlg({kind: "confirm", cap: "세우기", stop: false,
+    doc: shortId(id),
+    title: "이 요청을 맡아 도는 무인 작업자를 세울까요?",
+    desc: "지금 하던 일은 문서에 적힌 데까지만 남고, 그 뒤로 진행 중이던 것은"
+      + " 사라집니다. 세운 사실과 사유는 문서에 남습니다. 다시 굴리려면 카드가"
+      + " 멈춤으로 바뀐 뒤 깨우기를 누르면 됩니다.",
+    ok: "세우기", cancel: "그대로 두기"});
+  if (!go) return;
+  stopAt.set(id, Date.now());
+  paintStop(id);
+  let d = null, reached = false;
+  try{
+    const r = await fetch("/api/stop", {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(withAs({id}))});  // actor는 서버 whoami 파생
+    reached = true;
+    d = await r.json();
+  }catch(e){}
+  stopAt.delete(id); paintStop(id);
+  if (!d || !d.message){
+    // 옛 서버에는 이 손잡이가 아직 없다 — 깨우기가 세운 그 문장과 같은 자리다.
+    s9dlg({kind: "alert", cap: "연결", stop: true,
+      title: reached ? "서버가 세우기를 알지 못합니다"
+                     : "서버에 닿지 못했습니다",
+      desc: reached ? "s9 serve 를 다시 띄우면 이 손잡이가 붙습니다."
+                    : "잠시 뒤 다시 시도해 주세요. 서버가 재기동 중일 수 있습니다.",
+      ok: "닫기"});
+    return;
+  }
+  s9dlg({kind: "alert", cap: d.ok ? "세움" : "세우지 않음", stop: false,
+    doc: shortId(id), title: d.message, ok: "닫기"});
+  if (d.ok) refreshCatalog(true);
 }
 
 /* 카드가 내주는 긴 글 한 덩어리 — 세 줄 + (잘렸으면) 그 자리에서 펴는 손잡이

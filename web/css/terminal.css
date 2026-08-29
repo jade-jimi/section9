@@ -155,7 +155,7 @@
 .ccjump.unread:hover{opacity:.88;color:var(--cc-bg)}
 .ccjump:focus-visible{outline:1px solid var(--cc-text);outline-offset:2px}
 .ccout .ln{display:flex;gap:9px;margin:0 0 13px}
-.ccout .ln .g{flex:none;width:14px;text-align:left;user-select:none}
+.ccout .ln .g{flex:none;width:14px;text-align:left;user-select:none;-webkit-user-select:none}
 .ccout .ln .b{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word}
 .ccout .ln.sub{margin:-9px 0 13px;color:var(--cc-dim)}   /* ⎿ 연속줄 — 앞 줄에 붙는다 */
 .ccout .ln.sub .g{color:var(--cc-faint)}

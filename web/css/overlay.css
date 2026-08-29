@@ -181,6 +181,11 @@
    문서 주소(mono 흐린 글자)가 이미 줄의 시작을 표시한다. */
 .dlgbox .wsrow{margin-top:7px}
 .dlgbox .wsrow .path{margin-right:5px}
+/* 질문의 답은 잉크로 (REQ-20260829-030 3차). 사람이 이 창을 연 이유가 이 한
+   줄이라 나머지 설명과 같은 농도로 서면 안 된다 — 흐린 문장 셋 중 하나는
+   찾아야 읽히지만, 잉크 한 줄은 눈이 먼저 앉는다. 사유·푸는 법을 흐리게
+   내리지는 않는다: 본문 대비 4.5:1 아래로 내려가는 문장을 만들지 않는다. */
+.dlgbox .wsans{color:var(--text)}
 /* 푸는 법은 사유 아래에 한 번만 선다. 잉크도 띠도 올리지 않는다 — 한 창의
    강조는 주 행동 버튼 하나뿐이라(s9-design 2), 이 줄은 들여쓰기와 여백으로만
    갈린다. 사유가 여럿이면 그 아래 한 줄이 셋을 받는다. */
@@ -319,7 +324,7 @@
    한 번 누르면 통째로 잡히게 해 두어야 옮겨 적지 않는다. */
 .dlgbox .dlgcmd{display:block;margin-top:8px;padding:5px 8px;font-family:var(--mono);
   font-size:11px;line-height:1.55;color:var(--text);border:1px solid var(--border);
-  white-space:pre-wrap;word-break:break-all;user-select:all}
+  white-space:pre-wrap;word-break:break-all;user-select:all;-webkit-user-select:all}
 /* 곁들이는 축(깊이) — 고르는 것이지 실행하는 것이 아니라 칩으로 둔다.
    실행은 아래 목록의 줄이 한다. */
 .dlgchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}

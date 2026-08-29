@@ -98,20 +98,54 @@ def probe_new_port(budget=12.0):
             "error": f"{budget:.0f}초 안에 공개되지 않음", "latency": None}
 
 
+def etime_sec(tok):
+    """`[[dd-]hh:]mm:ss` → 초. 맥의 ps 에는 초 단위 `etimes` 가 없다."""
+    tok = (tok or "").strip()
+    if tok.isdigit():
+        return int(tok)
+    days = 0
+    if "-" in tok:
+        d, _, tok = tok.partition("-")
+        if not d.isdigit():
+            return None
+        days = int(d)
+    parts = tok.split(":")
+    if not parts or not all(p.isdigit() for p in parts) or len(parts) > 3:
+        return None
+    sec = 0
+    for p in parts:
+        sec = sec * 60 + int(p)
+    return days * 86400 + sec
+
+
 def ps_rows():
-    """(pid, ppid, 경과초, 커맨드) — ps 한 번으로 끝낸다(의존성 0)."""
-    try:
-        out = subprocess.run(["ps", "-eo", "pid,ppid,etimes,args"],
-                             capture_output=True, text=True, timeout=10).stdout
-    except Exception:
-        return []
-    rows = []
-    for line in out.splitlines()[1:]:
-        parts = line.strip().split(None, 3)
-        if (len(parts) == 4 and parts[0].isdigit() and parts[1].isdigit()
-                and parts[2].isdigit()):
-            rows.append((int(parts[0]), int(parts[1]), int(parts[2]), parts[3]))
-    return rows
+    """(pid, ppid, 경과초, 커맨드) — ps 한 번으로 끝낸다(의존성 0).
+
+    맥의 `ps` 는 GNU 가 아니다 (REQ-20260829-037): `etimes` 키워드가 없어
+    옛 형태는 **아무 줄도 못 내고 조용히 빈 목록**이었다 — 그러면 진단이
+    "s9 serve 프로세스 0개"라고 태연히 거짓말한다. BSD 형태를 폴백으로 둔다.
+    """
+    forms = ((["ps", "-eo", "pid,ppid,etimes,args"], True),
+             (["ps", "-A", "-ww", "-o", "pid=,ppid=,etime=,command="], False))
+    for argv, skip_header in forms:
+        try:
+            out = subprocess.run(argv, capture_output=True, text=True,
+                                 timeout=10).stdout
+        except Exception:
+            continue
+        rows = []
+        for line in out.splitlines()[1 if skip_header else 0:]:
+            parts = line.strip().split(None, 3)
+            if len(parts) != 4 or not parts[0].isdigit() \
+                    or not parts[1].isdigit():
+                continue
+            sec = etime_sec(parts[2])
+            if sec is None:
+                continue
+            rows.append((int(parts[0]), int(parts[1]), sec, parts[3]))
+        if rows:
+            return rows
+    return []
 
 
 # 부모가 이것들이면 진짜 부모(테스트 러너)는 이미 죽어 재양육된 것이다.

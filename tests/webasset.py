@@ -106,3 +106,18 @@ def _drop(path):
         os.unlink(path)
     except OSError:
         pass
+
+
+def part(name):
+    """조각 **하나**의 원문을 준다 (`part("app/graph.js")`).
+
+    가른 뒤 새로 생긴 함정 하나를 막는 문이다: `source()` 는 조각 서른 몇 개를
+    이어 붙이므로, 거기서 `function draw(` 를 정규식으로 찾으면 **먼저 오는
+    조각의 같은 이름**이 잡힌다. 실제로 REQ-20260829-038 이 진단 조각(`oops.js`,
+    맨 앞)에 자기 `draw()` 를 두자 그래프 시험이 그것을 집었다 — 제품은 멀쩡한데
+    시험만 빨개지는, 읽기 어려운 실패다.
+
+    어느 조각에 있는지가 계약의 일부인 것을 물을 때는 이것을 써라. 이어 붙인
+    한 장을 봐야 하는 계약(순서·캐스케이드·전체 존재)은 `source()` 그대로다.
+    """
+    return _read(os.path.join(WEB, *name.split("/")))

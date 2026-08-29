@@ -157,7 +157,17 @@ class TestReworkWatcher(unittest.TestCase):
         self.cli("eeee5555", "status", g, "review", "--note", "사용자 판정만 남음",
                  "--force")
 
-        # W10 (REQ-20260824-028). 승인 메모 → 후속 무인 스폰(1회), 소비 후 재스폰 없음
+        # W10. 승인 메모는 **무인 작업자를 띄우지 않는다** (REQ-20260830-002).
+        #
+        # 종전 계약: 승인 메모 → 후속 무인 스폰 1회 (REQ-20260824-028).
+        # 그 경로는 언제나 **done 문서**로 갔다 — 반려 루프와 대칭이라고 썼지만
+        # 대칭이 아니었다. 실사고 2026-08-30 00:30: 18:56 에 닫힌 문서에 작업자가
+        # 떠서 `bin/s9` 를 리스로 잡고 대기 중이던 일들을 그만큼 더 막았다.
+        # 게다가 이 저장소는 승인 전이에 근거 메모를 요구하므로 그 경로는
+        # 예외가 아니라 상시였다(2026-08-29 실측: 20슬롯 중 4건).
+        #
+        # 잃는 것은 없다 — 메모는 **소비되지 않은 채** 남고 훅이 다음 리드
+        # 세션 앞에 그대로 놓는다. 그것이 028 의 본래 경로였다.
         ap = self.cli("eeee5555", "new", "request", "--title", "approve-case",
                       "--summary", "t", "--goal", "t", "--size", "S",
                       "--user", "alice", "--body", "x").split()[0]
@@ -166,14 +176,11 @@ class TestReworkWatcher(unittest.TestCase):
         self.cli("eeee5555", "status", ap, "review", "--note", "t")
         self.cli(None, "status", ap, "done", "--note", "승인: 후속으로 구현까지 진행해줘")
         spawned, calls = self.tick(grace=0)
-        self.assertIn(ap, spawned, (spawned, self.spawn_log()))
-        argv = [a for a in calls if ap in " ".join(map(str, a))][0]
-        p = [s for s in argv if isinstance(s, str) and ap in s][0]
-        self.assertIn("승인 후속", p)
-        self.assertIn("구현까지 진행해줘", p)
-        self.assertIn("<<메모>>", p)
-        spawned, _ = self.tick(grace=0)
-        self.assertNotIn(ap, spawned, spawned)  # 소비됨 — 재스폰 없음
+        self.assertNotIn(ap, spawned, (spawned, self.spawn_log()))
+        self.assertEqual([a for a in calls if ap in " ".join(map(str, a))], [],
+                         "끝난 문서에 무인 작업자를 띄웠다")
+        self.assertIn(ap, self.cli("eeee5555", "approvals"),
+                      "메모까지 사라지면 사람도 못 본다 — 잃는 것이 생긴다")
 
         # W1. 반려 아닌 in-progress(open→in-progress)는 워처 대상 아님
         plain = self.cli("eeee5555", "new", "request", "--title", "plain",

@@ -181,7 +181,11 @@ class TheCommand(unittest.TestCase):
         """죽이는 자리는 하나여야 한다 — 두 곳이면 한 곳만 게이트를 지킨다."""
         i = self.src.find("def worker_stop(")
         self.assertGreater(i, 0, "worker_stop() 이 없다")
-        blk = self.src[i:i + 2200]
+        # 다음 최상위 함수까지가 이 함수다. 글자 수로 잘라 두면 주석 몇 줄에
+        # 창이 밀려 **제품은 멀쩡한데 시험만 빨개진다** (REQ-20260830-002 에서
+        # 실제로 그랬다).
+        j = self.src.find("\ndef ", i + 1)
+        blk = self.src[i:j if j > 0 else len(self.src)]
         self.assertIn("SIGTERM", blk)
         self.assertIn("SIGKILL", blk)
 

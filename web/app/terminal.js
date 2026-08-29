@@ -118,31 +118,48 @@ async function termTargetLoop(T){
     T.srvAgentsOk = true;
     T.srvAgents = d.agents || [];
     termAgentsRender(T);
+    // ?agview: 진단·헤드리스 캡처용 — 스트립의 마지막 에이전트 판을 열어 둔다
+    // (?mpanel·?depall 선례). 이 판은 클릭으로만 열려서 캡처로 볼 길이 없었고,
+    // 그래서 "로그가 저기서 나오는가"를 사람 손 없이는 확인할 수 없었다.
+    if (!T.agv && /[?&]agview/.test(location.search)){
+      // 서 있는 행이 없으면 마지막 에이전트라도 연다 — 캡처는 사람이 없는
+      // 시간에 찍히고, 그때 활성 에이전트가 없다고 판이 안 보이면 안 된다.
+      const act = T.srvAgents.filter(a => a.show ?? a.active);
+      const pick = (act.length ? act : T.srvAgents).slice(-1)[0];
+      if (pick) termAgentOpen(T, pick.id);
+    }
   };
   T.agTick = agTick;          // 탭 복귀 즉시 맞추기 위해 노출 (REQ-20260826-016)
   agTick();
   T.timers.push(setInterval(agTick, 10000));
-  /* 서브에이전트 줄 따라잡기 2.5s (REQ-20260829-014) — 스트립이 아는 에이전트
-     마다 **자기 offset** 으로 증분만 받아 리드 줄과 같은 버퍼에 넣는다.
-     스트립(10s)보다 잦은 것은 이게 말이 흐르는 자리라서다: 스트립은 "살아
-     있나"를, 이 틱은 "무슨 말을 하나"를 맡는다. */
-  const subTick = async () => {
+  /* 에이전트가 말하고 있다는 신호 2.5s (REQ-20260829-014 2차) — 말 자체는
+     그 에이전트의 판에서 읽는다(스트립 행 클릭 · ← 키). 여기서는 **몇 줄이
+     쌓였는지만** 센다: 에이전트마다 자기 offset 으로 증분을 받아 줄 수를
+     더하고 본문은 버린다. 스트립(10s)보다 잦은 것은 이게 "지금 말하는 중"을
+     말하는 자리라서다.
+
+     처음 본 에이전트는 세지 않고 기준선만 잡는다 — 붙자마자 "새 300줄"이
+     떠 있으면 그 수는 새것이 아니라 과거이고, 그런 배지는 두 번째부터
+     아무도 안 본다. 지금 열어 둔 에이전트도 세지 않는다(읽고 있는 중이다). */
+  const agNewTick = async () => {
     if (document.hidden || tab !== "terminal" || !T.sid) return;
     const sid = T.sid;
     for (const p of subFollowPlan(T.subs, T.srvAgents || [])){
+      if (T.agv && T.agv.id === p.id) continue;
       const d = await ccFetch(
         `/api/agentstream?session=${encodeURIComponent(sid)}` +
         `&agent=${encodeURIComponent(p.id)}&after=${p.after}`, 6000);
       if (TERM !== T || T.sid !== sid) return;
       if (!d) continue;         // 한 번 실패해도 offset 은 그대로 — 다음 틱이 받는다
+      const prev = T.subs[p.id];
       T.subs[p.id] = {off: typeof d.offset === "number" ? d.offset : p.after,
-                      type: p.type, desc: p.desc, tail: p.tail};
-      const evs = subTag(d.events || [], p);
-      if (evs.length){ T.buf.push(...evs); termScheduleFlush(T); }
+                      type: p.type, desc: p.desc, tail: p.tail,
+                      new: subUnread(prev, (d.events || []).length)};
+      termAgentsRender(T);
     }
   };
-  T.subTick = subTick;
-  T.timers.push(setInterval(subTick, 2500));
+  T.agNewTick = agNewTick;
+  T.timers.push(setInterval(agNewTick, 2500));
 }
 
 /* ------- 컨텍스트 압축 중 (REQ-20260827-065) -------
@@ -290,40 +307,27 @@ async function termAttach(T, nt){
     await new Promise(r => setTimeout(r, 400));
     return ccFetch(url);
   };
-  const [logR, evR, agR] = await Promise.all([
+  const [logR, evR] = await Promise.all([
     retry("/api/chat/log?sid=" + encodeURIComponent(sid)),
     retry("/api/stream?session=" + encodeURIComponent(sid)),
-    ccFetch("/api/agents?session=" + encodeURIComponent(sid), 5000),
   ]);
   if (TERM !== T || T.sid !== sid) return;
   const log = logR || {lines: []}, ev = evR || {events: [], offset: 0};
   T.chatCount = (log.lines || []).length;
   T.offset = ev.offset || 0;
   T.evCount = (ev.events || []).length;
-  // 붙일 때의 과거도 한 줄기다 (REQ-20260829-014) — 에이전트 파일을 함께 읽어
-  // 리드 이력과 시각 순으로 겹친다. 이걸 안 하면 이미 도는 세션에 붙은 사람은
-  // "지금부터의 에이전트 말"만 보고 그 앞은 여전히 빈 자리로 읽는다.
-  const subInit = await Promise.all(
-    subBackfillPlan((agR || {}).agents || []).map(async p => {
-      const d = await ccFetch(
-        `/api/agentstream?session=${encodeURIComponent(sid)}` +
-        `&agent=${encodeURIComponent(p.id)}&after=0`, 6000);
-      return [p, d];
-    }));
-  if (TERM !== T || T.sid !== sid) return;
-  const subEvs = [];
-  for (const [p, d] of subInit){
-    if (!d) continue;
-    T.subs[p.id] = {off: d.offset || 0, type: p.type, desc: p.desc,
-                    tail: p.tail};
-    subEvs.push(...subTag(subCap(d.events || []), p));
-  }
-  T.evCount += subEvs.length;
-  const merged = subOrder([
+  /* main 판은 **리드의 판이다** (REQ-20260829-014 2차). 서브에이전트의 말을
+     여기 섞었더니 리드의 문장 사이가 남의 도구 호출 수백 줄로 밀려, 정작
+     읽어야 할 말이 안 보였다. 에이전트의 말이 갈 자리는 하단 스트립에서 고르는
+     그 에이전트의 판(#cc-agview)이고, 여기에는 **새 줄이 쌓였다는 신호**만
+     온다(termAgentsRender 의 "새 N줄"). */
+  const merged = [
     ...(log.lines || []).map(l => ({...l, __chat: true})),
     ...(ev.events || []),
-    ...subEvs,
-  ]);
+  ].sort((a, b) => {
+    const ka = ccTsKey(a), kb = ccTsKey(b);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
   const html = ccRenderBatch(T, merged);
   const w = $("#cc-wait");
   if (w) w.insertAdjacentHTML("beforebegin", html ||
@@ -332,6 +336,9 @@ async function termAttach(T, nt){
   const out = $("#ccout");
   if (out) out.scrollTop = out.scrollHeight;
   termMeta(T); termSpinnerEval(T); termAgentsRender(T);
+  // 붙자마자 스트립을 채운다 — 10초 폴을 기다리면 방금 붙은 세션에서 도는
+  // 에이전트가 그동안 없는 것처럼 보인다(누를 자리가 안 보이면 로그도 없다).
+  if (T.agTick) T.agTick();
   termConnectSSE(T);
 }
 
@@ -421,9 +428,7 @@ function termScheduleFlush(T){
   T.raf = requestAnimationFrame(() => {
     T.raf = 0;
     if (TERM !== T) return;
-    // 한 틱에 두 원천(리드·에이전트)이 함께 들어오므로 그릴 때 시각 순으로
-    // 겹친다 (REQ-20260829-014). 시각이 같으면 받은 순서가 그대로다.
-    const evs = subOrder(T.buf); T.buf = [];
+    const evs = T.buf; T.buf = [];
     if (evs.length) termAppendBatch(T, evs);
   });
 }
@@ -645,11 +650,36 @@ function termSpinnerFinalize(T, base){
   if (w) w.hidden = true;
 }
 
+/* ==== subagent unread core (pure) — 쌓인 줄의 셈 (REQ-20260829-014 2차) ====
+   에이전트의 말은 그 에이전트의 판에서 읽는다. main 판에 남는 것은 "저기서
+   몇 줄이 쌓였다"는 셈 하나뿐이다 — 그래서 이 셈이 거짓이면 안 된다.
+
+   처음 본 에이전트는 세지 않는다(기준선만 잡는다). 붙자마자 "새 300줄"이
+   떠 있으면 그건 새것이 아니라 과거이고, 그런 배지는 두 번째부터 아무도 안
+   본다. 읽은 뒤(판을 열었다 닫은 뒤)에는 0에서 다시 센다. */
+function subUnread(prev, n){
+  if (!prev) return 0;                       // 첫 만남 = 기준선
+  return Math.max(0, (prev.new || 0) + Math.max(0, n || 0));
+}
+/* 배지 문구는 셈이 0이면 아예 없다 — 없는 것을 "0줄"이라고 적지 않는다. */
+function subNewMark(n){
+  return n > 0 ? `새 ${n > 99 ? "99+" : n}줄` : "";
+}
+/* ==== /subagent unread core ==== */
+
 /* ---- 활성 에이전트 스트립 (L8): Agent 스폰 = 추가, task-notification = 종결.
    상태 스트립의 작은 컨테이너만 재렌더 — 입력줄과 무관. ---- */
 function termAgentSpawn(T, type, desc){
   T.agents.push({type, desc});
   if (T.agents.length > 5) T.agents.shift();
+  // 스폰 줄을 그린 순간 스트립을 맞춘다 (REQ-20260829-014 2차) — 10초 폴을
+  // 기다리면 "맡겼다"는 말과 "누를 자리"가 십 초 어긋나고, 그 사이에 사람은
+  // 로그를 볼 자리가 없다고 읽는다. 과거 줄을 되그릴 때 몰려 오므로 한 번으로
+  // 묶는다.
+  if (T.agTick){
+    clearTimeout(T.agSoonT);
+    T.agSoonT = setTimeout(() => { if (TERM === T && T.agTick) T.agTick(); }, 600);
+  }
 }
 function termAgentDone(T){
   T.agents.shift();   // 통지엔 타입 정보가 없다 — 가장 오래된 활성분 종결로 근사
@@ -699,6 +729,9 @@ function termAgentsRender(T){
       const quiet = !a.active;   // 서 있되 조용한 행
       const now = Date.now();
       const dot = sel ? "●" : quiet ? "◌" : "○";
+      // 저 판에 쌓인 줄 (REQ-20260829-014 2차) — 색면이 아니라 글자로 말한다.
+      // 이게 "말이 흐르고 있다"의 유일한 신호이자, 누를 자리를 가리키는 손이다.
+      const nmark = sel ? "" : subNewMark(((T.subs || {})[a.id] || {}).new || 0);
       const qs = quiet
         ? `${AGENT_QUIET_MARK} <span data-base="${now - (a.quiet || 0) * 1000}">${fmtDur(a.quiet || 0)}</span> · `
         : "";
@@ -706,7 +739,8 @@ function termAgentsRender(T){
         `<span class="g"${sel ? ' style="color:var(--cc-green)"' : ""}>${dot}</span> <b>${esc(a.type)}</b> ` +
         `<span style="color:var(--cc-faint)">${esc(a.label || a.desc)}</span>` +
         `<button class="agtgt${tgt ? " on" : ""}" data-target="${esc(a.id)}" title="이 에이전트를 전송 대상으로 지목 — 다음 메시지를 리드가 중계한다">→</button>` +
-        `<span class="r">${sel ? "viewing · " : ""}${qs}<span data-base="${now - (a.elapsed || 0) * 1000}">${fmtDur(a.elapsed)}</span> · ↓ ${fmtTok(a.tokens)} tokens</span></div>`;
+        `<span class="r">${nmark ? `<span style="color:var(--cc-green)">${nmark}</span> · ` : ""}` +
+        `${sel ? "viewing · " : ""}${qs}<span data-base="${now - (a.elapsed || 0) * 1000}">${fmtDur(a.elapsed)}</span> · ↓ ${fmtTok(a.tokens)} tokens</span></div>`;
     }).join("");
     termMainRow(T);
     return;

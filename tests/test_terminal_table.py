@@ -89,10 +89,38 @@ class TerminalBlocks(unittest.TestCase):
         self.assertRegex(blk, r'endsWith\(":"\)')
 
     def test_escaped_pipe_stays_a_character(self):
-        r"""셀 안의 `\|` 는 칸을 가르지 않는다."""
-        c = js_regex(self.src, "CCTBL_CELL")
-        self.assertEqual(len(c.split(r"a\|b|c")), 2,
+        r"""셀 안의 `\|` 는 칸을 가르지 않는다.
+
+        규칙은 여태 `CCTBL_CELL = /(?<!\\)\|/` 한 줄이었는데, lookbehind 는
+        사파리 16.4 에서야 들어왔고 그전 사파리는 그것을 **문법 오류**로 다뤄
+        `ccrender.js` 를 통째로 죽였다 (REQ-20260829-038). 그래서 글자를 직접
+        훑는 `ccSplitCells` 로 내려왔다 — 뜻은 그대로다.
+
+        붙잡는 자리를 정규식 상수에서 **판정 그 자체**로 옮긴다. 시험이 구현의
+        모양을 붙잡고 있으면, 같은 뜻으로 내려 쓰는 것조차 빨간불이 된다.
+        """
+        m = re.search(r"function ccSplitCells\(t\)\{(.+?)\n\}", self.src, re.S)
+        self.assertIsNotNone(m, "칸을 가르는 자리(ccSplitCells)를 찾지 못했다")
+        body = m.group(1)
+        self.assertIn('t[i] === "|"', body, "파이프에서 가르지 않는다")
+        self.assertIn(r't[i - 1] !== "\\"', body,
+                      r"앞 글자가 \ 인지를 안 본다 — \| 가 칸을 가르게 된다")
+
+        # 그 판정을 그대로 파이썬으로 옮겨 뜻을 확인한다 (구현이 아니라 규칙을)
+        def split(t):
+            out, cur = [], ""
+            for i, ch in enumerate(t):
+                if ch == "|" and (i == 0 or t[i - 1] != "\\"):
+                    out.append(cur)
+                    cur = ""
+                    continue
+                cur += ch
+            out.append(cur)
+            return out
+
+        self.assertEqual(len(split(r"a\|b|c")), 2,
                          r"이스케이프한 \| 로는 쪼개지 않는다")
+        self.assertEqual(split("a|b|c"), ["a", "b", "c"], "맨 파이프는 가른다")
 
     # ---------- ③ 변환 순서 ----------
 
