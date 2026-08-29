@@ -81,7 +81,10 @@ class BareAssetPath(unittest.TestCase):
         parts = re.findall(r"`([^`]*)`", m.group(1))
         assert parts, "템플릿 조각을 찾지 못했다"
         consts = {}
-        for name in ("DOC_ID_PREFIX", "DOC_ID_TAIL"):
+        # IMAGE_EXTS 가 여기 끼는 것은 2026-08-29 부터다 (REQ-20260829-015 반려):
+        # "무엇이 그림인가"를 화면 세 곳이 각자 들고 있었고 실제로 어긋나 있어
+        # (heic 를 모르는 쪽, 서버가 모르는 avif 를 아는 쪽) 한 상수로 모았다.
+        for name in ("DOC_ID_PREFIX", "DOC_ID_TAIL", "IMAGE_EXTS"):
             c = re.search(r'const %s = "(.*)";' % name, cls.src)
             assert c, "%s 를 찾지 못했다" % name
             consts[name] = c.group(1).replace("\\\\", "\\")
@@ -96,12 +99,18 @@ class BareAssetPath(unittest.TestCase):
         self.assertIn("g", self.flags, "g 플래그가 없다 — 첫 경로만 그림이 된다")
 
     def test_it_reuses_the_marker_rendering(self):
-        """표기와 **같은 함수**로 그림을 낸다 — 두 벌을 적으면 한 벌만 고쳐진다."""
+        """표기와 **같은 함수**로 그림을 낸다 — 두 벌을 적으면 한 벌만 고쳐진다.
+
+        계약은 그대로고 **찾는 모양**만 2026-08-29 에 바뀌었다. attImg 이
+        md2html 안의 지역 화살표 함수였는데, 그림이 실패하면 다시 거는 손
+        (REQ-20260829-019)이 붙으면서 맨 위의 함수 선언으로 나왔다 — 재시도와
+        못 받은 자리가 거기 매여 있어야 두 벌이 생기지 않는다.
+        """
         body = self._bare_body()
         self.assertIn("attImg(", body, "표기와 같은 함수를 쓰지 않는다")
         self.assertIn("catFind", body,
                       "축약 id 를 풀지 않는다 — 사람이 쓰는 모양이 축약이다")
-        m = re.search(r"const attImg = \(did, f\) =>([\s\S]{0,600}?);\n",
+        m = re.search(r"function attImg\(did, f\)\{([\s\S]{0,900}?)\n\}",
                       self.src)
         self.assertIsNotNone(m, "attImg 를 찾지 못했다")
         self.assertIn("attimg", m.group(1), "표기와 같은 클래스를 쓰지 않는다")

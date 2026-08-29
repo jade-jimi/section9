@@ -69,15 +69,24 @@ class WakeHandle(unittest.TestCase):
         self.assertIn("깨우기", self.stall)
 
     def test_a_card_that_is_not_stalled_has_no_handle(self):
-        """멈춘 카드가 아니면 그 함수 자체가 안 불린다."""
+        """멈춘 카드가 아니면 빈 문자열이 온다.
+
+        조건이 **부르는 쪽**에 있던 것을 함수 안으로 걷어 들였다
+        (REQ-20260828-041 2차). 부르는 쪽마다 조건을 두면 그 조건이 갈라진다 —
+        실제로 카드에만 `!bl.length` 가 붙어 문서 화면과 다른 답을 냈다.
+        계약은 그대로다: 안 멈춘 카드에는 손잡이가 없다.
+        """
         m = re.search(r"const stall\s*=([\s\S]{0,200}?);\n", self.card)
         self.assertIsNotNone(m, "카드가 멈춤 줄을 다는 자리가 없다")
-        self.assertIn("stalled", m.group(1), "멈춤이 아닌 카드에도 손잡이가 붙는다")
         self.assertIn("stallHTML", m.group(1))
+        self.assertIn("stallState(r)", self.stall, "줄 짓는 함수가 판정을 안 지난다")
+        self.assertIn('return "";', self.stall, "안 멈춘 행에 빈 줄을 안 돌려준다")
 
     def test_the_screen_never_measures_the_minutes_itself(self):
         """분은 서버가 잰다 — 화면이 다시 재면 CLI 와 다른 말을 하게 된다."""
-        self.assertIn("r.stalled_mins", self.stall, "서버가 준 분을 안 읽는다")
+        state = _grab(self.src, "stallState")
+        self.assertIn("r.stalled_mins", state, "판정이 서버가 준 분을 안 읽는다")
+        self.assertIn("st.mins", self.stall, "줄이 그 분을 안 옮긴다")
         for banned in ("Date.now() -", "getTime()", "fromisoformat"):
             self.assertNotIn(banned, self.stall,
                              "멈춤 줄이 나이를 스스로 재고 있다: %s" % banned)
@@ -90,10 +99,11 @@ class WakeHandle(unittest.TestCase):
         self.assertGreaterEqual(len(calls), 3,
                                 "짓는 자리(1) + 부르는 자리(보드·문서)가 없다")
         self.assertIn("stallHTML(r)", self.card, "보드 카드가 안 부른다")
-        self.assertIn("stallHTML(srow)", self.src, "문서 화면이 안 부른다")
-        # 문서 화면도 같은 근거(서버가 실은 행)를 읽는다
-        self.assertIn("srow.stalled_mins != null", self.src,
-                      "문서 화면이 다른 근거로 멈춤을 판정한다")
+        self.assertIn("stallHTML(catFind(m.id))", self.src, "문서 화면이 안 부른다")
+        # 문서 화면은 **자기 조건을 갖지 않는다** (REQ-20260828-041 2차) —
+        # 카탈로그 행을 넘길 뿐이고, 멈춤인지는 stallState 한 곳이 답한다.
+        self.assertNotIn("srow", self.src.split("const stallRow")[1][:200],
+                         "문서 화면이 다시 판정한다")
         self.assertIn("${reviewActs}${stallRow}", self.src,
                       "문서 화면에 멈춤 줄이 실제로 놓이지 않는다")
 

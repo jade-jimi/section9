@@ -20,8 +20,9 @@
      라이트·다크 양쪽에서 2.98:1 로 기준(3:1) 미달이었고, 라이트에서는 초록보다
      오히려 밝아 흑백으로 보면 "일하는 중"이 "버려짐"보다 어두웠다.
   ④ **새 층을 만들지 않는다.** 멈춤은 기존 `.rvpt` 한 줄 + 열 머리 숫자로
-     말한다 — 새 배지·색면·경고 띠·깜빡임 없이. 선행 대기 줄이 있으면 그쪽이
-     이긴다(같은 사실을 두 줄로 말하지 않는다는 기존 규칙).
+     말한다 — 새 배지·색면·경고 띠·깜빡임 없이. (선행 대기 줄이 이기던 규칙은
+     REQ-20260828-041 2차 반려에서 뒤집혔다 — 그 관문이 지운 것은 문장이 아니라
+     **행동**이었고, 카드에만 있어서 문서 화면과 갈라졌다. C4 참조.)
 
 격리: S9_ROOT=mktemp. 실행: python3 tests/ stall_visible
 """
@@ -217,17 +218,25 @@ class StallOnScreen(unittest.TestCase):
         self.assertIn("진전 없음", self.stall)
         self.assertIn("마지막", self.stall)
 
-    # C4. 선행 대기 줄이 있으면 그쪽이 이긴다 (같은 사실을 두 줄로 말하지 않는다)
-    def test_c4_dep_wins(self):
+    # C4. 선행 대기가 있어도 손잡이를 뺏지 않는다 (REQ-20260828-041 2차로 뒤집힘)
+    def test_c4_dep_does_not_eat_the_handle(self):
+        """'같은 사실을 두 줄로 말하지 않는다'는 **문장**의 규칙이다.
+
+        그 규칙으로 세운 관문이 지운 것은 문장 하나가 아니라 행동 하나였고,
+        게다가 카드에만 있어서 같은 요청이 카드에선 못 깨우고 문서에선 깨워졌다.
+        선행 대기는 관계(무엇이 안 끝났나), 멈춤은 시계(아무도 안 적고 있다) —
+        축이 다르고, 선행이 안 끝난 채 아무도 안 붙은 요청이야말로 깨울 것이다.
+        """
         m = re.search(r"const stall\s*=([\s\S]{0,400}?);\n", self.card)
         self.assertTrue(m, "멈춤 줄을 짓는 자리가 없다")
-        self.assertIn("bl.length", m.group(1),
-                      "선행 대기가 있어도 멈춤 줄을 함께 그린다")
+        self.assertNotIn("bl.length", m.group(1),
+                         "선행 대기가 아직 멈춤 손잡이를 지운다")
 
     # C5. 열 머리가 몇 개가 멈췄는지 센다 — in-progress 열에서만, 0이면 안 나온다
     def test_c5_column_head_counts(self):
         self.assertIn("멈춤", self.col, "열 머리에 멈춤 수가 없다")
-        self.assertIn("stalled_mins", self.col)
+        # 세는 술어는 카드가 쓰는 그 하나다 (REQ-20260828-041 2차)
+        self.assertIn("stallState(", self.col)
         m = re.search(r"const stalls?\s*=([\s\S]{0,300}?);\n", self.col)
         self.assertTrue(m, "멈춤 수를 세는 자리가 없다")
         self.assertIn('in-progress', m.group(1) + self.col,
@@ -235,9 +244,9 @@ class StallOnScreen(unittest.TestCase):
 
     # C6. in-progress 열은 오래 멈춘 순으로 선다 — 급한 것이 위에
     def test_c6_stalled_first(self):
-        self.assertIn("stalled_mins", self.board,
+        self.assertIn("stallState(", self.board,
                       "보드가 멈춤으로 정렬하지 않는다")
-        seg = self.board[self.board.index("stalled_mins") - 300:]
+        seg = self.board[self.board.index("stallState(") - 300:]
         self.assertIn("in-progress", seg[:400] + self.board,
                       "정렬이 in-progress 열에 한정되지 않는다")
 

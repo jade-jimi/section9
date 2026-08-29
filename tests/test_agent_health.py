@@ -124,12 +124,24 @@ class HealthReportTest(unittest.TestCase):
         self.assertEqual(row["actor"], "sub:designer:eeee5555")
 
     def test_h7_stalled_when_transcript_missing(self):
+        """적어 둔 기록 자리가 없으면 그 기여는 **끝난 것**이다.
+
+        전제가 갈린 자리다 (REQ-20260828-041 라운드1). 종전엔 '경로 미등록'과
+        '등록됐는데 파일이 없다'가 똑같이 unknown 이었고, health_apply 는
+        unknown 을 되쓰지 않으므로 문서의 running 이 영원히 남았다. 워크트리가
+        거둬지면 그 안에서 돌던 서브에이전트가 정확히 이 모양이 된다 — 실사고
+        2026-08-29: REQ-041 자신이 그 상태로 하루 종일 '누가 붙어 있음'이라
+        판정돼 화면에서 깨우기가 사라지고 wake 는 busy 로 거부됐다.
+        지금은 failed(기록 자리가 사라졌다)로 종결돼 클레임이 풀린다."""
         self.s9run("contrib", self.doc, "--actor", "sub:designer:eeee5555",
                    "--item", "N1", "--result", "running",
                    "--transcript", "/nonexistent/a.output")
         out = json.loads(self.s9run("agents", "health", "--json").stdout)
         row = next(a for a in out["agents"] if a["req"] == self.doc)
-        self.assertIn(row["state"], ("stalled", "unknown"))
+        self.assertIn(row["state"], ("stalled", "failed"))
+        self.assertNotEqual(row["state"], "unknown",
+                            "되쓸 수 없는 판정이라 running 이 영원히 남는다")
+        self.assertTrue(row["reason"], "사유 없는 종결은 화면에서 쓸모가 없다")
 
     def test_h8_scans_only_open_docs(self):
         out = json.loads(self.s9run("agents", "health", "--json").stdout)

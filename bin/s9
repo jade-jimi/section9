@@ -729,25 +729,60 @@ def compute_status_since(meta, body):
     return last or meta.get("created", "")
 
 
-def _contrib_state(meta):
+def _iso_age(stamp, now=None):
+    """ISO 시각 문자열의 나이(초). 못 읽으면 None — 예외를 올리지 않는다."""
+    import time as _time
+    try:
+        return (_time.time() if now is None else now) \
+            - datetime.datetime.fromisoformat(str(stamp)).timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
+def _contrib_state(meta, now=None, win=None):
     """contributions 요약 → (state, actor, reason) 중 가장 나쁜 것 하나.
 
     카드는 점 하나로 말한다 — 여러 주체가 붙어 있으면 사람이 먼저 알아야 할
-    것은 '멈춘 쪽'이다. 나쁜 순서: failed > stalled > running."""
+    것은 '멈춘 쪽'이다. 나쁜 순서: failed > stalled > running.
+
+    **시간 한도를 둔다** (REQ-20260828-041 라운드1). 종전엔 기여 전체에서 가장
+    나쁜 것을 한도 없이 골랐다. 그래서 REQ-041 의 점은 2026-08-28 22:36 에
+    기록된 서브에이전트의 stalled 를 근거로 **다음 날에도** 정지였다 — 사용자가
+    본 화면은 '진전이 끊겼다고 적힌 카드 + 깨우기 없음' 이었고, 그것이 반려
+    문구가 가리킨 자리다. 근거가 늙으면 요약에서 빠진다: 오래된 사실로 오늘을
+    말하지 않는다.
+
+    `open` 도 함께 낸다 — 아직 열려 있는(살아 있다고 볼 만한) 기여의 수.
+    죽은 서브 하나 때문에 일하는 리드 위에 두 번째 손이 붙지 않게 하려면
+    '가장 나쁜 것'과 '아직 누가 있나'가 둘 다 필요하다."""
+    import time as _time
     rows = meta.get("contributions") or []
     if not isinstance(rows, list):
         return {}
+    now = _time.time() if now is None else now
+    win = DELEGATE_WIN if win is None else win
     rank = {"failed": 3, "stalled": 2, "running": 1}
-    worst = None
+    worst, worst_at, opened, open_at = None, "", 0, ""
     for c in rows:
         if not isinstance(c, dict):
             continue
+        stamp = str(c.get("ended") or c.get("started") or "")
+        age = _iso_age(stamp, now)
+        if age is not None and age >= win:
+            continue              # 시각을 모르면 늙었다고 단정하지 않는다
+        if c.get("result") == "running":
+            opened += 1
+            open_at = max(open_at, stamp)
         if rank.get(c.get("result"), 0) > rank.get((worst or {}).get("result"), 0):
-            worst = c
+            worst, worst_at = c, stamp
     if not worst:
         return {}
+    # 시각을 함께 싣는다: 이 요약은 색인에 굳어 저장되고 카드가 읽는 시점은
+    # 한참 뒤다. 시계 없이 굳으면 어제의 판정이 오늘의 점이 된다 — 그것이
+    # 정확히 REQ-041 카드에서 일어난 일이다 (라운드1).
     return {"state": worst.get("result", ""), "actor": worst.get("actor", ""),
-            "item": worst.get("item", ""), "reason": worst.get("reason", "")}
+            "item": worst.get("item", ""), "reason": worst.get("reason", ""),
+            "open": opened, "at": worst_at, "open_at": open_at}
 
 
 # 우선순위 가중치 (REQ-20260826-005). 저장은 언제나 정수 하나 —
@@ -1708,8 +1743,19 @@ def _auto_log(msg):
         pass
 
 
-def _auto_cap_block(req_id, cfg, now=None):
+def _auto_cap_block(req_id, cfg, now=None, reason=""):
     """캡 판정만 — 막혔으면 **사람이 읽을 사유**, 통과면 "" (기록은 하지 않는다).
+
+    `reason="wake"`(사람이 대시보드에서 누른 것)는 **자기 예산**을 쓴다
+    (REQ-20260828-041 라운드1). 실측 2026-08-29: 그날 20슬롯 중 13건을 반려
+    워처가, 4건을 승인 후속이 먹었고 16:48:07 에 20번째가 소진된 뒤로는 어느
+    요청에 대해서도 사람의 깨우기가 capped 였다. 게다가 워처는 30초마다 다시
+    시도하므로 캡이 풀리는 순간에도 사람보다 워처가 먼저 슬롯을 가져간다.
+    **사람이 누르는 손잡이가 무인 워처와 예산을 다투는 설계 자체가 결함이다** —
+    저녁마다 죽는 버튼은 없는 버튼과 같다.
+
+    per-REQ 쿨다운은 갈래와 무관하게 그대로다: 같은 요청에 손을 겹쳐 붙이는
+    것은 예산 문제가 아니라 충돌 문제다.
 
     판정을 세는 것에서 떼어 낸 이유 (REQ-20260828-041): 사람이 대시보드에서
     깨우기를 눌렀을 때 "아무 일도 안 일어남" 으로 끝나면 안 된다. 무엇이 막았는지
@@ -1732,6 +1778,18 @@ def _auto_cap_block(req_id, cfg, now=None):
         return (f"방금 이 요청에 작업자를 띄웠다 — "
                 f"{max(1, int(left // 60) + 1)}분 뒤에 다시 눌러라 (쿨다운 {cool}초)")
     g = _auto_cap_counts(nowt)
+    if reason == "wake":
+        w_day = int(cfg.get("auto_resume_wake_per_day", 12))
+        w_hour = int(cfg.get("auto_resume_wake_per_hour", 6))
+        if g.get("wake_day_count", 0) >= w_day:
+            return (f"오늘 사람이 누른 깨우기 한도를 다 썼다 "
+                    f"({g['wake_day_count']}/{w_day}건) — 내일 0시에 풀린다. "
+                    f"지금 올리려면 계정 설정의 auto_resume_wake_per_day 를 "
+                    f"늘려라")
+        if g.get("wake_hour_count", 0) >= w_hour:
+            return (f"이번 시간 깨우기 한도를 다 썼다 "
+                    f"({g['wake_hour_count']}/{w_hour}건) — 다음 정시에 풀린다")
+        return ""
     per_day = int(cfg.get("auto_resume_global_per_day", 20))
     per_hour = int(cfg.get("auto_resume_global_per_hour", 6))
     if g.get("day_count", 0) >= per_day:
@@ -1763,14 +1821,22 @@ def _auto_cap_counts(nowt):
         g = {"day": day, "day_count": 0, "hour": hour, "hour_count": 0}
     if g.get("hour") != hour:
         g["hour"], g["hour_count"] = hour, 0
+        g["wake_hour_count"] = 0
+    # 사람이 누른 깨우기의 카운터는 **따로** 산다 (라운드1). 같은 통에 담으면
+    # 무인 워처가 하루 예산을 다 쓴 저녁에 사람의 버튼이 함께 죽는다.
+    g.setdefault("wake_day_count", 0)
+    g.setdefault("wake_hour_count", 0)
     return g
 
 
-def _auto_caps_ok(req_id, cfg):
-    """per-REQ 쿨다운 + 전역 시간당/일일 캡. 통과 시 카운트 기록, 초과면 False."""
+def _auto_caps_ok(req_id, cfg, reason=""):
+    """per-REQ 쿨다운 + 전역 시간당/일일 캡. 통과 시 카운트 기록, 초과면 False.
+
+    갈래(reason)에 따라 **다른 통**에 기록한다 — 판정(_auto_cap_block)과 기록이
+    같은 갈래를 보지 않으면 사람의 깨우기가 워처의 예산을 조용히 갉아먹는다."""
     import time as _t
     nowt = _t.time()
-    if _auto_cap_block(req_id, cfg, now=nowt):
+    if _auto_cap_block(req_id, cfg, now=nowt, reason=reason):
         return False
     pf = os.path.join(_auto_dir(), safe_name(req_id) + ".json")
     try:
@@ -1780,8 +1846,12 @@ def _auto_caps_ok(req_id, cfg):
         p = {}
     g = _auto_cap_counts(nowt)
     p["last"], p["count"] = nowt, p.get("count", 0) + 1
-    g["day_count"] = g.get("day_count", 0) + 1
-    g["hour_count"] = g.get("hour_count", 0) + 1
+    if reason == "wake":
+        g["wake_day_count"] = g.get("wake_day_count", 0) + 1
+        g["wake_hour_count"] = g.get("wake_hour_count", 0) + 1
+    else:
+        g["day_count"] = g.get("day_count", 0) + 1
+        g["hour_count"] = g.get("hour_count", 0) + 1
     with open(pf, "w") as f:
         json.dump(p, f)
     with open(_auto_global_path(), "w") as f:
@@ -2158,14 +2228,73 @@ def delegated_running(req_id, win=DELEGATE_WIN, now=None):
             age = now - datetime.datetime.fromisoformat(stamp).timestamp()
         except (ValueError, TypeError):
             continue
-        if 0 <= age < win:
-            return r
+        if not (0 <= age < win):
+            continue
+        # 문서에 running 이라고 적혀 있다는 것만으로는 클레임이 아니다
+        # (REQ-20260828-041 라운드1). 판정이 두 벌이면 `agents health` 는
+        # stalled/unknown 이라 말하는데 이 함수는 busy 라고 답한다 — 화면이
+        # "멈췄다"고 그린 카드의 깨우기가 "이미 붙어 있다"로 거부되던 자리다.
+        # **같은 함수**(judge_health)를 지나게 해서 어긋남을 없앤다.
+        tp = str(r.get("transcript", "") or "")
+        state, _why = judge_health(
+            r.get("actor", ""), age=_path_age(tp, now),
+            gone=bool(tp) and not os.path.exists(tp), claim_age=age)
+        if state in ("failed", "stalled", "done"):
+            continue      # 죽은 기여는 남의 손을 막지 못한다
+        return r
     return None
 
 
 def delegated_live(req_id, win=DELEGATE_WIN, now=None):
     """위임된 에이전트가 붙어 있는가 — 판정은 delegated_running 하나뿐이다."""
     return delegated_running(req_id, win=win, now=now) is not None
+
+
+WORKER_WIN = 3600       # 도는 워커를 클레임으로 인정하는 한도 (위임과 같은 규모)
+
+
+def worker_running(req_id, win=WORKER_WIN, now=None, alias=None):
+    """이 REQ 를 맡아 **지금 도는** 무인 워커 — 있으면 {"pid","age"}, 없으면 None.
+
+    실사고 2026-08-29 11:04~11:39 (REQ-20260829-016-62x6): 반려 한 건에 워커가
+    넷 떴다. 간격은 쿨다운 그대로였다. 워크트리 넷이 같은 문제에 같은 답을 따로
+    냈고, 시간당 상한 6건을 다 써서 11:43 사람의 깨우기가 막혔다.
+
+    원인은 클레임의 눈이다. `rework_claimed` 는 세션 바인딩과 위임 기여만 본다.
+    스폰된 워커는 headless 라 inbox tail 도 attach_pid 도 없어 `chat_live` 가
+    서지 않는다 — 클레임이 워커의 협조 한 줄(`s9 last --add`)에 달려 있고,
+    그 한 줄이 실패한 워커는 쿨다운마다 자기 위에 자기를 다시 띄운다.
+
+    그런데 그 사실은 **이미 기록되고 있었다**: 스폰이 `_auto_mark_pid` 로 대상
+    REQ 마커에 pid 를 적고 `live_workers` 가 그것으로 목록을 만든다. 새 표를
+    만들지 않고 이미 있는 사실을 판정에 꽂는다. pid 재사용 방어는
+    `_worker_alive`(=`_pid_is_claude`) 가 이미 한다.
+
+    **한도를 둔다** (`delegated_running` 과 같은 이유): 워커가 멎은 채 프로세스만
+    남으면 그 클레임이 영원해져 멈춘 작업을 조용히 감춘다. 한 시간이 지나면
+    다시 스폰 대상이다.
+    """
+    import time as _t
+    now = _t.time() if now is None else now
+    d = _auto_dir()
+    pf = os.path.join(d, safe_name(req_id) + ".json")
+    if not os.path.exists(pf):      # 짧은 id 로 물어 온 경우만 정식 id 로 되짚는다
+        cid = canon_id(req_id, alias)   # alias 를 받으면 카탈로그를 다시 안 읽는다
+        if cid != req_id:
+            pf = os.path.join(d, safe_name(cid) + ".json")
+    try:
+        with open(pf, encoding="utf-8") as f:
+            m = json.load(f)
+    except (OSError, ValueError):
+        return None
+    try:
+        age = now - float(m.get("last") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not 0 <= age < win:
+        return None
+    return {"pid": m.get("pid"), "age": int(age)} \
+        if _worker_alive(m.get("pid")) else None
 
 
 def rework_claimed(req_id, win=120):
@@ -2181,11 +2310,15 @@ def rework_claimed(req_id, win=120):
     클레임은 인정하지 않는다: 끝난 세션이 붙잡고 있으면 아무도 이어받지 못한다.
     """
     import glob as _glob
+    alias = id_alias()          # 짧은 id로 등록한 클레임도 인식 (REQ-20260825-086)
     # 리드가 서브에이전트에 맡긴 것도 클레임이다 (REQ-20260828-003) — 세션
     # 바인딩만 보면 위임이 안 보여 워커가 겹쳐 뜬다.
     if delegated_live(req_id):
         return True
-    alias = id_alias()          # 짧은 id로 등록한 클레임도 인식 (REQ-20260825-086)
+    # 스폰된 무인 워커도 클레임이다 (REQ-20260829-016-62x6). 워커의 협조 한 줄
+    # (`s9 last --add`)에 기대지 않는다 — 프로세스가 도는 것이 더 단단한 증거다.
+    if worker_running(req_id, alias=alias):
+        return True
     for bp in _glob.glob(os.path.join(STATE, "*.json")):
         try:
             with open(bp, encoding="utf-8") as f:
@@ -2399,8 +2532,18 @@ def _proc_cmdlines():
 def chat_live(b, win=300):
     """채팅 생존 판정: inbox tail(Monitor) 존재 **또는** attach pid 생존
     **또는** 신선한 활동(transcript/stream). attach_pid는 재개·프로세스 교체로
-    낡고(041), 활동 신선도는 유휴에 만료되므로 tail 신호가 1순위다(042)."""
+    낡고(041), 활동 신선도는 유휴에 만료되므로 tail 신호가 1순위다(042).
+
+    **끝난 세션(`ended`)은 어느 신호로도 되살아나지 않는다** (REQ-20260829-023).
+    호출자들이 저마다 `and not b.get("ended")` 를 손으로 덧붙여 있었는데,
+    `/api/chat/target` 두 곳에서 그게 빠져 끝난 세션이 화면에 `live` 로
+    그려졌다 — attach pid 는 SessionEnd 뒤에도 잠깐 남는다. 화면은 대상이
+    있다 하고 보내기는 "라이브 클로드 세션이 없다" 를 냈다. 손으로 덧붙이는
+    규칙은 언젠가 빠지니, 판정을 여기 한 곳으로 들인다.
+    """
     import time as _time
+    if b.get("ended"):
+        return False
     if _inbox_watch_alive(b.get("session", "")):
         return True
     pid = b.get("attach_pid")
@@ -3455,6 +3598,11 @@ def cmd_config(args):
 
 
 ACCOUNT_NEW_LABEL = "새-계정"      # 로그인 전 임시 이름 — 로그인하면 계정으로 바뀐다
+# 기본 설정 디렉토리(~/.claude)를 가리키는 이름 (REQ-20260827-079). 프로필
+# 목록에는 이 자리가 없어서, 한 번 프로필로 옮기면 대시보드에서 **돌아올 길이
+# 없었다** — 나가는 문만 있고 들어오는 문이 없는 방이었다. 빈 문자열은 이미
+# "계정은 그대로"라는 뜻이라 쓸 수 없어 따로 이름을 준다.
+ACCOUNT_HOME_KEY = "@home"
 
 
 def profiles_base():
@@ -3488,25 +3636,97 @@ def account_of(cfg_dir):
     return ""
 
 
-def account_settle(prof):
+ACCOUNT_DUP_DIR = ".dup"       # 중복 프로필을 지우지 않고 비켜 두는 자리
+
+
+_LIVE_CFG = {"t": 0.0, "v": frozenset()}
+
+
+def _live_cfg_dirs(now=None, ttl=3.0):
+    """지금 살아 있는 프로세스가 `CLAUDE_CONFIG_DIR` 로 쓰는 실경로들.
+
+    가드가 **하나뿐인 채팅 대상 세션**만 보던 것을 전수로 바꾼 자리
+    (REQ-20260827-079 라운드1). `s9 account add` 가 만든 새 프로필에는
+    settings.json 이 없어 훅이 안 깔리고, 훅이 없으면 바인딩도 없다 —
+    즉 **지금 로그인 중인 창은 정의상 보호 밖**이었다. 프로세스 환경은
+    바인딩을 거치지 않으므로 그 구멍이 없다.
+
+    ttl 캐시를 두는 이유: 대시보드가 5초마다 계정 목록을 부르고 목록은
+    프로필마다 이 질문을 한다 — 매번 /proc 전수를 돌면 폴이 무거워진다.
+    """
+    import time as _t
+    nowt = _t.time() if now is None else now
+    if nowt - _LIVE_CFG["t"] < ttl:
+        return _LIVE_CFG["v"]
+    out = set()
+    try:
+        pids = [d for d in os.listdir("/proc") if d.isdigit()]
+    except OSError:
+        pids = []
+    for pid in pids:
+        try:
+            with open(f"/proc/{pid}/environ", "rb") as f:
+                raw = f.read()
+        except OSError:
+            continue
+        for kv in raw.split(b"\0"):
+            if kv.startswith(b"CLAUDE_CONFIG_DIR="):
+                p = kv.split(b"=", 1)[1].decode("utf-8", "replace").strip()
+                if p:
+                    out.add(os.path.realpath(os.path.expanduser(p)))
+                break
+    _LIVE_CFG["t"], _LIVE_CFG["v"] = nowt, frozenset(out)
+    return _LIVE_CFG["v"]
+
+
+def profile_in_use(path, live=None):
+    """그 설정 디렉토리를 쓰는 프로세스가 살아 있는가."""
+    live = _live_cfg_dirs() if live is None else live
+    try:
+        return os.path.realpath(path) in live
+    except OSError:
+        return True        # 모르면 쓰고 있다고 본다 — 손대는 쪽이 위험하다
+
+
+def account_settle(prof, live=None):
     """로그인이 끝난 프로필의 이름을 그 계정으로 정한다. 최종 경로를 준다.
 
     로그인을 안 하고 나갔으면 이름을 바꾸지 않는다 — 지어낼 근거가 없다.
-    같은 계정이 이미 있으면 새로 만든 쪽을 거둔다: 같은 자격증명이 두 자리에
-    있으면 어느 쪽이 최신인지 아무도 모른다.
+
+    **아무것도 지우지 않는다** (REQ-20260827-079 라운드1). 종전엔 같은 계정이
+    이미 있으면 새 자리를 `shutil.rmtree` 로 거뒀다. 그 판정이 대시보드의 5초
+    폴(`/api/chat/target` → `account_rows`)에서도 돌아, **로그인 중인 프로필이
+    살아 있는 채로 사라졌다** — 방금 만든 자격증명을 '계정 추가'가 스스로
+    파괴했다(2026-08-29 16:30 실사고: 시작 산출물만 없고 종료 산출물만 0700 으로
+    남은 지문). 중복은 `.dup/` 로 **비켜 두기만** 한다: 되돌릴 수 있어야 한다.
+
+    그리고 살아 있는 자리는 이름도 바꾸지 않는다. rename 은 파괴는 아니나,
+    돌고 있는 claude 가 이후 여는 파일은 사라진 옛 이름으로 열려 재생성된다 —
+    자격증명은 새 이름, 이후 상태는 옛 이름으로 갈린다.
     """
     email = account_of(prof)
     if not email:
+        return prof
+    if profile_in_use(prof, live):
         return prof
     target = os.path.join(os.path.dirname(prof), safe_name(email))
     if os.path.abspath(target) == os.path.abspath(prof):
         return prof
     if os.path.isdir(target):
-        if account_of(target) == email:
-            shutil.rmtree(prof, ignore_errors=True)   # 같은 계정 중복 — 거둔다
-            return target
-        return prof                                   # 이름 충돌 — 건드리지 않는다
-    os.rename(prof, target)
+        if account_of(target) != email:
+            return prof                       # 이름 충돌 — 건드리지 않는다
+        park = os.path.join(os.path.dirname(prof), ACCOUNT_DUP_DIR,
+                            f"{safe_name(email)}-{int(time.time())}")
+        try:
+            os.makedirs(os.path.dirname(park), exist_ok=True)
+            os.rename(prof, park)
+        except OSError:
+            return prof
+        return target
+    try:
+        os.rename(prof, target)
+    except OSError:
+        return prof
     return target
 
 
@@ -3562,6 +3782,12 @@ def cmd_account(args):
             print("◌ 로그인이 끝나지 않아 계정을 확인하지 못했다 — "
                   f"다시 하려면: s9 account add {os.path.basename(final)}")
         return
+    if args.action == "remove":
+        r = account_remove(args.name or "")
+        print(("◌ " if r.get("ok") else "✕ ") + r.get("message", ""))
+        if not r.get("ok"):
+            sys.exit(1)
+        return
     # use
     want = safe_name((args.name or "").strip())
     if not want:
@@ -3588,6 +3814,200 @@ def claude_profiles():
                       if os.path.isdir(os.path.join(base, d)))
     except OSError:
         return []
+
+
+def session_cfg_dir(b):
+    """그 세션이 어느 설정 디렉토리(=계정)로 떠 있는가 (REQ-20260827-079).
+
+    "서버는 모른다"고 두었던 자리다. 모르는 것을 아는 척 찍지 않는 것과, 알 수
+    있는 것을 안 찾아보는 것은 다르다 — 답은 그 프로세스의 환경에 있다.
+    """
+    try:
+        pid = int((b or {}).get("attach_pid") or 0)
+        if pid <= 0:
+            return ""
+        with open(f"/proc/{pid}/environ", "rb") as f:
+            for kv in f.read().split(b"\0"):
+                if kv.startswith(b"CLAUDE_CONFIG_DIR="):
+                    return kv.split(b"=", 1)[1].decode("utf-8", "replace")
+    except (OSError, ValueError):
+        pass
+    return ""
+
+
+def account_rows(cfg_dir=None, settle=True):
+    """고를 수 있는 계정들 (REQ-20260827-079) — 자리가 아니라 **계정**으로.
+
+    셋을 여기서 갚는다.
+    · 기본 계정(~/.claude)도 한 줄이다 — 없으면 돌아올 문이 없다.
+    · 로그인이 끝난 임시 자리(`새-계정-2`)는 부를 때마다 계정 이름으로 정한다.
+      settle 이 한 번 어긋나면 그 자리 이름이 영원히 남기 때문이다.
+    · 지금 붙어 있는 줄에 표식을 준다(세션의 CLAUDE_CONFIG_DIR 기준).
+
+    로그인 전 자리는 지우지 않고 `ready: False` 로 세운다 — 사람이 만들다 만
+    것을 목록이 말없이 치우면 안 된다.
+
+    `settle=False` 는 **읽기 전용**이다. 대시보드의 5초 폴이 이 함수를 지나는데,
+    그 자리에서 이름을 정하는 부수효과가 돌면 조회가 파일시스템을 바꾼다 —
+    그 경로가 실제로 로그인 중인 프로필을 지운 사고의 통로였다. 사람이 창을
+    연 자리(`/api/accounts`·CLI)에서만 settle 을 돌린다.
+    """
+    base = profiles_base()
+    home = os.path.abspath(claude_home())
+    cur = os.path.abspath(os.path.expanduser(cfg_dir)) if cfg_dir else home
+    live = _live_cfg_dirs()
+    rows = [{"key": ACCOUNT_HOME_KEY, "path": home, "email": account_of(home)}]
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        names = []
+    for d in names:
+        if d.startswith("."):
+            continue                   # .dup 등 비켜 둔 자리는 목록의 몫이 아니다
+        p = os.path.join(base, d)
+        if not os.path.isdir(p) or os.path.abspath(p) == home:
+            continue
+        # 지금 그 자리로 떠 있는 세션이 있으면 이름을 바꾸지 않는다 —
+        # 살아 있는 claude 의 CLAUDE_CONFIG_DIR 을 발밑에서 빼는 짓이다.
+        # (판정은 account_settle 이 프로세스 전수로 다시 한 번 한다.)
+        if settle and os.path.abspath(p) != cur:
+            p = account_settle(p, live)    # 로그인이 끝났으면 이름을 계정으로
+        if not os.path.isdir(p):
+            continue
+        rows.append({"key": os.path.basename(p), "path": os.path.abspath(p),
+                     "email": account_of(p)})
+    out, byemail = [], {}
+    for r in rows:
+        r["ready"] = bool(r["email"])
+        r["current"] = r["path"] == cur
+        prev = byemail.get(r["email"]) if r["email"] else None
+        if prev is not None:
+            # 같은 계정이 두 자리에 있으면 **줄을 지우지 않고 합친다**
+            # (REQ-20260827-079 라운드1). 종전엔 뒤에 온 줄을 버렸는데,
+            # @home 이 먼저 들어가므로 버려지는 쪽이 늘 '고를 수 있는 줄'
+            # 이었다 — 남는 것은 current 한 줄뿐이라 창의 `다시 시작` 이
+            # 영원히 비활성이었다. 반대 방향(세션이 프로필로 떠 있을 때)은
+            # 같은 코드가 @home 줄을 지워 돌아올 문을 닫았다.
+            prev.setdefault("also", []).append(r["path"])
+            prev["current"] = prev["current"] or r["current"]
+            continue
+        if r["email"]:
+            byemail[r["email"]] = r
+        out.append(r)
+    if not any(r["current"] for r in out):
+        out[0]["current"] = True       # 짚을 곳이 없으면 기본 계정이다
+    return out
+
+
+def account_switchable(rows):
+    """지금 **옮겨 갈 수 있는** 줄의 수 (REQ-20260827-079 라운드1).
+
+    '고를 수 있음'과 '옮겨 갈 수 있음'은 다르다 — 유일하게 활성인 줄이 곧
+    지금 쓰는 계정이면 화면은 누를 수 있는 것처럼 보이면서 아무 데도 못 간다.
+    셈을 서버가 해서 응답에 실어야 화면이 그 사실을 말할 수 있다.
+    """
+    return sum(1 for r in (rows or [])
+               if r.get("ready") and not r.get("current"))
+
+
+def account_remove(name):
+    """로그인 전 자리 하나를 지운다 (REQ-20260827-079 라운드1).
+
+    만들다 만 자리(`새-계정-2`)를 치울 길이 코드에 아예 없었다. 붙이면서
+    가드를 함께 못 박는다 — `safe_name('..') == '..'` 이라 이름을 그대로
+    이어 붙이면 홈 전체가 rmtree 사정권에 든다.
+
+    거부는 전부 사유와 함께 ok:false 다: 사람이 눌렀는데 아무 일도 안 일어나고
+    이유도 모르는 것이 제일 나쁘다. 반환은 wake 와 같은 모양이다
+    (ok · action · message) — 화면이 읽는 계약을 둘로 만들지 않는다.
+    action: removed · bad-name · outside · not-found · logged-in · in-use
+    """
+    base = profiles_base()
+    raw = (name or "").strip()
+    bad = (not raw or raw in (".", "..") or raw.startswith(".")
+           or raw.startswith("~") or "/" in raw or "\\" in raw
+           or (os.sep in raw) or (os.altsep and os.altsep in raw))
+    safe = safe_name(raw)
+    if bad or not safe or safe in (".", ".."):
+        return {"ok": False, "action": "bad-name", "name": raw,
+                "message": "그런 이름의 계정 자리는 지울 수 없다 — "
+                           "목록에 보이는 이름 그대로 넘겨라."}
+    target = os.path.join(base, safe)
+    if os.path.islink(target):
+        return {"ok": False, "action": "outside", "name": safe,
+                "message": f"{safe} 는 다른 자리를 가리키는 링크다 — "
+                           f"링크 너머는 지우지 않는다."}
+    try:
+        real, rbase = os.path.realpath(target), os.path.realpath(base)
+    except OSError:
+        return {"ok": False, "action": "outside", "name": safe,
+                "message": f"{safe} 의 실제 자리를 확인하지 못했다."}
+    if real == rbase or os.path.dirname(real) != rbase \
+            or real == os.path.realpath(claude_home()):
+        return {"ok": False, "action": "outside", "name": safe,
+                "message": f"{safe} 는 계정 프로필 자리 안이 아니다 — "
+                           f"그 밖은 건드리지 않는다."}
+    if not os.path.isdir(real):
+        return {"ok": False, "action": "not-found", "name": safe,
+                "message": f"그런 계정 자리가 없다: {safe}"}
+    if account_of(real) or os.path.exists(
+            os.path.join(real, ".credentials.json")):
+        return {"ok": False, "action": "logged-in", "name": safe,
+                "message": f"{safe} 에는 로그인이 들어 있다 — 지우면 되돌릴 수 "
+                           f"없다. 로그인 전 자리만 지운다."}
+    if profile_in_use(real):
+        return {"ok": False, "action": "in-use", "name": safe,
+                "message": f"{safe} 로 떠 있는 세션이 있다 — 발밑의 설정 "
+                           f"디렉토리를 빼지 않는다. 그 창을 닫고 다시 눌러라."}
+    try:
+        shutil.rmtree(real)
+    except OSError as e:
+        return {"ok": False, "action": "error", "name": safe,
+                "message": f"지우지 못했다: {e}"}
+    return {"ok": True, "action": "removed", "name": safe,
+            "message": f"로그인 전 자리를 지웠다: {safe}"}
+
+
+def account_add_terminal():
+    """대시보드에서 계정 추가를 시작한다 (REQ-20260827-079).
+
+    로그인은 `claude` 가 화면을 잡고 해야 하는 일이라 브라우저 안에서 끝낼 수
+    없다. 대신 **창을 여기서 연다** — 세션 깨우기가 이미 하는 그 일이다. 창을
+    열 수 없는 환경이면 붙여 넣을 명령을 그대로 준다(manual): 막다른 길을
+    만들지 않는다. 로그인이 끝나면 목록에 저절로 뜬다.
+    """
+    inner = f"cd {ROOT} && exec bin/s9 account add"
+    r = spawn_terminal(inner, f"cd {ROOT} && bin/s9 account add")
+    r["inner"] = inner
+    return r
+
+
+def _account_env(acct):
+    """그 계정 프로필로 뜰 환경 (REQ-20260827-032 · 079).
+
+    프로필에 하네스가 없으면 먼저 깐다 — 대시보드에서 계정을 고른 사람은 설치
+    절차를 모르고, 안 걸면 훅 없는 세션이 조용히 시작된다(외부기억에 아무것도
+    안 남는다).
+    """
+    import subprocess
+    prof = os.path.join(profiles_base(), safe_name(acct))
+    os.makedirs(prof, exist_ok=True)
+    env = {**os.environ, "CLAUDE_CONFIG_DIR": prof}
+    prev = os.environ.get("CLAUDE_CONFIG_DIR")
+    os.environ["CLAUDE_CONFIG_DIR"] = prof
+    try:
+        if not hooks_installed():
+            print(f"◌ 계정 {acct} 프로필에 section9 하네스를 설치한다…")
+            subprocess.run(
+                [os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                              "s9-install"), "--quiet"],
+                env=env, stdin=subprocess.DEVNULL)
+    finally:
+        if prev is None:
+            os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        else:
+            os.environ["CLAUDE_CONFIG_DIR"] = prev
+    return env
 
 
 def _restart_marker_path(sid8):
@@ -3659,19 +4079,19 @@ def _consume_restart_marker():
     return None
 
 
-def wake_session():
-    """대시보드에서 세션 띄우기 (REQ-20260825-067). claude는 TTY가 필요하므로
-    서버가 직접 붙잡을 수 없다 — 대신 **새 터미널 창**을 열어 s9 code를 실행한다.
-    WSL이면 Windows Terminal(wt.exe) → cmd start 순으로 시도하고, 리눅스 데스크톱
-    이면 x-terminal-emulator류를 시도한다. 어느 것도 없으면 실행 명령을 돌려준다
-    (mode=manual). S9_WAKE_DRYRUN=1 이면 실행 대신 명령만 반환(테스트)."""
+def spawn_terminal(inner, manual):
+    """새 터미널 창을 열어 명령을 돌린다 (REQ-20260825-067 · 20260827-079).
+
+    claude 는 TTY가 필요해 서버가 직접 붙잡을 수 없다 — 창을 연다. WSL이면
+    Windows Terminal(wt.exe) → cmd start 순으로, 리눅스 데스크톱이면
+    x-terminal-emulator류를 시도한다. 어느 것도 없으면 실행 명령을 돌려준다
+    (mode=manual). S9_WAKE_DRYRUN=1 이면 실행 대신 명령만 반환(테스트).
+
+    세션 깨우기와 계정 추가가 같은 일을 한다 — 창 여는 법을 두 곳이 각자 알면
+    한 곳만 고쳐진다.
+    """
     import glob
     import subprocess
-    b = chat_target(None)
-    if b and chat_live(b) and not b.get("ended"):
-        return {"ok": False, "reason": f"이미 살아있는 세션이 있다 ({b.get('session')})"}
-    inner = f"cd {ROOT} && exec bin/s9 code"
-    manual = f"cd {ROOT} && bin/s9 code"
     is_wsl = False
     try:
         with open("/proc/version") as f:
@@ -3707,11 +4127,99 @@ def wake_session():
                              stderr=subprocess.DEVNULL,
                              start_new_session=True)
             return {"ok": True, "mode": "spawned", "cmd": " ".join(argv[:2]),
-                    "reason": "새 터미널 창에서 세션을 시작했다 — 창이 뜨면 몇 초 뒤 live"}
+                    "reason": "새 터미널 창을 열었다"}
         except Exception:
             continue
     return {"ok": True, "mode": "manual", "cmd": manual,
             "reason": "창 열기 실패 — 터미널에서 직접 실행"}
+
+
+def wake_session(account=""):
+    """대시보드에서 세션 띄우기 (REQ-20260825-067) — 창을 열어 s9 code 실행.
+
+    `account` 를 주면 그 계정의 설정 디렉토리로 띄운다 (REQ-20260829-023).
+    없을 때는 언제나 기본 계정으로 돌아왔다 — 계정을 바꾸려는데 붙어 있는
+    세션이 없으면 "세션을 깨운 뒤 다시 눌러 주세요" 였고, 깨우면 또 옛
+    계정이었다. 사람이 빠져나갈 수 없는 고리였다.
+    """
+    b = chat_target(None)
+    if b and chat_live(b):
+        return {"ok": False,
+                "reason": f"이미 살아있는 세션이 있다 ({b.get('session')})"}
+    pre = ""
+    if account and account != ACCOUNT_HOME_KEY:
+        # 재시작(restart_session)이 쓰는 것과 **같은 표기**다 — 한 계정이 두
+        # 경로로 떠 있으면 그 뒤로 아무도 어느 쪽이 진짜인지 모른다.
+        pre = f"CLAUDE_CONFIG_DIR=~/.claude-profiles/{safe_name(account)} "
+        # 자리를 **미리 세운다** (REQ-20260827-079 라운드1). 셸 접두사만 붙이면
+        # 디렉토리가 없을 때 claude 가 0700 으로 만들고 훅 없이 돈다 — 훅이
+        # 없으면 바인딩이 없고, 바인딩이 없으면 그 세션은 외부기억에도 어떤
+        # 보호 가드에도 안 잡힌다. _account_env 가 그 준비를 이미 갖고 있다.
+        if not os.environ.get("S9_WAKE_DRYRUN"):
+            try:
+                _account_env(account)
+            except Exception:
+                pass          # 준비 실패가 창 열기를 막지는 않는다
+    r = spawn_terminal(f"cd {ROOT} && {pre}exec bin/s9 code",
+                       f"cd {ROOT} && {pre}bin/s9 code")
+    if r.get("mode") == "spawned":
+        r["reason"] = "새 터미널 창에서 세션을 시작했다 — 창이 뜨면 몇 초 뒤 live"
+        if pre:
+            r["reason"] = (f"{account} 계정으로 새 터미널 창에서 세션을 "
+                           f"시작했다 — 창이 뜨면 몇 초 뒤 live")
+    r["account"] = account or ACCOUNT_HOME_KEY
+    return r
+
+
+def session_rows(limit=12):
+    """고를 수 있는 세션들 (REQ-20260829-023) — 대상은 자동 선택뿐이었다.
+
+    살아 있는 세션이 여럿이거나 붙잡은 것이 죽었을 때, 사람이 다른 세션을
+    지목할 수단이 없었다. 정렬은 `chat_target` 의 우선순위와 **같은 차례**다
+    (수신 대기 → 정식 진입 → 최근 활동, 무인 워커는 맨 뒤) — 자동으로 골리는
+    것과 손으로 고를 때 보이는 것이 다르면 사람이 화면을 못 믿는다.
+
+    끝난 세션도 목록에 둔다(`ended: True`). 방금까지 보던 대상이 말없이
+    사라지면 "내가 뭘 잘못했나" 가 된다 — 지우는 게 아니라 접는 것이다.
+    """
+    import glob as _glob
+    rows = []
+    for bp in _glob.glob(os.path.join(STATE, "*.json")):
+        try:
+            with open(bp, encoding="utf-8") as f:
+                b = _norm_binding(json.load(f))
+        except (OSError, ValueError):
+            continue
+        sid = b.get("session", "")
+        if not sid:
+            continue
+        ts = max([os.path.getmtime(p)
+                  for p in _binding_activity_paths(b)] or [0.0])
+        live = chat_live(b)
+        listening = _inbox_watch_alive(sid)
+        rows.append({
+            "sid": sid,
+            "user": b.get("user") or "",
+            "live": live,
+            "ended": bool(b.get("ended")),
+            "listening": listening,
+            "worker": bool(b.get("worker")),
+            "entry": b.get("entry") or "",
+            "model": (session_model(b) or "").replace("claude-", ""),
+            "account": account_of(session_cfg_dir(b) or claude_home()),
+            "reqs": list(b.get("active_reqs") or [])[:3],
+            "last": (datetime.datetime.fromtimestamp(ts).astimezone().isoformat()
+                     if ts else ""),
+            "_rank": (1 if live else 0,
+                      0 if b.get("worker") else 1,
+                      1 if listening else 0,
+                      1 if b.get("entry") == "code" else 0,
+                      ts),
+        })
+    rows.sort(key=lambda r: r["_rank"], reverse=True)
+    for r in rows:
+        r.pop("_rank", None)
+    return rows[:limit]
 
 
 def restart_session(sid8, model="", effort="", account=""):
@@ -3752,7 +4260,7 @@ def restart_session(sid8, model="", effort="", account=""):
         # 대시보드 자동 재시작이 가능해진다 (claude 직접 실행이면 다음에도 수동)
         manual = f"{os.path.join(ROOT, 'bin', 's9')} code --resume " + full \
             + ((" " + " ".join(flags)) if flags else "")
-        if account:
+        if account and account != ACCOUNT_HOME_KEY:
             manual = (f"CLAUDE_CONFIG_DIR=~/.claude-profiles/"
                       f"{safe_name(account)} " + manual)
         # 래퍼 감지: claude의 부모 cmdline에 s9 + code (재시작 루프 보유 여부)
@@ -3922,16 +4430,23 @@ def chat_doc_target(text):
     return cands[0]["id"], rest, ""
 
 
-def chat_append_doc(doc_id, text, sender, sid8, anchor=""):
+def chat_append_doc(doc_id, text, sender, sid8, anchor="", label="ask"):
     """지목된 문서에 이어 말한 내용을 노트로 붙인다. 반환: 경고 문구.
 
     anchor 는 화면에서 끌어 고른 글이다 (REQ-20260827-072) — 어느 구간에 대고
-    한 말인지 문서 안에 남는다."""
+    한 말인지 문서 안에 남는다.
+
+    label 은 문서 안의 구획 이름이다 (REQ-20260829-015). 기본값 `ask` 는 이어
+    말하기의 뜻(답이 필요한 말)이라 그대로 두되, 판정 창이 대는 **반려 근거**는
+    질문이 아니다 — 그걸 `ask` 로 박아 두면 나중에 그 문서를 읽는 사람이 답해야
+    할 질문과 판정의 근거를 구별할 수 없다."""
     import subprocess
+    if label not in NOTE_LABELS:
+        label = "ask"
     env = dict(os.environ)
     env["S9_SESSION"] = sid8
     me = os.path.realpath(__file__)
-    argv = [me, "note", doc_id, text, "--label", "ask", "--user", sender]
+    argv = [me, "note", doc_id, text, "--label", label, "--user", sender]
     if anchor:
         argv += ["--anchor", anchor]
     subprocess.run(argv, capture_output=True, text=True, env=env, timeout=20)
@@ -4330,10 +4845,10 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
         return block("elsewhere",
                      f"이 요청은 다른 머신({meta.get('machine') or '미상'})의 "
                      f"것이다 — 여기({current_machine()})서는 띄우지 않는다")
-    if not _auto_caps_ok(doc_id, cfg):
+    if not _auto_caps_ok(doc_id, cfg, reason):
         # 사유는 판정을 다시 물어 얻는다 — 문턱 수치를 여기 옮겨 적지 않는다.
         _auto_log(f"SKIP(cap) {doc_id} {reason}")
-        return block("capped", _auto_cap_block(doc_id, cfg)
+        return block("capped", _auto_cap_block(doc_id, cfg, reason=reason)
                      or "무인 작업자 한도에 막혔다")
     b = read_binding(meta.get("machine", ""), meta.get("session", "")) or {}
     cwd = b.get("cwd", "") if os.path.isdir(b.get("cwd", "") or "") else ROOT
@@ -4553,6 +5068,10 @@ def _wake_refusal(cid, row, win, updated, now):
     거부만 돌려주고 이유를 안 주면 사람은 버튼이 고장 났다고 읽는다. 판정은
     새로 만들지 않는다: 화면·CLI 가 쓰는 그 축(위임 기여 · 스폰 마커 · 문서
     갱신 시각)을 그대로 읽어 문장으로만 바꾼다."""
+    # 잣대는 stall_mins 와 **같은 것**을 쓴다 — 거부 문구가 실제 문턱과 다르면
+    # 사람은 15분을 기다렸다가 또 안 되는 것을 본다 (라운드1).
+    if (row or {}).get("live_kind") in ("stalled", "spawn_failed"):
+        win = min(win, STALLED_DEAD_WIN)
     c = delegated_running(cid, now=now)
     if c:
         try:
@@ -4579,6 +5098,20 @@ def _wake_refusal(cid, row, win, updated, now):
     return {"ok": False, "id": cid, "action": "moving", "mins": None,
             "message": f"아직 멈춘 게 아니다 — {_ago_text(age)} 문서가 움직였다. "
                        f"{int(win // 60)}분 넘게 조용할 때만 깨운다."}
+
+
+def _wake_audit(res, actor):
+    """사람이 누른 깨우기의 결과를 한 줄 남긴다 (REQ-20260828-041 라운드1).
+
+    거부는 서버 로그 어디에도 안 남았다. 그래서 반려가 왔을 때 "버튼을 눌렀는데
+    안 된 것"인지 "버튼이 아예 없던 것"인지 짐작으로 갈라야 했다 — 다음 반려
+    때 같은 질문을 또 하지 않기 위한 한 줄이다."""
+    try:
+        _auto_log(f"WAKE {res.get('id')} by={actor or '?'} "
+                  f"action={res.get('action')} mins={res.get('mins')}")
+    except Exception:
+        pass
+    return res
 
 
 def wake_request(doc_id, actor="", win=None):
@@ -4608,24 +5141,31 @@ def wake_request(doc_id, actor="", win=None):
     now = _time.time()
     path = locate(doc_id) or locate(canon_id(doc_id))
     if not path:
-        return {"ok": False, "id": doc_id, "action": "missing", "mins": None,
-                "message": f"그런 문서가 없다: {doc_id}"}
+        return _wake_audit({"ok": False, "id": doc_id, "action": "missing",
+                            "mins": None,
+                            "message": f"그런 문서가 없다: {doc_id}"}, actor)
     try:
         meta, _body = read_doc(path)
     except (OSError, ValueError) as e:
-        return {"ok": False, "id": doc_id, "action": "error", "mins": None,
-                "message": f"문서를 읽지 못했다: {e}"}
+        return _wake_audit({"ok": False, "id": doc_id, "action": "error",
+                            "mins": None,
+                            "message": f"문서를 읽지 못했다: {e}"}, actor)
     cid = meta.get("id") or canon_id(doc_id)
+    # 감사는 **모든** 갈래를 지난다 (라운드2). 셋이 빠져 있었다: 그 셋은
+    # 화면이 잘못된 카드에 손잡이를 그렸을 때만 나오는 갈래라, 정작 '왜
+    # 눌렀는데 아무 일도 없었나'를 되짚을 때 아무 흔적이 없었다.
     if meta.get("type") != "request":
-        return {"ok": False, "id": cid, "action": "not-request", "mins": None,
-                "message": f"깨우는 것은 요청 문서뿐이다 "
-                           f"({meta.get('type') or '타입 미상'})."}
+        return _wake_audit({"ok": False, "id": cid, "action": "not-request",
+                            "mins": None,
+                            "message": f"깨우는 것은 요청 문서뿐이다 "
+                                       f"({meta.get('type') or '타입 미상'})."},
+                           actor)
     st = meta.get("status", "")
     if st != "in-progress":
-        return {"ok": False, "id": cid, "action": "not-in-progress",
-                "mins": None,
-                "message": f"지금 이 요청은 '{st}' 다 — 깨우는 것은 진행 중인 "
-                           f"것뿐이다."}
+        return _wake_audit({"ok": False, "id": cid,
+                            "action": "not-in-progress", "mins": None,
+                            "message": f"지금 이 요청은 '{st}' 다 — 깨우는 "
+                                       f"것은 진행 중인 것뿐이다."}, actor)
     # 멈춤 판정은 화면·CLI 와 **같은 함수**를 지난다 (stall_mins). 두 벌이면
     # 화면은 '멈춤' 이라 그려 놓고 버튼은 '아직 돈다' 며 거부한다.
     row = next((r for r in catalog_with_live(stall_win=win)
@@ -4635,16 +5175,21 @@ def wake_request(doc_id, actor="", win=None):
         row["stalled_mins"] = stall_mins(row, now, win)
     mins = row.get("stalled_mins")
     if mins is None:
-        return _wake_refusal(cid, row, win,
-                             row.get("updated") or meta.get("updated", ""), now)
+        return _wake_audit(
+            _wake_refusal(cid, row, win,
+                          row.get("updated") or meta.get("updated", ""), now),
+            actor)
     out = {}
     if _spawn_wake(cid, meta, mins=mins, by=actor, out=out):
-        return {"ok": True, "id": cid, "action": "spawned", "mins": mins,
-                "message": f"{cid} 를 깨웠다 — 무인 작업자가 이어받는다. "
-                           f"진행은 카드의 점과 Stream 에서 보인다."}
-    return {"ok": False, "id": cid, "action": out.get("blocked") or "blocked",
-            "mins": mins,
-            "message": out.get("why") or "무인 작업자를 띄우지 못했다."}
+        return _wake_audit({"ok": True, "id": cid, "action": "spawned",
+                            "mins": mins,
+                            "message": f"{cid} 를 깨웠다 — 무인 작업자가 "
+                                       f"이어받는다. 진행은 카드의 점과 "
+                                       f"Stream 에서 보인다."}, actor)
+    return _wake_audit(
+        {"ok": False, "id": cid, "action": out.get("blocked") or "blocked",
+         "mins": mins,
+         "message": out.get("why") or "무인 작업자를 띄우지 못했다."}, actor)
 
 
 def rework_watch_tick(grace=None, now=None):
@@ -5450,6 +5995,46 @@ TYPE_GROUPS = {
     "audio": {".mp3", ".wav", ".m4a", ".flac", ".ogg"},
 }
 ATTACH_MAX_BYTES = 30 * 1024 * 1024      # 첨부 상한 (REQ-054: 10MB → 30MB)
+# 문서 노트에 허용하는 구획 이름 (REQ-20260829-015). 아무 낱말이나 라벨이 되면
+# 문서의 구획이 사람마다 달라져 나중에 아무도 훑을 수 없다.
+NOTE_LABELS = ("ask", "response", "note", "judge", "tdd", "designer",
+               "deep-diver", "review")
+# 첨부 캐시 수명 (REQ-20260829-019). 짧다 — 이 저장소에는 **같은 이름으로 다시
+# 찍는 캡처**가 실제로 있어서(designer 가 n-model.png 를 두 번 찍었다) 오래
+# 물리면 판정이 옛 그림을 보고 이뤄진다. 5분이면 한 번 보는 동안의 다시 그리기
+# (폴링·탭 전환·스크롤)는 전부 덮으면서, 다시 찍은 것도 곧 따라온다.
+ASSET_CACHE_SEC = 300
+
+
+def asset_etag(path):
+    """첨부의 판본 표식 (REQ-20260829-019) — 없으면 "".
+
+    내용을 읽어 해시하지 않는다. 30MB 짜리를 매 요청마다 읽으면 아끼려던 것을
+    도로 쓴다. 크기와 변경 시각이면 이 자리에서는 충분하다 — 같은 이름으로
+    갈아 끼운 파일은 둘 중 하나가 반드시 달라진다.
+    """
+    try:
+        st = os.stat(path)
+    except OSError:
+        return ""
+    return '"%x-%x"' % (int(st.st_mtime_ns), st.st_size)
+
+
+def asset_mark(path):
+    """첨부 한 줄의 표기 — `[Image: …]` 인가 `[File: …]` 인가 (REQ-20260829-015).
+
+    이것은 파일의 성질이지 화면의 취향이 아니다. 그런데 판정 창은 붙인 것을
+    **무조건** `[Image:]` 로 적었고, 문서 뷰어는 그 표기를 `<img>` 로 그린다 —
+    영상이나 CSV 를 붙이면 깨진 그림 한 칸이 남았다. 붙지 않은 것보다 나쁘다.
+    사용자 반려: "첨부할 수 있는 이미지가, 그림 이미지일수도, 문서 파일일수도,
+    영상파일일수도 있다."
+
+    모르는 확장자는 그림이라고 우기지 않는다 — 깨진 칸보다 이름 한 줄이 낫다.
+    확장자 목록은 TYPE_GROUPS 하나에서 온다(두 벌로 만들면 한 벌만 고쳐진다).
+    """
+    ext = os.path.splitext(str(path or ""))[1].lower()
+    kind = "Image" if ext in TYPE_GROUPS["image"] else "File"
+    return f"[{kind}: {path}]"
 # 추출 본문 사이드카 (REQ-20260826-020). 태깅용 8000자와 달리 여기는 '보존'이
 # 목적이라 상한이 넉넉하다 — 200,000자면 산문 400쪽 남짓. 사이드카는 vault/ 안이라
 # git 대상이 아니고 카탈로그에도 싣지 않으므로 비용은 로컬 디스크뿐이다.
@@ -6864,6 +7449,11 @@ def reopened_requests():
 
 
 STALLED_WIN = 900       # 이만큼 진전이 없으면 "멈췄다" (초)
+# 붙어 있던 주체가 **죽었다고 판정된** 행은 더 기다릴 이유가 없다
+# (REQ-20260828-041 라운드1). 900초는 "손을 뗐나"를 재는 시계인데, 아무도 안
+# 붙어 있음이 이미 증명된 행에까지 그 시계를 쓰면 화면은 '멈췄다'고 그려 놓고
+# 15분 동안 누를 것을 주지 않는다. 그 조합이 사용자가 본 "안된다"였다.
+STALLED_DEAD_WIN = 180
 STALLED_SHOW = 3        # 매 턴 주입되므로 이만큼만 보이고 나머지는 숫자로
 
 
@@ -6886,6 +7476,26 @@ def stall_mins(r, now, win):
     # 무인 워커가 **이 요청을 위해** 돌고 있으면 직접 증거다 — 넘어간다.
     if r.get("live_kind") == "spawned":
         return None
+    # 점이 '멈췄다/죽었다'고 그린 행은 잣대를 좁힌다 — 점과 손잡이가 같은
+    # 시계를 봐야 '멈췄다고 적혔는데 못 누르는 카드'가 사라진다.
+    #
+    # 다만 **죽음이 기록된 뒤에도 문서가 움직였으면 좁히지 않는다**: 서브
+    # 하나가 죽어도 리드가 계속 노트를 쓰고 있을 수 있고, 그때 좁히면 일하는
+    # 손 위에 두 번째 손이 붙는다(이 저장소가 네 번 덴 그 사고). 근거 시각이
+    # 없는 옛 색인 행도 좁히지 않는다 — 모르면 넓은 쪽이 안전하다.
+    if r.get("live_kind") in ("stalled", "spawn_failed"):
+        dead = _iso_age((r.get("agent_state") or {}).get("at"), now)
+        if dead is None and r.get("live_kind") == "spawn_failed" \
+                and r.get("live_age") is not None:
+            # 마커에서 온 판정(pid 사망)에는 기여 요약이 없다 — 죽음의 시각을
+            # 스폰 나이로 대신한다 (REQ-20260828-041 라운드2). 없으면 15분
+            # 잣대가 그대로 남아 '멈췄다고 그려 놓고 못 누르는 카드'가 여기서
+            # 한 벌 더 만들어진다: 사람이 깨웠는데 워커가 즉사하면 그 카드는
+            # 점만 빨갛게 켠 채 15분 동안 다시 누를 것을 주지 않았다.
+            dead = float(r["live_age"])
+        upd = _iso_age(r.get("updated") or r.get("status_since"), now)
+        if dead is not None and (upd is None or upd >= dead - 5):
+            win = min(win, STALLED_DEAD_WIN)
     # 서브에이전트에게 맡겨 그쪽이 붙어 있는 것도 같다 (REQ-20260828-003).
     # 판정을 두 벌 만들지 않는다 — 워처가 쓰는 그 함수를 그대로 쓴다.
     if delegated_live(r["id"], now=now):
@@ -7472,6 +8082,38 @@ def record_contribution(meta, actor, item="", result="done", transcript="",
 # 탐침(대상에게 메시지를 보내 응답을 보는 방식)은 쓰지 않는다 — 관측이 대상의
 # 대화 컨텍스트를 오염시키고, 긴 툴 라운드를 도는 에이전트를 죽음으로 오판한다.
 HEALTH_WIN = {"lead": 120, "sub": 180, "wf": 300, "worker": 300}
+# 신호가 **하나도** 없는 클레임을 언제까지 봐 주는가 (REQ-20260828-041 라운드1).
+# 위임 클레임 한도(DELEGATE_WIN)와 같은 시계다 — 두 벌이면 한쪽은 "아직 붙어
+# 있다", 다른 쪽은 "아무도 없다"로 갈린다.
+UNKNOWN_GRACE = DELEGATE_WIN
+# 화면에서 **지우는** 잣대는 죽음을 의심하는 잣대와 다르다 (REQ-20260829-013).
+# 스트립이 `active` 인 행만 그리던 탓에, 긴 도구 하나를 붙잡고 조용해진
+# 서브에이전트는 일하는 중에 행이 통째로 사라졌다 — 사용자에게는 "아무 일도
+# 없다"로 읽힌다. 그렇다고 위의 180초를 넓히면 죽은 것을 살아 있다고 말하게
+# 된다(REQ-20260825-089: 한도로 죽은 워커가 10분간 "기동 중"이었다).
+#
+# 그래서 잣대를 둘로 나눈다. 살아있음은 그대로 180초, **행을 남기는 것**은
+# 600초. 그 사이는 사라지지 않고 "조용함"으로 적힌다 — 침묵이 안 보이는 것과
+# 침묵이 보이는 것은 다른 화면이다.
+#
+# 600은 잰 값이다: 서브에이전트 transcript 93개의 기록 간격 23,203건에서
+# p99.9 가 292초, 600초를 넘는 침묵은 5건(0.02%)뿐이다.
+AGENT_KEEP_SEC = 600
+
+
+def agent_label_line(text):
+    """응답 글에서 '지금 하는 일' 한 줄을 뽑는다 (REQ-20260829-013).
+
+    이 저장소의 규약은 모든 응답을 `` `[시각 - 역할명]` `` 로 시작하게 한다.
+    그 줄을 그대로 라벨로 쓰면 스트립의 "지금 하는 일" 자리에 **시각만** 찍힌다 —
+    규약이 스스로의 눈을 가린 꼴이다. 도장은 건너뛰고 그다음 뜻 있는 줄을 쓴다.
+    도장 뒤에 같은 줄로 이어 쓴 경우도 도장만 떼어 낸다."""
+    stamp = re.compile(r"^\s*`?\[[^\]]*\]`?\s*")
+    for raw in str(text or "").splitlines():
+        line = stamp.sub("", raw).strip()
+        if line:
+            return line[:70]
+    return ""
 HEALTH_FAIL_RE = re.compile(
     r"usage limit|rate.?limit|quota|한도|초과|not available|no such model|"
     r"invalid model|permission denied|authentication|traceback|fatal",
@@ -7700,7 +8342,8 @@ def actor_alive(actor, age=None, pid_alive=None, log_line="", recorded=""):
         return False
 
 
-def judge_health(actor, age=None, pid_alive=None, log_line="", recorded=""):
+def judge_health(actor, age=None, pid_alive=None, log_line="", recorded="",
+                 gone=False, claim_age=None):
     """actor 한 건의 생존 판정 → (state, reason).
 
     state: alive | stalled | failed | done | unknown
@@ -7709,6 +8352,15 @@ def judge_health(actor, age=None, pid_alive=None, log_line="", recorded=""):
     log_line   워커 로그 마지막 줄 (실패 사유를 화면에 원문으로 보이기 위함)
     recorded   문서에 기록된 결과 (done/failed 면 그것이 최종 — 관측이 사실을
                뒤집지 않는다)
+    gone       기록 자리가 **등록됐는데 사라졌다** (REQ-20260828-041 라운드1).
+               '경로를 안 적었다'와 '적어 둔 파일이 없어졌다'는 다른 사실인데
+               둘 다 unknown 이었다. 워크트리가 거둬지면 그 안에서 돌던
+               서브에이전트의 transcript 가 통째로 사라지고, unknown 은
+               health_apply 가 되쓰지 않으므로 문서의 `running` 이 **영원히**
+               남았다 — 그 REQ 는 보이지도 깨워지지도 않는다(실사고: 041 자신).
+    claim_age  그 클레임이 열려 있은 시간(초). 신호가 하나도 없는 채로 이만큼
+               지나면 더 기다릴 근거가 없다 — 유예 없이 죽이지도, 무기한
+               붙잡아 두지도 않기 위한 두 번째 시계다.
 
     어떤 입력에도 예외를 올리지 않는다: 헬스체크가 죽으면 워처 스레드가 죽고,
     그러면 화면은 다시 '아무 근거 없이 살아있는 척'으로 돌아간다."""
@@ -7734,7 +8386,18 @@ def judge_health(actor, age=None, pid_alive=None, log_line="", recorded=""):
         return "failed", line[:200] or "프로세스가 종료됐다 (로그 없음)"
     if HEALTH_FAIL_RE.search(line):
         return "failed", line[:200]
+    if gone:
+        # 적어 둔 자리가 없어졌다 = 그 주체는 더 진행되지 않는다. 모르는 것이
+        # 아니라 끝난 것이므로 health_apply 가 되쓸 수 있어야 한다.
+        return "failed", line[:200] or "기록 자리가 사라졌다 (transcript 경로가 없다)"
     if age is None:
+        try:
+            ca = None if claim_age is None else float(claim_age)
+        except (TypeError, ValueError):
+            ca = None
+        if ca is not None and ca >= UNKNOWN_GRACE:
+            return "stalled", (f"{int(ca // 60)}분째 진전 신호가 없다 "
+                               f"(기록 미등록 · 기준 {int(UNKNOWN_GRACE // 60)}분)")
         return "unknown", "진전 신호 없음 (transcript/로그 미등록)"
     if age < win:
         return "alive", f"{int(age)}초 전 진전"
@@ -7790,7 +8453,16 @@ def agent_health(now=None):
                 continue
             actor = c.get("actor", "")
             kind = actor_kind(actor)
-            age = _path_age(c.get("transcript", ""), now)
+            tp = str(c.get("transcript", "") or "")
+            age = _path_age(tp, now)
+            # 경로를 적어 뒀는데 그 파일이 없다 = 기록 자리가 사라졌다.
+            gone = bool(tp) and not os.path.exists(tp)
+            claim_age = None
+            try:
+                claim_age = now - datetime.datetime.fromisoformat(
+                    c.get("ended") or c.get("started") or "").timestamp()
+            except (ValueError, TypeError):
+                claim_age = None
             pid_alive = None
             line = ""
             if kind == "lead":
@@ -7812,7 +8484,8 @@ def agent_health(now=None):
                     age = _path_age(os.path.join(_auto_dir(),
                                                  safe_name(r["id"]) + ".log"), now)
             state, why = judge_health(actor, age=age, pid_alive=pid_alive,
-                                      log_line=line)
+                                      log_line=line, gone=gone,
+                                      claim_age=claim_age)
             out.append({"req": r["id"], "actor": actor,
                         "item": c.get("item", ""), "state": state,
                         "reason": why,
@@ -10059,37 +10732,27 @@ def cmd_code(args):
         # exec 시 기본값으로 복원되어 claude의 Ctrl+C 처리에 영향 없음).
         import signal as _signal
         _signal.signal(_signal.SIGINT, lambda *_a: None)
-        cmd, env = list(base_cmd), None
+        cmd, env, acct = list(base_cmd), None, ""
         while True:
             subprocess.run(cmd, env=env)
             m = _consume_restart_marker()
             if not m:
                 return
             cmd = _restart_cmd(base_cmd, m)
-            env = None
-            if m.get("account"):
-                prof = os.path.join(os.path.expanduser("~"),
-                                    ".claude-profiles", safe_name(m["account"]))
-                os.makedirs(prof, exist_ok=True)
-                env = {**os.environ, "CLAUDE_CONFIG_DIR": prof}
-                # 그 프로필에 하네스를 보장하고 뜬다 (REQ-20260827-032) —
-                # 대시보드에서 계정을 고른 사람은 설치 절차를 모른다. 여기서
-                # 안 걸면 훅 없는 세션이 조용히 시작된다.
-                prev = os.environ.get("CLAUDE_CONFIG_DIR")
-                os.environ["CLAUDE_CONFIG_DIR"] = prof
-                try:
-                    if not hooks_installed():
-                        print(f"◌ 계정 {m['account']} 프로필에 section9 "
-                              f"하네스를 설치한다…")
-                        subprocess.run(
-                            [os.path.join(os.path.dirname(
-                                os.path.realpath(__file__)), "s9-install"),
-                             "--quiet"], env=env, stdin=subprocess.DEVNULL)
-                finally:
-                    if prev is None:
-                        os.environ.pop("CLAUDE_CONFIG_DIR", None)
-                    else:
-                        os.environ["CLAUDE_CONFIG_DIR"] = prev
+            # 고른 계정은 이 한 번으로 끝나지 않는다 (REQ-20260827-079).
+            # 예전에는 마커가 계정을 말할 때만 프로필을 걸어서, 계정을 바꾼 뒤
+            # **모델만 바꾸면** 계정이 조용히 원래대로 돌아갔다 — 아무도 그러라고
+            # 말하지 않았는데. 마커가 말하지 않으면 직전에 고른 것을 들고 간다.
+            acct = m.get("account") or acct
+            if acct == ACCOUNT_HOME_KEY:
+                # 기본 계정으로 돌아가는 것도 '고른 것'이다. env=None 은
+                # 래퍼의 환경을 그대로 물려주므로, 프로필로 띄운 창
+                # (wake_session(account=X))에서 @home 을 고르면 그 프로필이
+                # 그대로 상속돼 **복귀가 조용히 무효**가 됐다 (라운드1).
+                env = {k: v for k, v in os.environ.items()
+                       if k != "CLAUDE_CONFIG_DIR"}
+            else:
+                env = None if not acct else _account_env(acct)
             print(f"◌ 세션 재시작: {' '.join(cmd[1:])}")
     except FileNotFoundError:
         die("claude 명령을 찾을 수 없다 — Claude Code 설치 확인")
@@ -10805,6 +11468,34 @@ def _guard_spawn_child(port, host, root=None):
         lf.close()
 
 
+def _guard_stop_signal(port, root=None):
+    """감시자에게 '물러나라'가 닿게 한다 (REQ-20260829-018).
+
+    중지 파일만 두었더니 평상시에 `s9 serve --stop` 이 늘 실패했다. 감시자는
+    자식이 사는 동안 `proc.wait()` 에 잠겨 있어서 그 파일을 **자식이 죽은
+    뒤에야** 본다 — 서버가 멀쩡히 도는 동안에는 영원히 안 본다는 뜻이고,
+    그래서 "감시자가 물러나지 않았다"가 정상 상태의 답이 되어 버렸다.
+    신호는 잠긴 곳까지 닿는다.
+
+    자식은 건드리지 않는다. 서버를 내리는 것은 `--stop` 의 **다음** 걸음이고,
+    `--stop-guard` 는 서버를 살려 둔 채 감시만 놓는 명령이다.
+    """
+    import signal as _sig
+
+    def _bye(_signum, _frame):
+        try:
+            _guard_record(port, "stop",
+                          f"{port} 감시 중지 신호 — 서버는 그대로 두고 물러난다",
+                          root=root)
+        finally:
+            os._exit(0)
+    for sg in (_sig.SIGTERM, _sig.SIGINT):
+        try:
+            _sig.signal(sg, _bye)
+        except (ValueError, OSError):
+            pass          # 주 스레드가 아니면(테스트) 신호를 걸 수 없다
+
+
 def serve_guard_loop(port, host="127.0.0.1", root=None, spawn=None,
                      sleep=None, clock=None, max_rounds=None):
     """감시 루프. 반환값은 종료 사유 문자열.
@@ -10812,6 +11503,7 @@ def serve_guard_loop(port, host="127.0.0.1", root=None, spawn=None,
     spawn/sleep/clock 은 테스트 주입점이다 — 실제 시간을 쓰지 않고 백오프·
     사망 기록·정상 종료 판정을 고정할 수 있어야 한다."""
     import time as _t
+    _guard_stop_signal(port, root)
     sleep = sleep or _t.sleep
     clock = clock or _t.monotonic
     spawn = spawn or (lambda: _guard_spawn_child(port, host, root))
@@ -10913,6 +11605,21 @@ def _guard_lock(port, root=None):
     except OSError:
         pass
     return f
+
+
+def _guard_ask_stop(port, pid=None, root=None):
+    """감시자에게 중지 신호를 보낸다 (REQ-20260829-018) — 파일은 이미 두었고,
+    이건 **잠겨 있는 감시자**에게 닿는 쪽이다. 없으면 조용히 넘어간다."""
+    import signal as _sig
+    if pid is None:
+        pid = _guard_alive(port, root)
+    if not pid or pid <= 0:
+        return False
+    try:
+        os.kill(pid, _sig.SIGTERM)
+        return True
+    except OSError:
+        return False
 
 
 def _guard_alive(port, root=None):
@@ -11095,13 +11802,23 @@ def catalog_with_live(stall_win=None):
                                        safe_name(r["id"]) + ".json")) as f:
                     sp = json.load(f)
                 age = now - sp.get("last", 0)
-                if age < SPAWN_WIN:
+                alive = _worker_alive(sp.get("pid")) if sp.get("pid") else None
+                # 앰버 창(SPAWN_WIN)은 '아직 클레임 전'을 재는 시계지 워커의
+                # 수명이 아니다 (REQ-20260829-016 패치2). 프로세스가 실제로
+                # 도는 동안은 계속 기동 중으로 본다 — 그러지 않으면 10분을
+                # 넘겨 도는 워커가 '멈춤'으로 그려지고, 그 카드의 깨우기가
+                # **곧 중복 스폰**이다. 실사고 11:04~11:39 의 재스폰 간격이
+                # 정확히 SPAWN_WIN 이었다(쿨다운과 같은 600초라, 앰버가 꺼지는
+                # 바로 그 순간 쿨다운이 풀린다). 한도는 worker_running 과
+                # 같은 WORKER_WIN — 멎은 채 프로세스만 남은 워커를 한 시간
+                # 넘게 감추지 않는다.
+                if age < SPAWN_WIN or (alive and age < WORKER_WIN):
                     r["live_age"] = int(age)
                     # 스폰 사실만으로 앰버를 켜면 즉사한 워커도 창이 닫힐
                     # 때까지 '기동 중'으로 보인다 — 066 워커는 모델 한도로
                     # 스폰 직후 죽었는데 10분간 앰버였다 (REQ-20260825-086).
                     # pid가 없는 구 마커는 기존대로 앰버(하위호환).
-                    if sp.get("pid") and not _worker_alive(sp.get("pid")):
+                    if sp.get("pid") and not alive:
                         r["live_kind"] = "spawn_failed"
                         r["live_reason"] = (_worker_last_line(r["id"])
                                             or "워커가 종료됐다 (로그 없음)")
@@ -11113,7 +11830,21 @@ def catalog_with_live(stall_win=None):
             # 마커 판정(spawn_failed)을 덮지 않는 이유: 마커 쪽이 더 구체적인
             # 근거(pid + 워커 로그 원문)를 갖는다.
             ag = r.get("agent_state") or {}
+            # 이 요약은 **색인에 굳어 있다** — 읽는 시점의 시계를 여기서 다시
+            # 댄다 (라운드1). REQ-041 의 점은 어제 22:36 에 기록된 stalled 를
+            # 근거로 오늘도 정지였다: 문서가 안 바뀌면 색인도 안 바뀌므로,
+            # _contrib_state 안의 한도만으로는 늙은 판정이 그대로 남는다.
+            a_age = _iso_age(ag.get("at"), now) if ag else None
+            if a_age is not None and a_age >= DELEGATE_WIN:
+                ag = {}
+            o_age = _iso_age(ag.get("open_at"), now) if ag else None
+            opened = bool(ag.get("open")) and not (
+                o_age is not None and o_age >= DELEGATE_WIN)
+            # 아직 열린 기여가 있으면 점을 끄지 않는다: 죽은 서브 하나 때문에
+            # 일하는 리드가 '멈춤'으로 그려지면, 그 카드의 깨우기가 일하는 손
+            # 위에 두 번째 손을 붙인다.
             if r.get("live_kind") not in ("spawn_failed",) \
+                    and not opened \
                     and ag.get("state") in ("failed", "stalled"):
                 r["live_kind"] = ("spawn_failed" if ag["state"] == "failed"
                                   else "stalled")
@@ -11179,6 +11910,7 @@ def cmd_serve(args):
         p = _guard_paths(args.port)
         os.makedirs(p["state"], exist_ok=True)
         open(p["stop"], "w").close()
+        _guard_ask_stop(args.port)
         print(f"{args.port} 감시 중지 요청 — 서버는 그대로 둔다 "
               f"(최대 {GUARD_POLL_SEC}s 안에 물러난다)")
         return
@@ -11195,6 +11927,7 @@ def cmd_serve(args):
             p = _guard_paths(args.port)
             os.makedirs(p["state"], exist_ok=True)
             open(p["stop"], "w").close()
+            _guard_ask_stop(args.port, held)
             print(f"감시자에 중지를 알렸다 (pid {held}) — 물러나기를 기다린다…")
             for _ in range(GUARD_POLL_SEC * 4):   # 폴 주기의 2배까지 기다린다
                 if _guard_alive(args.port) is None:
@@ -11574,7 +12307,10 @@ def cmd_serve(args):
                         or inp.get("pattern") or inp.get("command") or "")
                 return f"{b.get('name', '')} {str(hint)[:60]}".strip()
             if b.get("type") == "text" and b.get("text", "").strip():
-                return b["text"].strip().splitlines()[0][:70]
+                # 시각 도장을 '하는 일'로 적지 않는다 (REQ-20260829-013).
+                lab = agent_label_line(b["text"])
+                if lab:
+                    return lab
         return ""
 
     def chat_agent_target(sid8, want):
@@ -11765,6 +12501,39 @@ def cmd_serve(args):
             self.end_headers()
             self.wfile.write(data)
 
+        def _send_asset(self, full, ctype):
+            """첨부 서빙 — 잠깐 물리고, 안 바뀌었으면 안 보낸다 (REQ-20260829-019).
+
+            이 환경의 루프백은 같은 순간에 도착한 연결을 열 개쯤에서 자른다
+            (DOC-20260827-004). 그림이 열다섯 장인 문서를 `no-store` 로 내주면
+            **다시 그릴 때마다** 그 벼랑 앞에 열다섯을 던진다 — 사용자가 본
+            깨진 칸이 그것이다. 재시도는 화면의 몫이고, 서버의 몫은 부르는
+            횟수 자체를 줄이는 것이다.
+
+            판·목록·상태는 여전히 `no-store` 다(`_send`). 그것들은 사람이 옮긴
+            결과를 곧바로 보여야 하고, 첨부와는 성질이 다르다.
+            """
+            tag = asset_etag(full)
+            if tag and self.headers.get("If-None-Match") == tag:
+                self.send_response(304)
+                self.send_header("ETag", tag)
+                self.send_header("Cache-Control",
+                                 f"private, max-age={ASSET_CACHE_SEC}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            with open(full, "rb") as f:
+                data = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            if tag:
+                self.send_header("ETag", tag)
+            self.send_header("Cache-Control",
+                             f"private, max-age={ASSET_CACHE_SEC}")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
         def _json(self, obj, code=200):
             self._send(code, "application/json; charset=utf-8",
                        json.dumps(obj, ensure_ascii=False).encode())
@@ -11949,14 +12718,20 @@ def cmd_serve(args):
                     # 생존 판정은 actor_alive 한 곳에서만 온다 —
                     # 스트립이 자기 숫자(180)를 들고 있으면 헬스체크와 언제든
                     # 갈라진다 (REQ-20260826-016).
+                    # 침묵의 길이를 행이 스스로 말한다 (REQ-20260829-013) —
+                    # 화면이 자기 숫자를 들면 헬스체크와 언제든 갈린다.
+                    quiet = max(0.0, time.time() - st["mtime"])
                     out.append({"id": aid, "type": meta.get("type", ""),
                                 "desc": meta.get("desc", ""),
                                 "label": st["label"],
                                 "tokens": st["tokens"],
                                 "elapsed": max(elapsed, 0),
+                                "quiet": int(quiet),
+                                # 남길 것인가 — 죽음의 잣대와 다른 잣대다
+                                "show": quiet < AGENT_KEEP_SEC,
                                 "active": actor_alive(
                                     f"sub:{meta.get('type', '') or 'subagent'}",
-                                    age=time.time() - st["mtime"])})
+                                    age=quiet)})
                 self._json({"session": sid, "agents": out})
             elif parsed.path == "/api/agentstream":
                 # 에이전트 transcript 열람 (REQ-044): ←/클릭으로 터미널에서 조회
@@ -12111,15 +12886,41 @@ def cmd_serve(args):
                     # '@?' 표기 결함 (REQ-20260825-001). listening: inbox tail
                     # 실가동 여부 — live여도 tail이 없으면 세션이 유휴라
                     # 메시지가 큐잉만 된다는 사실을 프런트가 표시해야 한다.
+                    _acct = account_rows(session_cfg_dir(b), settle=False)
                     self._json({"sid": b.get("session"),
                                 "user": b.get("user")
                                 or whoami_info().get("user", ""),
                                 "live": chat_live(b),
+                                # 끝난 것과 그냥 조용한 것은 다른 일이다
+                                # (REQ-20260829-023) — 화면이 "이 세션은
+                                # 끝났습니다" 를 말할 수 있어야 한다.
+                                "ended": bool(b.get("ended")),
                                 "compacting": chat_compacting(b),
                                 "listening": _inbox_watch_alive(
                                     b.get("session", "")),
                                 "model": session_model(b),
-                                "profiles": claude_profiles()})
+                                "profiles": claude_profiles(),
+                                # 폴은 읽기 전용이다 (REQ-20260827-079 라운드1)
+                                # — 5초마다 도는 조회가 프로필을 옮기거나
+                                # 지우면 그건 조회가 아니라 사고다.
+                                "accounts": _acct,
+                                "switchable": account_switchable(_acct)})
+            elif parsed.path == "/api/accounts":
+                # 고를 수 있는 계정들 (REQ-20260827-079) — 자리 이름이 아니라
+                # 계정으로, 지금 붙어 있는 줄에 표식을 달아서.
+                b = chat_target(qs.get("sid", [""])[0] or None)
+                rows = account_rows(session_cfg_dir(b))
+                # switchable: 실제로 **옮겨 갈 수 있는** 줄의 수. 0이면 창은
+                # 막다른 길이라 화면이 그 사실을 말해야 한다 (라운드1).
+                self._json({"accounts": rows,
+                            "switchable": account_switchable(rows),
+                            "sid": (b or {}).get("session"),
+                            "ended": bool((b or {}).get("ended")),
+                            "live": bool(b) and chat_live(b)})
+            elif parsed.path == "/api/sessions":
+                # 고를 수 있는 세션들 (REQ-20260829-023) — 자동 선택만 있던
+                # 자리에 사람의 손을 들인다.
+                self._json({"sessions": session_rows()})
             elif parsed.path == "/api/chat/log":
                 sid = qs.get("sid", [""])[0]
                 lines = []
@@ -12150,8 +12951,7 @@ def cmd_serve(args):
                             import mimetypes
                             ctype = (mimetypes.guess_type(full)[0]
                                      or "application/octet-stream")
-                            with open(full, "rb") as f:
-                                self._send(200, ctype, f.read())
+                            self._send_asset(full, ctype)
                             ok = True
                 if not ok:
                     self._send(404, "text/plain", b"not found")
@@ -12285,6 +13085,29 @@ def cmd_serve(args):
                 if parsed.path == "/api/status":
                     note = (req.get("note") or "").strip()[:500]
                     tid, tto = str(req.get("id", "")), str(req.get("to", ""))
+                    # 첨부는 전이와 **한 번에** 온다 (REQ-20260829-015).
+                    # 예전엔 화면이 /api/note 로 붙이고 /api/status 로 옮기는
+                    # 두 왕복이라, 앞이 성공하고 뒤가 실패하면 근거만 남고
+                    # 상태는 안 옮겨진 어중간한 자리가 생겼다.
+                    #
+                    # **붙이는 것이 먼저다.** 반려는 무인 재작업 작업자를
+                    # 깨우는데, 그가 문서를 읽을 때 근거가 이미 있어야 한다.
+                    # 붙이지 못하면 예외가 나가 전이도 일어나지 않는다 —
+                    # 증거 없는 반려를 만들지 않는다.
+                    #
+                    # 표기(Image/File)는 서버가 정한다: 화면 둘이 각자 정규식을
+                    # 들면 한 곳만 고쳐진다.
+                    atts = [str(a) for a in (req.get("atts") or []) if a][:20]
+                    if atts:
+                        cands = resolve_id(tid)
+                        if not cands:
+                            raise ValueError(f"그런 문서가 없다: {tid}")
+                        marks = "\n".join(asset_mark(a) for a in atts)
+                        chat_append_doc(cands[0]["id"],
+                                        (note + "\n\n" if note else "") + marks,
+                                        actor, "",
+                                        label=str(req.get("label")
+                                                  or "response"))
                     # judge=True: 대시보드 전이는 사람의 행위 — review→done
                     # 승인에 한해 goal/TDD 게이트 면제 (REQ-20260825-030)
                     # note 는 사람이 쓴 메모 **원문**이다 — 판정 접두어와
@@ -12397,7 +13220,11 @@ def cmd_serve(args):
                     if len(cands) > 1:
                         raise ValueError(f"모호한 문서: {doc}")
                     tgt = cands[0]["id"]
-                    warn = chat_append_doc(tgt, text, actor, "", anchor)
+                    # 라벨은 문서 안의 구획 이름이다 (REQ-20260829-015) —
+                    # 판정 근거가 '질문'으로 적히던 자리.
+                    label = str(req.get("label") or "ask").strip()
+                    warn = chat_append_doc(tgt, text, actor, "", anchor,
+                                           label=label)
                     self._json({"ok": True, "id": tgt, "warn": warn})
                 elif parsed.path == "/api/chat":
                     # 대시보드 → 세션 채팅 (REQ-032): 수신함 append가 곧 전달.
@@ -12469,7 +13296,20 @@ def cmd_serve(args):
                                        actor=actor)
                     self._json(res, 200 if res.get("ok") else 409)
                 elif parsed.path == "/api/session/wake":
-                    self._json(wake_session())
+                    # account: 고른 계정으로 깨운다 (REQ-20260829-023) — 계정을
+                    # 바꾸려는데 붙어 있는 세션이 없을 때 빠져나갈 문이다.
+                    self._json(wake_session(
+                        account=str(req.get("account") or "").strip()))
+                elif parsed.path == "/api/account/remove":
+                    # 로그인 전 자리를 지운다 (REQ-20260827-079 라운드1).
+                    # 판정·가드는 account_remove 한 곳에만 있다 — 경로 검사가
+                    # 두 벌이면 한 벌만 고쳐진다.
+                    res = account_remove(str(req.get("name") or "").strip())
+                    self._json(res, 200 if res.get("ok") else 409)
+                elif parsed.path == "/api/account/add":
+                    # 계정 추가는 로그인 화면이 필요하다 — 창을 여기서 연다
+                    # (REQ-20260827-079). 로그인이 끝나면 목록에 저절로 뜬다.
+                    self._json(account_add_terminal())
                 elif parsed.path == "/api/session/restart":
                     # 모델·effort·계정 변경 = 같은 대화 재개 재기동 (REQ-037)
                     res = restart_session(
@@ -12734,6 +13574,42 @@ def worktree_add(name, owner=None):
     return path, f"wt/{name}"
 
 
+# 워크트리에 **없는** 것이 곧 사본의 결함이다: 데이터(state/·vault/·users/)는
+# S9_ROOT 로 본 저장소를 함께 쓰므로 사본 문제가 아니고, 코드만 갈린다.
+WORKTREE_SHARED_DIRS = ("state/", "vault/", "users/", "index/", "streams/")
+
+
+def repo_code_dirty(root=None):
+    """본 저장소에 **커밋되지 않은 코드 변경**이 있는가 (파일 목록으로).
+
+    워크트리는 마지막 커밋의 사본이다 — 오늘 고친 것이 아직 커밋 전이면 그
+    자리에는 그 코드가 **없다**. 실사고 2026-08-29 15:10: 사람이 누른 깨우기가
+    실제로 워커를 띄웠는데, 워커는 자기 자리에 고칠 코드가 없어 "여기서 고쳐
+    커밋하면 합칠 때 오늘 것을 되돌린다"며 blocked 로 물러났다. 창은 깨웠다고
+    말하고 카드는 그대로 — **성공 응답이 거짓말이 된다.**
+
+    데이터 자리는 세지 않는다(S9_ROOT 로 공유하므로 사본이 아니다).
+    """
+    import subprocess
+    try:
+        r = subprocess.run(["git", "status", "--porcelain"],
+                           capture_output=True, text=True,
+                           cwd=root or ROOT, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return []          # 못 물어봤으면 막지 않는다 — 편의지 전제가 아니다
+    if r.returncode != 0:
+        return []
+    out = []
+    for line in (r.stdout or "").splitlines():
+        p = line[3:].strip().strip('"')
+        if " -> " in p:                       # rename: 새 이름 쪽을 본다
+            p = p.split(" -> ", 1)[1]
+        if not p or p.startswith(WORKTREE_SHARED_DIRS):
+            continue
+        out.append(p)
+    return out
+
+
 def worker_worktree_name(doc_id):
     import time as _time
     return f"w-{safe_name(doc_id)[-12:]}-{int(_time.time())}"
@@ -12755,6 +13631,15 @@ def worker_workspace(doc_id, cfg, cwd):
     반환: (cwd, env 추가분, 워크트리 이름).
     """
     if not (cfg or {}).get("worker_worktree"):
+        return cwd, {}, ""
+    dirty = repo_code_dirty()
+    if dirty:
+        # 오늘 만든 것이 사본에 없다 — 갈라 주면 워커는 고칠 코드가 없는
+        # 자리에 앉는다 (REQ-20260828-041 라운드1). 갈라 주는 것은 편의지
+        # 전제가 아니므로, 여기서는 본 저장소로 물러난다(동시 작업 규율은
+        # _spawn_worker 의 비-워크트리 프롬프트가 그대로 건다).
+        _auto_log(f"WT-SKIP(dirty) {doc_id} 미커밋 코드 {len(dirty)}건 "
+                  f"({', '.join(dirty[:3])}) — 본 저장소에 앉힌다")
         return cwd, {}, ""
     import time as _time
     name = worker_worktree_name(doc_id)
@@ -13375,10 +14260,10 @@ def main():
 
     ac = sub.add_parser("account",
                         help="Claude 로그인 계정 관리 (만들기·목록·전환)")
-    ac.add_argument("action", choices=["ls", "add", "use"])
+    ac.add_argument("action", choices=["ls", "add", "use", "remove"])
     ac.add_argument("name", nargs="?",
                     help="add: 이름(생략하면 로그인한 계정으로 자동) · "
-                         "use: 바꿀 계정")
+                         "use: 바꿀 계정 · remove: 지울 로그인 전 자리")
     ac.set_defaults(fn=cmd_account)
 
     cd2 = sub.add_parser("code", help="대시보드 보장 + 이 터미널에서 claude 실행 (통합 진입)")

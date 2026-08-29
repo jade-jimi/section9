@@ -91,6 +91,10 @@ class BoardDoneWindow(unittest.TestCase):
         cls.lim = grab(cls.src, r"const COL_LIMIT = [^\n]*;", "COL_LIMIT")
         cls.col = grab(cls.src, r"^function colHTML\(key, label, color, grp\)\{.*?^\}",
                        "colHTML")
+        # 열 머리의 '멈춤 N' 은 카드와 같은 술어를 쓴다 (REQ-20260828-041 2차) —
+        # 그래서 이 열을 실행하려면 그 술어도 함께 실어야 한다.
+        cls.stallstate = grab(cls.src, r"^function stallState\(r\)\{.*?^\}",
+                              "stallState")
 
     # ---------- node 로 실제 실행 ----------
 
@@ -103,7 +107,7 @@ class BoardDoneWindow(unittest.TestCase):
             self.skipTest("node 없음 — 실행 검증 생략 (소스 계약은 별도 검사)")
         script = "\n".join([
             'const TERMINAL = new Set(["done","cancelled"]);',
-            self.lim, self.win, self.at, self.word,
+            self.lim, self.win, self.at, self.word, self.stallstate,
             "const cardHTML = r => `<c>${r.id}</c>`;",
             'const EMPTY_COL = {"in-progress": \'<div class="colempty">진행 중인 요청 없음</div>\','
             ' done: \'<div class="colempty">완료된 요청 없음</div>\'};',

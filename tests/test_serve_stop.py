@@ -117,6 +117,46 @@ class ServeStop(unittest.TestCase):
             src = f.read()
         self.assertIn('sv.add_argument("--stop", action="store_true"', src)
 
+    def test_t6_the_guard_is_told_by_signal_not_only_by_a_file(self):
+        """T6. 중지는 **신호로** 전한다 (REQ-20260829-018).
+
+        중지 파일만 두었더니 평상시에 `--stop` 이 늘 실패했다: 감시자는 자식이
+        사는 동안 `proc.wait()` 에 잠겨 있어서 그 파일을 **자식이 죽은 뒤에야**
+        본다. 서버가 멀쩡히 도는 동안에는 영원히 안 본다는 뜻이고, 그래서
+        "감시자가 물러나지 않았다"가 정상 상태의 답이 되어 버렸다. 신호는 잠긴
+        곳까지 닿는다.
+        """
+        m = self.mod
+        sent = []
+        with mock.patch.object(m, "_guard_alive",
+                               side_effect=[4242, None, None]), \
+             mock.patch.object(m, "_signal_port", return_value=1), \
+             mock.patch.object(m, "_port_busy", return_value=True), \
+             mock.patch.object(m, "_wait_port_free", return_value=True), \
+             mock.patch("os.kill", side_effect=lambda p, s: sent.append((p, s))), \
+             mock.patch("time.sleep", lambda *_: None):
+            m.cmd_serve(self._args(stop=True))
+        self.assertIn(4242, [p for p, _ in sent],
+                      "감시자 pid 에 아무 신호도 보내지 않았다 — 파일만 두면 "
+                      "서버가 사는 동안 감시자는 그것을 보지 못한다")
+
+    def test_t7_the_guard_hears_the_signal_while_blocked(self):
+        """T7. 감시자가 그 신호를 받을 채비를 하고 돈다 — 보내는 쪽만 고치면
+        아무 데도 닿지 않는다."""
+        with open(S9, encoding="utf-8") as f:
+            src = f.read()
+        i = src.find("def serve_guard_loop(")
+        self.assertGreater(i, 0)
+        self.assertIn("_guard_stop_signal", src[i:i + 1500],
+                      "감시 루프가 중지 신호를 받을 자리를 마련하지 않았다")
+        j = src.find("def _guard_stop_signal(")
+        self.assertGreater(j, 0, "_guard_stop_signal() 이 없다")
+        blk = src[j:j + 1400]
+        self.assertIn("SIGTERM", blk)
+        self.assertNotIn("proc.terminate", blk,
+                         "물러나면서 서버를 함께 죽였다 — --stop-guard 는 "
+                         "서버를 살려 둔 채 감시만 놓는 명령이다")
+
     def test_t5_kill_path_is_shared_with_restart(self):
         """T5. `--stop` 과 `--restart` 가 같은 종료 경로를 쓴다.
 

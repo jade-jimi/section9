@@ -6,7 +6,7 @@ role: admin
 emails: ["claude01.pfe@example.invalid"]
 github: nicehugepark
 os_accounts: ["sjpark1"]
-machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-29T11:39:10+09:00"}]
+machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-29T18:35:50+09:00"}]
 ---
 
 ## Notes
@@ -122,3 +122,4 @@ machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpar
 - 2026-08-28T17:50:51+09:00 config timezone=Asia/Seoul (by nicehugepark via dashboard)
 - 2026-08-28T19:09:58+09:00 config timezone=America/New_York (by nicehugepark)
 - 2026-08-28T19:09:58+09:00 config timezone=Asia/Seoul (by nicehugepark)
+- 2026-08-29T14:41:03+09:00 config ui_tone=system (by nicehugepark via dashboard)

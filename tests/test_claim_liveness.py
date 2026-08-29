@@ -141,7 +141,7 @@ class ClaimLiveness(unittest.TestCase):
         sp.Popen = fake_popen
         try:
             self.m.user_config = lambda o: {"auto_resume": True}
-            self.m._auto_caps_ok = lambda d, c: True
+            self.m._auto_caps_ok = lambda d, c, *_a, **_k: True
             ok = self.m._spawn_worker(
                 "REQ-20260826-013-62x6",
                 {"user": "tester", "machine": "testbox", "session": "cb49b2cd"},
@@ -170,7 +170,7 @@ class ClaimLiveness(unittest.TestCase):
         sp.Popen = fake_popen
         try:
             self.m.user_config = lambda o: {"auto_resume": True}
-            self.m._auto_caps_ok = lambda d, c: True
+            self.m._auto_caps_ok = lambda d, c, *_a, **_k: True
             self.m._spawn_worker(
                 "REQ-20260826-013-62x6",
                 {"user": "tester", "machine": "testbox", "session": "nosess00"},

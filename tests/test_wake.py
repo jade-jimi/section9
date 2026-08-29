@@ -146,14 +146,40 @@ class WakeDecision(unittest.TestCase):
                        "day_count": 20, "hour": int(time.time() // 3600),
                        "hour_count": 0}, f)
 
+    def _cap_wake_full(self, n=12):
+        d = os.path.join(self.root, "state", "auto_resume")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "_global.json"), "w") as f:
+            json.dump({"day": datetime.date.today().isoformat(),
+                       "day_count": 0, "hour": int(time.time() // 3600),
+                       "hour_count": 0, "wake_day_count": n,
+                       "wake_hour_count": 0}, f)
+
     def test_w4_day_cap_is_reported(self):
+        """사람이 누른 깨우기의 **자기 예산**이 다 차면 그 사실 그대로 답한다.
+
+        전제가 바뀐 자리다 (REQ-20260828-041 라운드1). 종전엔 워처의 전역
+        일일 캡(day_count 20)이 이 손잡이도 함께 막았고, 그것을 이 시험이
+        정상으로 못 박고 있었다. 실측 2026-08-29: 그날 20슬롯 중 17건을 자동
+        경로(rework 13 · followup 4)가 먹었고 16:48:07 이후 사람의 깨우기는
+        전부 capped 였다 — **저녁마다 죽는 버튼은 없는 버튼과 같다.** 그래서
+        예산을 갈랐고, 시험도 갈린 쪽을 잰다."""
         self.m.user_config = lambda o=None: {"auto_resume": True}
-        self._cap_day_full()
+        self._cap_wake_full(12)
         res = self.wake(self.rid, actor="alice", win=0)
         self.assertFalse(res["ok"])
         self.assertEqual(res["action"], "capped")
-        self.assertIn("20", res["message"],
+        self.assertIn("12", res["message"],
                       "한도가 몇인지 안 적히면 사람이 무엇을 바꿔야 할지 모른다")
+
+    def test_w4c_watcher_exhaustion_leaves_the_button_alive(self):
+        """워처가 오늘 예산을 다 써도 사람이 누르는 손잡이는 산다."""
+        self.m.user_config = lambda o=None: {"auto_resume": True}
+        self._cap_day_full()
+        self.stub_spawn()
+        res = self.wake(self.rid, actor="alice", win=0)
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(res["action"], "spawned")
 
     def test_w4b_cooldown_is_reported(self):
         """쿨다운은 '기동 중' 창(SPAWN_WIN)보다 길게 잡은 계정에서만 보인다 —
