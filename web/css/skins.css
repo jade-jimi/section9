@@ -111,6 +111,15 @@
 [data-skin="terminal"] .stat.on b{color:var(--bg)}
 [data-skin="terminal"] .brand .dot{width:9px;height:14px;animation:s9blink 1.1s steps(1) infinite}
 @keyframes s9blink{50%{opacity:0}}
+/* density: compact — skin 이 못박은 자리마다 그 skin 의 compact 값을 세운다
+   (REQ-20260830-034). 이 파일은 density.css 보다 **앞**에 실리므로 calm 처럼
+   손잡이가 죽지는 않았다 — 대신 반대 사고가 났다: compact 를 켜면 ledger 의
+   숫자가 스킨의 언어를 덮어썼다(grid 는 풀블리드를 잃고 판에 12px 여백이 생겼고,
+   field 는 지면이 보이던 가장자리를 잃었다). 짝(특이도 0,3,0)은 두 사고를 한꺼번에
+   막는다 — 순서와 무관하게 이기고, 값은 그 스킨의 것이다.
+   지키는 선은 calm 과 같다: **여백과 글자만** 줄이고 라운드·그림자·잉크·배경은
+   손대지 않는다. 밀도는 재질을 바꾸는 축이 아니다. */
+[data-skin="terminal"][data-density="compact"] body{font-size:11.5px}
 
 /* ============ skin: glass — frosted 레이어 + 앰비언트 컬러 필드 (2026-08-23 사용자 번복으로 부활)
    ledger의 정반대 언어: 반투명 패널 + backdrop blur, 은은한 그라데이션 배경, 라운드/부드러운 그림자.
@@ -262,6 +271,11 @@
 [data-skin="field"] .col,[data-skin="field"] .col:last-child{
   background:var(--panel);border:1px solid var(--fd-line)}
 [data-skin="field"] .ghint{border-color:var(--fd-hair)}
+/* density: compact — 가장자리로 지면(필드)이 보이는 것이 이 스킨의 전부다.
+   ledger 의 10px 12px 로 눌리면 백색 판이 화면을 꽉 채워 필드가 사라진다.
+   여백은 절반으로 줄이되 clamp 문법은 유지한다 — 넓은 화면에서 판이 끝까지
+   퍼지지 않는 것이 field 의 호흡이다. */
+[data-skin="field"][data-density="compact"] main{padding:14px clamp(12px, 2.4vw, 32px)}
 
 /* ============ skin: cobalt — 컬러 헤더 밴드 셸 ============
    상단을 짙은 코발트 밴드(브랜드·탭 백색 잉크)로 바꾼 클래식 프로 SaaS 셸.
@@ -388,6 +402,18 @@
    함께 옮긴다 (REQ-20260828-009). 윗 여백은 제목 줄이 가진다. */
 [data-skin="grid"] .viewer{--vpad:26px;padding:0 var(--vpad) 18px}
 [data-skin="grid"] .settings-panel{top:84px}
+/* density: compact — grid 는 **풀블리드가 정체성**이다. compact 가 판에 12px
+   여백을 도로 그리면 엣지-투-엣지 그리드가 아니라 여백 있는 표가 된다 —
+   판 여백은 0 그대로 두고, 줄 안쪽(카드·행)만 눌러 밀도를 만든다.
+   좌우 12px 는 컬럼 헤더 바·카드·문서 행이 한 축으로 정렬되는 이 스킨의 격자라
+   compact 에서도 어긋내지 않는다. 줄이는 것은 세로다. */
+[data-skin="grid"][data-density="compact"] main{padding:0}
+[data-skin="grid"][data-density="compact"] .col{flex:1 1 0;width:auto;min-width:176px}
+[data-skin="grid"][data-density="compact"] .col h2{padding:6px 12px}
+[data-skin="grid"][data-density="compact"] .card{padding:4px 12px}
+[data-skin="grid"][data-density="compact"] .card .t{font-size:12px;margin:1px 0 2px}
+[data-skin="grid"][data-density="compact"] .doclist .row{padding:4px 12px}
+[data-skin="grid"][data-density="compact"] .viewer{--vpad:18px;padding:0 var(--vpad) 14px}
 
 /* skin: cockpit — 제거됨 (REQ-20260825-079: 다크-온-다크로 판독 불가).
    저장값 cockpit은 opts 검증에서 기본(ledger)으로 폴백된다. */
@@ -470,6 +496,13 @@
 [data-skin="slate"] header button:focus-visible,[data-skin="slate"] a:focus-visible,
 [data-skin="slate"] input:focus-visible,[data-skin="slate"] select:focus-visible{
   outline-color:var(--sl-blue)}
+/* density: compact — 화이트 카드는 라운드 8px 과 그림자를 그대로 두고 안쪽만
+   좁힌다. 좌우를 11px 로 남기는 것은 인색해서가 아니라, 라운드 모서리 안쪽
+   11px 아래로 글자를 밀면 글자가 곡선에 닿아 보이기 때문이다(각진 ledger 의
+   10px 를 그대로 쓸 수 없는 이유). 줄이는 몫은 세로가 가져간다. */
+[data-skin="slate"][data-density="compact"] body{font-size:12px}
+[data-skin="slate"][data-density="compact"] .card{padding:6px 11px}
+[data-skin="slate"][data-density="compact"] .card .t{font-size:12px}
 
 /* ============ skin: cork — 컬러 캔버스 보드 웰 ============
    대중적 칸반 보드의 디자인 언어(상표 요소 없이): 은은한 단색 컬러 캔버스가 지면,
@@ -528,6 +561,12 @@
   border-color:var(--ck-line);box-shadow:var(--ck-lift)}
 [data-skin="cork"] .ghint{border-radius:6px}
 [data-skin="cork"] .md pre{border-radius:8px;border-left:0}
+/* density: compact — 웰 안에 뜬 라운드 카드다. 라운드·그림자·리프트는 그대로
+   두고 안쪽 여백만 줄인다(slate 와 같은 이유로 좌우는 10px 에서 멈춘다).
+   컬럼 제목은 웰의 어깨에 얹혀 있어 아래 여백이 카드와의 간격을 겸한다 —
+   위아래를 함께 줄여야 제목이 첫 카드에 붙지 않는다. */
+[data-skin="cork"][data-density="compact"] .card{padding:6px 10px}
+[data-skin="cork"][data-density="compact"] .col h2{padding:6px 10px 4px}
 [data-skin="cork"] .md code{border-radius:4px}
 [data-skin="cork"] .term{border-radius:10px;margin:8px}
 [data-skin="cork"] .ccterm{border-radius:12px}

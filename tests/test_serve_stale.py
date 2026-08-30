@@ -27,10 +27,12 @@ import os
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
 HOOK = os.path.join(HERE, "..", "bin", "s9-audit-prompt")
+HOOK_SESSION = os.path.join(HERE, "..", "bin", "s9-audit-session")
 
 from portpool import free_port, wait_server  # noqa: E402
 
@@ -236,6 +238,107 @@ class TempPortNoStamp(unittest.TestCase):
                                         "serve-code.json")),
             "임시 포트 서버가 지문을 남겼다 — 죽은 뒤 doctor·배너가 "
             "이 지문으로 거짓말을 한다")
+
+
+class HookServeGuard(unittest.TestCase):
+    """훅이 남의 자리에 서버를 세우지 않는다 (REQ-20260830-033).
+
+    005 가 지문 쓰기를 serve_stamp_wanted 로 막았지만, s9-audit-session 의
+    ensure_serve 는 S9_PORT env 만 있고 S9_ROOT 없는 환경에서 본 저장소
+    ROOT 로 임시 포트 서버 자체를 띄울 수 있었다 — 규범 아닌 포트에 서버
+    프로세스가 뜨는 것도 오염이다. 훅은 독립 실행 파일이라 판정을 최소
+    복제하고, 갈라지지 않음은 계약 시험(G5 왕복)이 못박는다
+    (test_platform_live H1~H4 복제 검증 선례)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.hook = _load("s9_sess_guard", HOOK_SESSION)
+        cls.s9 = _load("s9_guard_cli", S9)
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="s9guard-")
+        os.makedirs(os.path.join(self.root, "state"), exist_ok=True)
+        # 물려받은 환경에 흔들리지 않게 판정 env 를 비운다 (tdd 규율)
+        self._saved = {k: os.environ.pop(k, None)
+                       for k in ("S9_PORT", "S9_ROOT")}
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            if v is not None:
+                os.environ[k] = v
+
+    # G1(S1). 회귀 — 짝 없이 새어든 S9_PORT 로는 세우지 않는다: 판정 0,
+    #         ensure_serve 는 serve 를 Popen 하지 않고 조용히 물러난다
+    def test_g1_stray_env_port_skips(self):
+        with mock.patch.dict(os.environ, {"S9_PORT": "18898"}):
+            self.assertEqual(self.hook._serve_port_wanted(self.root), 0)
+            spawned = []
+            with mock.patch.object(self.hook.subprocess, "Popen",
+                                   lambda argv, **kw: spawned.append(argv)):
+                self.hook.ensure_serve()
+        self.assertFalse([a for a in spawned if "serve" in a],
+                         "규범 아닌 포트에 서버를 세웠다 — 005 거짓 지문 "
+                         "계열의 남은 문")
+
+    # G2(S2). 정상 — env 없으면 규범 포트(state/port > 9909)다 (행동 보존)
+    def test_g2_no_env_uses_canonical(self):
+        self.assertEqual(self.hook._serve_port_wanted(self.root), 9909)
+        with open(os.path.join(self.root, "state", "port"), "w") as f:
+            f.write("9911")
+        self.assertEqual(self.hook._serve_port_wanted(self.root), 9911)
+
+    # G3(S3). 경계 — 규범과 같은 S9_PORT 는 짝 없이도 통과, S9_ROOT 와
+    #         짝이면(인스턴스 봉투) 그 포트가 규범이다 (행동 보존)
+    def test_g3_matching_or_paired_env_launches(self):
+        with mock.patch.dict(os.environ, {"S9_PORT": "9909"}):
+            self.assertEqual(self.hook._serve_port_wanted(self.root), 9909)
+        with mock.patch.dict(os.environ, {"S9_PORT": "18898",
+                                          "S9_ROOT": self.root}):
+            self.assertEqual(self.hook._serve_port_wanted(self.root), 18898)
+
+    # G4(S4). 쓰레기 S9_PORT 는 s9_port 와 같은 규율로 무시한다 — 현행은
+    #         ValueError 가 훅 밖으로 새는 잠재 결함(훅은 시끄러우면 안 된다)
+    def test_g4_garbage_env_port_ignored(self):
+        with mock.patch.dict(os.environ, {"S9_PORT": "x"}):
+            self.assertEqual(self.hook._serve_port_wanted(self.root), 9909)
+            spawned = []
+            with mock.patch.dict(os.environ, {"S9_ROOT": self.root}), \
+                 mock.patch.object(self.hook.subprocess, "Popen",
+                                   lambda argv, **kw: spawned.append(argv)):
+                self.hook.ensure_serve()      # 예외가 새어나오면 실패
+        serve = [a for a in spawned if "serve" in a]
+        self.assertTrue(serve, "규범 포트로도 세우지 않았다")
+        self.assertIn("9909", serve[0])
+
+    # G5(S5). 계약(왕복) — 훅이 포트 P 로 세우기로 한 모든 env 조합에서
+    #         bin/s9 serve_stamp_wanted(P, root) 도 참이다: 훅이 세운 서버는
+    #         반드시 지문 자격이 있다. 복제 판정이 갈라지면 여기서 깨진다.
+    def test_g5_contract_launch_implies_stamp(self):
+        cases = [
+            ({}, None),                                  # 기본 9909
+            ({"S9_PORT": "9909"}, None),                 # 규범과 일치
+            ({}, "9911"),                                # state/port 인스턴스
+            ({"S9_PORT": "18898", "S9_ROOT": "SELF"}, None),   # 봉투 짝
+            ({"S9_PORT": "18898"}, None),                # 남의 봉투 → 0
+            ({"S9_PORT": "x"}, None),                    # 쓰레기 → 규범
+        ]
+        launched = 0
+        for env, port_file in cases:
+            root = tempfile.mkdtemp(prefix="s9guardm-")
+            os.makedirs(os.path.join(root, "state"), exist_ok=True)
+            if port_file:
+                with open(os.path.join(root, "state", "port"), "w") as f:
+                    f.write(port_file)
+            env = {k: (root if v == "SELF" else v) for k, v in env.items()}
+            with mock.patch.dict(os.environ, env):
+                port = self.hook._serve_port_wanted(root)
+                if port:
+                    launched += 1
+                    self.assertTrue(
+                        self.s9.serve_stamp_wanted(port, root=root),
+                        f"훅은 {port} 에 세우는데 s9 는 지문 자격이 없다고 "
+                        f"한다 — 복제 판정이 갈라졌다 (env={env})")
+        self.assertEqual(launched, 5, "세우는 조합 수가 설계와 다르다")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>density audit</title>
+<style>body{font:12px ui-monospace,monospace;margin:0;padding:8px;background:#fff;color:#000}
+#f{width:1440px;height:900px;border:0;position:absolute;left:-9999px;top:0}
+pre{white-space:pre-wrap;margin:0}</style></head><body>
+<iframe id="f"></iframe><pre id="out">running…</pre>
+<script>
+/* density 축이 skin 에 삼켜졌는지 **픽셀로** 재는 보조 페이지 (REQ-20260830-034).
+   같은 DOM 을 skin×density 로만 바꿔 띄우고 카드 높이 중앙값과 한 열에 서는
+   장수를 센다. 코드가 맞아 보이는 것과 화면이 줄어든 것은 다른 말이다. */
+const COMBOS = JSON.parse(new URLSearchParams(location.search).get("combos") || "[]");
+const out = document.getElementById("out"), fr = document.getElementById("f");
+const lines = [];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function median(a){
+  if(!a.length) return 0;
+  const s = a.slice().sort((x,y)=>x-y), m = s.length>>1;
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+}
+
+async function waitCards(win, ms){
+  const t0 = Date.now();
+  while(Date.now()-t0 < ms){
+    try{
+      const c = win.document.querySelectorAll(".board .col .cards .card");
+      if(c.length >= 3) return true;
+    }catch(e){}
+    await sleep(120);
+  }
+  return false;
+}
+
+function measure(win){
+  const doc = win.document;
+  const cols = [...doc.querySelectorAll(".board .col")];
+  let best = null, bestN = -1;
+  for(const col of cols){
+    const n = col.querySelectorAll(".cards .card").length;
+    if(n > bestN){ bestN = n; best = col; }
+  }
+  if(!best) return null;
+  const cards = [...best.querySelectorAll(".cards .card")];
+  const hs = cards.map(c => +c.getBoundingClientRect().height.toFixed(1));
+  const wrap = best.querySelector(".cards");
+  const gap = parseFloat(win.getComputedStyle(wrap).rowGap) || 0;
+  /* 한 열 장수는 **고정 660px 칸**으로 환산한다 (REQ-20260830-032 과 같은 자) —
+     실제 남는 높이는 알림 줄 유무로 흔들려 스킨끼리 비교가 안 된다. */
+  const avail = 660;
+  const mh = median(hs);
+  const all = [...doc.querySelectorAll(".board .col .cards .card")]
+    .map(c => +c.getBoundingClientRect().height.toFixed(1));
+  return {
+    allmed: median(all), alln: all.length,
+    col: best.querySelector("h2") ? best.querySelector("h2").textContent.trim().split(/\s+/)[0] : "?",
+    n: cards.length,
+    med: mh,
+    min: Math.min(...hs), max: Math.max(...hs),
+    colw: +best.getBoundingClientRect().width.toFixed(1),
+    gap: +gap.toFixed(1),
+    fit: mh ? +(avail / (mh + gap)).toFixed(2) : 0,
+    body: win.getComputedStyle(doc.body).fontSize,
+    mainpad: win.getComputedStyle(doc.querySelector("main")).padding
+  };
+}
+
+/* before/after 를 **한 번의 로드 안에서** 잰다. 보드는 살아 있는 데이터라
+   몇 분 사이에도 카드 글이 바뀐다 — 파일을 바꿔 두 번 재면 CSS 가 준 몫과
+   데이터가 준 몫이 섞인다. 같은 DOM 에서 짝 규칙만 CSSOM 에서 걷어내
+   "짝 없던 시절"을 그 자리에서 재현한다. */
+const PAIR_RE = /\[data-skin="(cork|grid|slate|field|terminal)"\]\[data-density="compact"\]/;
+function dropPairs(win){
+  let n = 0;
+  for(const sheet of win.document.styleSheets){
+    let rules;
+    try{ rules = sheet.cssRules; }catch(e){ continue; }
+    if(!rules) continue;
+    for(let i = rules.length - 1; i >= 0; i--){
+      const sel = rules[i].selectorText;
+      if(sel && PAIR_RE.test(sel)){ sheet.deleteRule(i); n++; }
+    }
+  }
+  return n;
+}
+
+function fmt(tag, skin, dens, m){
+  return m ? [skin, dens, tag, "board(n="+m.alln+")med="+m.allmed.toFixed(1)+"px",
+    "col="+m.col+"/"+m.n, "colmed="+m.med+"px", "colw="+m.colw, "gap="+m.gap,
+    "fit660="+m.fit, "body="+m.body, "mainpad="+m.mainpad].join("  ")
+    : skin+"/"+dens+" "+tag+"  측정 실패";
+}
+
+async function load(skin, dens){
+  fr.src = "/?skin=" + skin + "&density=" + dens + "&t=" + Date.now();
+  await new Promise(r => { fr.onload = r; setTimeout(r, 12000); });
+  const win = fr.contentWindow;
+  if(!await waitCards(win, 15000)) return null;
+  await sleep(500);
+  return win;
+}
+
+async function run(){
+  for(const [skin, dens] of COMBOS){
+    const win = await load(skin, dens);
+    if(!win){ lines.push(skin+"/"+dens+"  카드 못 찾음"); out.textContent = lines.join("\n"); continue; }
+    lines.push(fmt(dens === "compact" ? "after " : "      ", skin, dens, measure(win)));
+    if(dens === "compact"){
+      const n = dropPairs(win);
+      await sleep(300);
+      lines.push(fmt("before(짝 "+n+"개 제거)", skin, dens, measure(win)));
+    }
+    out.textContent = lines.join("\n");
+  }
+  lines.push("DONE");
+  out.textContent = lines.join("\n");
+  document.title = "done";
+}
+run();
+</script></body></html>

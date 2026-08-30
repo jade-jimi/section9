@@ -39,15 +39,7 @@ CSS = os.path.join(WEB, "css")
 
 # 아직 density 짝이 없는 자리 (skin, 선택자). **줄어들기만 한다** —
 # 새로 늘리려면 그 skin 을 고치는 편이 빠르다.
-KNOWN = {
-    ("cork", ".card"), ("cork", ".col h2"),
-    ("field", "main"),
-    ("grid", ".card"), ("grid", ".card .t"), ("grid", ".col"),
-    ("grid", ".col h2"), ("grid", ".doclist .row"), ("grid", ".viewer"),
-    ("grid", "main"),
-    ("slate", ".card"), ("slate", ".card .t"), ("slate", "body"),
-    ("terminal", "body"),
-}
+KNOWN = set()   # 비었다 — **어떤 skin 도 density 를 삼키지 않는다** (REQ-20260830-034)
 
 RULE_RE = re.compile(r"([^{}]+)\{([^{}]*)\}")
 SKIN_RE = re.compile(r'^\[data-skin="(\w+)"\]\s+(.*)$')
