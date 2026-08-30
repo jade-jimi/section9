@@ -448,6 +448,99 @@ _ALIAS_CACHE = {"key": (), "map": {}, "gen": 0}
 _ALIAS_LOCK = threading.Lock()
 
 
+# 폴링 계산 공유 게이트 (REQ-20260831-001 ② → REQ-20260831-002 확장).
+# 대시보드 폴링이 겹치면 스레드마다 같은 패스를 통째로 다시 돌았고(요청당
+# ~1s CPU), 그 중복이 GIL 을 나눠 먹으며 응답이 분 단위로 밀리는 나선이 됐다
+# (실측 72~91s→120s 타임아웃; 001 마감 뒤에도 브라우저 재시도 폭풍 —
+# ESTABLISHED 95연결 — 이 연결 수만큼 계산을 곱해 재발). 두 겹이다:
+#  ① 동시 공유 — 기본 인자 호출은 계산이 이미 도는 중이면 새로 돌지 않고
+#     그 결과를 기다려 받는다. 낡음의 상한은 계산 한 번의 길이.
+#  ② TTL 스냅샷 (serve 모드만, POLL_SNAPSHOT_SEC) — 끝난 계산을 짧은 시간
+#     재사용해, 폭풍이 몇 연결이든 계산은 TTL 당 한 번이다. CLI·시험의
+#     기본값은 0: 프로세스가 한 번 묻고 끝나는 자리에 낡음을 들이지 않는다.
+#     TTL 안이라도 지문(_poll_fingerprint: 카탈로그 stat + 서버 POST 카운터)이
+#     바뀌면 재계산 — 전이·세우기·깨우기 **직후의 조회가 낡은 화면을 받으면
+#     사용자는 실패로 읽는다** (반려 의견 무시로 보인 REQ-20260823-078 계열).
+# 인자를 명시한 호출(stall_win — CLI·wake 판정 / limit — 내부 조회)은 다른
+# 창의 판정이므로 둘 다 타지 않는다. 행동 경로(chat_target)는 게이트 밖이다 —
+# tail 종료 0.2s 내 반영이 계약이다 (test_dashboard_chat C9/C18).
+# 데코레이터인 이유: 판정 본문이 `def catalog_with_live` 블록 안에 그대로
+# 남아야 한다 — 구조 시험(stop_branch·stop_reach)이 "화면과 누름이 같은
+# 판정을 지난다"는 계약을 그 블록에서 읽는다.
+POLL_SNAPSHOT_SEC = 0.0     # cmd_serve 가 2.0 으로 올린다 — 다른 자리 금지
+_POLL_EPOCH = [0]           # 서버 POST(행동)마다 +1 — 행동 직후 조회는 신선
+# /api/catalog 응답 바이트 캐시 — 키는 (게이트 세대 seq, 뷰어, archived).
+# 항상 게이트 **뒤에서만** 조회된다(신선도 판정은 게이트 한 곳) — 핸들러 참조.
+_CATALOG_RESP = {"key": None, "body": b""}
+_CATALOG_RESP_LOCK = threading.Lock()
+
+
+def _poll_fingerprint():
+    """스냅샷이 유효한 세계의 지문 — 문서가 바뀌었거나(카탈로그 stat) 이
+    서버로 행동이 들어왔으면(_POLL_EPOCH) 다른 세계다."""
+    try:
+        st = os.stat(CATALOG)
+        cat = (st.st_mtime_ns, st.st_size, st.st_ino)
+    except OSError:
+        cat = None
+    return (cat, _POLL_EPOCH[0])
+
+
+def _share_default_pass(fn):
+    cond = threading.Condition()
+    st = {"busy": False, "seq": 0, "result": None, "t": 0.0, "fp": None,
+          "dur": 0.0}
+
+    def gate(*a, **k):
+        if a or k:
+            return gate._compute(*a, **k)
+        import time as _time
+        ttl = POLL_SNAPSHOT_SEC
+        fp = _poll_fingerprint() if ttl > 0 else None
+        with cond:
+            # 유효창은 max(TTL, 계산 소요) 다. TTL 하나만 쓰면 부하로 계산이
+            # TTL 보다 길어지는 순간 스냅샷이 태어나자마자 만료되고, 순차
+            # 폴마다 전량 재계산하는 원래 나선으로 돌아간다(실측: 부하 시
+            # 계산 3.5s > TTL 2s). 스냅샷은 어차피 태어날 때 이미 계산
+            # 소요만큼 낡아 있다 — 그만큼을 더 쓰는 최악 낡음은 소요의 2배로
+            # 유계이고, 시스템이 눌릴수록 보호가 세지는 방향이다.
+            if (ttl > 0 and st["result"] is not None
+                    and _time.monotonic() - st["t"] < max(ttl, st["dur"])
+                    and st["fp"] == fp):
+                # 스냅샷도, 공유 결과도 응답끼리 dict 를 나누지 않는다 —
+                # 한 응답의 장식이 다른 응답에 배면 두 화면이 같은 거짓을 그린다
+                return [dict(r) for r in st["result"]]
+            if st["busy"]:
+                seq = st["seq"]
+                while st["busy"] and st["seq"] == seq:
+                    # 상한은 계산자가 죽었을 때의 탈출구 — 평시엔 notify 로 깬다
+                    cond.wait(timeout=30)
+                if st["seq"] != seq and st["result"] is not None:
+                    return [dict(r) for r in st["result"]]
+                # 계산자가 죽었거나 결과가 없다 — 직접 돈다
+            st["busy"] = True
+        rows, t0 = None, _time.monotonic()
+        try:
+            rows = gate._compute()
+        finally:
+            with cond:
+                st["busy"] = False
+                if rows is not None:
+                    # 저장본은 원본, 반환은 복사 — 계산한 스레드의 호출자가
+                    # 행을 장식해도 뒤의 스냅샷이 오염되지 않는다
+                    st["result"], st["fp"] = rows, fp
+                    st["t"] = _time.monotonic()
+                    st["dur"] = st["t"] - t0
+                    st["seq"] += 1
+                cond.notify_all()
+        return [dict(r) for r in rows]
+    gate._compute = fn      # 시험이 계산부를 바꿔 끼우는 이음매
+    gate._state = st        # 시험 관측용 (seq = 계산 세대, dur = 계산 소요)
+    gate.__name__, gate.__doc__ = fn.__name__, fn.__doc__
+    return gate
+
+
+
 def load_catalog():
     """카탈로그 로드. tombstone(.trash) 행은 조회 단계에서도 배제한다
     (REQ-20260825-051): 재생성은 이미 .trash를 제외하지만, 낡은 코드·중단된
@@ -5242,6 +5335,7 @@ def wake_session(account=""):
     return r
 
 
+@_share_default_pass
 def session_rows(limit=12):
     """고를 수 있는 세션들 (REQ-20260829-023) — 대상은 자동 선택뿐이었다.
 
@@ -14322,53 +14416,6 @@ def _guard_detach(port, host="127.0.0.1", root=None):
 
 
 
-# catalog_with_live 동시 공유 게이트 (REQ-20260831-001 ②). 대시보드 폴링이
-# 겹치면 스레드마다 같은 패스를 통째로 다시 돌았고(요청당 ~1s CPU), 그 중복이
-# GIL 을 나눠 먹으며 응답이 분 단위로 밀리는 나선이 됐다(실측 72~91s→120s
-# 타임아웃). 기본 호출(stall_win=None — /api/catalog 폴링 경로)은 계산이 이미
-# 도는 중이면 새로 돌지 않고 그 결과를 기다려 받는다 — 낡음의 상한은 계산
-# 한 번의 길이다. stall_win 을 명시한 호출(CLI·wake 경로)은 다른 창의
-# 판정이므로 섞지 않는다. 데코레이터인 이유: 판정 본문이 `def
-# catalog_with_live` 블록 안에 그대로 남아야 한다 — 구조 시험(stop_branch·
-# stop_reach)이 "화면과 누름이 같은 판정을 지난다"는 계약을 그 블록에서 읽는다.
-_CWL_COND = threading.Condition()
-_CWL_STATE = {"busy": False, "seq": 0, "result": None}
-
-
-def _share_default_pass(fn):
-    def gate(stall_win=None):
-        if stall_win is not None:
-            return gate._compute(stall_win)
-        with _CWL_COND:
-            if _CWL_STATE["busy"]:
-                seq = _CWL_STATE["seq"]
-                while _CWL_STATE["busy"] and _CWL_STATE["seq"] == seq:
-                    # 상한은 계산자가 죽었을 때의 탈출구 — 평시엔 notify 로 깬다
-                    _CWL_COND.wait(timeout=30)
-                if _CWL_STATE["seq"] != seq \
-                        and _CWL_STATE["result"] is not None:
-                    # 응답끼리 dict 를 공유하지 않는다 — 한 응답의 장식이
-                    # 다른 응답에 배면 두 화면이 같은 거짓을 그린다
-                    return [dict(r) for r in _CWL_STATE["result"]]
-                # 계산자가 죽었거나 결과가 없다 — 직접 돈다
-            _CWL_STATE["busy"] = True
-        rows, done = None, False
-        try:
-            rows = gate._compute(None)
-            done = True
-            return rows
-        finally:
-            with _CWL_COND:
-                _CWL_STATE["busy"] = False
-                if done:
-                    _CWL_STATE["result"] = rows
-                    _CWL_STATE["seq"] += 1
-                _CWL_COND.notify_all()
-    gate._compute = fn      # 시험이 계산부를 바꿔 끼우는 이음매
-    gate.__name__, gate.__doc__ = fn.__name__, fn.__doc__
-    return gate
-
-
 @_share_default_pass
 def catalog_with_live(stall_win=None):
     """catalog + 실제 LLM 동작 신호(live). 문서 상태 in-progress와 별개로,
@@ -15473,7 +15520,16 @@ def cmd_serve(args):
                             "stale": stamp_is_stale(SERVE_CODE_STAMP, cur),
                             # 긴 잡 (REQ-20260830-022) — 헤더 칩이 그린다.
                             # 새 API 를 열지 않는다: 이 응답은 이미 20초마다 온다.
-                            "jobs": jobs_running()})
+                            "jobs": jobs_running(),
+                            # 폴링 스냅샷 관측 (REQ-20260831-002) — 폭풍 진단이
+                            # 추측이 아니라 이 세 값을 읽게 한다: 게이트가
+                            # 켜졌는가(ttl), 몇 세대인가(seq), 한 계산이
+                            # 얼마나 걸리는가(dur).
+                            "poll_snapshot": {
+                                "ttl": POLL_SNAPSHOT_SEC,
+                                "seq": catalog_with_live._state["seq"],
+                                "dur": round(
+                                    catalog_with_live._state["dur"], 3)}})
             elif parsed.path == "/api/serveguard":
                 # 대시보드가 왜 죽었는지를 대시보드 안에서 답한다
                 # (REQ-20260826-018). 명세는 그 문서의 decision 노트 —
@@ -15493,9 +15549,27 @@ def cmd_serve(args):
                 # `s9 ls` 와도 갈린다 — 치웠다는 사실은 한 곳에서만 판정한다.
                 # ?archived=1 은 보관함을 보는 자리(그때는 보관된 것만).
                 want = qs.get("archived", [""])[0] in ("1", "true", "yes")
-                self._json([r for r in catalog_with_live()
-                            if bool(r.get("archived")) == want
-                            and doc_visible(r, me)])
+                # 게이트가 신선도를 판정한 **뒤에** 같은 세대·같은 뷰어의
+                # 응답 바이트를 재사용한다 (REQ-20260831-002). 폭풍에서 남는
+                # 비용은 계산이 아니라 95연결이 제각각 굽는 700행 필터+직렬화
+                # (~50ms×연결수 = GIL 직렬 수 초)다. 게이트를 앞세우는 이유:
+                # 캐시가 게이트보다 먼저 답하면 TTL·지문 무효화를 우회하는
+                # 두 번째 신선도 판정이 생긴다 — 판정은 게이트 한 곳이다.
+                rows = catalog_with_live()
+                key = (catalog_with_live._state["seq"], me, want)
+                with _CATALOG_RESP_LOCK:
+                    body = (_CATALOG_RESP["body"]
+                            if _CATALOG_RESP["key"] == key else None)
+                if body is None:
+                    body = json.dumps(
+                        [r for r in rows
+                         if bool(r.get("archived")) == want
+                         and doc_visible(r, me)],
+                        ensure_ascii=False).encode()
+                    with _CATALOG_RESP_LOCK:
+                        _CATALOG_RESP["key"] = key
+                        _CATALOG_RESP["body"] = body
+                self._send(200, "application/json; charset=utf-8", body)
             elif parsed.path == "/api/graph":
                 me = viewer_of(qs)
                 g = graph_data()
@@ -15956,6 +16030,10 @@ def cmd_serve(args):
         def do_POST(self):
             if self._host_guard():
                 return
+            # 행동이 들어왔다 — 폴링 스냅샷의 세계가 바뀐다 (REQ-20260831-002).
+            # 전이·세우기·깨우기 직후의 조회가 낡은 화면을 받지 않게, 지문을
+            # 여기 한 곳에서 굴린다 (엔드포인트별 분기 금지).
+            _POLL_EPOCH[0] += 1
             parsed = urllib.parse.urlparse(self.path)
             try:
                 n = int(self.headers.get("Content-Length", 0))
@@ -16350,12 +16428,16 @@ def cmd_serve(args):
     # 그 사실을 알린다 (REQ-20260826-011). 지문은 **서버가 메모리에 들고 도는
     # 것 전부**다 — bin/s9 와 채팅 판정자가 있는 bin/s9-audit-prompt
     # (REQ-20260828-025).
-    global SERVE_CODE_STAMP, SERVE_STARTED, SERVE_HOST
+    global SERVE_CODE_STAMP, SERVE_STARTED, SERVE_HOST, POLL_SNAPSHOT_SEC
     SERVE_CODE_STAMP = running_code_stamp()
     SERVE_STARTED = now_iso()
     # 실제로 바인드한 주소를 박아 둔다 (REQ-20260828-028) — 루프백 전제에
     # 기대는 라우트(/api/code)와 리바인딩 방어가 이 값 하나로 갈린다.
     SERVE_HOST = args.host
+    # 폴링 스냅샷은 **서버에서만** 켠다 (REQ-20260831-002) — 브라우저 재시도
+    # 폭풍(실측 95연결)이 몇 연결이든 무거운 목록 계산은 TTL 당 한 번이다.
+    # CLI 는 기본 0 그대로: 한 번 묻고 끝나는 프로세스에 낡음을 들이지 않는다.
+    POLL_SNAPSHOT_SEC = 2.0
 
     http.server.ThreadingHTTPServer.request_queue_size = 32
 
