@@ -91,6 +91,21 @@
   background:var(--text)}
 [data-skin="terminal"] .card:hover *,[data-skin="terminal"] .doclist .row:hover *{
   color:var(--bg) !important}
+/* **반전된 카드 위에서는 칩도 반전한다** (REQ-20260830-043 2차, 실제 포인터를
+   얹어 찍고 발견). 바로 아래 `.row.sel:focus-visible` 이 같은 이유로 링을
+   뒤집는 것과 같은 자리다 — 잉크 배경에 잉크 칩은 없는 것과 같다.
+
+   이 스킨은 손이 얹힌 카드를 통째로 반전한다(위 두 줄). 그런데 ▶·⏸ 의 hover
+   칩은 `.acts button:hover{background:var(--text)}` 로 칠해지므로, 반전된 카드
+   배경과 **같은 색**이 된다 — 손을 얹으면 칩이 사라지고 글리프도 함께 배경색이
+   되어 손잡이가 통째로 없어졌다. 색만 뒤집는다: 칩은 종이색, 글리프는 잉크색.
+   (칠해지는 자리는 여전히 actions.css 의 관문이 정한다 — 여기서는 `background`
+   단축을 쓰지 않아 그 `background-clip` 을 되돌리지 않는다.) */
+[data-skin="terminal"] .card:hover .acts.deedbelt button.deed.ico:hover{
+  background-color:var(--bg)}
+[data-skin="terminal"] .card:hover .acts.deedbelt button.deed.ico:hover,
+[data-skin="terminal"] .card:hover .acts.deedbelt button.deed.ico:hover *{
+  color:var(--text) !important}
 [data-skin="terminal"] .typebar .tb.on{background:var(--text);color:var(--bg);
   border-bottom-color:transparent}
 /* 선택 상태는 배경이 잉크로 반전된다 — 그 위에서 타입색 잉크는 대비를 잃는다.

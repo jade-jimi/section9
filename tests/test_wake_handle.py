@@ -252,5 +252,102 @@ class WakeHandle(unittest.TestCase):
         self.assertIn("wakeDoc(wk.dataset.wake)", m.group(1))
 
 
+def _css(src):
+    """주석을 걷어낸 CSS 만 — 주석은 고쳐 낸 옛 값을 근거로 인용한다."""
+    return re.sub(r"/\*[\s\S]*?\*/", " ", src)
+
+
+def _rules(src):
+    """(셀렉터, 선언) 짝 — 손잡이를 건드리는 규칙만 훑는다."""
+    out = []
+    for m in re.finditer(r"([^{}@]+)\{([^{}]*)\}", src):
+        out.append((" ".join(m.group(1).split()), m.group(2)))
+    return out
+
+
+class ThePaintIsNotTheTarget(unittest.TestCase):
+    """손이 닿는 상자와 **칠해지는 원**은 다른 것이다 (REQ-20260830-043 2차 반려).
+
+    사용자: "레이아웃이 여전히 안맞다" — 캡처는 손이 카드에 얹힌 화면이었고,
+    거기서 검은 원이 식별자의 마지막 글자를 파고들었다.
+
+    뿌리는 hover 가 **과녁 전체**(27px)를 칠한 것이다. 글리프 손잡이는 27px
+    과녁 안에 11px 그림을 담고, 벨트는 그 남는 흰 자리만큼을 음수 여백으로
+    되돌려 잉크 사이를 줄의 눈금에 맞춘다 — 그러니 상자를 통째로 칠하면 되돌린
+    만큼이 그대로 글자를 덮는다. 쉬는 얼굴만 재고 끝내서 두 번 반려됐다.
+
+    그래서 계약은 셋이다.
+      ① 과녁은 안 줄인다 (min-width/min-height 27px).
+      ② 칠은 안쪽 원에만 든다 (padding + background-clip:content-box).
+      ③ 그 클립을 되돌리는 `background` 단축을 손잡이에 쓰지 않는다.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        with open(INDEX, encoding="utf-8") as f:
+            cls.css = _css(f.read())
+        cls.rules = _rules(cls.css)
+        cls.belt = [(s, d) for s, d in cls.rules
+                    if "deedbelt" in s or "deed.ico" in s]
+
+    def test_the_target_is_not_shaved(self):
+        """과녁 27px 은 1px 도 안 줄인다 — 아이콘이 된 대가가 작은 과녁이면 안 된다."""
+        hit = [d for s, d in self.rules if s.endswith(".acts button.deed.ico")]
+        self.assertTrue(hit, "글리프 손잡이의 과녁 규칙이 없다")
+        self.assertIn("min-width:27px", hit[0])
+        self.assertIn("min-height:27px", hit[0])
+
+    def test_the_paint_is_clipped_into_the_target(self):
+        """칠은 과녁이 아니라 그 안의 원에 든다."""
+        gate = [d for s, d in self.belt if "background-clip" in d]
+        self.assertEqual(len(gate), 1,
+                         "칠하는 자리를 정하는 관문이 하나가 아니다 — "
+                         "스킨마다 사본이 생기면 한쪽만 고쳐진다")
+        self.assertIn("background-clip:content-box", gate[0])
+        self.assertRegex(gate[0], r"padding:\d+px",
+                         "안여백이 없으면 클립해도 원이 과녁 그대로다")
+        self.assertIn("border-radius:999px", gate[0],
+                      "라운드를 못박지 않으면 cobalt·slate 의 각진 값이 "
+                      "클립된 칠을 모난 알약으로 만든다")
+
+    def test_no_shorthand_undoes_the_clip(self):
+        """`background:` 단축은 background-clip 을 border-box 로 되돌린다.
+
+        손잡이를 건드리는 규칙이 단축을 쓰는 순간, 특이도가 관문보다 높으면
+        칠이 다시 과녁 전체로 퍼진다 — 반려된 그 얼굴로 되돌아간다."""
+        for sel, dec in self.belt:
+            self.assertNotRegex(
+                dec, r"(^|;)\s*background\s*:",
+                "손잡이 규칙이 background 단축을 쓴다 (%s) — "
+                "낱개 속성(background-color/-image)으로 쓰라" % sel)
+
+    def test_the_pull_is_written_once(self):
+        """왼쪽 당김은 잉크 사이를 실측해 정한 값이라 **한 곳**에만 산다.
+
+        calm 이 `margin` 단축으로 세로 여백을 지우면서 그 값을 한 벌 더 갖고
+        있었다 — 다음에 자를 대는 사람이 한쪽만 고친다."""
+        pulls = [(s, d) for s, d in self.rules
+                 if "deedbelt" in s and re.search(r"margin(-left)?\s*:[^;]*-\d", d)]
+        self.assertEqual(len(pulls), 1,
+                         "벨트의 왼쪽 당김이 %d 곳에 적혀 있다: %s"
+                         % (len(pulls), [s for s, _ in pulls]))
+
+    def test_the_focus_ring_rounds_the_circle_not_the_target(self):
+        """키보드 링도 칠이다 — 과녁 밖에 그리면 hover 와 똑같이 글자를 덮는다."""
+        ring = [d for s, d in self.belt if "focus-visible" in s]
+        self.assertTrue(ring, "글리프 손잡이의 포커스 링 규칙이 없다")
+        self.assertIn("outline-offset:-6px", ring[0])
+
+    def test_an_inverted_card_inverts_the_chip_too(self):
+        """터미널 스킨은 손이 얹힌 카드를 통째로 반전한다 — 그 위의 잉크 칩은
+        배경과 같은 색이 되어 **손잡이가 통째로 사라졌다**(실제 포인터를 얹어
+        찍고 발견). 잉크 배경에 잉크 칩은 없는 것과 같다."""
+        inv = [d for s, d in self.belt
+               if '[data-skin="terminal"]' in s and ".card:hover" in s]
+        self.assertTrue(inv, "반전된 카드 위에서 칩을 뒤집는 규칙이 없다")
+        self.assertTrue(any("background-color:var(--bg)" in d for d in inv),
+                        "반전 카드에서 칩이 배경색에 묻힌다")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

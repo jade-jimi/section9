@@ -201,8 +201,12 @@
   flex-wrap:wrap;font-size:10px;color:var(--calm-quiet);letter-spacing:.03em}
 /* 손잡이 벨트는 id 줄에 얹히는 조각이라 `.acts` 의 세로 여백을 안 받는다 —
    calm 의 `.acts{margin-top:10px}` 가 baseline 을 밀어 벨트만 아래로 처진다.
-   특이도가 같은 두 규칙이라(둘 다 0,2,0) 여기서 한 번 더 못박는다. */
-[data-skin="calm"] .acts.deedbelt{margin:0 0 0 -4px;gap:2px}
+   특이도가 같은 두 규칙이라(둘 다 0,2,0) 여기서 한 번 더 못박는다.
+   **지우는 것은 세로 여백뿐이다** (REQ-20260830-043 2차): 종전엔 `margin` 단축을
+   써서 왼쪽 당김(-4px)까지 여기 한 벌 더 적혀 있었다 — 그 값은 잉크 사이를
+   실측해 정한 것이라 한 곳(actions.css)에만 있어야 하고, 사본이 있으면 다음에
+   그 자리를 다시 재는 사람이 한쪽만 고친다. */
+[data-skin="calm"] .acts.deedbelt{margin-top:0;margin-bottom:0;gap:2px}
 [data-skin="calm"] .card .elapsed{position:absolute;right:16px;bottom:12px;top:auto;
   font-size:10px;color:var(--calm-quiet);letter-spacing:.01em}
 /* 집는 손잡이는 경과 시각이 선 칸을 빌려 쓴다 — calm 은 그 칸이 아래쪽이다 */

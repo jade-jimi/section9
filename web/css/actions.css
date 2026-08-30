@@ -104,18 +104,80 @@
    줄에 얹힌 것이 아니라 떠 있는 것으로 읽힌다. 여백은 단추가 이미 갖고 있다. */
 .acts.deedbelt{display:inline-flex;align-items:center;gap:2px;flex:0 0 auto;
   /* 눈이 재는 것은 상자가 아니라 잉크 사이의 흰 자리다. 상자를 0 으로 붙여도
-     보이는 틈은 13.5px 이었다(2배 캡처 실측) — 과녁 27px 안의 그림이 11px 이라
-     상자 안에 이미 흰 자리가 있기 때문이다. 줄의 다른 틈(점~식별자 8px)에
-     맞추려고 그만큼을 되돌린다. 과녁은 1px 도 안 줄인다 — 밀도 축이 여백을
-     줄이는 축이지 과녁을 깎는 축이 아닌 것과 같은 이유다. */
-  margin:0 0 0 -4px}
+     보이는 틈이 남는다 — 과녁 27px 안의 그림이 11px 이라 상자 안에 이미 흰
+     자리가 있기 때문이다. 그만큼을 되돌린다. 과녁은 1px 도 안 줄인다 — 밀도
+     축이 여백을 줄이는 축이지 과녁을 깎는 축이 아닌 것과 같은 이유다.
+
+     **-4 에서 -2 로** (REQ-20260830-043 2차). -4 는 쉬는 얼굴 하나만 보고 정한
+     값이라, 손이 얹혀 원이 칠해지는 순간 그 원이 식별자를 2px 앞까지 파고들었다
+     (ledger 실측). 한 손잡이에 얼굴이 둘인데 자를 한 얼굴에만 댄 것이 화근이라,
+     이번엔 **줄의 눈금을 두 얼굴 사이에 둔다**: 줄의 기준 틈(점 잉크 → 식별자
+     잉크)은 5.5~6.5px 이고, 두 얼굴의 틈은 원의 지름이 정하는 만큼(3.5px) 벌어질
+     수밖에 없으니, 그 3.5px 을 기준 틈의 좌우로 반씩 나눈다.
+     결과 실측(css px, 2배 캡처): ledger·terminal·glass 는 쉼 8.5 / hover 5.0,
+     calm 은 10.5 / 7.0 (calm 은 id 줄이 flex `gap:2px` 이라 한 눈금 더 넓다). */
+  margin:0 0 0 -2px}
 /* 줄 안에 서는 손잡이는 **테두리와 면을 벗는다** — 한 줄 안에서 네모난 알약이
    글자 옆에 서면 그 줄이 두 덩어리로 읽힌다. 평소엔 잉크만, 손이 얹히면 그때
-   원이 돈다(카드가 이미 쓰는 그 반전, 네모 대신 원). */
-.deedrow .acts button.deed.ico,.deedbelt button.deed.ico{border-color:transparent;
-  background:none;color:var(--muted)}
-.deedrow .acts button.deed.ico:hover,.deedbelt button.deed.ico:hover{
-  background:var(--text);color:var(--bg);border-color:var(--text)}
+   원이 돈다(카드가 이미 쓰는 그 반전, 네모 대신 원).
+
+   ---- **손이 닿는 상자와 칠해지는 원을 가른다** (REQ-20260830-043 2차 반려) ----
+
+   사용자: "레이아웃이 여전히 안맞다" — 캡처는 손이 카드에 얹힌 화면이었고,
+   거기서 검은 원이 식별자의 마지막 글자를 파고들었다. 1차는 **쉬는 얼굴만**
+   재고 끝냈다: 글리프는 27px 과녁 안의 11px 그림이라 상자를 -4px 당겨도 보이는
+   틈이 9px 남는다. 그러나 hover 는 그 상자를 **통째로** 칠했다 — 칠해지는 것이
+   그림이 아니라 과녁이면, 과녁을 당긴 만큼 그대로 글자를 덮는다. 실측(2배 캡처,
+   실제 포인터를 얹어): 원 왼끝이 식별자 잉크 오른끝보다 1.5px **왼쪽**이었다.
+   세로도 같은 값이 나온다 — 10px 글자 줄에 27px 원이 서니 위아래로 솟는다.
+
+   그래서 **과녁은 1px 도 안 줄이고**(min-width/min-height 27px 그대로, 손이 닿는
+   자리는 손의 것이다) 칠만 안쪽으로 들인다: `padding` 으로 원을 상자 안에
+   앉히고 `background-clip:content-box` 로 칠을 그 안에 가둔다.
+
+   ::before 로 원을 따로 그리지 않은 이유는 **잉크를 한 곳에 두기 위해서**다.
+   스킨들은 이미 `.acts button:hover{background: …}` 로 자기 잉크를 말해 놓았다
+   (slate 는 파랑, glass·calm 은 --text). 칠하는 **자리**만 바꾸면 그 말이 그대로
+   살고, 원을 새로 그리면 스킨 수만큼 색을 다시 적어야 한다 — 이 파일이 세 번 덴
+   "한쪽만 고쳐진다"가 그렇게 시작한다.
+
+   `.acts.deedbelt` 로 잠그는 것은 아래 `.acts button.deed.ico`(padding:0)와
+   특이도가 같아지면(둘 다 0,3,1) 뒤에 선 그쪽이 이기기 때문이다.
+   `border-radius` 도 여기서 못박는다 — cobalt(7px)·slate(4px)·cork(6px) 가
+   `.acts button` 로 라운드를 갈아 두어, 칠이 클립되는 순간 그 값이 원을
+   모난 알약으로 만든다. 테두리는 두 상태 모두 지운다: 베이스가 hover 에 켜는
+   `border-color:var(--text)` 가 남으면 27px 상자에 1px 링이 돌아 원을 다시
+   과녁 크기로 되돌린다. */
+.deedrow .acts button.deed.ico,.acts.deedbelt button.deed.ico{border-color:transparent;
+  /* 6px = (27 - 1(테두리)×2 - 13(원))/2.
+
+     지름이 두 얼굴의 **벌어짐**을 정한다: 쉬는 얼굴의 틈은 글리프 잉크가
+     기준이고 손 얹힌 얼굴의 틈은 원의 왼끝이 기준이라, 둘의 차는 정확히
+     (그림 잉크가 상자 안에 갖고 있는 흰 자리 10.5px) − (27−지름)/2 다.
+     17px 이면 6.5px 이 벌어져 한쪽을 맞추면 다른 쪽이 글자에 붙고, 11px 이면
+     2.5px 로 좁지만 원이 그림 상자와 같아져 글리프가 테를 뚫고 나온다.
+     13px 이 그 사이다 — 벌어짐 3.5px, 그림 8.4px 둘레로 2.3px 의 테. */
+  padding:6px;background-clip:content-box;border-radius:999px}
+/* 면을 벗는 것은 **쉴 때뿐**이다 (`:not(:hover)`).
+
+   이 관문은 스킨을 이겨야 클립을 지킬 수 있어서 특이도가 높다. 그래서 면까지
+   여기서 지우면 hover 잉크마저 함께 지워진다 — 실제로 그렇게 만들었다가 손을
+   얹어도 아무것도 안 칠해지는 얼굴이 나왔다(2배 캡처로 잡았다). 상태를 갈라
+   두면 손이 얹힌 순간 이 규칙이 비켜서고, 스킨이 말한 잉크(slate 는 파랑,
+   calm·glass 는 --text)가 그대로 와서 위 규칙의 클립에 담긴다.
+   `background` 단축이 아니라 낱개 속성을 쓰는 것도 같은 이유다 — 단축은
+   `background-clip` 을 border-box 로 되돌린다. */
+.deedrow .acts button.deed.ico:not(:hover),
+.acts.deedbelt button.deed.ico:not(:hover){
+  background-color:transparent;background-image:none;color:var(--muted)}
+/* 키보드로 닿은 자리의 링도 **칠이다** — 과녁이 아니라 원을 두른다.
+   기본 링(`outline-offset:1px`)은 27px 상자 밖에 그려져, 손이 얹혔을 때와
+   똑같이 식별자의 마지막 글자를 덮었다(캡처로 확인). 안으로 6px 들여 잉크 원의
+   바로 바깥을 두르게 한다 — `border-radius` 를 따라가므로 네모가 아니라 원이고,
+   쉴 때 눌러도 hover 때 눌러도 같은 자리에 같은 크기로 선다.
+   과녁은 그대로 27px 다: 링이 작아진 것이지 닿는 자리가 작아진 것이 아니다. */
+.deedrow .acts button.deed.ico:focus-visible,
+.acts.deedbelt button.deed.ico:focus-visible{outline-offset:-6px}
 /* 도는 중에는 눌리지 않는다. 색면·붉은 실패로 그리지 않고, 잉크를 한 급 낮춰
    "지금은 내 차례가 아니다"만 말한다. */
 .acts button.wake[disabled]{cursor:default;color:var(--muted);
