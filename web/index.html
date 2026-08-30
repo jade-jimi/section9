@@ -132,15 +132,15 @@ window.__S9_RETRY = {pending: 0, lost: [], on: true};
   </div>
   <div class="hrow2">
     <div class="fgroup">
-      <input id="q" type="text" placeholder="search…">
-      <label class="chk" title="문서 본문(History 포함)까지 검색 — Docs 탭에서 매치 라인 표시">
+      <input id="q" type="text" placeholder="검색…">
+      <label class="chk" title="문서 본문(History 포함)까지 검색합니다 — Docs 탭에서는 일치한 줄을 함께 보여 줍니다">
         <input type="checkbox" id="q-body"> 본문</label>
-      <select id="f-user"><option value="">user: all</option></select>
+      <select id="f-user"><option value="">사용자: 전체</option></select>
       <label class="chk" id="mine-wrap">
         <input type="checkbox" id="f-mine"> 내 것만</label>
-      <select id="f-project"><option value="">project: all</option></select>
-      <select id="f-tag"><option value="">tag: all</option></select>
-      <select id="f-type"><option value="">type: all</option>
+      <select id="f-project"><option value="">프로젝트: 전체</option></select>
+      <select id="f-tag"><option value="">태그: 전체</option></select>
+      <select id="f-type"><option value="">종류: 전체</option>
         <option>request</option><option>article</option><option>knowledge</option><option>question</option><option>session</option><option>project</option></select>
     </div>
     <div class="pgroup idcol">
@@ -148,7 +148,7 @@ window.__S9_RETRY = {pending: 0, lost: [], on: true};
            (REQ-20260827-056). tabindex 는 마우스 없이도 그 카드에 닿기 위한 것 —
            손잡이가 곧 포커스 지점이다. 읽어 줄 이름은 usageTitle() 이 채운다. -->
       <span id="usage-chip" class="usagechip" tabindex="0" role="button"></span>
-      <span id="whoami" class="who" title="서버가 파생한 신원 — 대시보드는 127.0.0.1 전용이라 브라우저 사용자 = 서버 기동 OS 계정. 다른 계정명으로 연결하려면 터미널에서 s9 user attach"></span>
+      <span id="whoami" class="who" title="이 화면은 계정을 따로 묻지 않습니다 — 이 컴퓨터에서만 열리는 화면이라, 서버를 띄운 계정을 그대로 씁니다. 다른 이름으로 보려면 터미널에서 s9 user attach 를 실행하세요"></span>
     </div>
   </div>
   <!-- 서버 코드 낡음 알림 — 낡았을 때만 채워진다 (renderOldCode). 기본은 hidden. -->

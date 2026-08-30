@@ -14205,7 +14205,7 @@ def catalog_with_live(stall_win=None):
                     if sp.get("pid") and not alive:
                         r["live_kind"] = "spawn_failed"
                         r["live_reason"] = (_worker_last_line(r["id"])
-                                            or "워커가 종료됐다 (로그 없음)")
+                                            or "자동 작업이 기록을 남기지 않고 끝났습니다")
                     else:
                         r["live_kind"] = "spawned"
             except (OSError, ValueError):

@@ -127,7 +127,7 @@ function fillProjects(){
   const el = $("#f-project"), cur = el.value;
   while (el.options.length > 1) el.remove(1);
   const scoped = mineActive() ? mineProjects() : projects;
-  el.options[0].textContent = mineActive() ? `project: mine(${scoped.length})` : "project: all";
+  el.options[0].textContent = mineActive() ? `프로젝트: 내 것(${scoped.length})` : "프로젝트: 전체";
   const known = new Set();
   scoped.forEach(p => {
     known.add(p.slug);

@@ -108,8 +108,8 @@ function stallHTML(r){
   // 있는데 못 그린 것처럼 보인다.
   const last = fmtLast(r.updated || r.status_since);
   const going = wokePending(r.id);
-  return `<div class="rvpt stall" title="이 문서가 마지막으로 바뀐 뒤로 `
-    + `${st.mins}분 — 그동안 이 문서에 아무것도 적히지 않았다`
+  return `<div class="rvpt stall" title="이 문서가 마지막으로 바뀐 지 `
+    + `${st.mins}분 됐습니다 — 그동안 이 문서에 아무것도 적히지 않았습니다`
     // 죽음이 기록돼 있으면 그 말을 함께 싣는다 — 점의 툴팁과 같은 문장이다.
     + (st.face === "dead" && st.reason ? ` (${esc(st.reason)})` : "") + `">`
     /* 커밋 드리프트 (REQ-20260830-018, 낱말·순서는 REQ-20260830-021 검토):
@@ -792,9 +792,9 @@ function cardHTML(r){
      것은 채운 사각, 아니면 속 빈 사각. */
   const liveDot = r.status === "in-progress"
     ? (st && st.face === "dead"
-         ? `<span class="livedot dot-stopped" title="처리 주체가 멈췄다 — ${esc(st.reason||"프로세스 종료")}"></span>`
+         ? `<span class="livedot dot-stopped" title="이 요청을 맡았던 작업이 멈췄습니다 — ${esc(st.reason||"프로세스 종료")}"></span>`
        : st
-         ? `<span class="livedot dot-stopped mild" title="${st.mins}분째 이 요청에 진전이 없다${esc(st.reason ? " — " + st.reason : "")}${r.live ? " (잡고 있는 세션은 활동 중이지만 다른 일을 하고 있다)" : ""}"></span>`
+         ? `<span class="livedot dot-stopped mild" title="이 요청은 ${st.mins}분째 진전이 없습니다${esc(st.reason ? " — " + st.reason : "")}${r.live ? " — 맡은 쪽은 움직이고 있지만 지금은 다른 일을 하고 있습니다" : ""}"></span>`
        /* 사람이 중단해 둔 것은 **모름이 아니다** (REQ-20260829-024 라운드4).
           이 갈래가 없으면 사다리 끝의 `.off`(속 빈 회색 원 = "in-progress 인데
           스트림이 조용함, 모름")로 떨어져, 카드가 왜 조용한지 알면서도 모른다고
@@ -804,17 +804,17 @@ function cardHTML(r){
        : r.stopped
          ? `<span class="livedot dot-stopped mild" title="사람이 이 요청의 자동 작업을 중단했습니다 — 카드의 「${WAKE_LABEL}」를 누르면 다시 이어집니다"></span>`
        : r.live
-         ? `<span class="livedot on" title="이 요청을 실행 중인 세션이 활동 중 (${r.live_age}s 전 갱신 — last_req/active_reqs 등록)"></span>`
+         ? `<span class="livedot on" title="지금 이 요청을 맡아 일하고 있습니다 — ${r.live_age}초 전에 움직였습니다"></span>`
        : r.live_kind === "session"
-         ? `<span class="livedot sess" title="담당 세션은 활동 중이나 이 요청의 직접 신호는 없음 (${r.live_age}s 전 세션 갱신)"></span>`
+         ? `<span class="livedot sess" title="이 요청을 맡은 쪽은 ${r.live_age}초 전까지 움직였습니다 — 다만 이 요청을 손대고 있다는 신호는 없습니다"></span>`
        : r.live_kind === "spawned"
          ? `<span class="livedot spawn" title="자동 작업이 막 시작됐습니다 (${r.live_age}초 전) — 이 요청을 집기까지 잠시 걸립니다"></span>`
-         : `<span class="livedot off" title="in-progress지만 스트림 조용함 — 실제 동작 아닐 수 있음"></span>`)
+         : `<span class="livedot off" title="상태는 in-progress 인데 하는 일이 잠잠합니다 — 실제로는 돌고 있지 않을 수 있습니다"></span>`)
     : "";
   return `<div class="card" ${isReq ? 'draggable="true"' : ""} tabindex="0" role="button" style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
     <button type="button" class="pickdoc" data-pick="${esc(r.id)}"
       aria-label="${esc(shortId(r.id))} 에 이어 말하기">이어 말하기</button>
-    <div class="id">${liveDot}<span class="idn">${esc(shortId(r.id))}</span><span class="pkst" title="이어 말할 대상 — 카드에 얹어 손잡이를 다시 누르면 놓는다">${PICKED_MARK}</span></div>
+    <div class="id">${liveDot}<span class="idn">${esc(shortId(r.id))}</span><span class="pkst" title="이어 말할 대상으로 골라 둔 카드입니다 — 「이어 말하기」를 다시 누르면 놓습니다">${PICKED_MARK}</span></div>
     <div class="t">${esc(r.title)}</div>
     <div class="m">
       <span class="badge" style="--ah:${tagHue(r.user||"?")}"><i class="av">${esc((r.user||"?").slice(0,1).toUpperCase())}</i>${esc(r.user)}</span>

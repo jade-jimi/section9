@@ -315,7 +315,7 @@ class StallRendersTheSame(unittest.TestCase):
                              "%s: 점과 손잡이가 어긋난다 (손잡이=%s 정지마크=%s)"
                              % (rid, handle, stopped))
         self.assertIn("dot-stopped mild", out["REQ-A"]["card"])
-        self.assertIn('livedot dot-stopped" title="처리 주체가 멈췄다',
+        self.assertIn('livedot dot-stopped" title="이 요청을 맡았던 작업이 멈췄습니다',
                       out["REQ-C"]["card"])
         self.assertIn("livedot on", out["REQ-E"]["card"])
 

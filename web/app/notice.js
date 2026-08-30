@@ -552,7 +552,7 @@ function syncMineToggle(){
   // 못 받은 것을 미등록이라고 부르지 않는다 (REQ-20260828-039) — 등록하라는
   // 안내는 등록이 실제로 안 돼 있을 때만 맞는 말이다.
   $("#mine-wrap").title = me
-    ? `@${me}가 active 멤버인 프로젝트의 문서만 표시 (Board·Docs·Graph 공통)`
+    ? `@${me} 가 활성 멤버로 있는 프로젝트의 문서만 봅니다 — Board·Docs·Graph 에 함께 적용됩니다`
     : supplyLost("whoami")
       ? "내 계정을 받지 못했습니다 — 헤더의 다시 받기를 눌러 보세요"
       : "미등록 계정 — s9 user add 로 등록하면 내 프로젝트만 볼 수 있습니다";
