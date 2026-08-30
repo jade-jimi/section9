@@ -352,6 +352,30 @@ function renderSvChip(){
       title: lost.map(k => eul(supplyLabel(k)) + " 받지 못했습니다").join(" · ")
              + " — 눌러서 다시 받습니다",
       act: () => lost.forEach(supplyAgain)});
+  /* 긴 잡 (REQ-20260830-022, 낱말은 ux-writer 검토) — 테스트 스위트처럼 몇 분씩
+     무출력으로 도는 작업. 없으면 흔적도 없고, 있으면 존재·경과·지나온 양만
+     말한다(진행바·퍼센트는 거짓말이라 금지 — 끝을 모른다). 「잠잠」은 손길
+     줄의 「조용」(문서에 안 적힘)과 다른 축(작업이 신호를 안 냄)이라 낱말을
+     가른다. 숫자가 매분 바뀌는 것은 sig 가 흡수한다. */
+  let jobs = (ocInfo && ocInfo.jobs) || [];
+  /* ?job=<분>[&jobquiet=<초>] — 칩을 진짜로 세운다 (?stall 이 낸 선례: 이
+     화면은 긴 잡이 도는 그 몇 분에만 존재해 파라미터 없이는 검증 못 한다). */
+  const jm = /[?&]job=(\d+)/.exec(location.search);
+  if (jm) jobs = [{name: "테스트", mins: +jm[1], done: 1204,
+    quiet_sec: +((/[?&]jobquiet=(\d+)/.exec(location.search) || [])[1] || 0)}];
+  if (jobs.length){
+    const mx = Math.max(...jobs.map(j => +j.mins || 0));
+    const one = jobs[0];
+    const label = jobs.length > 1
+      ? `자동 작업 ${jobs.length}건 · ${mx}분째`
+      : `${one.name} ${mx}분째`
+        + (one.done ? ` · ${Number(one.done).toLocaleString("ko-KR")}건` : "")
+        + (+one.quiet_sec >= 60 ? ` · ${one.quiet_sec}초 잠잠` : "");
+    items.push({tone: "sv-run", mark: "↻", spin: true, label,
+      title: `${esc(one.name)}가 ${mx}분째 돌고 있습니다 — 누르면 Terminal `
+        + `탭에서 진행을 볼 수 있습니다`,
+      act: () => document.querySelector('header [data-tab="terminal"]')?.click()});
+  }
   const oc = ocInfo;
   if (oc && oc.stale && ocAck() === oc.started)
     items.push({tone: "sv-warn", mark: "▲", label: "서버 재기동 필요",

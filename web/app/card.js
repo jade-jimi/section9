@@ -144,14 +144,25 @@ function stallHTML(r){
    분은 서버가 준 초를 단위만 바꿔 옮긴다 — 화면이 스스로 시계를 대면 CLI 와
    다른 수를 말하게 된다 (REQ-20260828-036). */
 function workRowHTML(r){
-  if (!r || r.type !== "request" || !r.worker) return "";
+  if (!r || r.type !== "request") return "";
+  /* 긴 잡 조각 (REQ-20260830-022): 이 요청에 귀속된 테스트 스위트 등. 서버가
+     pid 생존·명령줄 대조를 지나 실은 값만 그린다 — 화면 재판정 없음. */
+  const jbit = (r.jobs || [])
+    .map(j => `${esc(j.name)} ${fmtStall(+j.mins || 0)}`).join(" · ");
+  if (!r.worker){
+    if (!jbit) return "";
+    return `<div class="rvpt work" title="이 요청에 귀속된 작업이 돌고 있습니다`
+      + ` — 끝나면 저절로 이어집니다">`
+      + `<span class="rvcap">진행 중</span>${jbit}</div>`;
+  }
   const going = stopPending(r.id);
   const mins = fmtStall(Math.floor((+r.worker.age || 0) / 60));
   return `<div class="rvpt work" title="자동 작업이 이 요청을 맡아 진행 중입니다`
     + ` — 중단하면 지금 하던 일이 거기서 끝나고, 중단한 사유가 문서에 남습니다">`
     // 캡션이 이미 "진행 중"을 말한다 — 본문이 그 말을 되풀이하면 좁은 줄에서
     // 낱말 하나(`작업`)가 세 번 선다. 멈춤 줄과 같은 틀이다: 캡션 + 사실.
-    + `<span class="rvcap">진행 중</span>자동 작업 ${mins}</div>`
+    + `<span class="rvcap">진행 중</span>자동 작업 ${mins}`
+    + (jbit ? ` · ${jbit}` : "") + `</div>`
     + `<div class="acts stoprow"><button type="button" class="deed stop"`
     + ` data-stop="${esc(r.id)}"${going ? " disabled" : ""}`
     + ` title="진행 중인 자동 작업을 중단합니다 — 계정이나 모델을 바꾸기 전에 씁니다">`
@@ -271,7 +282,17 @@ function stallProbe(rows){
 
    그림을 따로 짓지 않는다 — 서버가 줬을 값(`worker`)을 행에 얹고, 그다음은
    평소 그리던 길(cardHTML → stallHTML → workRowHTML)이 그대로 그린다. */
+/* ?jobrow[=<분>] — 카드의 긴 잡 조각을 세운다 (REQ-20260830-022). */
+function jobRowProbe(rows){
+  const m = /[?&]jobrow(?:=(\d+))?\b/.exec(location.search);
+  if (!m || !Array.isArray(rows)) return rows;
+  for (const r of rows)
+    if (r.type === "request" && r.status === "in-progress")
+      r.jobs = [{name: "테스트", mins: +(m[1] || 4)}];
+  return rows;
+}
 function workProbe(rows){
+  jobRowProbe(rows);
   const m = /[?&]work(?:=(\d+))?\b/.exec(location.search);
   if (!m || !Array.isArray(rows)) return rows;
   const mins = Math.max(0, Math.min(9999, +(m[1] || 12)));

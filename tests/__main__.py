@@ -17,6 +17,7 @@ sys.path.insert(0, HERE)
 
 import portpool  # noqa: E402  (경로를 세운 뒤에 부른다)
 import tmproot  # noqa: E402  — portpool 다음에: 포트 락은 /tmp 공용이어야 한다
+import jobfile  # noqa: E402  — 긴 실행의 존재를 대시보드에 알린다 (REQ-20260830-022)
 
 
 def _reap(label):
@@ -107,7 +108,19 @@ def main():
             print(f"no tests matched: {p}", file=sys.stderr)
         if suite.countTestCases() == 0:
             return 1
-        res = unittest.TextTestRunner(verbosity=2).run(suite)
+        # 잡 파일 (REQ-20260830-022): 이 실행이 도는 동안 화면 헤더 칩과 카드가
+        # "테스트 N분째 · M건" 을 그린다. 안쪽 실행(S9_TESTS_NESTED)은 안 쓴다.
+        bump, clear = jobfile.start(suite.countTestCases())
+
+        class _Result(unittest.TextTestResult):
+            def stopTest(self, test):
+                super().stopTest(test)
+                bump(self.testsRun)
+        try:
+            res = unittest.TextTestRunner(verbosity=2,
+                                          resultclass=_Result).run(suite)
+        finally:
+            clear()
         ok = res.wasSuccessful()
     finally:
         left = tmproot.drop_run_root(tmp_root, prev_tmpdir)

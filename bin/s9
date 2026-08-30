@@ -8937,6 +8937,50 @@ def heartbeat_session(doc_id):
         return ""
 
 
+JOB_CAP_SEC = 3600   # 잡의 수명 상한 — 행·고아 파일이 진행으로 못 굳는다
+
+
+def jobs_running(now=None):
+    """state/jobs/ 의 살아 있는 잡들 (REQ-20260830-022).
+
+    잡 파일은 러너(tests/jobfile)가 스스로 쓰는 **선언**이고, 여기서는 그
+    선언을 세 겹으로 검증한다 — pid 생존 · 명령줄에 hint 포함(pid 재사용 방어,
+    _worker_alive 와 동형) · 시작 60분 상한(SIGKILL 고아·행 방어). 셋 중 하나라도
+    어긋나면 그 잡은 없는 것이다: 급사한 러너의 파일은 거짓말하지 못한다.
+    반환 행: {name, pid, mins, quiet_sec, total, done, session}."""
+    import glob as _glob
+    import time as _time
+    now = _time.time() if now is None else now
+    out = []
+    table = None
+    for p in sorted(_glob.glob(os.path.join(ROOT, "state", "jobs", "*.json"))):
+        try:
+            with open(p, encoding="utf-8") as f:
+                j = json.load(f)
+            pid = int(j.get("pid") or 0)
+            started = float(j.get("started") or 0)
+        except (OSError, ValueError, TypeError):
+            continue
+        if not pid or not started or now - started > JOB_CAP_SEC:
+            continue
+        if table is None:
+            table = proc_table()
+        cmd = table.get(pid) or ""
+        if str(j.get("hint") or "") not in cmd:
+            continue
+        try:
+            quiet = max(0, int(now - os.path.getmtime(p)))
+        except OSError:
+            quiet = 0
+        out.append({"name": str(j.get("name") or "작업"), "pid": pid,
+                    "mins": int(max(0, now - started) // 60),
+                    "quiet_sec": quiet,
+                    "total": int(j.get("total") or 0),
+                    "done": int(j.get("done") or 0),
+                    "session": str(j.get("session") or "")})
+    return out
+
+
 def heartbeat_gc(doc_id):
     """terminal 전이가 그 문서의 손길을 거둔다 — 닫힌 문서에 attached 가 남지 않게."""
     try:
@@ -9007,6 +9051,14 @@ def stall_verdict(r, now, win, hands=None):
     # 조용한 시간은 그대로 낸다 — 이 함수의 약속이다(감추지 않는다).
     if r.get("live_kind") == "spawned" or r.get("worker"):
         return dict(v, state="moving", why="자동 작업이 이 요청을 맡아 진행 중입니다")
+    # 이 요청에 귀속된 긴 잡(테스트 스위트 등)이 돌고 있다 (REQ-20260830-022).
+    # 잡은 pid 생존·명령줄 대조를 이미 지난 관측이다 — 문서가 조용해도 붙어
+    # 있는 것이고, 깨우기 손잡이는 서지 않는다. quiet_mins 는 그대로 낸다.
+    if r.get("jobs"):
+        _j = r["jobs"][0]
+        return dict(v, state="attached",
+                    why=f"{_j.get('name', '작업')} {_j.get('mins', 0)}분째 "
+                        f"진행 중입니다 — 끝나면 저절로 이어집니다")
     # 점이 '멈췄다/죽었다'고 그린 행은 잣대를 좁힌다 — 점과 손잡이가 같은
     # 시계를 봐야 '멈췄다고 적혔는데 못 누르는 카드'가 사라진다.
     #
@@ -14185,6 +14237,17 @@ def catalog_with_live(stall_win=None):
     # 멈춤은 live 판정이 다 선 뒤에 잰다 — spawned(기동 중)를 읽어야 하기 때문.
     win = STALLED_WIN if stall_win is None else stall_win
     hands = unassigned_hands(now=now)     # 한 번만 센다 — 행마다 세면 n제곱이다
+    # 긴 잡의 카드 귀속 (REQ-20260830-022) — **세션 선언이 있을 때만**. 잡 파일의
+    # session 이 어떤 바인딩의 클레임(active_reqs·last_req)과 맞으면 그 카드에
+    # 싣고, 없으면 전역 칩(serveinfo)까지만 간다 — 귀속을 추측하면 근원 B 다.
+    job_rows = {}
+    for _j in jobs_running(now=now):
+        if not _j.get("session"):
+            continue
+        _b = read_binding(current_machine(), _j["session"]) or {}
+        for _rid in ([_b.get("last_req")] + list(_b.get("active_reqs") or [])):
+            if _rid:
+                job_rows.setdefault(canon_id(_rid), []).append(_j)
     for r in rows:
         if r.get("status") != "in-progress":
             continue
@@ -14192,6 +14255,8 @@ def catalog_with_live(stall_win=None):
         # `stalled_mins` 만 실으면 화면은 '멈춤 아님' 셋(대기·미상·진행)을
         # 구별할 수 없어 전부 조용한 카드로 그린다 — 그것이 "대기와 멈춤이
         # 구별되지 않는다"의 서버 쪽 절반이다.
+        if job_rows.get(canon_id(r["id"])):
+            r["jobs"] = job_rows[canon_id(r["id"])]
         v = stall_verdict(r, now, win, hands=hands)
         # 커밋 드리프트 — 손잡이가 「닫기 검토」로 서는 근거 (REQ-20260830-018).
         # 화면은 이 필드를 그리기만 한다(클라이언트 재판정 금지). in-progress
@@ -15094,7 +15159,10 @@ def cmd_serve(args):
                             "code_stamp": SERVE_CODE_STAMP,
                             "disk_stamp": cur,
                             "changed": stale_parts(SERVE_CODE_STAMP, cur),
-                            "stale": stamp_is_stale(SERVE_CODE_STAMP, cur)})
+                            "stale": stamp_is_stale(SERVE_CODE_STAMP, cur),
+                            # 긴 잡 (REQ-20260830-022) — 헤더 칩이 그린다.
+                            # 새 API 를 열지 않는다: 이 응답은 이미 20초마다 온다.
+                            "jobs": jobs_running()})
             elif parsed.path == "/api/serveguard":
                 # 대시보드가 왜 죽었는지를 대시보드 안에서 답한다
                 # (REQ-20260826-018). 명세는 그 문서의 decision 노트 —
