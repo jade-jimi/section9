@@ -54,16 +54,24 @@ class DocTitleAnchor(unittest.TestCase):
     # ---------- ① 제목이 붙는다 ----------
 
     def test_the_title_sticks_to_the_top_of_the_pane(self):
-        """내려도 제목이 남는다 — 붙박이 어휘는 이 화면 것을 그대로 쓴다."""
-        rule = self._rule(r"\.viewer \.dtitle")
-        self.assertIn("position:sticky", rule, "제목이 붙지 않는다")
+        """내려도 제목이 남는다 — 붙박이 어휘는 이 화면 것을 그대로 쓴다.
+
+        붙는 덩어리가 제목 한 줄에서 머리(.dhead = 제목 + 행동 띠)로 자랐다
+        (REQ-20260830-046 반려: "버튼의 위치가 너무 눈에 띄지 않는다" — 행동이
+        첫머리에만 있어 한 화면만 내리면 손에 남는 단추가 없었다). ①의 뜻
+        (내려도 잃지 않는다)은 그대로고, 잃지 않는 것이 제목에서 제목+행동으로
+        늘었다."""
+        rule = self._rule(r"\.viewer \.dhead")
+        self.assertIn("position:sticky", rule, "머리가 붙지 않는다")
         self.assertIn("top:0", rule, "붙는 자리가 판 위가 아니다")
         self.assertIn("background:var(--panel)", rule,
                       "배경이 없으면 본문이 제목을 뚫고 지나간다")
         self.assertIn("border-bottom:1px solid var(--hairline)", rule,
                       "목록 붙박이와 다른 어휘를 쓴다")
-        # 마크업이 실제로 그 옷을 입는다
+        # 마크업이 실제로 그 옷을 입는다 — 머리 안에 제목과 행동 띠가 함께 선다
         self.assertIn('<h1 class="dtitle">', self.code, "제목 줄에 이름표가 없다")
+        self.assertIn('<div class="dhead">', self.code, "머리 덩어리가 없다")
+        self.assertIn('class="acts dacts"', self.code, "행동 띠가 머리에 없다")
 
     def test_the_title_line_carries_name_number_and_state(self):
         """무엇을 보고 있는지: 제목 · 번호 · 상태. 상태는 이름의 얼굴(mono)로."""
@@ -91,7 +99,7 @@ class DocTitleAnchor(unittest.TestCase):
 
     def test_the_sticky_line_spans_the_pane_in_every_skin(self):
         """좌우 여백은 스킨·밀도마다 다르다 — 고정 픽셀로 적으면 어긋난다."""
-        rule = self._rule(r"\.viewer \.dtitle")
+        rule = self._rule(r"\.viewer \.dhead")
         self.assertIn("calc(-1 * var(--vpad))", rule, "음수 여백이 고정값이다")
         self.assertIn("padding:8px var(--vpad)", rule, "안쪽 여백이 고정값이다")
         # --vpad 를 바꾸는 곳은 여백을 바꾸는 곳과 같아야 한다

@@ -328,7 +328,9 @@ class StallRendersTheSame(unittest.TestCase):
             # 둘 다 같은 함수에서 온다 (REQ-20260830-040).
             "const out = CAT.map(r => ({id: r.id, card: cardHTML(r),"
             "  row: stallHTML(catFind(r.id)), belt: deedBeltHTML(catFind(r.id)),"
-            "  tell: holdTellHTML(catFind(r.id)), lock: holdLockHTML(catFind(r.id))}));",
+            "  tell: holdTellHTML(catFind(r.id)), lock: holdLockHTML(catFind(r.id)),"
+            # 문서 머리 띠의 얼굴 — 같은 함수, wordy 인자만 참 (REQ-20260830-046)
+            "  docbelt: deedBeltHTML(catFind(r.id), true)}));",
             "console.log(JSON.stringify(out));",
         ])
         p = subprocess.run([NODE, "-e", script], capture_output=True,
@@ -594,6 +596,36 @@ class StallRendersTheSame(unittest.TestCase):
         for rid in ("REQ-F", "REQ-L"):
             self.assertEqual("", out[rid]["lock"],
                              "%s: 붙어 있는데 잠금 단추가 섰다" % rid)
+
+    def test_a_held_document_offers_no_lock(self):
+        """이미 사람이 중단해 둔 문서에 「중단해 두기」가 또 서면 ▶ 와 나란히
+        반대 방향 두 단추가 된다 — 042 가 카드에서 걷어낸 그 모순이 낱말로
+        갈아입고 문서에 옮겨 와 있었다 (REQ-20260830-046 designer ④)."""
+        rows = [{"id": "REQ-HELD", "type": "request", "status": "in-progress",
+                 "title": "중단해 둔 것", "user": "u",
+                 "stopped": {"age": 600},
+                 "stoppable": {"kind": "idle", "claimed": False},
+                 "updated": "2026-08-30T21:00:00+09:00"}]
+        out = self.render(rows)
+        self.assertEqual("", out["REQ-HELD"]["lock"],
+                         "중단해 둔 문서에 잠금 단추가 또 섰다 — 잠글 것이 없다")
+        self.assertIn("data-restart=", out["REQ-HELD"]["belt"],
+                      "중단해 둔 문서의 벨트에 「이어가기」가 없다")
+
+    def test_the_document_belt_wears_words(self):
+        """문서의 글리프는 낱말을 입는다 (REQ-20260830-046) — 낱말 없는 11px
+        회색 글리프는 행동으로 읽히지 않았다("버튼의 위치가 너무 눈에 띄지
+        않는다"의 절반). 카드는 원형(ico) 그대로고, 조건은 얼굴 인자 하나다."""
+        out = self.render(self.ROWS)
+        att = out["REQ-F"]     # 붙어 있는 것 — ⏸
+        self.assertIn("wgly", att["docbelt"], "문서 벨트가 낱말 얼굴이 아니다")
+        self.assertIn('<span class="lbl">중단하기</span>', att["docbelt"],
+                      "문서 ⏸ 에 낱말이 없다")
+        self.assertIn("ico", att["belt"], "카드 벨트가 원형 얼굴을 잃었다")
+        self.assertNotIn("lbl", att["belt"], "카드 글리프에 낱말이 붙었다")
+        idle = out["REQ-A"]    # 멈춘 것 — ▶
+        self.assertIn('<span class="lbl">이어가기</span>', idle["docbelt"],
+                      "문서 ▶ 에 낱말이 없다")
 
     def test_a_stalled_card_always_offers_something_to_press(self):
         """멈췄다고 그려 놓고 누를 것이 없는 카드는 없다 (REQ-20260828-041).

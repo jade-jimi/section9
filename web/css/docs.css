@@ -118,9 +118,16 @@
    않는다**(읽으려고 연 화면이다) — 파일 경로는 위에 남아 함께 올라가 사라지고,
    붙는 것은 제목·번호·상태 한 줄뿐이다. 좌우 음수 여백으로 판 끝까지 늘려
    본문이 옆으로 새어 보이지 않게 한다. */
-.viewer .dtitle{position:sticky;top:0;z-index:5;
+/* 붙는 것은 이제 머리 한 덩어리(.dhead)다 (REQ-20260830-046) — 제목 줄에 행동
+   띠가 합류했다. "버튼의 위치가 너무 눈에 띄지 않는다"의 셋째 원인이 흩어짐
+   이었다: 행동은 첫머리, 치우기는 맨 끝, 붙는 것은 제목뿐이라 한 화면만 내리면
+   손에 남는 단추가 보관/삭제뿐이었다. 붙박이 어휘(sticky top:0 · 판 배경 ·
+   아래 헤어라인 · --vpad 음수 여백)는 제목 줄이 쓰던 그대로 옮겼고, 이중
+   sticky 는 여전히 금지다 — 붙는 덩어리는 판 안에 이것 하나뿐이다. */
+.viewer .dhead{position:sticky;top:0;z-index:5;
   margin:2px calc(-1 * var(--vpad)) 2px;padding:8px var(--vpad) 9px;
-  background:var(--panel);border-bottom:1px solid var(--hairline);
+  background:var(--panel);border-bottom:1px solid var(--hairline)}
+.viewer .dtitle{margin:0;padding:0;border:0;background:none;
   display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
 .viewer .dtitle .did{font-family:var(--mono);font-size:12px;color:var(--faint);
   font-weight:400;letter-spacing:.02em}

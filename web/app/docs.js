@@ -329,8 +329,9 @@ async function loadDoc(id, bg){
      "이 상태로 옮김" 인데, `→ 이어 말하기` 에서는 "저기로 감" 이다. 한 줄에서
      한 기호가 두 뜻으로 갈리면 이어 말하기가 다섯 번째 목적지로 위장한다.
      갈래가 바뀐다는 말은 옆의 헤어라인(.adiv)이 이미 하고 있다. */
+  const pickBtn = `<button class="deed" data-pick="${esc(m.id)}" title="터미널에서 이 문서에 이어 말한다">이어 말하기</button>`;
   const pickAct = ((targets.length || transLost) ? `<span class="adiv"></span>` : "")
-    + `<button class="deed" data-pick="${esc(m.id)}" title="터미널에서 이 문서에 이어 말한다">이어 말하기</button>`;
+    + pickBtn;
   /* 이름과 행위를 글꼴로 가른다 (REQ-20260828-007 반려) — `→ done` 은 상태의
      이름이라 mono 로, `✓ 승인` 은 사람이 하는 일이라 본문체(.deed)로 선다.
      귀띔(title)에서도 '전이'를 지웠다: 그건 코드가 쓰는 말이다. */
@@ -340,7 +341,7 @@ async function loadDoc(id, bg){
      아니고, 이 화면이 이미 쓰는 회색 보조줄(.path)과 텍스트 버튼(.more)이다. */
   // 받는 중인지(transWait) 아닌지로 문장이 갈린다 — 둘 다 실제로 일어나는 일이고,
   // "받는 중" 이라고 써 놓고 아무도 안 받고 있는 화면이 이 결함의 원형이다.
-  const reviewActs = `<div class="acts" style="margin:10px 0 0">` + (transLost
+  const transBtns = (transLost
     ? (transWait
         ? `<span class="transwait" role="status">상태 옮기기 버튼을 불러오는 중…</span>`
         : `<span class="transwait" role="status">상태 옮기기 버튼을 받지 못했습니다</span>`
@@ -351,7 +352,9 @@ async function loadDoc(id, bg){
                             : `${m.status} 에서 ${to} 상태로 옮깁니다`;
         return `<button class="deed" data-trans="${esc(m.id)}|${to}|${esc(m.status)}"`
           + ` title="${esc(tip)}">${actLabel(to, judging)}</button>`;
-      }).join("")) + pickAct + `</div>`;
+      }).join(""));
+  const reviewActs = `<div class="acts" style="margin:10px 0 0">`
+    + transBtns + pickAct + `</div>`;
   /* 문서 화면에도 **같은 손잡이**를 둔다 (REQ-20260828-041).
 
      사용자가 물은 것은 "in-progress 중인 카드**나 문서**에 상태체크 기능을
@@ -379,8 +382,24 @@ async function loadDoc(id, bg){
      idle 의 ⏸ 가 카드에서 사라지면서, 앞으로 안 맡게 잠그는 **정책**은 지금
      내리는 행위들과 층을 나눠 문서로 왔다. 새 경로가 아니라 같은 stop 길의
      idle 갈래다 — 카드에서 옮겨 왔을 뿐이다. */
-  const stallRow = stallHTML(stallDoc) + holdTellHTML(stallDoc)
-    + deedBeltHTML(stallDoc) + holdLockHTML(stallDoc);
+  /* 행동은 **한 띠**에 모여 제목과 함께 붙는다 (REQ-20260830-046 반려).
+
+     사용자: "버튼의 위치가 너무 눈에 띄지 않는다." 실측 진단 셋 — ① 잠금
+     단추는 idle 에만 서는데 안내는 어디서나 했고 ② 남은 것은 낱말 없는 11px
+     회색 글리프 고아였고 ③ 행동은 첫머리, 치우기는 맨 끝(약 4000px 간격)이라
+     한 화면만 내려도 손에 남는 단추가 보관/삭제뿐이었다.
+
+     그래서 자리는 고정, 내용은 상태가 정한다(040 규칙 4의 문서판): 진행
+     무리(▶/⏸ 낱말 글리프 + 잠금) → 옮기기·판정 → 이어 말하기 순서로 한 띠에
+     서고, 띠는 제목과 함께 붙박이(.dhead)라 아무리 내려도 손끝에 남는다.
+     사실 줄(stallHTML)은 띠에 넣지 않는다 — 붙박이에 얹으면 같은 문장이
+     스크롤 내내 따라다닌다. */
+  const beltDoc = deedBeltHTML(stallDoc, true) + holdLockHTML(stallDoc);
+  // 무리 사이만 헤어라인(.adiv)이 가른다 — 빈 무리는 가를 것도 없다.
+  const docActs = `<div class="acts dacts">`
+    + [beltDoc, transBtns, pickBtn].filter(Boolean)
+        .join(`<span class="adiv"></span>`) + `</div>`;
+  const stallRow = stallHTML(stallDoc) + holdTellHTML(stallDoc);
   // review/blocked 문서: 판단 근거(전이 --note)가 본문 최하단 History에 묻힌다
   // (REQ-20260825-006 반려) — 현재 회차의 note를 상단 callout으로, 과거 회차
   // (이전 확인 포인트·반려 사유)는 접힘 이력으로 (REQ-20260825-011 반려:
@@ -449,10 +468,11 @@ async function loadDoc(id, bg){
       <div class="backlinks" id="backlinks"></div>`;
   } else viewer.innerHTML = `
     <div class="path dpath">${esc(d.path)}</div>
+    <div class="dhead">
     <h1 class="dtitle">${esc(m.title)}
       <span class="did" title="${esc(m.id)}">${esc(shortId(m.id))}</span>
       <span class="dst" style="--sc:${SCOLOR[m.status] || "var(--muted)"}">${esc(statusLabel(m))}</span>
-    </h1>${reviewActs}${stallRow}${gate}
+    </h1>${docActs}</div>${stallRow}${gate}
     <table class="metatbl">${fields.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td></tr>`).join("")}</table>
     <div class="md">${md2html(d.body)}</div>${streamSec}
     <div class="backlinks" id="backlinks"></div>`;

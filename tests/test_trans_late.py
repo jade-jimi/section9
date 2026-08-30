@@ -88,7 +88,9 @@ class TransLate(unittest.TestCase):
     # T4. 못 받은 동안 그 자리가 조용하지 않다 + 다시 받는 길이 있다
     def test_t4_says_and_offers(self):
         self.assertIn("transLost", self.doc)
-        i = self.doc.index("reviewActs")
+        # 전이 단추 무리가 transBtns 로 갈라졌다 (REQ-20260830-046 — 행동 띠가
+        # 벨트·전이·말하기를 한 곳에 모으며). '못 받은 경우'는 그 무리가 다룬다.
+        i = self.doc.index("const transBtns")
         seg = self.doc[i:i + 900]
         self.assertIn("transLost", seg, "버튼 줄이 못 받은 경우를 다루지 않는다")
         self.assertIn("data-retrans", self.src, "다시 받는 버튼이 없다")

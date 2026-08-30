@@ -124,12 +124,16 @@ class WakeHandle(unittest.TestCase):
         # 조각이 둘이 된 뒤로도 **둘 다** 같은 함수에서 온다 (REQ-20260830-040) —
         # 벨트를 문서에서 빼면 문서 화면만 손잡이를 잃는다.
         self.assertIn("deedBeltHTML(r)", self.card, "보드 카드가 벨트를 안 부른다")
-        self.assertIn("deedBeltHTML(stallDoc)", self.src, "문서 화면이 벨트를 안 부른다")
+        # 문서는 낱말 얼굴(wordy)로 부른다 (REQ-20260830-046) — 함수는 같다.
+        self.assertIn("deedBeltHTML(stallDoc, true)", self.src,
+                      "문서 화면이 벨트를 안 부른다")
         # 문서 화면은 **자기 조건을 갖지 않는다** (REQ-20260828-041 2차) —
         # 카탈로그 행을 넘길 뿐이고, 멈춤인지는 stallState 한 곳이 답한다.
         self.assertNotIn("srow", self.src.split("const stallRow")[1][:200],
                          "문서 화면이 다시 판정한다")
-        self.assertIn("${reviewActs}${stallRow}", self.src,
+        # 행동은 머리 띠(docActs, 붙박이)로, 사실 줄은 그 아래 흐름으로
+        # (REQ-20260830-046) — 멈춤 줄이 실제로 놓이는 계약은 그대로다.
+        self.assertIn("${docActs}</div>${stallRow}", self.src,
                       "문서 화면에 멈춤 줄이 실제로 놓이지 않는다")
 
     # ---------- ③ 화면이 이유를 짓지 않는다 ----------

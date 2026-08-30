@@ -155,12 +155,16 @@ function tidyDecorate(){
   const v = $("#viewer"), id = v && v.dataset.showing;
   if (v && id){
     const arch = tidyIsArchived(id);
+    /* 얼굴은 .deed 가 아니라 .more 다 (REQ-20260830-046 designer) — 행동 단추가
+       머리 띠로 모이면서, 맨 아래 이 줄만 같은 알약이면 "이게 전부"라는 거짓
+       실마리가 된다(사용자 스크린샷이 정확히 그 끝 화면이다). 다 읽고 하는
+       일이라는 자리는 지키고, 급만 보조(텍스트 단추)로 내린다. */
     const html = `<span class="tcap">이 문서 치우기</span><div class="acts">`
-      + `<button type="button" class="deed" data-tidy="${arch ? "unarch1" : "arch1"}"`
+      + `<button type="button" class="more" data-tidy="${arch ? "unarch1" : "arch1"}"`
       + ` data-id="${esc(id)}" title="${arch
           ? "목록으로 되돌린다" : "목록에서 내린다 — 문서는 그대로 있고 언제든 되돌린다"}">`
       + `${arch ? "보관 해제" : "보관"}</button>`
-      + `<button type="button" class="deed" data-tidy="rm1" data-id="${esc(id)}"`
+      + `<button type="button" class="more" data-tidy="rm1" data-id="${esc(id)}"`
       + ` title="휴지통으로 보낸다 — 목록에서 사라지되 되돌릴 수 있다">삭제</button></div>`;
     let box = v.querySelector(".tidyacts");
     if (!box){

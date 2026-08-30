@@ -229,9 +229,13 @@ class DeadEnd(unittest.TestCase):
         m = re.search(r"const stallRow = ([\s\S]+?);\n", self.src)
         self.assertTrue(m, "문서 화면이 조각을 잇는 자리가 없다")
         made = " ".join(m.group(1).split())
-        self.assertEqual(made,
-                         "stallHTML(stallDoc) + holdTellHTML(stallDoc) "
-                         "+ deedBeltHTML(stallDoc) + holdLockHTML(stallDoc)")
+        # 벨트·잠금은 머리 띠(.dacts)로 갔다 (REQ-20260830-046) — 사실 줄만 남는다.
+        self.assertEqual(made, "stallHTML(stallDoc) + holdTellHTML(stallDoc)")
+        # 띠도 **같은 두 함수**를 부른다 — wordy 는 얼굴 인자일 뿐 조건이 아니다.
+        m2 = re.search(r"const beltDoc = ([\s\S]+?);\n", self.src)
+        self.assertTrue(m2, "문서 머리 띠가 벨트를 잇는 자리가 없다")
+        self.assertEqual(" ".join(m2.group(1).split()),
+                         "deedBeltHTML(stallDoc, true) + holdLockHTML(stallDoc)")
 
     # ---------- ⑥ 눈으로 볼 길 ----------
 
