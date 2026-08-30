@@ -244,17 +244,25 @@ function factTail(...bits){
   return t ? ` · ${t}` : "";
 }
 /* ⏸ 한 개의 HTML. **카드에 ⏸ 는 하나뿐**이고, 그 자리는 이제 사실 줄이 아니라
-   id 줄이다 (규칙 4) — 자리 규칙은 deedBeltHTML 주석에 있다. */
-function stopBtnHTML(r){
+   id 줄이다 (규칙 4) — 자리 규칙은 deedBeltHTML 주석에 있다.
+
+   `wordy` (REQ-20260830-046): 문서 화면에서는 글리프에 낱말을 붙인다 — 카드의
+   27px 원형이 정당한 이유(224px 칸의 폭 다툼)가 1030px 문서에는 없고, 낱말 없는
+   11px 회색 글리프가 "안 보인다"의 절반이었다. 얼굴만 갈리고 이름·길·상태는
+   같다. wgly 는 ico 가 아니라 낱말 단추 계보다 — 스킨별 알약 모양을 그대로
+   물려받고, faceDeed 의 낱말 규칙(textContent)이 상태를 칠한다(실패 복귀 시
+   글리프는 다음 그리기가 되살린다 — 문서는 곧 다시 그려진다). 조건 두 벌 금지. */
+function stopBtnHTML(r, wordy){
   const kind = (r.stoppable || {}).kind;
   if (!kind) return "";
   const going = stopPending(r.id);
   const tip = (STOP_KIND[kind] || {}).tip || STOP_KIND.idle.tip;
-  return `<button type="button" class="deed stop ico${going ? " busy" : ""}"`
+  return `<button type="button" class="deed stop ${wordy ? "wgly" : "ico"}${going ? " busy" : ""}"`
     + ` data-stop="${esc(r.id)}" data-kind="${esc(kind)}"${going ? " disabled" : ""}`
     + ` data-name="${STOP_LABEL}" data-tip="${esc(tip)}"`
     + ` aria-label="${going ? STOP_GOING : STOP_LABEL}"`
-    + ` title="${going ? STOP_GOING : esc(tip)}">${GLYPH_PAUSE}</button>`;
+    + ` title="${going ? STOP_GOING : esc(tip)}">${GLYPH_PAUSE}`
+    + (wordy ? `<span class="lbl">${STOP_LABEL}</span>` : "") + `</button>`;
 }
 /* 사람이 중단해 둔 자리인가 — 술어 하나 (REQ-20260829-024 라운드4).
    줄(stoppedRowHTML)과 ▶ 의 갈래(wakeBtnHTML)가 각자 조건을 가지면 줄은 「중단」
@@ -295,7 +303,7 @@ function holdTell(r){
 /* ▶ 는 카드에 하나다 — 멈춘 것을 이어가거나(`data-wake`), 사람이 중단해 둔 것을
    되돌린다(`data-restart`). 둘은 배타적이다: 중단해 둔 카드는 멈춤 판정을 이긴다.
    낱말 손잡이(「끝났는지 확인」)는 여기 서지 않는다 — 아래 driftBtnHTML 참조. */
-function wakeBtnHTML(r){
+function wakeBtnHTML(r, wordy){
   const held = heldState(r);
   const st = held ? null : stallState(r);
   if (!held && !st) return "";
@@ -305,20 +313,22 @@ function wakeBtnHTML(r){
      ux-writer). 단추가 하나로 줄면 "왜 지금 이것 하나인가"가 화면에 없어지는데,
      첫 마디를 붙이는 것으로 족하다.
      멈춤 갈래의 꼬리 한 줄은 카드에서 사라진 정책(잠그기)의 길을 알려 준다 —
-     화면에 없는 단추를 툴팁이 부르지 않도록, 부르는 것은 단추가 아니라 문서다. */
+     그 단추는 카드를 열면 나오는 문서의 **맨 위 행동 띠**에 있다(REQ-20260830-046:
+     "문서를 열면 있다"고만 말해 놓고 바닥까지 훑게 만든 것이 실사고다). */
   const tip = held
     ? "사람이 중단해 둔 요청입니다 — 누르면 자동 작업이 다시 이어서 진행합니다"
     : "담당 없이 멈춰 있습니다 — 누르면 자동 작업이 이어서 진행합니다."
-      + " 자동 작업이 다시 맡지 않게 해 두려면 카드를 열어 주세요";
+      + " 다시 맡지 않게 해 두는 단추는 카드를 열면 맨 위에 있습니다";
   // 속성 이름을 조립하지 않는다(`data-${...}`) — 짓는 자리를 세는 회귀 시험도,
   // 다음 사람의 grep 도 조립된 이름을 못 찾는다.
   const at = held ? `data-restart="${esc(r.id)}"` : `data-wake="${esc(r.id)}"`;
-  return `<button type="button" class="deed wake ico${going ? " busy" : ""}"`
+  return `<button type="button" class="deed wake ${wordy ? "wgly" : "ico"}${going ? " busy" : ""}"`
     + ` ${at}${going ? " disabled" : ""}`
     + ` data-name="${WAKE_LABEL}" data-tip="${esc(tip)}"`
     // 글리프 단추는 이름을 글자가 아니라 여기로 실어 낸다 — 낭독기에도, 손에도.
     + ` aria-label="${going ? WAKE_GOING : WAKE_LABEL}"`
-    + ` title="${going ? WAKE_GOING : esc(tip)}">${GLYPH_PLAY}</button>`;
+    + ` title="${going ? WAKE_GOING : esc(tip)}">${GLYPH_PLAY}`
+    + (wordy ? `<span class="lbl">${WAKE_LABEL}</span>` : "") + `</button>`;
 }
 /* 셋째 손잡이만 낱말이고, **자기 줄을 지킨다** (REQ-20260830-032 · -040 규칙 4).
 
@@ -369,12 +379,13 @@ function driftBtnHTML(r){
    **관문은 여기 한 곳이다.** 두 단추 함수에 각자 조건을 심으면 두 벌이 되고,
    이 파일이 세 번 덴 "한쪽만 고쳐진다"가 재발한다. 정책(idle 잠금)이 갈 곳은
    문서 화면의 낱말 단추다 — 아래 holdLockHTML. */
-function deedBeltHTML(r){
+function deedBeltHTML(r, wordy){
   const kind = (r.stoppable || {}).kind;
   const attached = !!kind && kind !== "idle";
   // 붙어 있으면 끊는 쪽, 아니면 잇는 쪽. 그 함수의 held/stall 조건이 멈춤과
   // 중단을 다시 가르고, 어느 쪽도 아니면 빈 문자열이 온다.
-  const btn = attached ? stopBtnHTML(r) : wakeBtnHTML(r);
+  // wordy(문서 화면)는 얼굴만 갈린다 — 관문·조건은 이 한 곳 그대로다.
+  const btn = attached ? stopBtnHTML(r, wordy) : wakeBtnHTML(r, wordy);
   if (!btn) return "";
   return `<span class="acts deedbelt">${btn}</span>`;
 }
@@ -403,13 +414,21 @@ function holdTellHTML(r){
 function holdLockHTML(r){
   if (!r || r.type !== "request" || r.status !== "in-progress") return "";
   if ((r.stoppable || {}).kind !== "idle") return "";
+  /* 이미 사람이 중단해 둔 문서에는 서지 않는다 (REQ-20260830-046 designer ④).
+     이 관문이 없던 동안 「▶ 이어가기」와 「자동 작업 중단해 두기」가 나란히
+     섰다 — 042 가 카드에서 걷어낸 그 모순이 낱말로 갈아입고 문서에 옮겨 와
+     있었다. 중단해 둔 상태에서 잠금은 이미 이뤄져 있으니 세울 것이 없다. */
+  if (heldState(r)) return "";
   const going = stopPending(r.id);
   const tip = STOP_KIND.idle.tip;
-  return `<div class="acts lockrow"><button type="button" class="deed stop`
-    + `${going ? " busy" : ""}" data-stop="${esc(r.id)}" data-kind="idle"`
-    + `${going ? " disabled" : ""} data-name="${STOP_HOLD_LABEL}"`
+  /* 줄(.lockrow)을 접었다 (REQ-20260830-046) — 이 단추는 이제 문서 머리의
+     행동 띠(.dacts) 안에서 정책 잉크(.pol, 한 급 낮음)로 선다. 자기 줄로 서면
+     행동들이 흩어지고, 그 흩어짐이 "안 보인다"의 나머지 절반이었다. */
+  return `<button type="button" class="deed stop pol${going ? " busy" : ""}"`
+    + ` data-stop="${esc(r.id)}" data-kind="idle"${going ? " disabled" : ""}`
+    + ` data-name="${STOP_HOLD_LABEL}"`
     + ` data-tip="${esc(tip)}" title="${going ? STOP_GOING : esc(tip)}">`
-    + `${going ? STOP_GOING : STOP_HOLD_LABEL}</button></div>`;
+    + `${going ? STOP_GOING : STOP_HOLD_LABEL}</button>`;
 }
 /* 진행 축의 **줄 하나** (REQ-20260830-040 규칙 2). 사다리는 구체성 순이다:
 

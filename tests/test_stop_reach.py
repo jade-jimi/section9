@@ -296,7 +296,8 @@ class TheHandleOnTheScreen(unittest.TestCase):
                       "화면이 서버가 준 사실 말고 다른 것으로 손잡이를 세운다")
         # ⏸ 를 그리는 자리는 하나로 모였다 (REQ-20260830-035 — 갈래가 넷이라
         # 줄마다 베끼면 네 벌이 된다). 행의 사실을 읽는 계약은 그 조각이 진다.
-        self.assertIn("stopBtnHTML(r)", self.workrow, "벨트가 ⏸ 를 안 세운다")
+        # wordy 는 얼굴 인자다 (REQ-20260830-046) — 조건이 아니라 같은 호출이다.
+        self.assertIn("stopBtnHTML(r, wordy)", self.workrow, "벨트가 ⏸ 를 안 세운다")
         self.assertIn('data-stop="${esc(r.id)}"', _fn(self.web, "stopBtnHTML"))
         # 점으로 대신하면 클레임 뒤에 손잡이가 사라진다
         self.assertNotIn("live_kind", self.workrow,
@@ -315,7 +316,7 @@ class TheHandleOnTheScreen(unittest.TestCase):
         조각이 사실 줄(stallHTML)과 손잡이 벨트(deedBeltHTML) 둘로 나뉘었지만,
         짓는 자리는 여전히 한 곳씩이고 두 화면이 그 둘을 다 부른다 — 한쪽이
         벨트를 안 부르면 그 화면만 손잡이를 잃는다."""
-        self.assertIn("stopBtnHTML(r)", _fn(self.web, "deedBeltHTML"),
+        self.assertIn("stopBtnHTML(r, wordy)", _fn(self.web, "deedBeltHTML"),
                       "벨트가 세우기를 안 짓는다")
         for caller in ("cardHTML", "loadDoc"):
             seg = _fn(self.web, caller) if caller != "loadDoc" \

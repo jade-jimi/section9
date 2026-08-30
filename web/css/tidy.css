@@ -68,6 +68,13 @@
 .viewer .tidyacts .tcap{font-family:var(--mono);font-size:10px;letter-spacing:0;
   color:var(--faint);display:block;margin-bottom:6px}
 .viewer .tidyacts .acts{margin-top:0}
+/* 얼굴은 .more(보조 텍스트 단추)다 (REQ-20260830-046) — 행동이 머리 띠로 모인
+   뒤, 맨 아래 이 줄만 .deed 알약이면 "이게 전부"로 읽힌다. .more 기본은 목록
+   꼬리용 블록(width:100%)이라 이 줄에서는 나란히 서게만 되돌린다. */
+.viewer .tidyacts .more{display:inline-block;width:auto;padding:2px 0;
+  margin-right:14px}
+/* "+ " 는 목록 꼬리(더 보기)의 어휘다 — 치우기에는 뜻이 없다. */
+.viewer .tidyacts .more::before{content:""}
 /* 버튼이 여럿 서는 줄은 좁아지면 접힌다 — 안 접으면 판 밖으로 밀려 나간다. */
 .viewer .acts{flex-wrap:wrap}
 

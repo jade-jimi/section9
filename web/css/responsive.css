@@ -8,6 +8,9 @@
    (.gsplit.empty 는 위 미디어의 .gsplit 보다 특이도가 높아 그대로 남는다) */
 @media (max-width:900px){
   .gsplit.empty{grid-template-columns:minmax(0,1fr)}
+  /* 좁은 화면 탈출구 (REQ-20260830-046) — 제목+행동 띠 두 줄이 접혀 서너 줄이
+     되면 붙박이가 본문을 다 가린다. 붙기를 포기하고 흐름에 둔다. */
+  .viewer .dhead{position:static}
 }
 .dshead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
   font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}

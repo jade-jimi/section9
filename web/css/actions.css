@@ -178,6 +178,20 @@
    과녁은 그대로 27px 다: 링이 작아진 것이지 닿는 자리가 작아진 것이 아니다. */
 .deedrow .acts button.deed.ico:focus-visible,
 .acts.deedbelt button.deed.ico:focus-visible{outline-offset:-6px}
+/* 문서 머리의 행동 띠 (REQ-20260830-046) — 진행(▶/⏸/잠금) · 옮기기·판정 ·
+   이어 말하기가 한 줄에 서고, 무리 사이는 .adiv 헤어라인이 가른다. 띠는
+   .dhead 붙박이 안이라 스크롤과 무관하게 손끝에 남는다. */
+.acts.dacts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:7px 0 0}
+/* 문서에서는 글리프가 낱말을 입는다(.wgly) — 카드의 27px 원형이 정당한 이유
+   (좁은 칸의 폭 다툼)가 1030px 문서에는 없고, 낱말 없는 11px 회색 글리프는
+   행동으로 읽히지 않는다(실사고). wgly 는 ico 계보가 아니라 낱말 단추 계보라
+   테두리·알약 모양은 스킨이 주는 그대로다 — 여기서는 글리프 조각의 크기와
+   틈만 정한다. */
+.dacts .deedbelt{margin:0}
+.dacts button.deed.wgly{display:inline-flex;align-items:center;gap:5px}
+.dacts button.deed.wgly .gly{display:block;width:11px;height:11px}
+/* 정책 단추(잠금)는 잉크 한 급 낮음 — 행위와 정책의 위계다. 색면 없음. */
+.dacts .deed.pol{color:var(--muted);border-color:var(--hairline)}
 /* 도는 중에는 눌리지 않는다. 색면·붉은 실패로 그리지 않고, 잉크를 한 급 낮춰
    "지금은 내 차례가 아니다"만 말한다. */
 .acts button.wake[disabled]{cursor:default;color:var(--muted);
