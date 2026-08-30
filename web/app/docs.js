@@ -273,6 +273,11 @@ async function loadDoc(id, bg){
     ["summary", esc(m.summary) || null], ["goal", esc(m.goal) || null],
     ["user / machine / session", esc([m.user, m.machine, m.session].filter(Boolean).join(" / "))],
     ["project", esc(m.project) || null],
+    // 작업 자리는 **표 안에서만** 말한다 (REQ-20260829-030 4차 반려: "카드에
+    // 보여주는건 혼란만 가중"). 제목 줄에서도 내렸다 — 제목 줄은 카드와 같이
+    // 훑는 자리라, 거기 세우면 같은 지적을 다시 받는다. 값이 없으면 행도 없다
+    // (fields 는 빈 칸을 걸러 낸다).
+    ["workspace", wsChip(catFind(m.id)) || null],
     // 우선순위는 기본값(50)일 때도 적는다 — 값이 안 보여 "숨겨져 있는 건가"로
     // 반려된 축이다 (REQ-20260826-005). 다만 그 답을 설명문으로 하지는 않는다
     // (REQ-20260827-029): `보통 50/99` 두 낱말이 등급·값·척도를 한 번에 말하고,
@@ -435,7 +440,6 @@ async function loadDoc(id, bg){
     <div class="path dpath">${esc(d.path)}</div>
     <h1 class="dtitle">${esc(m.title)}
       <span class="did" title="${esc(m.id)}">${esc(shortId(m.id))}</span>
-      ${wsChip(catFind(m.id))}
       <span class="dst" style="--sc:${SCOLOR[m.status] || "var(--muted)"}">${esc(statusLabel(m))}</span>
     </h1>${reviewActs}${stallRow}${gate}
     <table class="metatbl">${fields.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td></tr>`).join("")}</table>

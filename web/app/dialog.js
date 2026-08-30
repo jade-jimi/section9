@@ -34,8 +34,66 @@ function showPrioHover(el){
     <div class="ht">${PRIO_TIERS[cur]} · ${p}/${PRIO_MAX}</div>
     <div class="hs">숫자가 클수록 먼저 집는다. 값을 적지 않으면 ${PRIO_DEFAULT}(보통)이다.</div>
     <div class="pscale">${bands}</div>
-    <div class="hs" style="margin-top:5px">바꾸기 — <code>s9 set &lt;요청&gt; --priority high</code></div>`;
+    <div class="hs" style="margin-top:5px">눌러서 바꾼다 — 올린 것이 다음에 집힌다.</div>`;
   placeHover(el);
+}
+/* 순서를 바꾸는 창 (REQ-20260829-029).
+
+   "화면에서 우선순위를 조절할 수 있고, 올린 것이 실제로 제일 먼저 실행된다" —
+   이 창은 앞쪽 절반이고, 뒤쪽 절반은 서버가 이미 들고 있다(`work_order()` 가
+   `s9 next` 와 무인 작업자 스폰 순서를 정한다). 그래서 아래 한 줄이 빈말이
+   아니다: **여기서 올리면 다음에 집히는 것이 바뀐다.**
+
+   고르는 것은 등급 넷이다. 1~99 를 그대로 묻지 않는 이유는 이 화면이 이미
+   내린 판단 그대로다 (const.js): 사람이 읽는 글자는 등급 낱말이고, 숫자를
+   고르게 하면 아무도 안 쓴다. 값이 필요한 사람은 여전히 CLI 로 정확한 수를
+   넣을 수 있고, 그 값도 등급 낱말로 읽힌다.
+
+   확인 단계는 없다 — 되돌리기가 한 번 더 누르는 것뿐인 일에 확인을 겹치면
+   손이 두 배로 든다 (s9choose 가 세워 둔 규칙). */
+async function prioSet(id){
+  const r = catFind(id);
+  if (!r) return;
+  const cur = prioOf(r), curTier = prioTier(cur);
+  const items = [["urgent", 90], ["high", 75], ["normal", 50], ["low", 25]]
+    .map(([t, v]) => ({
+      key: String(v), label: PRIO_TIERS[t], tag: String(v),
+      cur: t === curTier,
+      // 지금 값이 등급의 대표값과 다를 수 있다(CLI로 77 을 넣은 문서). 그때는
+      // 그 수를 그대로 보여 준다 — 누르면 대표값으로 **바뀐다**는 사실이
+      // 숨겨지면 사람이 모르는 사이 값이 옮겨 간다.
+      note: t === curTier ? (cur === v ? "지금 이것" : `지금 ${cur}`) : "",
+    }));
+  // 머리와 제목은 판정 창과 **같은 곳**에서 짓는다 (dlgFor, REQ-20260828-007) —
+  // 창마다 제 문장을 지으면 언젠가 하나만 제목을 잃고 조사가 어긋난다.
+  const pick = await s9dlg({
+    kind: "choose", cap: "우선순위", ...dlgFor(id, "어느 자리에 둘까요"),
+    desc: "위에 둔 것을 다음에 집습니다 — 자동 작업도 이 순서를 따릅니다.",
+    items, cancel: "그만두기",
+  });
+  if (!pick || !pick.key || Number(pick.key) === cur) return;
+  postPriority(id, Number(pick.key));
+}
+/* 바꾼 값을 보낸다 — 실패하면 **화면을 고쳐 쓰지 않는다**. 낙관적으로 카드를
+   먼저 옮겨 놓으면 서버가 거절했을 때 화면과 문서가 갈리고, 그 갈림은 다음
+   새로고침까지 아무도 모른다. 성공한 뒤에 목록을 다시 받는다. */
+async function postPriority(id, value){
+  try{
+    const r = await fetch("/api/priority", {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(withAs({id, priority: value}))});
+    const d = await r.json();
+    if (!d.ok){
+      s9dlg({kind: "alert", cap: "실패", title: "우선순위를 바꾸지 못했습니다",
+        desc: String(d.error || ""), ok: "닫기"});
+      return;
+    }
+    refreshCatalog(true);
+  }catch(e){
+    s9dlg({kind: "alert", cap: "연결", title: "서버에 닿지 못했습니다",
+      desc: "잠시 뒤 다시 시도해 주세요. 서버가 재기동 중일 수 있습니다.",
+      ok: "닫기"});
+  }
 }
 /* 판정 대화상자 (REQ-20260827-071) — prompt·confirm·alert 를 대신하는 한 자리.
    셋을 한 컴포넌트의 변형으로 두는 이유는 이 저장소가 이미 여러 번 겪은 것과
@@ -310,7 +368,7 @@ function s9dlg(o){
         fs.forEach(take);
       });
       if (attBox) attBox.addEventListener("click", e => {
-        const rm = e.target.closest("[data-dlgattrm]");
+        const rm = evEl(e.target)?.closest("[data-dlgattrm]");
         if (!rm) return;
         atts.splice(+rm.dataset.dlgattrm, 1);
         attRender(); sync();
@@ -374,9 +432,14 @@ function s9choose(o){
   let sel = curKey;                      // 라디오 선택 — 열릴 때는 지금 값
   dlg.innerHTML = `<div class="dlghead">`
     + `<span class="dlgcap">${esc(o.cap || "고르기")}</span>`
+    /* 문서에 매인 고르기도 있다 (REQ-20260829-029 의 우선순위). 주소는 머리에,
+       제목은 본문에 — 판정 창(s9dlg)이 이미 세운 그 자리를 그대로 쓴다. 모델·
+       계정 창은 문서가 없어 이 자리를 안 쓴다. */
+    + (o.doc ? `<span class="dlgdoc">${esc(o.doc)}</span>` : "")
     + `<span class="dlgesc"><kbd>ESC</kbd> 닫기</span></div>`
     + `<div class="dlgbody">`
-    + `<div class="dlgt">${esc(o.title || "")}</div>`
+    // titleHtml 은 s9dlg 와 같은 약속이다 — 짓는 쪽(dlgFor)이 이미 escape 했다.
+    + `<div class="dlgt">${o.titleHtml || esc(o.title || "")}</div>`
     + (o.desc ? `<div class="dlgs">${esc(o.desc)}</div>` : "")
     + (ch ? `<div class="dlgsub">${esc(ch.label)}</div><div class="dlgchips">`
         + ch.opts.map(([v, t]) => `<button type="button" data-chip="${esc(v)}"`

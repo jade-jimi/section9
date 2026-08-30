@@ -268,7 +268,9 @@ class TheRunningWorkerIsNotStalled(IsolatedVault):
                           "도는 워커 위에 두 번째 손을 붙이라고 그린다")
         res = self.m.wake_request(rid, actor="tester")
         self.assertEqual(res["action"], "busy", res["message"])
-        self.assertIn("돌", res["message"])
+        # 이미 하고 있다는 말이 문장에 있어야 한다 (낱말은 REQ-20260830-007 에서
+        # `돌고 있다` → `진행하고 있습니다` 로 바뀌었다 — 사용자의 말로).
+        self.assertIn("진행", res["message"])
 
     def test_r5c_a_hung_worker_eventually_lets_go(self):
         """멎은 채 프로세스만 남은 워커를 한 시간 넘게 감추지 않는다."""

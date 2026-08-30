@@ -140,18 +140,18 @@ function termBindInput(T){
     fs.forEach(f => termUpload(T, f));
   });
   root.addEventListener("click", e => {          // 모델 라벨 클릭 → 변경 플로우
-    if (e.target.closest(".ccmodelbtn")) termModelChange(T);
-    if (e.target.closest(".ccsidbtn")) termSessionPick(T);
+    if (evEl(e.target)?.closest(".ccmodelbtn")) termModelChange(T);
+    if (evEl(e.target)?.closest(".ccsidbtn")) termSessionPick(T);
   });
   pal.addEventListener("mousedown", e => {       // mousedown — blur 전에 선택
-    const pi = e.target.closest("[data-pi]");
+    const pi = evEl(e.target)?.closest("[data-pi]");
     if (!pi) return;
     e.preventDefault();
     T.pal.idx = +pi.dataset.pi;
     termPalPick(T);
   });
   att.addEventListener("click", e => {
-    const rm = e.target.closest("[data-attrm]");
+    const rm = evEl(e.target)?.closest("[data-attrm]");
     if (!rm) return;
     T.atts.splice(+rm.dataset.attrm, 1);
     termAttRender(T);
@@ -286,7 +286,7 @@ function roveMove(cur, dir){
 }
 document.addEventListener("keydown", e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const cur = e.target && e.target.closest && e.target.closest(ROVE_ITEM);
+  const cur = evEl(e.target)?.closest(ROVE_ITEM);
   if (!cur) return;
   const dir = {ArrowDown: 1, ArrowUp: -1, Home: "home", End: "end"}[e.key];
   if (dir === undefined) return;
@@ -295,7 +295,7 @@ document.addEventListener("keydown", e => {
 });
 // 포커스가 옮겨 가면 Tab 의 입구도 따라간다 — 목록을 떠났다 돌아오면 마지막 자리
 document.addEventListener("focusin", e => {
-  const it = e.target && e.target.closest && e.target.closest(ROVE_ITEM);
+  const it = evEl(e.target)?.closest(ROVE_ITEM);
   if (!it) return;
   const c = it.closest("[data-rove]");
   if (c) c.querySelectorAll(ROVE_ITEM).forEach(r => { r.tabIndex = r === it ? 0 : -1; });
@@ -322,7 +322,7 @@ document.addEventListener("keydown", e => {
     return;
   }
   if (e.target === ta) return;
-  if (e.target.closest && e.target.closest("input,textarea,select,[contenteditable]")) return;
+  if (evEl(e.target)?.closest("input,textarea,select,[contenteditable]")) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key.length !== 1) return;
   if (window.getSelection && String(getSelection())) return;  // 선택/복사 중 방해 금지

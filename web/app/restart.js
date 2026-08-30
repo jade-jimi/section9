@@ -76,9 +76,9 @@ async function restartTell(T, sid, req, d, what, cap){
   restartChip("fail", what, d);
   const go = await s9dlg({kind: "confirm", cap, stop: false,
     title: "지금 이 세션이 일하는 중입니다",
-    desc: "하던 일을 멈추고 바꿀까요? 대화는 그대로 이어지므로, 다시 시작한 뒤"
-      + " 하던 말을 이어서 하면 됩니다. 멈추지 않으면 지금 설정 그대로 둡니다.",
-    ok: "멈추고 바꾸기", cancel: "그대로 두기"});
+    desc: "하던 일을 중단하고 바꿀까요? 대화는 그대로 이어지므로, 다시 시작한 뒤"
+      + " 하던 말을 이어서 하면 됩니다. 중단하지 않으면 지금 설정 그대로 둡니다.",
+    ok: "중단하고 바꾸기", cancel: "그대로 두기"});
   if (!go) return;
   await restartAfterStop(T, sid, req, what, cap);
 }
@@ -95,7 +95,7 @@ async function restartAfterStop(T, sid, req, what, cap){
     if (!di.ok) throw new Error(di.error || "중단 요청 실패");
   }catch(ex){
     restartChip("fail", what, {reason: "중단 요청 실패"});
-    await s9dlg({kind: "alert", cap, title: "하던 일을 멈추지 못했습니다",
+    await s9dlg({kind: "alert", cap, title: "하던 일을 중단하지 못했습니다",
       desc: "설정은 그대로 두었습니다 — 세션 터미널을 확인한 뒤 다시 눌러 주세요.",
       ok: "닫기"});
     return;
@@ -108,7 +108,10 @@ async function restartAfterStop(T, sid, req, what, cap){
     return;
   }
   // 15초를 기다려도 안 멈췄다 — 지어내지 않고 있는 그대로 말한다
-  restartChip("fail", what, {reason: "안 멈춤"});
+  // `멈춤` 은 이제 **상태**의 낱말이다 (REQ-20260829-024 라운드4) — 저절로
+  // 조용해진 것을 가리킨다. 사람이 끝내는 행동은 `중단` 이라, 여기 사유는
+  // 상태 낱말을 피해 무엇이 안 됐는지만 말한다.
+  restartChip("fail", what, {reason: "안 끝남"});
   await s9dlg({kind: "alert", cap, title: "하던 일이 아직 안 끝났습니다",
     desc: "멈춰 달라고는 했지만 15초 안에 끝나지 않았습니다 — 설정은 그대로"
       + " 둡니다. 잠시 뒤 다시 눌러 주세요.", ok: "닫기"});
@@ -144,11 +147,11 @@ async function sessionRestart(sid, req, T, cap){
   const wk = liveWorkerRows();
   if (wk.length){
     const go = await s9dlg({kind: "confirm", cap: cap || "다시 시작", stop: false,
-      title: `도는 무인 작업자 ${wk.length}건을 세우고 ${what} 바꿉니다`,
-      desc: "이 재기동은 이 창만 바꿉니다 — 세우지 않으면 그 작업자들은 옛"
-        + " 설정 그대로 계속 돕니다. 세우면 각 문서에 세운 사실과 사유가"
-        + " 남고, 나중에 그 카드의 깨우기로 다시 굴릴 수 있습니다.",
-      ok: "세우고 바꾸기", cancel: "그만두기"});
+      title: `진행 중인 자동 작업 ${wk.length}건을 중단하고 ${what} 바꿉니다`,
+      desc: "이 재시작은 이 창만 바꿉니다 — 중단하지 않으면 그 작업들은 옛"
+        + " 설정 그대로 계속 진행됩니다. 중단하면 각 문서에 중단한 사실과 사유가"
+        + " 남고, 나중에 그 카드의 「이어가기」로 다시 맡길 수 있습니다.",
+      ok: "중단하고 바꾸기", cancel: "그만두기"});
     if (!go) return;
     req = Object.assign({}, req, {stopWorkers: true});
   }

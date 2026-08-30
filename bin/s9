@@ -790,6 +790,16 @@ def _contrib_state(meta, now=None, win=None):
 PRIORITY_DEFAULT = 50
 PRIORITY_ALIASES = {"low": 25, "normal": 50, "high": 75, "urgent": 90}
 PRIORITY_MIN, PRIORITY_MAX = 1, 99
+# 서두르는 문턱 (REQ-20260829-029). 화면의 등급 경계(`prioTier` — 75 부터 '높음')와
+# **같은 값이어야 한다**: 사람이 '높음'으로 올렸는데 시스템이 안 서두르면 그 손잡이는
+# 거짓말이 된다. 여태 우선순위는 **순서**만 바꿨고 **지연**은 못 바꿨다 — 유예도
+# 워처 주기도 상수라 긴급이든 보통이든 똑같이 최대 1분을 기다렸다.
+PRIORITY_RUSH = 75
+# 시간·일 예산의 마지막 몇 자리는 긴급·높음 몫으로 비워 둔다 (REQ-20260829-029).
+# **캡을 뚫지 않는다** — 뚫으면 캡을 세운 이유(워커 넷이 같은 문제에 같은 답을
+# 따로 낸 2026-08-29 11:04 실사고)가 통째로 사라진다. 대신 보통 이하가 예산을
+# 바닥까지 긁어 급한 것을 굶기는 일을 막는다. 계정 설정 auto_resume_rush_reserve.
+AUTO_RUSH_RESERVE = 2
 
 
 def parse_priority(value):
@@ -830,6 +840,73 @@ def work_order(rows):
     2차 키를 갱신 순으로 두면 손이 자주 가는 항목이 계속 앞에 서서 뒤엣것이
     굶는다. 기다린 시간이 길수록 앞으로 오는 편이 대기열로서 정직하다."""
     return sorted(rows, key=lambda r: (-doc_priority(r), r.get("created", "")))
+
+
+def apply_priority(meta, body, value, user=None, via=""):
+    """우선순위를 문서에 적히는 값으로 바꾸고 근거 한 줄을 History 에 남긴다
+    (REQ-20260829-029).
+
+    파일을 열지도 잠그지도 않는다 — 부르는 쪽이 이미 문서를 들고 있을 때 두 번
+    쓰지 않으려는 것이다. `cmd_set` 은 다른 필드와 함께 한 번에 쓰고, 화면은
+    `set_doc_priority` 를 지난다. **값을 해석하고 근거를 남기는 규칙은 여기
+    하나뿐**이라 CLI 로 바꾼 것과 화면으로 바꾼 것이 문서에 다르게 적힐 수 없다.
+
+    History 에 남기는 이유: 순서는 사람이 손으로 정하는 축이고, "왜 이게 위에
+    있나"는 나중에 반드시 묻는 질문이다. 그 답이 프론트매터의 현재값 하나뿐이면
+    아무도 판정할 수 없다.
+
+    **`updated` 는 건드리지 않는다.** 그 시각이 멈춤 판정의 시계다
+    (`stall_verdict` 의 `quiet_mins` 가 그것으로 조용한 시간을 잰다). 순서를
+    바꾸는 것은 일이 진전된 것이 아니어서, 여기서 시계를 되감으면 카드를 끌어
+    올리는 것만으로 멈춤 경보가 꺼진다 — REQ-20260829-034 가 클레임에 대해 이미
+    막은 그 병이고, 대칭으로 여기서도 막는다.
+
+    반환: (old, new, body). old == new 면 body 도 그대로다(멱등).
+    """
+    new = parse_priority(value)
+    old = doc_priority(meta)
+    if new == old:
+        return old, new, body
+    meta["priority"] = new
+    entry = (f"- {now_iso()} priority: {old} -> {new} "
+             f"(by {user or resolve_user()})"
+             + (f" [via {via}]" if via else "") + "\n")
+    if "## History" in body:
+        body = body.rstrip("\n") + "\n" + entry
+    else:
+        body = body.rstrip("\n") + "\n\n## History\n" + entry
+    return old, new, body
+
+
+def set_doc_priority(doc_id, value, user=None, via=""):
+    """문서 하나의 우선순위를 바꾼다 — 화면(`POST /api/priority`)이 지나는 문.
+
+    반환: {"ok", "id", "old", "new", "changed", "message"}
+    `changed=False` 는 실패가 아니라 **이미 그 값**이라는 뜻이다(멱등) — 화면이
+    같은 등급을 다시 눌러도 History 에 같은 줄이 쌓이지 않는다.
+    """
+    path = locate(doc_id) or locate(canon_id(doc_id))
+    if not path:
+        raise ValueError(f"document not found: {doc_id}")
+    meta, body = read_doc(path)
+    # 우선순위는 요청의 축이다 — knowledge/session 에 붙이면 정렬에 쓰이지도
+    # 않는 값이 문서에 남아 다음 사람이 그 뜻을 묻는다.
+    if meta.get("type") != "request":
+        raise ValueError(
+            f"우선순위는 요청 문서의 축이다 ({meta.get('type') or '타입 미상'})")
+    cid = meta.get("id") or canon_id(doc_id)
+    old, new, body = apply_priority(meta, body, value, user=user, via=via)
+    if old == new:
+        return {"ok": True, "id": cid, "old": old, "new": new,
+                "changed": False, "message": f"{cid}: 우선순위 {old} 그대로"}
+    acquire_lock()
+    try:
+        write_doc(path, meta, body)
+        rebuild_index(quiet=True)
+    finally:
+        release_lock()
+    return {"ok": True, "id": cid, "old": old, "new": new, "changed": True,
+            "message": f"{cid}: 우선순위 {old} → {new}"}
 
 
 def catalog_row(meta, path, body=""):
@@ -1888,8 +1965,29 @@ def _auto_log(msg):
         pass
 
 
-def _auto_cap_block(req_id, cfg, now=None, reason=""):
+def _rush_limits(cfg, prio, per_day, per_hour):
+    """긴급·높음이 아니면 예산의 **마지막 몇 자리를 남겨 둔다** (REQ-20260829-029).
+
+    사용자 지적: "긴급이나 높음의 경우 바로 시작되어야 하는데 … 긴급하게
+    처리한다는 것이 가능한가?" — 순서(work_order)는 이미 우선순위를 읽지만
+    예산은 몰랐다. 보통 요청들이 시간당 예산을 바닥까지 긁으면, 그다음에 올린
+    긴급은 **순서가 첫째여도 뜰 자리가 없다**. 순위가 있는데 자리가 없으면
+    순위는 아무 말도 하지 않는다.
+
+    뚫지 않고 **남긴다**: 상한 자체는 그대로라 캡을 세운 이유(겹친 워커)는
+    유지되고, 급한 것만 그 마지막 자리를 쓴다. 한도가 예비보다 작으면 예비를
+    접는다 — 예비가 상한을 삼켜 아무도 못 뜨는 것이 더 나쁜 고장이다."""
+    if prio is not None and prio >= PRIORITY_RUSH:
+        return per_day, per_hour
+    keep = int(cfg.get("auto_resume_rush_reserve", AUTO_RUSH_RESERVE) or 0)
+    return max(1, per_day - keep), max(1, per_hour - keep)
+
+
+def _auto_cap_block(req_id, cfg, now=None, reason="", prio=None):
     """캡 판정만 — 막혔으면 **사람이 읽을 사유**, 통과면 "" (기록은 하지 않는다).
+
+    `prio`: 이 요청의 가중치. 긴급·높음(>= PRIORITY_RUSH)은 예비 자리를 쓴다
+    (`_rush_limits`). 넘기지 않으면 예비를 남기는 쪽 — 모르면 좁은 쪽이 안전하다.
 
     `reason="wake"`(사람이 대시보드에서 누른 것)는 **자기 예산**을 쓴다
     (REQ-20260828-041 라운드1). 실측 2026-08-29: 그날 20슬롯 중 13건을 반려
@@ -1919,31 +2017,57 @@ def _auto_cap_block(req_id, cfg, now=None, reason=""):
     # 작업자가 조용히 죽은 경우의 재시도도 10분 주기면 충분하다 (REQ-20260824-004)
     cool = int(cfg.get("auto_resume_cooldown_sec", 600))
     left = cool - (nowt - p.get("last", 0))
+    # 사람이 세워 둔 요청 (REQ-20260829-024 라운드4). 갈래에 따라 정반대로 답한다.
+    #   · 기계(워처)는 되살리지 않는다 — 사람이 세운 것을 30초 뒤에 다시 띄우면
+    #     세우기라는 행동 자체가 무의미해진다.
+    #   · 사람은 곧바로 되돌릴 수 있다 — 쿨다운이 재는 것은 **겹쳐 붙는 손**인데
+    #     세워 둔 자리에는 붙어 있는 손이 없다. 예산(하루·시간)은 그대로 든다.
+    if stop_mark(req_id, now=nowt):
+        if reason != "wake":
+            return ("사람이 세운 요청입니다 — Board 탭 카드에서 다시 시작해야 "
+                    "자동 작업이 이어집니다")
+        left = 0
     if left > 0:
-        return (f"방금 이 요청에 작업자를 띄웠다 — "
-                f"{max(1, int(left // 60) + 1)}분 뒤에 다시 눌러라 (쿨다운 {cool}초)")
+        return (f"방금 이 요청을 이어가기 시작했습니다 — "
+                f"{max(1, int(left // 60) + 1)}분 뒤에 다시 눌러 주세요")
     g = _auto_cap_counts(nowt)
     if reason == "wake":
         w_day = int(cfg.get("auto_resume_wake_per_day", 12))
         w_hour = int(cfg.get("auto_resume_wake_per_hour", 6))
         if g.get("wake_day_count", 0) >= w_day:
-            return (f"오늘 사람이 누른 깨우기 한도를 다 썼다 "
-                    f"({g['wake_day_count']}/{w_day}건) — 내일 0시에 풀린다. "
-                    f"지금 올리려면 계정 설정의 auto_resume_wake_per_day 를 "
-                    f"늘려라")
+            return (f"오늘 이어갈 수 있는 횟수를 다 썼습니다 "
+                    f"({g['wake_day_count']}/{w_day}건) — 내일 0시에 다시 "
+                    f"채워집니다. 지금 더 쓰려면 Settings 의 계정 설정에서 "
+                    f"auto_resume_wake_per_day 를 올려 주세요")
         if g.get("wake_hour_count", 0) >= w_hour:
-            return (f"이번 시간 깨우기 한도를 다 썼다 "
-                    f"({g['wake_hour_count']}/{w_hour}건) — 다음 정시에 풀린다")
+            return (f"이번 시간에 이어갈 수 있는 횟수를 다 썼습니다 "
+                    f"({g['wake_hour_count']}/{w_hour}건) — 다음 정시에 다시 "
+                    f"채워집니다")
         return ""
-    per_day = int(cfg.get("auto_resume_global_per_day", 20))
-    per_hour = int(cfg.get("auto_resume_global_per_hour", 6))
+    per_day, per_hour = _rush_limits(
+        cfg, prio,
+        int(cfg.get("auto_resume_global_per_day", 20)),
+        int(cfg.get("auto_resume_global_per_hour", 6)))
+    # 남겨 둔 자리에 막힌 것은 "다 썼다"가 아니라 **"급한 것 몫으로 비워 뒀다"**
+    # 이다. 두 사유를 같은 문장으로 말하면 사람은 한도를 올리러 간다 —
+    # 올릴 필요가 없는데.
     if g.get("day_count", 0) >= per_day:
-        return (f"오늘 무인 작업자 한도를 다 썼다 ({g['day_count']}/{per_day}건) — "
-                f"내일 0시에 풀린다. 지금 올리려면 계정 설정의 "
-                f"auto_resume_global_per_day 를 늘려라")
+        return (f"오늘 쓸 수 있는 자동 작업 횟수를 다 썼습니다 "
+                f"({g['day_count']}/{per_day}건) — 내일 0시에 다시 채워집니다. "
+                f"남은 자리는 긴급·높음 몫으로 비워 둡니다. 이 요청을 먼저 "
+                f"돌리려면 우선순위를 올려 주세요"
+                if prio is not None and prio < PRIORITY_RUSH else
+                f"오늘 쓸 수 있는 자동 작업 횟수를 다 썼습니다 "
+                f"({g['day_count']}/{per_day}건) — 내일 0시에 다시 채워집니다. "
+                f"지금 더 쓰려면 Settings 의 계정 설정에서 "
+                f"auto_resume_global_per_day 를 올려 주세요")
     if g.get("hour_count", 0) >= per_hour:
-        return (f"이번 시간 무인 작업자 한도를 다 썼다 "
-                f"({g['hour_count']}/{per_hour}건) — 다음 정시에 풀린다")
+        return (f"이번 시간에 쓸 수 있는 자동 작업 횟수를 다 썼습니다 "
+                f"({g['hour_count']}/{per_hour}건) — 다음 정시에 다시 "
+                f"채워집니다"
+                + (". 남은 자리는 긴급·높음 몫으로 비워 둡니다 — 이 요청을 "
+                   "먼저 돌리려면 우선순위를 올려 주세요"
+                   if prio is not None and prio < PRIORITY_RUSH else ""))
     return ""
 
 
@@ -1974,14 +2098,14 @@ def _auto_cap_counts(nowt):
     return g
 
 
-def _auto_caps_ok(req_id, cfg, reason=""):
+def _auto_caps_ok(req_id, cfg, reason="", prio=None):
     """per-REQ 쿨다운 + 전역 시간당/일일 캡. 통과 시 카운트 기록, 초과면 False.
 
     갈래(reason)에 따라 **다른 통**에 기록한다 — 판정(_auto_cap_block)과 기록이
     같은 갈래를 보지 않으면 사람의 깨우기가 워처의 예산을 조용히 갉아먹는다."""
     import time as _t
     nowt = _t.time()
-    if _auto_cap_block(req_id, cfg, now=nowt, reason=reason):
+    if _auto_cap_block(req_id, cfg, now=nowt, reason=reason, prio=prio):
         return False
     pf = os.path.join(_auto_dir(), safe_name(req_id) + ".json")
     try:
@@ -2120,6 +2244,9 @@ def _auto_mark_pid(doc_id, proc):
     except (OSError, ValueError):
         p = {}
     p["pid"] = pid
+    # 다시 뜬 자리에 '세워 둠' 이 남아 있으면 카드가 도는 작업을 세워 둔 것으로
+    # 그린다 (REQ-20260829-024 라운드4).
+    stop_mark_clear(doc_id)
     try:
         with open(pf, "w") as f:
             json.dump(p, f)
@@ -2422,6 +2549,61 @@ def _stop_note(doc_id, text):
                    timeout=30)
 
 
+# 사람이 세워 둔 요청을 그대로 두는 시간 (REQ-20260829-024 라운드4). 천장 없는
+# 보호는 교착의 다른 이름이라 한도를 둔다 — `delegated_running`·`worker_running`
+# 에서 두 번 배운 것이다. 두 시간이면 계정·모델을 바꾸고 돌아오기에 넉넉하고,
+# 사람이 잊고 떠나도 그날 안에 저절로 풀린다.
+STOP_HOLD_WIN = 2 * 3600
+
+
+def _stop_mark_path(doc_id):
+    return os.path.join(_auto_dir(), safe_name(doc_id) + ".stopped")
+
+
+def stop_mark(doc_id, now=None, win=None):
+    """사람이 세워 둔 표시 — 있으면 {"at","by","why"}, 없거나 늙었으면 None.
+
+    이 표시가 있는 동안 두 가지가 달라진다 (REQ-20260829-024 라운드4).
+      · **기계는 되살리지 않는다.** 사람이 세운 것을 워처가 30초 뒤에 다시
+        띄우면 세우기라는 행동 자체가 무의미하다.
+      · **사람은 곧바로 되돌릴 수 있다.** 세우면 그 사유가 문서에 적혀 문서가
+        '방금 움직인 것'이 되는데, 그 때문에 멈춤 판정이 15분간 서지 않아
+        깨우기 손잡이가 사라졌다 — 사용자가 "멈춰놓고선 다시 시작할 수 있는
+        기능이 없다"고 반려한 그 자리다. 세운 그 자리가 곧 '조용하다'의
+        근거이므로, 이 표시가 멈춤 판정을 대신한다.
+    """
+    import time as _t
+    now = _t.time() if now is None else now
+    win = STOP_HOLD_WIN if win is None else win
+    try:
+        with open(_stop_mark_path(doc_id), encoding="utf-8") as f:
+            mk = json.load(f)
+    except (OSError, ValueError):
+        return None
+    try:
+        at = float(mk.get("at") or 0)
+    except (TypeError, ValueError):
+        return None
+    return mk if 0 <= now - at < win else None
+
+
+def stop_mark_write(doc_id, by="", why=""):
+    import time as _t
+    try:
+        with open(_stop_mark_path(doc_id), "w", encoding="utf-8") as f:
+            json.dump({"at": _t.time(), "by": by or "", "why": why or ""}, f,
+                      ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def stop_mark_clear(doc_id):
+    try:
+        os.remove(_stop_mark_path(doc_id))
+    except OSError:
+        pass
+
+
 def worker_stop(doc_id, session="", why="", claims=None, kill=None,
                 alive=None, wait=None, note=None, grace=5.0, owner=False):
     """리드가 무인 작업자를 세운다 (REQ-20260829-021-62x6).
@@ -2451,7 +2633,7 @@ def worker_stop(doc_id, session="", why="", claims=None, kill=None,
                 "message": msg}
 
     if not (why or "").strip():
-        return no("이유가 없다", "왜 세우는지 적어라 — `--why '<이유>'`. "
+        return no("이유가 없다", "왜 중단하는지 적어라 — `--why '<이유>'`. "
                                 "이유 없는 중단은 나중에 판정할 수 없다.")
     # 끝난 문서에는 **클레임 게이트가 서지 않는다** (REQ-20260830-002).
     #
@@ -2466,8 +2648,8 @@ def worker_stop(doc_id, session="", why="", claims=None, kill=None,
     # 세운 까닭이 없으면 나중에 아무도 판정할 수 없다.
     closed = doc_status_live(doc_id) in TERMINAL_STATUSES
     if not owner and not closed and not claims(doc_id, session):
-        return no("클레임 없음", f"{doc_id} 를 집지 않은 세션은 그 작업자를 "
-                                f"세울 수 없다 — 먼저 `s9 last {doc_id} --add` "
+        return no("클레임 없음", f"{doc_id} 를 집지 않은 세션은 그 자동 작업을 "
+                                f"중단할 수 없다 — 먼저 `s9 last {doc_id} --add` "
                                 f"로 집어라.")
     pf = os.path.join(_auto_dir(), safe_name(doc_id) + ".json")
     try:
@@ -2477,7 +2659,7 @@ def worker_stop(doc_id, session="", why="", claims=None, kill=None,
         pid = 0
     if not pid:
         return {"ok": True, "stopped": False, "reason": "", "pid": 0,
-                "message": f"{doc_id} 에 도는 무인 작업자가 없다."}
+                "message": "이 요청에 진행 중인 자동 작업이 없습니다."}
     sent = False
     if alive(pid):
         kill(pid, _sig.SIGTERM)      # 먼저 물러나기를 청한다
@@ -2490,19 +2672,27 @@ def worker_stop(doc_id, session="", why="", claims=None, kill=None,
     except OSError:
         pass
     lease_release(doc_id)
+    # 세운 사실을 남긴다 (라운드4). 이 표시가 없으면 워처가 곧 되살리고, 사람은
+    # 자기가 세운 것을 15분 동안 되돌리지 못한다 — 세우기가 문서에 사유를 적는
+    # 순간 그 문서는 '방금 움직인 것'이 되어 멈춤 판정에서 빠지기 때문이다.
+    # 끝난 문서를 거두는 것은 사람이 세운 것이 아니므로 남기지 않는다: 그 자리에
+    # 표시를 남기면 다시 열린 요청이 까닭도 없이 묶인다.
+    if not closed:
+        stop_mark_write(doc_id, by=(session or ("사람" if owner else "")),
+                        why=why)
     # 누가 세웠는지가 기록의 절반이다 — 사람이 화면에서 세운 것과 세션이 세운
     # 것은 다음 사람이 되짚을 때 완전히 다른 사실이다.
     kind = "사람" if owner else ("끝난문서" if closed else "세션")
     _auto_log(f"STOP {doc_id} pid={pid} by={kind}:{session or '?'} "
               f"why={' '.join(str(why).split())[:120]}")
     try:
-        note(doc_id, f"무인 작업자를 세웠다 (pid {pid}, {kind} "
+        note(doc_id, f"자동 작업을 중단했다 (pid {pid}, {kind} "
                      f"{session or '?'}) — {why}")
     except Exception:
         pass
     return {"ok": True, "stopped": sent, "reason": "", "pid": pid,
-            "message": f"{doc_id} 의 무인 작업자를 세웠다 (pid {pid}). "
-                       f"사유는 문서에 남겼다."}
+            "message": "이 요청의 자동 작업을 중단했습니다. "
+                       "중단한 사실과 사유는 문서에 남겼습니다."}
 
 
 def _when(sec):
@@ -2556,16 +2746,32 @@ def _worker_last_line(doc_id):
 
 
 def maybe_auto_resume(doc_id, old, new, note):
-    """반려(review→in-progress) 접수 — 전이 시점에는 스폰하지 않는다 (REQ-20260823-083).
-    진행 보장은 serve의 rework 워처(rework_watch_tick)가 클레임 기반으로 수행:
-    유예(auto_resume_grace_sec) 내에 어떤 세션도 클레임하지 않으면 무인 스폰.
-    여기선 PENDING 로그만 남긴다 — '라이브 세션이 다음 프롬프트에서 집는다'는
-    사용자 발화 의존 구조(REQ-081의 SKIP(live))를 제거한 재설계."""
+    """전이 접수 — 보통은 접수만 하고, **급한 것만 그 자리에서 띄운다**.
+
+    원래 설계 (REQ-20260823-083): 전이 시점에는 스폰하지 않고 serve 의 워처
+    (`rework_watch_tick`)가 클레임 기반으로 보장한다 — 유예 안에 어떤 세션도
+    클레임하지 않으면 무인 스폰. '라이브 세션이 다음 프롬프트에서 집는다'는
+    사용자 발화 의존 구조(REQ-081 의 SKIP(live))를 제거한 재설계였다.
+
+    그 설계는 보통 요청에 대해서는 지금도 옳다. 그러나 사용자 지적
+    (REQ-20260829-029): "특히 긴급이나 높음의 경우 바로 시작되어야 하는데".
+    워처 주기 30초 + 유예 30초가 붙어 **긴급도 최대 1분을 기다렸다** — 우선순위가
+    순서만 정하고 지연은 못 정하면 '긴급'은 이름뿐이다.
+
+    그래서 유예가 0 인 것(=긴급·높음, `rework_grace`)만 여기서 곧바로 띄운다.
+    보통 이하는 종전 그대로 PENDING 로그만 남기고 워처에 맡긴다 — 그 30초는
+    낭비가 아니라 살아 있는 세션이 먼저 집을 기회다.
+
+    관문은 **워처가 쓰는 그 함수들**을 그대로 지난다 (`rework_kick`).
+    반환: 여기서 띄웠으면 True."""
     try:
-        if [old, new] != ["review", "in-progress"]:
+        if new != "in-progress" or old not in ("review", "open"):
             return False
         if os.environ.get("S9_AUTO_RESUME_DISABLE") or os.environ.get("S9_AUTO_RESUME"):
             return False
+        if rework_kick(doc_id):
+            _auto_log(f"RUSH {doc_id} — 긴급·높음이라 전이 자리에서 바로 띄웠다")
+            return True
         _auto_log(f"PENDING {doc_id} — 워처가 유예 후 미클레임이면 스폰")
     except Exception:
         pass
@@ -2984,16 +3190,25 @@ def proc_backend():
     """이 기계에서 프로세스를 보는 길.
 
     `proc` = 리눅스/WSL(`/proc` 직독, 포크 없음) · `ps` = macOS/BSD 등 POSIX ·
+    `win` = 네이티브 윈도우(PowerShell CIM 조회, 없으면 wmic) ·
     `none` = 볼 수 없다(판정은 전부 거짓으로 떨어지되 죽지 않는다).
 
     `S9_PROC_BACKEND` 로 강제할 수 있다. 맥이 이 자리에 없으므로 그 갈래를
     **여기서 돌려 보기 위한 문**이고, 진단(`s9 doctor --live`)도 같은 이름을 쓴다.
     """
     forced = (os.environ.get("S9_PROC_BACKEND") or "").strip()
-    if forced in ("proc", "ps", "none"):
+    if forced in ("proc", "ps", "win", "none"):
         return forced
     if os.path.isdir("/proc/self"):
         return "proc"
+    if os.name == "nt":
+        # 네이티브 윈도우에는 `/proc` 도 `ps` 도 없다. `ps` 를 먼저 물으면
+        # Git Bash 가 얹은 것이 잡혀 **자기 프로세스도 못 보는 표**가 나온다
+        # (MSYS ps 는 MSYS 프로세스만 센다) — 그래서 nt 판정이 먼저다.
+        if shutil.which("powershell") or shutil.which("pwsh") \
+                or shutil.which("wmic"):
+            return "win"
+        return "none"
     if shutil.which("ps"):
         return "ps"
     return "none"
@@ -3030,6 +3245,67 @@ def _ps_table():
     return rows
 
 
+# 윈도우 갈래 (REQ-20260829-037). `.cmd` 진입점이 있는 이상 이 저장소는
+# 네이티브 윈도우에서도 돌 수 있는데, 거기서는 `/proc` 도 `ps` 도 없어
+# 판정이 통째로 `none` 으로 떨어졌다 — 맥과 **같은 결함**이 자리만 옮긴
+# 것이다. 프로세스 목록을 명령줄까지 주는 것은 PowerShell 의 CIM 조회이고,
+# 그것이 없는 옛 기계에는 wmic 가 있다. 두 갈래 모두 위의 두 갈래와 **같은
+# 모양**({pid: 명령줄})으로 접어 돌려주므로, 읽는 쪽은 갈래를 몰라도 된다.
+#
+# 부모 pid 를 같은 조회에서 함께 걷는다: 윈도우에서는 한 번 묻는 값이
+# 비싸고(프로세스 하나를 띄운다), `pid_ppid` 가 따로 물으면 조상 체인을
+# 열 걸음 올라갈 때마다 열 번을 띄우게 된다.
+WIN_PS_SCRIPT = ("Get-CimInstance Win32_Process | ForEach-Object { "
+                 "$c = $_.CommandLine; if (-not $c) { $c = $_.Name }; "
+                 "[string]$_.ProcessId + ' ' + [string]$_.ParentProcessId "
+                 "+ ' ' + $c }")
+WIN_WMIC_ARGV = ("wmic", "process", "get",
+                 "ProcessId,ParentProcessId,CommandLine", "/format:csv")
+_WIN_PPID = {}          # {pid: 부모 pid} — win 조회가 지나갈 때마다 다시 찬다
+
+
+def _win_ps_argv():
+    exe = shutil.which("powershell") or shutil.which("pwsh") or "powershell"
+    return (exe, "-NoProfile", "-NonInteractive", "-Command", WIN_PS_SCRIPT)
+
+
+def _win_table():
+    """{pid: 명령줄} — PowerShell 먼저, 없으면 wmic."""
+    rows, ppids = {}, {}
+    for ln in _ps_lines(_win_ps_argv(), timeout=25):
+        c = ln.strip().split(None, 2)
+        if len(c) == 3 and c[0].isdigit() and c[1].isdigit():
+            rows[int(c[0])] = c[2].strip()
+            ppids[int(c[0])] = int(c[1])
+    if not rows:
+        # wmic /format:csv 는 열을 알파벳순으로 낸다:
+        # Node,CommandLine,ParentProcessId,ProcessId. 명령줄 안에 쉼표가
+        # 있으므로 **양 끝에서** 자른다 — 가운데가 통째로 명령줄이다.
+        for ln in _ps_lines(WIN_WMIC_ARGV, timeout=25):
+            c = ln.strip().split(",")
+            if len(c) < 4 or not c[-1].strip().isdigit():
+                continue
+            pid = int(c[-1].strip())
+            rows[pid] = ",".join(c[1:-2]).strip()
+            ppids[pid] = int(c[-2].strip()) if c[-2].strip().isdigit() else 0
+    _WIN_PPID.clear()
+    _WIN_PPID.update(ppids)
+    return rows
+
+
+def _win_head(cmd):
+    """윈도우 명령줄의 실행 파일 한 토막 — 따옴표와 역슬래시를 걷어낸다.
+    `"C:\\Program Files\\nodejs\\node.exe" x` → `node.exe`."""
+    head = (cmd or "").strip()
+    if not head:
+        return ""
+    if head.startswith('"'):
+        head = head[1:].split('"', 1)[0]
+    else:
+        head = head.split(" ", 1)[0]
+    return os.path.basename(head.replace("\\", "/"))
+
+
 def _proc_table_read(how):
     """캐시를 거치지 않은 실제 조회 — 갈래마다 한 벌씩."""
     if how == "proc":
@@ -3051,6 +3327,8 @@ def _proc_table_read(how):
         return out
     if how == "ps":
         return _ps_table()
+    if how == "win":
+        return _win_table()
     return {}
 
 
@@ -3105,6 +3383,11 @@ def pid_alive(pid):
         return os.path.exists(f"/proc/{pid}")
     if how == "none":
         return False
+    if how == "win":
+        # 윈도우 파이썬의 os.kill 은 시그널 0 에도 프로세스를 죽인다 —
+        # 갈래를 이름으로 먼저 가려서, 리눅스에서 이 갈래를 흉내 낼 때도
+        # 같은 길로 가게 한다(흉내가 진짜와 다른 길로 가면 시험이 헛돈다).
+        return pid in proc_table()
     if os.name == "posix":
         try:
             os.kill(pid, 0)
@@ -3148,7 +3431,11 @@ def pid_comm(pid):
         except (OSError, TypeError, ValueError):
             return ""
     cmd = pid_cmdline(pid)
-    return os.path.basename(cmd.split(" ", 1)[0]) if cmd else ""
+    if not cmd:
+        return ""
+    if proc_backend() == "win":
+        return _win_head(cmd)
+    return os.path.basename(cmd.split(" ", 1)[0])
 
 
 def pid_ppid(pid):
@@ -3157,7 +3444,8 @@ def pid_ppid(pid):
         pid = int(pid)
     except (TypeError, ValueError):
         return 0
-    if proc_backend() == "proc":
+    how = proc_backend()
+    if how == "proc":
         try:
             with open(f"/proc/{pid}/status", encoding="utf-8") as f:
                 for ln in f:
@@ -3166,6 +3454,11 @@ def pid_ppid(pid):
         except (OSError, ValueError):
             return 0
         return 0
+    if how == "none":
+        return 0
+    if how == "win":
+        proc_table()            # 부모 pid 는 그 조회가 함께 걷어 둔다
+        return _WIN_PPID.get(pid, 0)
     for ln in _ps_lines(("ps", "-o", "ppid=", "-p", str(pid))):
         ln = ln.strip()
         if ln.isdigit():
@@ -3211,6 +3504,8 @@ def proc_env_table():
             c = ln.strip().split(None, 1)
             if len(c) == 2 and c[0].isdigit():
                 out[int(c[0])] = c[1]
+    # `win` 은 빈 목록이다. Win32_Process 는 환경을 주지 않는다 — 모르는 것을
+    # 아는 척하면 계정 표시가 조용히 틀린다(빈칸이 거짓말보다 낫다).
     return out
 
 
@@ -3222,13 +3517,16 @@ def pid_env(pid, key):
         return ""
     if pid <= 0:
         return ""
-    if proc_backend() == "proc":
+    how = proc_backend()
+    if how == "proc":
         try:
             with open(f"/proc/{pid}/environ", "rb") as f:
                 blob = f.read().decode("utf-8", "replace").replace("\0", " ")
         except OSError:
             return ""
         return env_value(blob, key)
+    if how != "ps":
+        return ""               # 환경을 볼 길이 없다 (win·none)
     for ln in _ps_lines(("ps", "-E", "-ww", "-o", "command=", "-p", str(pid))):
         v = env_value(ln, key)
         if v:
@@ -3484,10 +3782,21 @@ def _pid_comm(pid):
 CLAUDE_RUNTIMES = ("node", "bun", "deno")
 
 
+def exe_name(comm):
+    """실행 파일 이름을 갈래 무관한 한 모양으로 — 윈도우의 `node.exe` 는
+    리눅스의 `node` 와 같은 것이다 (REQ-20260829-037).
+
+    이름을 그대로 견주면 윈도우에서 **아무것도 claude 로 안 잡힌다**:
+    `attach_pid` 재사용 방어가 늘 거짓을 내고 조상 체인이 중간 셸에서 멈춘다.
+    맥에서 났던 사고와 같은 모양이고, 원인은 한 글자 차이다."""
+    c = (comm or "").strip()
+    return c[:-4] if c.lower().endswith(".exe") else c
+
+
 def _pid_is_claude(pid):
     """attach_pid 재사용 방어 — 실제 claude 프로세스일 때만 True.
     comm=claude(네이티브) 또는 comm이 런타임이면서 cmdline에 claude 포함."""
-    comm = _pid_comm(pid)
+    comm = exe_name(_pid_comm(pid))
     if comm == "claude":
         return True
     if comm not in CLAUDE_RUNTIMES:
@@ -5580,7 +5889,7 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
     # 호출부(rework_watch_tick·maybe_auto_resume)에만 있어서, 새 경로를 여는
     # 사람이 그 검사를 옮겨 적는 것을 잊으면 스위치에 옆문이 났다.
     if os.environ.get("S9_AUTO_RESUME_DISABLE"):
-        return block("disabled", "무인 작업자 스위치가 꺼져 있다 "
+        return block("disabled", "자동 작업 스위치가 꺼져 있습니다 "
                                  "(S9_AUTO_RESUME_DISABLE)")
     # 끝난 문서에는 **어떤 경로로도** 뜨지 않는다 (REQ-20260830-002).
     #
@@ -5600,21 +5909,28 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
     if st in TERMINAL_STATUSES:
         _auto_log(f"SKIP(closed) {doc_id} status={st} reason={reason}")
         return block("closed",
-                     f"{doc_id} 는 이미 {st} 다 — 끝난 문서에는 무인 작업자를 "
-                     f"띄우지 않는다. 할 일이 남았으면 새 요청으로 열어라.")
+                     f"{doc_id} 는 이미 {st} 상태입니다 — 끝난 요청은 다시 "
+                     f"진행하지 않습니다. 할 일이 남았으면 새 요청으로 "
+                     f"올려 주세요.")
     owner = meta.get("user", "")
     cfg = user_config(owner)
     if not cfg.get("auto_resume"):
-        return block("off", f"{owner or '이'} 계정은 무인 이어받기가 꺼져 있다 — "
-                            f"설정에서 auto_resume 을 켜야 깨울 수 있다")
+        return block("off", f"{owner or '이'} 계정은 자동 이어가기가 꺼져 "
+                            f"있습니다 — Settings 의 계정 설정에서 auto_resume "
+                            f"을 켜야 이어갈 수 있습니다")
     if meta.get("machine") != current_machine():
         return block("elsewhere",
-                     f"이 요청은 다른 머신({meta.get('machine') or '미상'})의 "
-                     f"것이다 — 여기({current_machine()})서는 띄우지 않는다")
+                     f"이 요청은 다른 컴퓨터({meta.get('machine') or '미상'})의 "
+                     f"것입니다 — 여기({current_machine()})서는 시작할 수 "
+                     f"없습니다")
     # 캡은 **세지 않고 먼저 본다.** 아래 자리 판정이 git 을 두 번 부르는데,
     # 어차피 한도에 막힐 후보에 30초마다 그 값을 치를 이유가 없다. 세는 것은
     # 여전히 `_auto_caps_ok` 한 곳뿐이라 대기가 예산을 깎지 않는다(L6).
-    peek = _auto_cap_block(doc_id, cfg, reason=reason)
+    # 가중치는 **디스크의 meta** 에서 온다 — 예산의 예비 자리를 누가 쓰는지가
+    # 여기에 달렸다 (REQ-20260829-029). 낡은 카탈로그가 아니라 부르는 쪽이 방금
+    # 읽은 문서다: 사람이 우선순위를 올린 직후가 정확히 이 경로가 도는 순간이다.
+    prio = doc_priority(meta)
+    peek = _auto_cap_block(doc_id, cfg, reason=reason, prio=prio)
     if peek:
         _auto_log(f"SKIP(cap) {doc_id} {reason}")
         return block("capped", peek)
@@ -5633,8 +5949,8 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
     wait = None
     hands = unassigned_hands()
     if hands:
-        wait = ("hands", f"어느 문서인지 모르는 서브에이전트 {len(hands)}이 "
-                         f"세션 {hands[0].get('session') or '?'} 에서 도는 중이다")
+        wait = ("hands", f"어느 요청의 것인지 모르는 작업 {len(hands)}건이 "
+                         f"아직 돌고 있습니다")
     dec = workspace_decision(doc_id, cfg)
     scope = dec.get("scope") or set()
     if wait is None and dec["kind"] == "main":
@@ -5645,11 +5961,11 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
         inflight = [r for r in live_workers() if r.get("id") != mine]
         if len(inflight) >= cap:
             wait = ("inflight",
-                    f"무인 작업자 {len(inflight)}이 이미 본 저장소에서 돌고 있다")
+                    f"이미 자동 작업 {len(inflight)}건이 함께 돌고 있습니다")
         elif scope:
             hit = lease_conflict(doc_id, scope)
             if hit:
-                wait = ("held", f"{hit[0][1]} 가 {hit[0][0]} 를 잡고 있다")
+                wait = ("held", f"{hit[0][1]} 가 {hit[0][0]} 를 고치는 중입니다")
     if wait:
         # **거부가 아니라 대기다.** 워처가 30초마다 다시 부르므로 앞 작업자가
         # 끝나면 저절로 뜬다. 거부는 이 저장소의 다른 병("멈춘 것이 계속 멈춰
@@ -5659,16 +5975,18 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
         if age < LEASE_WAIT_MAX_SEC:
             _wait_mark(doc_id, wait[0], wait[1])
             _auto_log(f"DEFER {doc_id} reason={wait[0]} {wait[1]}")
-            return block("waiting", f"{wait[1]} — 차례를 기다린다"
-                                    f"(30초마다 다시 본다).")
+            return block("waiting", f"{wait[1]} — 차례를 기다립니다. 앞 작업이 "
+                                    f"끝나면 30초 안에 저절로 시작하니 그대로 "
+                                    f"두셔도 됩니다.")
         _auto_log(f"WAIT-CEILING {doc_id} {int(age)}초 기다렸다 — "
                   f"겹쳐도 띄운다 ({wait[1]})")
     _wait_clear(doc_id)
-    if not _auto_caps_ok(doc_id, cfg, reason):
+    if not _auto_caps_ok(doc_id, cfg, reason, prio=prio):
         # 사유는 판정을 다시 물어 얻는다 — 문턱 수치를 여기 옮겨 적지 않는다.
         _auto_log(f"SKIP(cap) {doc_id} {reason}")
-        return block("capped", _auto_cap_block(doc_id, cfg, reason=reason)
-                     or "무인 작업자 한도에 막혔다")
+        return block("capped", _auto_cap_block(doc_id, cfg, reason=reason,
+                                               prio=prio)
+                     or "자동 작업 한도에 막혔습니다")
     b = read_binding(meta.get("machine", ""), meta.get("session", "")) or {}
     cwd = b.get("cwd", "") if os.path.isdir(b.get("cwd", "") or "") else ROOT
     # 코드는 갈리고 데이터는 하나다 (REQ-20260828-011 2단계) — 켠 계정만.
@@ -5794,11 +6112,11 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
         return True
     except FileNotFoundError:
         _auto_log(f"claude not found — skip {doc_id} {reason}")
-        return block("no-cli", "이 머신에 claude 명령이 없다 — 무인 작업자를 "
-                               "띄울 수 없다")
+        return block("no-cli", "이 컴퓨터에 claude 명령이 없어 자동 작업을 "
+                               "시작할 수 없습니다")
     except Exception as e:
         _auto_log(f"ERROR {doc_id} {reason}: {e}")
-        return block("error", f"작업자를 띄우다 실패했다: {e}")
+        return block("error", f"자동 작업을 시작하지 못했습니다: {e}")
 
 
 def _spawn_rework(doc_id, meta, note):
@@ -5893,11 +6211,27 @@ def _workspace_marker(doc_id):
     return ws if isinstance(ws, dict) else {}
 
 
-def _workspace_text(doc_id):
-    ws = _workspace_marker(doc_id)
-    if ws.get("kind") == "worktree":
-        return f"워크트리 {ws.get('wt') or ''}".strip()
-    return "본 저장소"
+# 작업 자리가 **사람에게 뜻하는 것** (REQ-20260830-007).
+#
+# 자리 이름(`본 저장소`·`워크트리`)은 깃을 아는 사람의 말이다. 다섯 번의 반려가
+# 가리킨 것이 하나였다 — "깃을 모르는 사람에게 이 사실은 읽을 것도 할 일도
+# 아니다"(REQ-20260829-030). 그래도 **뜻은 남는다**: 사람이 알아야 하는 것은
+# 자리 이름이 아니라 "내가 지금 보는 화면에서 그 결과를 볼 수 있나" 하나다.
+#
+# 화면 쪽의 같은 문장은 `web/app/card.js` 의 `WS_MEANS` 다. 두 런타임이 문자열
+# 하나를 나눠 가질 수 없어 부득이 두 벌인데, 두 벌이면 한 벌만 고쳐진다 —
+# 그래서 **둘이 같은 말인지를 시험이 붙잡는다**(tests/test_dialog_voice.py).
+# 여기를 고치면 저기도 같이 고쳐라.
+WS_MEANS_KO = {
+    "main": "고친 것은 지금 보고 있는 이 화면에 바로 나타납니다",
+    "worktree": "고친 것은 따로 떼어 둔 사본에 있어,"
+                " 커밋되기 전까지 이 화면에 나타나지 않습니다",
+}
+
+
+def _workspace_means(doc_id):
+    kind = _workspace_marker(doc_id).get("kind")
+    return WS_MEANS_KO.get(kind) or WS_MEANS_KO["main"]
 
 
 def _wake_refusal(cid, row, win, updated, now):
@@ -5916,15 +6250,14 @@ def _wake_refusal(cid, row, win, updated, now):
     state = (row or {}).get("stall_state") or ""
     if state == "waiting":
         return {"ok": False, "id": cid, "action": "waiting", "mins": None,
-                "message": f"{(row or {}).get('stall_why') or '차례를 기다린다'}"
-                           f" — 앞 작업자가 끝나면 저절로 뜬다. 겹쳐 띄우면 "
-                           f"같은 파일에 두 번째 손이 붙는다."}
+                "message": f"{(row or {}).get('stall_why') or '차례를 기다립니다'}"
+                           f" — 앞 작업이 끝나면 저절로 시작합니다. 지금 겹쳐 "
+                           f"시작하면 같은 파일을 둘이 고치게 됩니다."}
     if state == "unknown":
         return {"ok": False, "id": cid, "action": "unknown", "mins": None,
-                "message": f"{(row or {}).get('stall_why') or '붙은 손이 있다'}"
-                           f" — 그것이 이 요청일 수 있어 띄우지 않는다. "
-                           f"`s9 workers` 로 누가 도는지 보고, 이 요청이 "
-                           f"아니면 잠시 뒤 다시 눌러라."}
+                "message": f"{(row or {}).get('stall_why') or '아직 도는 작업이 있습니다'}"
+                           f" — 그것이 이 요청일 수 있어 겹쳐 시작하지 "
+                           f"않습니다. 잠시 뒤 다시 눌러 주세요."}
     c = delegated_running(cid, now=now)
     if c:
         try:
@@ -5937,20 +6270,22 @@ def _wake_refusal(cid, row, win, updated, now):
         who = act.split(":")[1] if act.startswith("sub:") and ":" in act[4:] \
             else (act or "위임된 작업자")
         return {"ok": False, "id": cid, "action": "busy", "mins": None,
-                "message": f"이미 {who} 가 붙어 있다 "
-                           f"({_ago_text(age)} 움직였다{item}). 겹쳐 띄우면 "
-                           f"같은 파일에 두 번째 손이 붙는다."}
+                "message": f"이미 {who} 가 이 요청을 맡고 있습니다 "
+                           f"({_ago_text(age)} 움직였습니다{item}). 그 일이 "
+                           f"끝난 뒤에 다시 눌러 주세요."}
     if (row or {}).get("live_kind") == "spawned":
         return {"ok": False, "id": cid, "action": "busy", "mins": None,
-                "message": f"무인 작업자가 이미 이 요청을 맡아 돌고 있다 "
-                           f"({_ago_text(row.get('live_age'))} 기동)."}
+                "message": f"자동 작업이 이미 이 요청을 진행하고 있습니다 "
+                           f"({_ago_text(row.get('live_age'))} 시작했습니다). "
+                           f"어디까지 왔는지는 Stream 탭에서 볼 수 있습니다."}
     try:
         age = now - datetime.datetime.fromisoformat(updated or "").timestamp()
     except (ValueError, TypeError):
         age = 0
     return {"ok": False, "id": cid, "action": "moving", "mins": None,
-            "message": f"아직 멈춘 게 아니다 — {_ago_text(age)} 문서가 움직였다. "
-                       f"{int(win // 60)}분 넘게 조용할 때만 깨운다."}
+            "message": f"아직 멈추지 않았습니다 — {_ago_text(age)} 이 요청이 "
+                       f"움직였습니다. {int(win // 60)}분 넘게 아무 움직임이 "
+                       f"없을 때만 이어갈 수 있습니다."}
 
 
 def _wake_audit(res, actor):
@@ -5996,13 +6331,13 @@ def wake_request(doc_id, actor="", win=None):
     if not path:
         return _wake_audit({"ok": False, "id": doc_id, "action": "missing",
                             "mins": None,
-                            "message": f"그런 문서가 없다: {doc_id}"}, actor)
+                            "message": f"그런 문서가 없습니다: {doc_id}"}, actor)
     try:
         meta, _body = read_doc(path)
     except (OSError, ValueError) as e:
         return _wake_audit({"ok": False, "id": doc_id, "action": "error",
                             "mins": None,
-                            "message": f"문서를 읽지 못했다: {e}"}, actor)
+                            "message": f"문서를 읽지 못했습니다: {e}"}, actor)
     cid = meta.get("id") or canon_id(doc_id)
     # 감사는 **모든** 갈래를 지난다 (라운드2). 셋이 빠져 있었다: 그 셋은
     # 화면이 잘못된 카드에 손잡이를 그렸을 때만 나오는 갈래라, 정작 '왜
@@ -6010,15 +6345,18 @@ def wake_request(doc_id, actor="", win=None):
     if meta.get("type") != "request":
         return _wake_audit({"ok": False, "id": cid, "action": "not-request",
                             "mins": None,
-                            "message": f"깨우는 것은 요청 문서뿐이다 "
-                                       f"({meta.get('type') or '타입 미상'})."},
+                            "message": f"이어갈 수 있는 것은 요청 문서뿐입니다 "
+                                       f"(이것은 "
+                                       f"{meta.get('type') or '알 수 없는'} "
+                                       f"문서입니다)."},
                            actor)
     st = meta.get("status", "")
     if st != "in-progress":
         return _wake_audit({"ok": False, "id": cid,
                             "action": "not-in-progress", "mins": None,
-                            "message": f"지금 이 요청은 '{st}' 다 — 깨우는 "
-                                       f"것은 진행 중인 것뿐이다."}, actor)
+                            "message": f"이 요청은 지금 '{st}' 상태입니다 — "
+                                       f"이어갈 수 있는 것은 진행 중"
+                                       f"(in-progress)인 요청뿐입니다."}, actor)
     # 멈춤 판정은 화면·CLI 와 **같은 함수**를 지난다 (stall_mins). 두 벌이면
     # 화면은 '멈춤' 이라 그려 놓고 버튼은 '아직 돈다' 며 거부한다.
     row = next((r for r in catalog_with_live(stall_win=win)
@@ -6030,6 +6368,13 @@ def wake_request(doc_id, actor="", win=None):
         if v["mins"] is not None:
             row["stalled_mins"] = v["mins"]
     mins = row.get("stalled_mins")
+    # 사람이 세워 둔 요청은 **세운 그 자리가 곧 '조용하다'의 근거**다
+    # (REQ-20260829-024 라운드4). 세우면 그 사유가 문서에 적혀 문서가 '방금
+    # 움직인 것'이 되고, 그 때문에 멈춤 판정이 15분간 서지 않아 세운 사람이
+    # 자기가 세운 것을 되돌릴 수 없었다 — 사용자가 반려한 그 자리다.
+    smk = stop_mark(cid, now=now)
+    if mins is None and smk:
+        mins = int(max(0, (now - (smk.get("at") or now)) // 60))
     if mins is None:
         return _wake_audit(
             _wake_refusal(cid, row, win,
@@ -6039,17 +6384,26 @@ def wake_request(doc_id, actor="", win=None):
     if _spawn_wake(cid, meta, mins=mins, by=actor, out=out):
         # 어디에 앉혔는지를 함께 말한다 (REQ-20260829-028-62x6 V3). 자리가
         # 다르면 사람이 확인할 자리도 다르다 — 워크트리에서 고친 화면은
-        # 9909 에 영영 안 나타난다.
+        # 9909 에 영영 안 나타난다. **자리 이름 대신 그 뜻을 말한다**
+        # (REQ-20260830-007): 사람이 알아야 하는 것은 저장소의 생김새가 아니라
+        # 자기가 보는 화면에서 결과를 볼 수 있느냐다.
+        #
+        # 문서 번호는 여기 다시 적지 않는다 — 창머리가 이미 주소를 달고 있고
+        # (REQ-20260828-007: "주소는 머리에, 말은 본문에"), 한 창에 같은 번호가
+        # 두 번 서면 읽는 눈이 그 둘이 같은 것인지 다시 맞춰 봐야 한다.
+        # 기계가 읽을 번호는 이 응답의 `id` 에 그대로 있다.
         return _wake_audit({"ok": True, "id": cid, "action": "spawned",
                             "mins": mins,
-                            "message": f"{cid} 를 깨웠다 — 무인 작업자가 "
-                                       f"{_workspace_text(cid)}에서 "
-                                       f"이어받는다. 진행은 카드의 점과 "
-                                       f"Stream 에서 보인다."}, actor)
+                            "message": f"자동 작업이 이 요청을 이어서 "
+                                       f"진행합니다. "
+                                       f"{_workspace_means(cid)}. 진행 "
+                                       f"상황은 Board 탭의 카드와 Stream "
+                                       f"탭에서 볼 수 있습니다."},
+                           actor)
     return _wake_audit(
         {"ok": False, "id": cid, "action": out.get("blocked") or "blocked",
          "mins": mins,
-         "message": out.get("why") or "무인 작업자를 띄우지 못했다."}, actor)
+         "message": out.get("why") or "자동 작업을 시작하지 못했습니다."}, actor)
 
 
 def stop_request(doc_id, actor="", why=""):
@@ -6083,28 +6437,31 @@ def stop_request(doc_id, actor="", why=""):
 
     path = locate(doc_id) or locate(canon_id(doc_id))
     if not path:
-        return out(False, "missing", f"그런 문서가 없다: {doc_id}")
+        return out(False, "missing", f"그런 문서가 없습니다: {doc_id}")
     try:
         meta, _body = read_doc(path)
     except (OSError, ValueError) as e:
-        return out(False, "error", f"문서를 읽지 못했다: {e}")
+        return out(False, "error", f"문서를 읽지 못했습니다: {e}")
     cid = meta.get("id") or canon_id(doc_id)
     if meta.get("type") != "request":
         return out(False, "not-request",
-                   f"세우는 것은 요청 문서뿐이다 "
-                   f"({meta.get('type') or '타입 미상'}).", cid)
+                   f"중단할 수 있는 것은 요청 문서뿐입니다 "
+                   f"(이것은 {meta.get('type') or '알 수 없는'} 문서입니다).",
+                   cid)
     reason = (why or "").strip() or \
-        f"{actor or '사람'} 가 화면에서 세웠다 (계정·모델 변경 등)"
+        f"{actor or '사람'} 가 화면에서 중단했다 (계정·모델 변경 등)"
     res = worker_stop(cid, session=actor, why=reason, owner=True)
     if not res.get("ok"):
         return out(False, "error",
                    res.get("message") or res.get("reason") or
-                   "무인 작업자를 세우지 못했다.", cid)
+                   "진행 중인 자동 작업을 중단하지 못했습니다.", cid)
     if not res.get("pid"):
         # 이미 끝난 것을 오류로 만들지 않는다 — 두 번 눌러도 안전해야 손이 편하다.
-        return out(True, "none", f"{cid} 에 도는 무인 작업자가 없다.", cid)
+        return out(True, "none",
+                   "이 요청에 진행 중인 자동 작업이 없습니다 — 이미 끝났거나 "
+                   "먼저 멈춘 것입니다.", cid)
     return out(True, "stopped", res.get("message") or
-               f"{cid} 의 무인 작업자를 세웠다.", cid)
+               "이 요청의 자동 작업을 중단했습니다.", cid)
 
 
 def stop_all_workers(actor="", why="", ids=None):
@@ -6118,7 +6475,7 @@ def stop_all_workers(actor="", why="", ids=None):
     """
     rows = live_workers() if ids is None else [{"id": i} for i in (ids or [])]
     reason = (why or "").strip() or \
-        f"{actor or '사람'} 가 화면에서 전부 세웠다 (계정·모델 변경)"
+        f"{actor or '사람'} 가 화면에서 전부 중단했다 (계정·모델 변경)"
     done, failed = [], []
     for r in rows:
         rid = r.get("id") or ""
@@ -6132,19 +6489,92 @@ def stop_all_workers(actor="", why="", ids=None):
     except Exception:
         pass
     if not done and not failed:
-        msg = "도는 무인 작업자가 없다 — 세울 것이 없었다."
+        msg = "진행 중인 자동 작업이 없어 중단할 것이 없었습니다."
     else:
-        msg = f"무인 작업자 {len(done)}건을 세웠다."
+        msg = f"자동 작업 {len(done)}건을 중단했습니다."
         if failed:
-            msg += f" {len(failed)}건은 세우지 못했다: {', '.join(failed)}"
+            msg += f" {len(failed)}건은 중단하지 못했습니다: {', '.join(failed)}"
     return {"ok": not failed, "ids": done, "count": len(done),
             "failed": failed, "message": msg}
+
+
+def rework_candidate(lt):
+    """이 마지막 전이가 무인 재작업 후보인가 (`_last_transition` 의 튜플).
+
+    반려(review→in-progress) + 대시보드 드래그 착수(open→in-progress
+    [via dashboard], REQ-20260825-039 — 드래그가 상태 기록일 뿐 아무도 착수하지
+    않던 공백). CLI 착수는 그 세션이 이미 작업 중이므로 제외.
+
+    워처와 전이 지점이 **같은 답**을 써야 한다 (REQ-20260829-029): 두 벌이면
+    한쪽만 고쳐지고, 그때 급한 요청은 즉시 경로에서만 조용히 빠진다."""
+    if not lt:
+        return False
+    return ((lt[1], lt[2]) == ("review", "in-progress")
+            or ((lt[1], lt[2]) == ("open", "in-progress")
+                and "[via dashboard]" in (lt[3] or "")))
+
+
+def rework_grace(meta):
+    """이 문서의 유예(초) — **긴급·높음은 0** (REQ-20260829-029).
+
+    사용자 지적: "특히 긴급이나 높음의 경우 바로 시작되어야 하는데". 여태
+    우선순위는 순서만 정했다 — 유예 30초도 워처 주기 30초도 상수라 긴급이든
+    보통이든 똑같이 최대 1분을 기다렸고, 그러면 '긴급'은 이름뿐이다.
+
+    보통 이하의 유예는 **그대로 둔다**. 그 30초는 낭비가 아니라 살아 있는
+    세션·기존 위임이 먼저 집을 기회이고(REQ-20260824-014), 없애면 이 저장소가
+    네 번 덴 사고 — 일하는 파일 위에 두 번째 손 — 가 되돌아온다. 급한 것만
+    그 기회를 포기하는 것이고, 포기해도 `rework_claimed()` 검사는 그대로 서
+    있으므로 **이미 집힌 것 위에는 뜨지 않는다**."""
+    if doc_priority(meta) >= PRIORITY_RUSH:
+        return 0
+    return int(user_config(meta.get("user", ""))
+               .get("auto_resume_grace_sec", 30) or 30)
+
+
+def rework_kick(doc_id, meta=None, body=None):
+    """전이 **그 자리에서** 재작업 작업자를 띄운다 — 유예가 0 인 것만.
+
+    워처는 30초마다 돈다. 유예가 0 이어도 다음 틱까지 최대 30초를 더 기다리는데,
+    그 30초는 '긴급'이라고 눌러 놓고 아무 일도 안 일어나는 시간이다. 그래서
+    급한 것은 전이가 끝나는 자리에서 곧바로 띄운다.
+
+    **판정을 새로 짓지 않는다**: 후보 여부·유예·스폰 관문(옵트인·머신·쿨다운·
+    캡·리스)은 전부 워처가 쓰는 그 함수들이다. 여기서 더하는 것은 "지금 부른다"
+    하나뿐이라, 워처가 막을 것은 여기서도 막힌다.
+
+    반환: 띄웠으면 True."""
+    if os.environ.get("S9_AUTO_RESUME_DISABLE"):
+        return False
+    try:
+        if meta is None or body is None:
+            path = locate(doc_id)
+            if not path:
+                return False
+            meta, body = read_doc(path)
+        lt = _last_transition(body)
+        if not rework_candidate(lt) or rework_grace(meta) > 0:
+            return False
+        if rework_claimed(meta.get("id") or doc_id):
+            return False      # 누군가 이미 집었다 — 워처와 같은 규율
+        return bool(_spawn_rework(meta.get("id") or doc_id, meta, lt[3]))
+    except Exception as e:
+        # 전이는 성공했다. 스폰이 넘어졌다고 전이까지 되돌리지 않는다 —
+        # 워처가 30초 뒤에 같은 후보를 다시 본다.
+        try:
+            _auto_log(f"KICK-FAIL {doc_id} {e.__class__.__name__}: {e}")
+        except Exception:
+            pass
+        return False
 
 
 def rework_watch_tick(grace=None, now=None):
     """반려 재작업 워처 1틱 (REQ-20260823-083) — serve의 데몬 스레드가 30초마다 호출.
     반려된(마지막 전이 review→in-progress) in-progress REQ 중 유예를 넘기고도
-    아무 세션도 클레임하지 않은 것을 무인 스폰한다. 반환: 스폰한 doc_id 리스트."""
+    아무 세션도 클레임하지 않은 것을 무인 스폰한다. 반환: 스폰한 doc_id 리스트.
+
+    유예·후보 판정은 `rework_grace`·`rework_candidate` 한 곳에서 온다 —
+    전이 지점의 즉시 스폰(`rework_kick`)이 같은 답을 써야 하기 때문이다."""
     import time as _time
     spawned = []
     if os.environ.get("S9_AUTO_RESUME_DISABLE"):
@@ -6173,21 +6603,13 @@ def rework_watch_tick(grace=None, now=None):
         lt = _last_transition(body)
         if not lt:
             continue
-        # 후보: 반려(review→in-progress) + 대시보드 드래그 착수(open→in-progress
-        # [via dashboard], REQ-20260825-039 — 드래그가 상태 기록일 뿐 아무도
-        # 착수하지 않던 공백). CLI 착수는 그 세션이 이미 작업 중이므로 제외.
-        if not ((lt[1], lt[2]) == ("review", "in-progress")
-                or ((lt[1], lt[2]) == ("open", "in-progress")
-                    and "[via dashboard]" in (lt[3] or ""))):
+        if not rework_candidate(lt):
             continue
         try:
             ts = datetime.datetime.fromisoformat(lt[0]).timestamp()
         except ValueError:
             continue
-        # 기본 30초 (REQ-20260824-014): 라이브 세션 선점 기회는 유지하되, 무인 적용
-        # 활성 환경에서 반려→착수 지연을 줄인다. 계정 설정 auto_resume_grace_sec로 조절.
-        g = grace if grace is not None else int(
-            user_config(meta.get("user", "")).get("auto_resume_grace_sec", 30) or 30)
+        g = grace if grace is not None else rework_grace(meta)
         if nowt - ts < g:
             continue  # 유예: 라이브 세션/기존 위임이 집을 기회
         if rework_claimed(r["id"]):
@@ -6745,17 +7167,22 @@ def cmd_set(args):
             meta[key] = val
             changed.append(key)
     if getattr(args, "priority", None) is not None:
+        # 값 해석도 근거 기록도 화면과 **같은 문**을 지난다 (REQ-20260829-029).
         # 거부되면 문서를 건드리지 않고 끝낸다 — 잘못된 입력이 기존 값을
         # 지우면 사람이 매긴 우선순위가 소리 없이 사라진다.
         try:
-            meta["priority"] = parse_priority(args.priority)
+            _old, _new, body = apply_priority(meta, body, args.priority)
         except ValueError as e:
             die(str(e))
         changed.append("priority")
     if not changed:
         die("nothing to set (use --title/--summary/--goal/--size/--project"
             "/--priority)")
-    meta["updated"] = now_iso()
+    # 순서만 바꾼 것은 진전이 아니다 — 갱신 시각은 멈춤 판정의 시계라
+    # 여기서 되감으면 우선순위를 만지는 것만으로 경보가 꺼진다
+    # (apply_priority 주석). 다른 필드가 함께 바뀐 때에만 새로 찍는다.
+    if changed != ["priority"]:
+        meta["updated"] = now_iso()
 
     acquire_lock()
     try:
@@ -8449,7 +8876,7 @@ def stall_verdict(r, now, win, hands=None):
     v = {"state": "stalled", "mins": None, "quiet_mins": None, "why": "",
          "wait": None}
     if r.get("status") != "in-progress":
-        return dict(v, state="moving", why="진행 중이 아니다")
+        return dict(v, state="moving", why="진행 중이 아닙니다")
     try:
         age = now - datetime.datetime.fromisoformat(
             r.get("updated") or r.get("status_since") or "").timestamp()
@@ -8457,8 +8884,22 @@ def stall_verdict(r, now, win, hands=None):
         age = None
     v["quiet_mins"] = int((age or 0) // 60)
     # 무인 워커가 **이 요청을 위해** 돌고 있으면 직접 증거다 — 넘어간다.
-    if r.get("live_kind") == "spawned":
-        return dict(v, state="moving", why="무인 작업자가 이 요청을 맡아 돈다")
+    #
+    # 두 얼굴을 다 봐야 한다 (REQ-20260830-009). `live_kind == "spawned"` 는
+    # **클레임 전**만 말한다 — 워커가 문서를 집는 순간 `direct` 로 덮여 "지금
+    # 돌고 있다"가 이 값에서 사라진다(같은 사실을 catalog_with_live 가 이미
+    # 주석으로 적어 두고, 세우기 손잡이는 그래서 `worker_running` 을 따로
+    # 부른다). 그 절반만 보다가 실사고가 났다: 한 카드에 「멈춤 74분째 ·
+    # 깨우기」와 「진행 중 자동 작업 0분째 · 세우기」가 함께 섰다.
+    #
+    # 모순으로만 끝나지 않는다. 그 깨우기는 **서버가 거절할 행동**이다("무인
+    # 작업자가 이미 이 요청을 맡아 돌고 있다") — 누를 수 있게 그려 놓고 누르면
+    # 거절하는 손잡이다. 판정을 새로 짓지 않고, 세우기 줄이 먹는 그 사실을
+    # 행에서 그대로 읽는다(`catalog_with_live` 가 멈춤보다 먼저 싣는다).
+    #
+    # 조용한 시간은 그대로 낸다 — 이 함수의 약속이다(감추지 않는다).
+    if r.get("live_kind") == "spawned" or r.get("worker"):
+        return dict(v, state="moving", why="자동 작업이 이 요청을 맡아 진행 중입니다")
     # 점이 '멈췄다/죽었다'고 그린 행은 잣대를 좁힌다 — 점과 손잡이가 같은
     # 시계를 봐야 '멈췄다고 적혔는데 못 누르는 카드'가 사라진다.
     #
@@ -8485,23 +8926,23 @@ def stall_verdict(r, now, win, hands=None):
         act = str(c.get("actor") or "")
         who = act.split(":")[1] if act.startswith("sub:") and ":" in act[4:] \
             else (act or "위임된 작업자")
-        return dict(v, state="attached", why=f"{who} 가 붙어 있다")
+        return dict(v, state="attached", why=f"{who} 가 이 요청을 맡고 있습니다")
     if age is not None and age < win:
         # 방금 착수한 것 — 아직 멈춘 게 아니다
-        return dict(v, state="moving", why="방금 움직였다")
+        return dict(v, state="moving", why="방금 움직였습니다")
     # ---- 여기부터는 '조용하다' 가 확정이다. 무엇 때문에 조용한가만 남는다.
     w = _wait_info(r["id"], now=now)
     if w:
         return dict(v, state="waiting", wait=w,
-                    why=f"차례를 기다린다 — {w['why']}")
+                    why=f"차례를 기다리는 중입니다 — {w['why']}")
     if hands:
         # 어느 문서인지 모르는 손이 붙어 있다. 이 요청일 수도 있다 — 그러니
         # '멈춤' 이라 단정하지 않고 겹쳐 띄우지도 않는다. 넓게 잡히는 것은
         # 알고 한 선택이다: 거짓 멈춤의 대가는 **일하는 파일 위의 두 번째
         # 손**(2026-08-29 20:34)이고, 거짓 미상의 대가는 2분간의 유예다.
         return dict(v, state="unknown",
-                    why=f"어느 문서인지 모르는 서브에이전트 {len(hands)}이 "
-                        f"세션 {hands[0].get('session') or '?'} 에서 도는 중이다")
+                    why=f"어느 요청의 것인지 모르는 작업 {len(hands)}건이 "
+                        f"아직 돌고 있습니다")
     return dict(v, state="stalled", mins=v["quiet_mins"],
                 why=f"{v['quiet_mins']}분째 진전 없음")
 
@@ -9284,6 +9725,19 @@ def _port_owner_pid(port):
         return 0
     how = proc_backend()
     if how == "none":
+        return 0
+    if how == "win":
+        # `netstat -ano` 의 상태 낱말("LISTENING")은 **언어팩을 탄다** — 한국어
+        # 윈도우에서는 "수신 대기"로 나오고 공백까지 있어 열 수가 달라진다.
+        # 그래서 낱말을 읽지 않는다: 듣고 있는 줄은 상대 주소가 `:0` 이라는
+        # 것으로 가른다(연결된 줄에는 진짜 상대 포트가 적힌다).
+        want = f":{int(port)}"
+        for ln in _ps_lines(("netstat", "-ano", "-p", "TCP"), timeout=25):
+            c = ln.split()
+            if (len(c) >= 4 and c[0].upper() == "TCP"
+                    and c[1].endswith(want) and c[2].endswith(":0")
+                    and c[-1].isdigit()):
+                return int(c[-1])
         return 0
     if how != "proc":
         # `/proc/net/tcp` 도 리눅스에만 있다. 맥·BSD 에서는 lsof 가 같은 답을
@@ -12306,7 +12760,14 @@ def _reclaim_shot_procs(marker, win=False):
 # 사람이 읽을 이름. 내부 용어(경로·함수 이름)를 화면에 내지 않는다.
 LOOK_KO = {"proc": "커널이 주는 목록 (리눅스·WSL)",
            "ps": "ps 명령 (맥·BSD)",
+           "win": "윈도우 프로세스 조회 (PowerShell·wmic)",
            "none": "볼 수 없음"}
+# 갈래마다 있어야 하는 명령이 다르다 — 윈도우에 `ps` 가 없다고 경고하면
+# 그 경고가 사람을 엉뚱한 데로 보낸다.
+LOOK_TOOLS = {"proc": ("tail",),
+              "ps": ("ps", "lsof", "tail"),
+              "win": ("powershell", "netstat", "tail"),
+              "none": ("ps",)}
 DIAG_MARK = {"ok": "✓", "warn": "△", "critical": "✗", "unknown": "·"}
 
 
@@ -12330,20 +12791,24 @@ def live_diag():
     me = os.getpid()
     now = _t.time()
 
-    checks = [_dv("backend",
-                  "ok" if how != "none" else "critical",
+    # 갈래 이름이 붙었다는 것과 그 갈래가 **실제로 무엇을 봤다**는 것은 다른
+    # 일이다. 목록이 비었는데 ✓ 를 찍으면, 아무것도 못 보는 기계가 스스로
+    # 멀쩡하다고 말하게 된다 — 이 진단이 있는 이유가 바로 그 자리다.
+    blind = how == "none" or not table
+    checks = [_dv("backend", "critical" if blind else "ok",
                   f"프로세스 목록을 보는 방법: {LOOK_KO.get(how, how)} — "
                   f"{len(table)}개가 보인다",
-                  "" if how != "none"
-                  else "이 기계에서는 프로세스를 볼 수 없다. `ps` 명령이 "
-                       "있는지 확인해 달라 — 없으면 살아 있음을 잴 수 없다.")]
+                  "" if not blind
+                  else "이 기계에서는 프로세스 목록을 볼 수 없다. 맥·리눅스면 "
+                       "`ps`, 윈도우면 PowerShell 이 있어야 한다 — "
+                       "없으면 살아 있음을 잴 수 없다.")]
     checks.append(_dv("self", "ok" if me in table else "critical",
                       f"내 프로세스(번호 {me})가 그 목록에 "
                       + ("보인다" if me in table else "안 보인다"),
                       "" if me in table
                       else "목록에 나 자신도 없다면 그 목록을 믿을 수 없다. "
-                           "`ps` 출력 형태가 다른 기계일 수 있으니 이 결과를 "
-                           "그대로 붙여 보내 달라."))
+                           "이 기계의 조회 출력이 우리가 아는 모양과 다를 수 "
+                           "있으니 이 결과를 그대로 붙여 보내 달라."))
 
     rows, listening = [], 0
     for bp in sorted(_glob.glob(os.path.join(STATE, "*.json"))):
@@ -12433,7 +12898,8 @@ def live_diag():
              "쓰는지 읽는 방법이 이 기계에 없는 것이다(맥이면 `lsof`). "
              "진단만 못 하는 것이고 화면 자체는 돌 수 있다."))
 
-    tools = {t: bool(shutil.which(t)) for t in ("ps", "lsof", "tail")}
+    tools = {t: bool(shutil.which(t))
+             for t in LOOK_TOOLS.get(how, ("ps", "lsof", "tail"))}
     missing = [t for t, ok in tools.items() if not ok]
     if missing:
         checks.append(_dv("tools", "warn",
@@ -12441,7 +12907,8 @@ def live_diag():
                           "이 명령들이 있어야 이 기계에서 살아 있음을 잰다."))
 
     return {"os": os_platform(), "platform": sys.platform,
-            "backend": how, "processes": len(table), "me": me,
+            "backend": how, "blind": blind,
+            "processes": len(table), "me": me,
             "tools": tools, "sessions": rows,
             "inboxes": inboxes, "tails": tails,
             "listening": listening, "checks": checks,
@@ -12501,7 +12968,9 @@ def cmd_doctor(args):
             print(json.dumps(d, ensure_ascii=False, indent=1))
         else:
             print_live_diag(d)
-        sys.exit(0 if d["backend"] != "none" else 1)
+        # 아무것도 못 본 기계는 0 으로 끝나지 않는다 — 갈래 이름이 붙었다는
+        # 것만으로 성공이라고 하면, 스크립트로 거는 쪽이 조용히 속는다.
+        sys.exit(1 if d.get("blind") else 0)
     tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s9-doctor")
     if not os.path.exists(tool):
         die("bin/s9-doctor 가 없다")
@@ -13486,6 +13955,14 @@ def catalog_with_live(stall_win=None):
         wk = worker_running(r["id"], now=now)
         if wk:
             r["worker"] = wk
+        # 사람이 세워 둔 요청 (라운드4) — 도는 것이 없을 때만이다. 둘이 함께
+        # 실리면 카드가 "진행 중" 과 "세워 둠" 을 한꺼번에 말한다.
+        if not wk:
+            sm = stop_mark(r["id"], now=now)
+            if sm:
+                at = sm.get("at") or now
+                r["stopped"] = {"at": at, "by": sm.get("by") or "",
+                                "age": int(max(0, now - at))}
         page = active.get(r["id"])                 # 실행 등록 경로 최근성
         sage = sess_age.get(r.get("session") or "")  # 소속 세션 최근성
         if page is not None and page < LIVE_WIN:
@@ -15008,6 +15485,18 @@ def cmd_serve(args):
                     self._json({"ok": True, "id": req.get("id"),
                                 "old": old, "new": tto, "freed": freed,
                                 "auto_resume": spawned, "notified": notified})
+                elif parsed.path == "/api/priority":
+                    # 화면에서 순서를 바꾸는 자리 (REQ-20260829-029). 해석·검증·
+                    # 근거 기록은 CLI 와 같은 문(set_doc_priority)을 지난다 —
+                    # 두 벌이면 화면으로 바꾼 것만 History 에 안 남는다.
+                    #
+                    # 여기서 끝이 아니다: 바뀐 값은 `work_order()` 를 통해
+                    # `s9 next`(이어받을 것 고르기)와 무인 작업자 스폰 순서에
+                    # 그대로 먹힌다 — 화면의 손잡이가 숫자놀음이 아닌 이유다.
+                    res = set_doc_priority(str(req.get("id") or ""),
+                                           req.get("priority"),
+                                           user=actor, via="dashboard")
+                    self._json(res)
                 elif parsed.path == "/api/docs/tidy":
                     # 치우기 (REQ-20260829-025) — 보관·해제·삭제·복원·소거가
                     # 한 문 하나를 지난다. 단건도 여러 건도 같은 문이다:
@@ -16381,11 +16870,11 @@ def main():
     wk = sub.add_parser("workers", help="지금 도는 무인 작업자 목록")
     wk.add_argument("--quiet", action="store_true")
     wk.add_argument("--stop", metavar="문서id",
-                    help="그 문서의 무인 작업자를 세운다 (집은 세션만)")
+                    help="그 문서의 자동 작업을 중단한다 (집은 세션만)")
     wk.add_argument("--stop-all", action="store_true", dest="stop_all",
-                    help="도는 무인 작업자를 전부 세운다 (계정·모델 변경 전)")
+                    help="도는 자동 작업을 전부 중단한다 (계정·모델 변경 전)")
     wk.add_argument("--why", default="",
-                    help="세우는 이유 (--stop 에 필수, --stop-all 에 권장)")
+                    help="중단하는 이유 (--stop 에 필수, --stop-all 에 권장)")
     wk.set_defaults(fn=cmd_workers)
 
     rv = sub.add_parser("review", help="확인 대기(review) 요청 목록")

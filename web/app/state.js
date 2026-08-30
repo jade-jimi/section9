@@ -1,4 +1,4 @@
-/* state.js — 화면 상태와 정렬 — catalog/tab/펼침, workOrder·recentOrder·stableOrder, esc·shortId */
+/* state.js — 화면 상태와 정렬 — catalog/tab/펼침, workOrder·recentOrder·stableOrder, esc·shortId·evEl */
 "use strict";
 let catalog = [], graph = null, auditCache = null, TRANS = {}, projects = [];
 let tab = "board", selectedDoc = null, selectedStream = null;
@@ -132,3 +132,22 @@ function catFind(id){         // 정확 일치 우선, 아니면 유일 prefix (
    좋지 않아서, 아래 CC_SHORT_VECTORS 를 두 엔진이 함께 통과해야 하는
    계약서로 박아 뒀다 (tests/test_short_ref.py 가 이 표를 읽어 서버를
    검사하고, `?shortref` 가 같은 표로 화면을 검사한다). */
+
+
+/* 이벤트가 가리키는 **요소** (REQ-20260830-010).
+
+   `e.target` 은 요소라는 보장이 없다. 사용자가 글자를 끌면 dragstart 의
+   target 이 텍스트 노드이고, 텍스트 노드에는 `closest` 가 없다 — 그 한 줄이
+   던진 TypeError 가 `events.js` 조각을 통째로 죽여 판의 버튼이 전부 멎었다
+   (2026-08-30 제보, Chrome 151). 화면을 조각으로 가른 뒤로 조각 하나의 죽음이
+   곧 그 조각이 맡은 자리 전체의 죽음이다.
+
+   그동안은 부르는 자리마다 `&&` 로 있는지 먼저 물어 손으로 덧대 왔는데,
+   쉰 곳 넘는 자리에 손으로 덧대는 규칙은 언젠가 한 곳이 빠진다 — 실제로
+   빠진 자리에서 이 사고가 났다. 그래서 문을 하나 둔다: 요소면 그대로,
+   아니면 부모 요소로, 그것도 없으면 null. */
+function evEl(t){
+  if (!t) return null;
+  if (t.nodeType === 1) return t;              // 요소
+  return t.parentElement || null;              // 텍스트 노드 등 → 감싼 요소
+}

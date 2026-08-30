@@ -116,7 +116,13 @@ class WakeDecision(unittest.TestCase):
         self.assertIn(self.rid, self.calls[0]["prompt"])
         self.assertIn("--add --session", self.calls[0]["prompt"],
                       "깨운 작업자가 클레임하지 않으면 워처가 또 띄운다")
-        self.assertIn(self.rid, res["message"])
+        # 무엇을 깨웠는지는 **응답의 `id`** 가 말한다 (REQ-20260830-007).
+        # 창은 그 값을 머리에 주소로 달고, 본문은 사람에게 할 말만 한다 —
+        # 한 창에 같은 번호가 두 번 서면 읽는 눈이 둘을 다시 맞춰 봐야 한다
+        # (REQ-20260828-007 이 판정 창에서 이미 세운 규칙).
+        self.assertEqual(res["id"], self.rid)
+        self.assertNotIn(self.rid, res["message"],
+                         "창머리가 이미 다는 주소를 본문이 또 적는다")
 
     # ---- W2. 이미 누가 붙어 있으면 거부 ----------------------------------
     def test_w2_busy_delegate_blocks_wake(self):

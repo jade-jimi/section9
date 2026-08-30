@@ -94,7 +94,7 @@ class GraphEmpty(unittest.TestCase):
 
     def test_handler_covers_both_fixes(self):
         """필터 지우기와 종류 다시 켜기 둘 다 실제로 동작한다."""
-        m = re.search(r'const gf = e\.target\.closest\("\[data-gfix\]"\);'
+        m = re.search(r'const gf = evEl\(e\.target\)\?\.closest\("\[data-gfix\]"\);'
                       r'[\s\S]*?\n  \}', self.src)
         self.assertIsNotNone(m, "data-gfix 핸들러가 없다")
         h = m.group(0)
@@ -220,7 +220,7 @@ class GraphEmpty(unittest.TestCase):
 
     def test_toggle_handler_records_what_was_turned_on(self):
         """켠 종류를 기록한다 — 끈 것은 기록하지 않는다(의도적 축소다)."""
-        m = re.search(r'const gt2 = e\.target\.closest\("\[data-gtype\]"\);'
+        m = re.search(r'const gt2 = evEl\(e\.target\)\?\.closest\("\[data-gtype\]"\);'
                       r'[\s\S]*?\n  \}', self.src)
         self.assertIsNotNone(m, "범례 토글 핸들러가 없다")
         h = m.group(0)
@@ -243,7 +243,7 @@ class GraphEmpty(unittest.TestCase):
 
     def test_ack_does_not_outlive_the_click(self):
         """되돌리기가 성공했거나 조건이 바뀌면 인정 줄은 남지 않는다."""
-        m = re.search(r'const gf = e\.target\.closest\("\[data-gfix\]"\);'
+        m = re.search(r'const gf = evEl\(e\.target\)\?\.closest\("\[data-gfix\]"\);'
                       r'[\s\S]*?\n  \}', self.src)
         self.assertIsNotNone(m)
         self.assertRegex(m.group(0), r"gLastOn\s*=\s*null",
@@ -295,7 +295,7 @@ class GraphEmpty(unittest.TestCase):
 
     def test_only_the_guilty_condition_is_cleared(self):
         """되돌리기는 범인 하나만 푼다 — 나머지 조건은 사용자가 걸어 둔 것이다."""
-        m = re.search(r'const gf = e\.target\.closest\("\[data-gfix\]"\);'
+        m = re.search(r'const gf = evEl\(e\.target\)\?\.closest\("\[data-gfix\]"\);'
                       r'[\s\S]*?\n  \}', self.src)
         self.assertIsNotNone(m)
         h = m.group(0)

@@ -229,7 +229,12 @@ class ThePersonHasTheirOwnBudget(unittest.TestCase):
         self._global(wake_day_count=99)
         why = self.m._auto_cap_block("REQ-b", {}, reason="wake")
         self.assertTrue(why)
-        self.assertIn("깨우기", why, "사람이 읽을 사유가 아니다")
+        # 사람이 읽을 사유여야 한다 — 무엇이 바닥났는지가 낱말로 서야
+        # `capped` 라는 코드 이름 말고 사람이 읽을 것이 남는다.
+        # (REQ-20260830-007 에서 `깨우기 한도` → `깨울 수 있는 횟수` 로 풀었다.)
+        # 낱말이 「깨우기」에서 「이어가기」로 바뀌었다 (REQ-20260829-024 라운드4
+        # 반려). 계약은 그대로다 — 사람이 읽을 수 있는 사유여야 한다.
+        self.assertIn("이어갈 수 있는 횟수", why, "사람이 읽을 사유가 아니다")
 
     def test_w6c_wake_spends_the_human_counter_only(self):
         self._global()

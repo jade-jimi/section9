@@ -86,7 +86,7 @@ class TermMention(unittest.TestCase):
         읽던 자리를 잃고, 이 기능은 탭을 건너뛰는 것과 같아진다.
         """
         i = self.code.find('closest("[data-tdoc]")')
-        j = self.code.find('const doc = e.target.closest("[data-doc]")')
+        j = self.code.find('const doc = evEl(e.target)?.closest("[data-doc]")')
         self.assertGreater(i, 0, "터미널 손잡이를 잡는 자리가 없다")
         self.assertGreater(j, 0, "문서 열기 위임을 찾지 못했다")
         self.assertLess(i, j, "문서 열기가 터미널 손잡이보다 먼저 잡는다")

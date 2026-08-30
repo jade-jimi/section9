@@ -330,10 +330,25 @@ function tidyConfirmRm(ids){
    눈금을 누를 때마다 문서가 함께 열린다. 이 조각은 목록을 소유하지 않으므로
    자기 손잡이만 가로채고 나머지는 그대로 흘려보낸다. */
 document.addEventListener("click", e => {
-  const t = e.target.closest && e.target.closest("[data-tidy]");
+  /* 눌린 자리가 **Element 가 아닐 수 있다** — 그러면 조상을 거슬러 찾는 손이
+     아예 없다 (REQ-20260830-006 실사고: `TypeError: … is not a function`,
+     화면이 "조각 하나가 죽었다"고 알렸다). 종전에는 손잡이를 찾는 줄만 지키고
+     판을 닫는 줄은 안 지켰는데, 하필 그 줄은 **판이 떠 있을 때만** 도는 줄이라
+     평소 클릭에서는 한 번도 밟히지 않았다 — 판을 처음 열어 본 날 터졌다.
+
+     지키는 자리를 둘로 나누면 언젠가 한쪽만 지켜진다. 그래서 물음은 `near`
+     한 곳에서만 던진다.
+
+     그리고 그 `near` 도 자기 문을 따로 파지 않는다 — 여기서 한 번 막은 뒤
+     `events.js` 에서 **같은 오류가 그대로 다시 났고**(REQ-20260830-010,
+     글자를 끌면 dragstart 의 target 이 텍스트 노드다), 조각 하나가 또 통째로
+     죽었다. 조각마다 자기 방어를 두면 조각 수만큼 구멍이 남는다. 판정은
+     `evEl` 하나를 지난다 (web/app/state.js). */
+  const near = sel => evEl(e.target)?.closest(sel);
+  const t = near("[data-tidy]");
   // 판 밖을 누르면 닫는다 — 떠 있는 것은 떠 있는 것끼리 같은 규칙을 쓴다.
   // 닫기만 하고 그 클릭은 원래 주인에게 그대로 흘려보낸다.
-  if (!t && tidyBox && !e.target.closest(".tidypanel,.dlgbox")) tidyClose();
+  if (!t && tidyBox && !near(".tidypanel,.dlgbox")) tidyClose();
   if (!t) return;
   e.preventDefault(); e.stopPropagation();
   tidyAct(t.dataset.tidy, t);

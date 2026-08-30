@@ -70,7 +70,9 @@ class WakeHandle(unittest.TestCase):
         # 그려진 것을 **찾는** 자리라 세지 않는다).
         self.assertEqual(len(re.findall(r'data-wake="\$\{esc\(', self.src)), 1,
                          "손잡이를 그리는 자리가 여럿이다 — 한 벌만 고쳐진다")
-        self.assertIn("깨우기", self.stall)
+        # 낱말은 상수 한 곳에서 온다 (REQ-20260829-024 라운드4) — 글자를 짓는
+        # 자리와 다시 칠하는 자리 두 곳에 두었더니 개명 한 번에 갈렸다.
+        self.assertIn("WAKE_LABEL", self.stall)
 
     def test_a_card_that_is_not_stalled_has_no_handle(self):
         """멈춘 카드가 아니면 빈 문자열이 온다.
@@ -155,8 +157,11 @@ class WakeHandle(unittest.TestCase):
         self.assertIn("WOKE_HOLD", self.src, "표식이 만료되지 않는다")
 
     def test_the_running_state_says_it_is_running(self):
-        self.assertIn("깨우는 중…", self.stall)
-        self.assertIn("깨우는 중…", self.src)
+        # 낱말이 「깨우기」에서 「이어가기」로 바뀌었다 (REQ-20260829-024 반려:
+        # "깨우기, 세우기 라는 용어가 너무 어색한데"). 계약은 그대로다 —
+        # 누른 뒤의 얼굴이 자기가 도는 중임을 말해야 한다.
+        self.assertIn("WAKE_GOING", self.stall)
+        self.assertIn("이어가는 중…", self.src)
         self.assertIn("disabled", self.stall,
                       "다시 그려도 도는 중인 손잡이가 되살아난다")
 

@@ -119,7 +119,10 @@ function showUserForm(u, host, isAdminEdit){
     <div class="path" style="margin-top:16px">변경은 profile.md Notes에 audit + git 동기화. 본인 또는 admin만 수정.</div>`;
   // 이메일 행 추가/삭제 — DOM만 조작(재렌더 없음 → 다른 입력값 보존)
   host.querySelector("#uf-emails").addEventListener("click", e => {
-    if (e.target.classList.contains("em-rm")) e.target.closest(".emrow").remove();
+    // 지우기 단추의 **글자**를 누르면 target 이 텍스트 노드다 — 거기엔
+    // classList 도 closest 도 없다 (REQ-20260830-010). 문을 한 번만 지난다.
+    const el = evEl(e.target);
+    if (el?.classList.contains("em-rm")) el.closest(".emrow")?.remove();
   });
   host.querySelector("#uf-em-add").addEventListener("click", () => {
     host.querySelector("#uf-em-add").insertAdjacentHTML("beforebegin", emRowHTML(""));
@@ -295,7 +298,7 @@ function showUserForm(u, host, isAdminEdit){
   }
   if (whereBox){
     whereBox.addEventListener("change", e => {
-      const r = e.target.closest("input[type=radio]");
+      const r = evEl(e.target)?.closest("input[type=radio]");
       if (!r || r.disabled) return;
       secWhere = r.value;
       paintWhere();
@@ -303,7 +306,7 @@ function showUserForm(u, host, isAdminEdit){
     // 잠긴 칸을 눌렀는데 아무 일도 안 일어나면 고장으로 읽힌다 — 아래 줄을 한 번
     // 깜빡여 눈을 그리로 보낸다(움직임을 줄여 달라고 한 사람에게는 하지 않는다).
     whereBox.addEventListener("click", e => {
-      if (!e.target.closest(".wopt.off")) return;
+      if (!evEl(e.target)?.closest(".wopt.off")) return;
       e.preventDefault();
       const w = host.querySelector("#sec-why");
       if (w && w.animate
@@ -312,7 +315,7 @@ function showUserForm(u, host, isAdminEdit){
     });
   }
   if (whyBox) whyBox.addEventListener("click", e => {
-    if (!e.target.closest("#sec-gopath")) return;
+    if (!evEl(e.target)?.closest("#sec-gopath")) return;
     const box = host.querySelector("#sec-ext");
     if (!box) return;
     box.scrollIntoView({block: "center", behavior: "smooth"});
@@ -432,7 +435,7 @@ function showUserForm(u, host, isAdminEdit){
     /* 지우기는 **되돌릴 수 없다** — 값이 어디에도 남지 않으므로 "실행 취소"를 줄
        방법이 없다. 되돌릴 수 없을 때만 확인 창을 쓴다는 규칙이 정확히 이 자리다. */
     secList.addEventListener("click", async e => {
-      const b = e.target.closest(".secrm");
+      const b = evEl(e.target)?.closest(".secrm");
       if (!b) return;
       const key = b.dataset.k, w = b.dataset.w;
       // 같은 이름이 양쪽에 있으면 줄은 하나지만 파일은 둘이다 — 무엇이 사라지는지

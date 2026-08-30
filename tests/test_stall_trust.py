@@ -206,6 +206,34 @@ class StallTrust(unittest.TestCase):
         finally:
             pass
 
+    # ---- C8. 도는 워커는 멈춤을 이긴다 (REQ-20260830-009) ----------------
+    def test_c8_a_running_worker_beats_the_stall_clock(self):
+        """실사고: 한 카드에 「멈춤 74분째 · 깨우기」와 「진행 중 자동 작업
+        0분째 · 세우기」가 함께 섰다. 사용자: "어떻게 이런상태가 존재할 수 있지?"
+
+        원인은 이 판정이 도는 워커를 `live_kind == "spawned"` 로만 알아본 것이다.
+        그 값은 **클레임 전**만 말한다 — 워커가 문서를 집는 순간 `direct` 로
+        덮인다. 그래서 세우기 줄은 `worker_running` 을 따로 부르는데 멈춤만
+        그 사실을 못 봤고, 결과로 **서버가 거절할 행동**(깨우기)이 손잡이로
+        그려졌다.
+
+        조용한 시간은 그대로 낸다 — 감추는 것은 이 함수가 금한 반대편 병이다.
+        """
+        self.clear_hands("lead1234")
+        r = dict(self.row(self.A))
+        base = self.m.stall_verdict(r, time.time(), self.m.STALLED_WIN)
+        self.assertEqual(base["state"], "stalled",
+                         "밑그림이 멈춤이 아니면 이 시험은 아무것도 안 잡는다")
+
+        r["live_kind"] = "direct"          # 워커가 문서를 집어 덮인 뒤
+        r["worker"] = {"pid": 179646, "age": 80}
+        v = self.m.stall_verdict(r, time.time(), self.m.STALLED_WIN)
+        self.assertEqual(v["state"], "moving", v)
+        self.assertIsNone(v["mins"],
+                          "도는 동안에는 깨울 분(minutes)을 주지 않는다")
+        self.assertIsNotNone(v["quiet_mins"],
+                             "조용한 시간까지 감추면 반대편 병이다")
+
     # ---- C2. 추정으로 붙인 손은 추정이라고 적힌다 ------------------------
     def test_c2_guessed_hand_is_unassigned(self):
         self.clear_hands("lead1234")

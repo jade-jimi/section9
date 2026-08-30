@@ -36,7 +36,7 @@ import re
 import shutil
 import subprocess
 import unittest
-from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
+from webasset import index_path, part   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = index_path()
@@ -83,8 +83,10 @@ class WorkspaceChip(unittest.TestCase):
         cls.title = grab(cls.src, r"^function wsTitle\(s\)\{.*?^\}", "wsTitle")
         cls.chip = grab(cls.src, r"^function wsChip\(r\)\{.*?^\}", "wsChip")
         cls.open = grab(cls.src, r"^function wsOpen\(id\)\{.*?^\}", "wsOpen")
-        cls.note = grab(cls.src, r"^function wsBoardNote\(\)\{.*?^\}", "wsBoardNote")
+        # wsBoardNote 는 5차 반려로 없앴다 — 잡을 것이 없다 (W8 이 부재를 붙잡는다)
         cls.card = grab(cls.src, r"^function cardHTML\(r\)\{.*?^\}", "cardHTML")
+        # 카드가 실제로 뱉는 글자 — 훑는 자리에 깃 낱말이 없어야 한다(W8b)
+        cls.card_html = cls.card
         cls.wake = grab(cls.src, r"^async function wakeDoc\(id\)\{.*?^\}", "wakeDoc")
         cls.wakedlg = grab(cls.src, r"^function wakeDlg\(id, d\)\{.*?^\}", "wakeDlg")
 
@@ -102,7 +104,7 @@ class WorkspaceChip(unittest.TestCase):
             "let catalog = %s;" % json.dumps(rows or []),
             "const catFind = id => catalog.find(r => r.id === id) || null;",
             self.place, self.mark, self.fix, self.means, self.why,
-            self.state, self.title, self.chip, self.open, self.note,
+            self.state, self.title, self.chip, self.open,
             body,
         ])
         p = subprocess.run([NODE, "-e", script], capture_output=True,
@@ -211,60 +213,97 @@ class WorkspaceChip(unittest.TestCase):
             self.assertNotIn("worktree-pile", fn, f"{name} 이 사유를 손으로 갈랐다")
         self.assertIn("w.kind", self.state, "서버가 준 kind 를 안 읽는다")
 
-    # W8 — 저장소 하나의 사실은 카드마다 되풀이하지 않는다
-    def test_w8_the_repo_fact_is_told_once(self):
-        rows = [self.row(id="REQ-A", workspace={"kind": "main", "reason": "dirty-spine"}),
-                self.row(id="REQ-B", workspace={"kind": "main", "reason": "dirty-overlap"}),
-                self.row(id="REQ-C", workspace={"kind": "main", "reason": "dirty-unknown"}),
-                self.row(id="REQ-D", workspace={"kind": "main", "reason": "worktree-pile"}),
-                # 아래 둘은 세지 않는다 — 사람이 할 일이 없다
-                self.row(id="REQ-E", workspace={"kind": "main", "reason": "self-edit"}),
-                self.row(id="REQ-F", workspace={"kind": "worktree", "reason": "fresh"})]
-        r = self.run_js(
-            "const it = wsBoardNote(); it.act();"
-            "console.log(JSON.stringify({label: it.label, tone: it.tone,"
-            " title: it.title, body: dlgSeen.descHtml, cap: dlgSeen.cap,"
-            " stop: dlgSeen.stop}));", rows=rows)
-        self.assertIn("4", r["label"], "손이 드는 건수만 세지 않았다")
-        # 경고가 아니다 — 옆의 진짜 경고와 층위가 같아지면 둘 다 안 읽힌다
-        self.assertNotIn("sv-bad", r["tone"])
-        self.assertNotIn("sv-warn", r["tone"])
-        self.assertIs(r["stop"], False, "고장 창의 붉은 눈썹을 달았다")
-        # 푸는 법은 사유마다가 아니라 **한 번만** 적힌다: 미커밋 사유 셋에 답은 하나다
-        self.assertEqual(r["body"].count("커밋하면"), 1,
-                         "같은 답을 여러 번 적었다 — 여러 번 적힌 문장은 안 읽힌다")
-        self.assertEqual(r["body"].count("거두면"), 1)
+    # W8 — **개정** 헤더는 이 사실을 아예 말하지 않는다
+    def test_w8_the_header_does_not_tell_the_repo_fact(self):
+        """5차 반려로 계약이 뒤집혔다.
 
-    def test_w8b_quiet_when_nothing_needs_hands(self):
-        """할 일이 없으면 헤더는 아무 말도 하지 않는다 — 상시 자리표시자는 곧
-        배경이 되어 진짜 사고 때도 안 읽힌다(이 칩이 세운 규칙)."""
-        rows = [self.row(id="REQ-A", workspace={"kind": "worktree", "reason": "fresh"}),
-                self.row(id="REQ-B", workspace={"kind": "main", "reason": "live-verify"})]
-        r = self.run_js("console.log(JSON.stringify({n: wsBoardNote()}));", rows=rows)
-        self.assertIsNone(r["n"], "풀 것이 없는데 헤더가 말을 걸었다")
+        앞 세대의 W8 은 "저장소 하나의 사실은 카드마다 되풀이하지 않고 헤더 칩
+        하나로 모은다" 였다. 사용자가 그 전제를 걷어냈다:
+
+          "이 시스템이 워크트리도 만들고, 커밋도 해야하지. 하지만 사용자는 깃을
+           전혀 모르는 상태에서도 요청이 잘 되느냐 마느냐, 질문이 답변을 받느냐
+           마느냐 등만 관심분야다. 개발자나 엔지니어가 아닌 사용자가 이 시스템을
+           사용한다고 가정하고 판단해라."
+
+        헤더 칩은 **사람 손이 드는 사실**에만 주는 자리인데(REQ-20260827-018),
+        커밋은 이 시스템이 알아서 하는 일이라 그 자격이 없었다. 그래서 한 번만
+        말하던 것조차 말하지 않는다 — 전제가 사실이 아니게 된 계약을 그대로 두면
+        시험이 제품을 과거에 묶는다.
+
+        사실 자체는 문서의 메타 표에 남는다(W9·W10 이 그것을 붙잡는다).
+        """
+        # 이름은 주석에 남는다(왜 내렸는지가 그 이름과 함께 적혀 있어야 다음
+        # 사람이 되돌리지 않는다). 없어야 하는 것은 **정의와 호출**이다.
+        self.assertNotIn("function wsBoardNote", self.src,
+                         "헤더 칩이 되살아났다 — 5차 반려가 내린 자리다")
+        notice = part("app/notice.js")
+        self.assertNotIn("wsBoardNote(", notice,
+                         "헤더가 다시 자리 이야기를 꺼낸다")
+        # 왜 내렸는지가 코드에 남아 있어야 한다 — 없으면 다음 사람이 되돌린다
+        self.assertIn("깃을 모르는", self.src + notice,
+                      "내린 이유가 코드에 없다")
+
+    def test_w8b_the_place_words_stay_out_of_the_browsing_surfaces(self):
+        """훑는 자리(보드 카드·헤더)에는 깃 낱말이 한 글자도 서지 않는다.
+
+        4차가 카드에서, 5차가 헤더에서 내렸다. 둘 다 "지금 무슨 일이 어디까지
+        왔나"를 훑는 자리이고, 작업자가 어느 사본에 앉았는지는 그 물음의 답이
+        아니다. 남은 자리는 문서의 메타 표 하나뿐이다(눌러서 펴는 자리).
+        """
+        def code_only(s):
+            """주석은 뺀다 — 왜 내렸는지를 적으려면 그 낱말을 인용해야 한다.
+            금지되는 것은 **사람에게 나가는 글자**이지 경위 기록이 아니다."""
+            s = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
+            return re.sub(r"//[^\n]*", "", s)
+
+        for word in ("본 저장소", "워크트리"):
+            self.assertNotIn(word, code_only(self.card_html),
+                             f"보드 카드가 다시 '{word}' 를 말한다")
+        notice = code_only(part("app/notice.js"))
+        for word in ("본 저장소", "워크트리", "커밋하면"):
+            self.assertNotIn(word, notice,
+                             f"헤더가 다시 '{word}' 를 말한다")
 
     # ---------- 소스 계약 (node 유무와 무관) ----------
 
-    # W9 — 카드와 문서 화면이 **같은 함수**를 부른다
-    def test_w9_one_function_for_both_screens(self):
-        """같은 사실이 두 화면에 각자 글자를 가지면 한쪽만 고쳐진다 —
-        판정 단추가 그 이유로 세 번 반려됐다(REQ-20260828-007)."""
-        self.assertIn("${wsChip(r)}", self.card, "카드가 자리를 안 말한다")
-        self.assertIn("${wsChip(catFind(m.id))}", self.src,
+    # W9 — 글자는 한 함수에서만 오고, **카드는 그 함수를 부르지 않는다**
+    def test_w9_one_function_and_not_on_the_card(self):
+        """4차 반려로 자리가 하나 줄었다.
+
+        사용자: "'◇ 본 저장소' … 시스템이 사용하는 변수아닌가? 문서에 포함은
+        되어도 상관은 없을 것 같은데 카드에 보여주는건 혼란만 가중하는것같다."
+
+        보드는 무슨 일이 어디까지 왔나를 훑는 판이고, 작업자가 어느 사본에
+        앉았는지는 그 물음의 답이 아니다. 그래서 카드에서는 내리고 문서 화면에
+        남긴다. 다만 **글자는 여전히 한 함수에서만** 온다 — 두 벌이 되면 한 벌만
+        고쳐진다(판정 단추가 그 이유로 세 번 반려됐다, REQ-20260828-007)."""
+        self.assertNotIn("wsChip", self.card,
+                         "카드가 다시 자리를 말한다 — 4차 반려가 내린 자리다")
+        self.assertIn("wsChip(catFind(m.id))", self.src,
                       "문서 화면이 자리를 안 말한다")
         # 낱말은 한 곳에만 있다
         self.assertEqual(self.src.count('"본 저장소"'), 1,
                          "자리 낱말이 두 곳에 적혀 있다")
 
-    # W10 — 줄이 아니라 칩이다
+    # W10 — 줄이 아니라 칩이고, 그 칩이 서는 곳은 **문서의 메타 표**다
     def test_w10_a_chip_not_a_row(self):
         """"줄은 사람의 손을 요구하는 사실에만 준다"(REQ-20260827-017).
-        자리는 읽고 나서 할 일이 없는 사실이라 카드 메타 줄 안에 선다."""
+        자리는 읽고 나서 대개 할 일이 없는 사실이라 줄을 갖지 않는다.
+
+        서는 자리는 문서 화면의 메타 표다 — 제목 줄이 아니다(4차 반려).
+        제목 줄은 카드와 마찬가지로 **훑는 자리**라, 거기 세우면 카드에서
+        받은 지적을 그대로 다시 받는다."""
         self.assertNotIn("rvpt", self.chip, "자리에 대기·멈춤과 같은 줄을 줬다")
-        # 메타 줄(.m) 안에서 태그보다 앞, 즉 한 덩어리 안이다
+        # 카드 메타 줄(.m)에는 없다
         m = re.search(r'<div class="m">(.*?)</div>', self.card, re.S)
-        self.assertTrue(m and "${wsChip(r)}" in m.group(1),
-                        "자리 칩이 메타 줄 밖에 섰다 — 카드에 줄이 하나 늘었다")
+        self.assertTrue(m and "wsChip" not in m.group(1),
+                        "자리 칩이 카드 메타 줄로 돌아왔다")
+        # 문서 화면에서는 제목 줄이 아니라 메타 표의 한 칸이다
+        self.assertIn('["workspace", wsChip(catFind(m.id)) || null]', self.src,
+                      "문서 메타 표에 자리 칸이 없다")
+        h1 = re.search(r'<h1 class="dtitle">(.*?)</h1>', self.src, re.S)
+        self.assertTrue(h1 and "wsChip" not in h1.group(1),
+                        "자리 칩이 문서 제목 줄에 섰다 — 훑는 자리다")
         css = re.search(r"(?m)^\.wsat\{([^}]*)\}", self.src)
         self.assertTrue(css, ".wsat 규칙이 없다")
         for banned in ("background", "border"):
@@ -277,21 +316,23 @@ class WorkspaceChip(unittest.TestCase):
     def test_w14_the_chip_carries_a_mark(self):
         """1차는 낱말만 세웠다. 메타 줄은 이름·급·크기·태그가 이미 서는 자리라
         낱말 하나는 지나가는 태그로 읽혔고, 값이 붙은 카드가 실제로 보드에
-        있었는데도 사람이 못 찾았다. 표는 헤더 칩과 **같은 글자**여야 한다 —
-        표를 둘로 나누면 사람이 배울 것이 둘이 된다."""
+        있었는데도 사람이 못 찾았다.
+
+        **개정 (5차 반려)**: 앞 세대는 "표가 헤더 칩과 같은 글자여야 한다"까지
+        붙잡았는데, 그 헤더 칩이 없어졌으므로 맞댈 상대가 없다. 남은 계약은
+        문서 메타 표의 그 칸 하나 — 다른 칸이 전부 글자뿐인 자리에서 이 칸만
+        눌러 펼 수 있다는 것을 표가 말한다.
+        """
         mark = re.search(r'"(.+?)"', self.mark).group(1)
         r = self.run_js(
-            "console.log(JSON.stringify({ main: wsChip(%s), wt: wsChip(%s),"
-            " note: wsBoardNote()}));" % (
+            "console.log(JSON.stringify({ main: wsChip(%s), wt: wsChip(%s)}));" % (
                 json.dumps(self.row(workspace={"kind": "main",
                                                "reason": "live-verify"})),
                 json.dumps(self.row(workspace={"kind": "worktree",
                                                "reason": "fresh"}))),
             rows=[self.row(workspace={"kind": "main", "reason": "dirty-spine"})])
-        self.assertIn(mark, r["main"], "카드의 자리에 표가 없다")
+        self.assertIn(mark, r["main"], "문서의 자리 칸에 표가 없다")
         self.assertIn(mark, r["wt"])
-        self.assertEqual(r["note"]["mark"], mark,
-                         "카드와 헤더의 표가 다르다 — 둘이 한 가지라는 것을 못 잇는다")
         # 표가 낱말을 밀어내지는 않는다 — 표만으로는 어느 자리인지 못 읽는다
         self.assertIn("본 저장소", r["main"])
 
@@ -331,7 +372,9 @@ class WorkspaceChip(unittest.TestCase):
         self.assertIn("REQ-A", r["a"]["title"])
         self.assertNotIn("REQ-B", r["a"]["title"] + r["a"]["descHtml"])
         # 사유와 푸는 법이 **창 안 문장**으로 있다 (귀띔에만 있으면 못 찾은 사람에게 답이 아니다)
-        self.assertIn("커밋되지 않았다", r["a"]["descHtml"])
+        # 말결은 창의 것이다 — 한 창 안에서 존댓말과 반말이 갈리지 않는다
+        # (REQ-20260830-007).
+        self.assertIn("커밋되지 않았습니다", r["a"]["descHtml"])
         self.assertIn("커밋하면", r["a"]["descHtml"])
         # 그래서 나에게 무슨 뜻인가 — 자리가 다르면 답도 달라야 한다
         self.assertIn("바로 나타납니다", r["a"]["descHtml"])

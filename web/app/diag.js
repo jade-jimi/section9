@@ -234,14 +234,16 @@
     setTimeout(() => clearInterval(t), 12000);
     return;
   }
-  /* ?dlg=wsat — 카드의 자리 칩을 **진짜로 누른다** (REQ-20260829-030 2차 반려).
+  /* ?dlg=wsat — 자리 칩을 **진짜로 누른다** (REQ-20260829-030 2차 반려).
      1차는 손 위의 글에만 설명이 있어 "어디서 확인하는지 모르겠다"는 반려를
      받았다. 그 답으로 칩을 누를 수 있게 했으니, 눌린 화면 자체가 캡처로 남아야
      한다 — 손이 없는 환경에서 누르지 않으면 볼 수 없는 화면은 이 길로만 남는다.
-     `?ws=main/dirty-overlap&dlg=wsat` 처럼 자리를 세워 놓고 쓴다. */
+     칩이 서는 자리는 이제 **문서 화면의 메타 표** 하나다(4차 반려로 카드에서
+     내렸다). 그래서 문서를 하나 열어 놓고 쓴다:
+     `?ws=main/dirty-overlap&dlg=wsat#docs/<id>`. */
   if (m[1] === "wsat"){
     const t = setInterval(() => {
-      const b = document.querySelector(".card [data-wsat]");
+      const b = document.querySelector("[data-wsat]");
       if (!b) return;
       clearInterval(t); b.click();
     }, 400);
@@ -257,12 +259,42 @@
   if (m[1] === "wakewait" || m[1] === "wakespawn"){
     const fx = m[1] === "wakewait"
       ? {ok: false, action: "waiting",
-         message: "REQ-20260829-028-62x6 가 bin/s9 를 잡고 있다 — 차례를 "
-                + "기다린다(30초마다 다시 본다)."}
+         message: "REQ-20260829-028-62x6 가 bin/s9 를 고치는 중입니다 — 차례를 "
+                + "기다립니다. 앞 작업이 끝나면 30초 안에 저절로 시작하니 "
+                + "그대로 두셔도 됩니다."}
       : {ok: true, action: "spawned",
-         message: "REQ-20260829-030-62x6 를 깨웠다 — 무인 작업자가 본 저장소"
-                + "에서 이어받는다. 진행은 카드의 점과 Stream 에서 보인다."};
+         message: "이 요청을 깨웠습니다 — 자동 작업이 이어서 진행합니다. "
+                + "고친 것은 지금 보고 있는 이 화면에 바로 나타납니다. 진행 "
+                + "상황은 Board 탭의 카드와 Stream 탭에서 볼 수 있습니다."};
     setTimeout(() => wakeDlg("REQ-20260829-030-62x6", fx), 900);
+    return;
+  }
+  /* ?dlg=stopask — 세우기의 **묻는 창**을 진짜로 연다 (REQ-20260830-007).
+     `?work=12&dlg=stopask` 로 쓴다: 앞이 `작업 중` 줄과 손잡이를 세우고,
+     여기가 그 손잡이를 누른다. wsat·priolive 가 낸 그 길이다 — 이 창은 도는
+     작업이 있어야만 열리는데 캡처를 찍으려는 그 순간에는 대개 없다.
+     누르는 것은 **묻는 창까지**다: 확인을 대신 누르지 않으므로 `/api/stop`
+     은 나가지 않는다. */
+  if (m[1] === "stopask"){
+    const t = setInterval(() => {
+      const b = document.querySelector("[data-stop]:not([disabled])");
+      if (!b) return;
+      clearInterval(t); b.click();
+    }, 400);
+    setTimeout(() => clearInterval(t), 12000);
+    return;
+  }
+  /* ?dlg=priolive — 순서 손잡이를 **진짜로 누른다** (REQ-20260829-029).
+     이 창은 카드의 등급 낱말을 눌러야만 열리고, 손이 없는 환경에서는 누르지
+     않으면 볼 수 없다. wsat 이 낸 선례 그대로다: 손잡이가 정말 그 창을 여는지
+     (그리고 카드가 대신 열리지 않는지)까지 캡처 한 장에 들어온다. */
+  if (m[1] === "priolive"){
+    const t = setInterval(() => {
+      const b = document.querySelector(".card [data-prioset]");
+      if (!b) return;
+      clearInterval(t); b.click();
+    }, 400);
+    setTimeout(() => clearInterval(t), 12000);
     return;
   }
   /* ?dlg=acctlive — 그림이 아니라 **진짜 창**을 연다. 위 셋은 서버 없이도 판을

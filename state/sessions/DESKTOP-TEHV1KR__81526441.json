@@ -6,8 +6,8 @@
  "ses_doc": "SES-20260829-029-62x6",
  "attach_pid": "68633",
  "entry": "code",
- "ended": "",
- "capture_paused": false,
+ "ended": "1",
+ "capture_paused": true,
  "active_reqs": [],
  "claim_at": {
   "REQ-20260828-041-62x6": "2026-08-29T17:29:23+09:00",
@@ -20,6 +20,9 @@
   "/tmp/claude-1000/-home-sjpark1-section9/81526441-334e-48ad-a828-ceb1a3bfd17c/tasks/a4a2de7b4e68f08e7.output"
  ],
  "cwd": "/home/sjpark1/section9",
- "last_qst": "",
- "last_req": "REQ-20260829-032-62x6"
+ "last_qst": "QST-20260830-001-62x6",
+ "last_req": "REQ-20260829-032-62x6",
+ "pending_qst": [
+  "QST-20260830-001-62x6"
+ ]
 }

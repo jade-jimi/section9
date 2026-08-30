@@ -1,0 +1,226 @@
+<!doctype html>
+<!-- REQ-20260830-003 (부모 REQ-20260829-019) 검증 하니스 (same-origin 보조 페이지):
+     못 받은 그림의 `다시` 단추를 **실제 좌표 클릭**으로 눌러 본다.
+
+     부모 건은 "눌러서 회수되는 것 자체는 미검증"을 남기고 닫혔다 — 이 환경에
+     브라우저 조작 수단이 없다고 봤기 때문이다. 그런데 수단은 있다:
+     서버의 `/[\w.-]+\.html` 길이 web/ 아래 정적 html 을 same-origin 으로 내주고
+     (verify-gempty-click.html 이 이미 그렇게 범례를 눌렀다), 같은 출처면
+     iframe 안의 문서를 그대로 만질 수 있다. 헤드리스 캡처는 클릭을 못 만들지만
+     이 하니스는 만든다.
+
+     ?doc=<문서id>&n=<빗나가게 할 장수> — 기본 REQ-20260827-079-62x6 · 3장.
+     대상 화면은 `/?attfail=n&attdead&attstat#docs/<doc>` 다: 앞 n 장이 끝까지
+     못 오게 해 `다시` 단추가 있는 자리를 세운다. -->
+<html><head><meta charset="utf-8"><title>verify att retry click</title>
+<style>
+ html,body{margin:0;background:#111;color:#eee;font:13px/1.6 ui-monospace,monospace}
+ #out{padding:10px 14px;white-space:pre-wrap;font-size:14px}
+ .ok{color:#55c07a} .bad{color:#e06c5d} .hi{color:#d9b13b} .dim{color:#8b8f96}
+ iframe{border:0;width:1400px;height:900px;background:#000}
+</style>
+</head><body>
+<div id="out">초기화…</div>
+<iframe id="f"></iframe>
+<script>
+const P = new URLSearchParams(location.search);
+const DOC = P.get("doc") || "REQ-20260827-079-62x6";
+const N = +(P.get("n") || 3);
+document.getElementById("f").src =
+  `/?attfail=${N}&attdead&attstat#docs/${DOC}`;
+
+const out = document.getElementById("out");
+const lines = [];
+const say = (s, cls) => { lines.push(cls ? `<span class="${cls}">${s}</span>` : s);
+                          out.innerHTML = lines.join("\n"); };
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const desc = el => {
+  if (!el) return "(null)";
+  return esc(`<${el.tagName.toLowerCase()}`
+    + `${el.className ? " ." + String(el.className).split(" ").join(".") : ""}>`);
+};
+const wait = (fn, ms=15000, what="") => new Promise((res, rej) => {
+  const t0 = Date.now();
+  const t = setInterval(() => {
+    let v = null;
+    try{ v = fn(); }catch(e){}
+    if (v){ clearInterval(t); res(v); }
+    else if (Date.now() - t0 > ms){ clearInterval(t); rej(new Error("timeout: " + what)); }
+  }, 120);
+});
+const sleep = ms => new Promise(s => setTimeout(s, ms));
+
+let verdicts = [];
+const check = (name, pass, detail) => {
+  verdicts.push({name, pass});
+  say(`  ${pass ? "✓" : "✗"} ${esc(name)}${detail ? "  — " + esc(detail) : ""}`,
+      pass ? "ok" : "bad");
+};
+
+const f = document.getElementById("f");
+let loads = 0;
+f.addEventListener("load", () => { loads++; if (loads === 1) run(); });
+
+/* 실제 좌표에 실제 MouseEvent 를 던진다. 대상은 `elementFromPoint` 가 돌려준
+   **맨 위 요소** 다 — 사람의 손가락이 닿는 것이 그것이고, 다른 것이 덮고 있으면
+   여기서 드러난다. */
+function realClick(win, doc, el){
+  const r = el.getBoundingClientRect();
+  const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+  const top = doc.elementFromPoint(cx, cy);
+  const mk = t => new win.MouseEvent(t, {bubbles: true, cancelable: true, view: win,
+                                         clientX: cx, clientY: cy, button: 0});
+  if (top){
+    top.dispatchEvent(mk("mousedown"));
+    top.dispatchEvent(mk("mouseup"));
+    top.dispatchEvent(mk("click"));
+  }
+  return {cx, cy, top};
+}
+
+async function run(){
+  const win = f.contentWindow, doc = f.contentDocument;
+  const errs = [];
+  win.addEventListener("error", e => errs.push(String(e.message)));
+  win.addEventListener("unhandledrejection", e => errs.push("reject: " + e.reason));
+
+  // 클릭이 링크를 열려 했는지 본다. 두 겹이다 — window.open 호출과,
+  // 거품 단계에서 본 defaultPrevented(막혔으면 <a> 는 따라가지 않는다).
+  let opened = 0;
+  const realOpen = win.open;
+  win.open = function(){ opened++; return null; };
+  /* 재는 자리가 중요하다. 화면의 처리기는 문서의 **잡는 단계**에 달려 있고
+     거기서 stopPropagation() 을 건다 — 그래서 거품 단계 청취자는 아예 안 불린다
+     (없는 것을 "안 막았다"로 읽으면 거짓 실패다). 같은 노드의 잡는 단계에
+     하나 더 달면 stopPropagation 은 그것까지 막지 못하므로, 그 자리에서
+     defaultPrevented 를 읽는다. 거품 쪽은 반대로 **안 불리는 것**이 증거다. */
+  let lastClick = null, bubbled = 0;
+  doc.addEventListener("click", e => {
+    lastClick = {prevented: e.defaultPrevented,
+                 target: e.target && e.target.className};
+  }, true);
+  doc.addEventListener("click", () => { bubbled++; }, false);
+  const href0 = win.location.href;
+
+  try{
+    say(`대상  <b>${esc(DOC)}</b> · 앞 ${N}장을 끝내 못 오게 세운 화면 (?attfail=${N}&attdead)`, "hi");
+
+    // 게으른 그림은 화면에 들어와야 부른다 — 부르지 않으면 실패도 없다.
+    const box0 = await wait(() => doc.querySelector(".attbox"), 15000, "첨부 자리");
+    box0.scrollIntoView({block: "center"});
+
+    const misses = await wait(() => {
+      const m = [...doc.querySelectorAll(".attmiss:not([hidden]):not(.wait)")]
+        .filter(x => x.querySelector("[data-attretry]"));
+      return m.length >= N ? m : null;
+    }, 20000, "못 받은 자리 " + N + "개");
+    const box = misses[0].closest(".attbox");
+    const img = box.querySelector("img.attimg");
+    const link = box.querySelector(".attlink");
+    const btn = misses[0].querySelector("[data-attretry]");
+
+    say(`\n[전]  못 받은 자리 ${misses.length}개 · 배너 “${esc((doc.getElementById("attstat")||{}).textContent || "")}”`);
+    say(`[전]  첫 자리: ${esc(misses[0].querySelector(".attf").textContent)}`, "dim");
+    say(`[전]  그림 naturalWidth=${img.naturalWidth} · 시도=${img.dataset.atttry} · 링크 hidden=${link.hidden}`, "dim");
+
+    say(`\n① 단추가 링크 밖에 있고, 눌리는 자리에 있는가`);
+    check("단추의 조상에 <a> 가 없다", btn.closest("a") === null,
+          "가장 가까운 a = " + desc(btn.closest("a")));
+    const r = btn.getBoundingClientRect();
+    const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+    const top = doc.elementFromPoint(cx, cy);
+    check("좌표 hit-test 의 맨 위 요소가 그 단추다",
+          top === btn || btn.contains(top),
+          `(${cx},${cy}) → ${desc(top)}`);
+
+    say(`\n② 실제 좌표 클릭 — 링크가 열리지 않고 다시 받기 시작하는가`);
+    const hit = realClick(win, doc, btn);
+    check("클릭이 단추에 닿았다", hit.top === btn || btn.contains(hit.top),
+          desc(hit.top));
+    check("클릭이 막혔다(preventDefault) — <a> 를 따라가지 않는다",
+          !!(lastClick && lastClick.prevented));
+    check("이벤트가 위로 새지 않았다(stopPropagation)", bubbled === 0,
+          `거품 단계 ${bubbled}회`);
+    check("새 창을 열지 않았다", opened === 0, `window.open ${opened}회`);
+
+    const waiting = await wait(() => {
+      const w = box.querySelector(".attmiss.wait:not([hidden])");
+      return w && /다시 받는 중/.test(w.textContent) ? w : null;
+    }, 8000, "받는 중 자리");
+    check("자리가 “다시 받는 중”으로 바뀌었다", true,
+          waiting.textContent.replace(/\s+/g, " ").trim());
+    check("새 요청이 나갔다(재시도 주소로 갈렸다)", /[?&]r=u\d/.test(img.src),
+          img.src.replace(/^.*\/api/, "/api"));
+    check("화면이 뒤집히지 않았다(같은 주소·같은 문서)",
+          win.location.href === href0 && loads === 1);
+
+    // 이 조건(attdead)에서는 다시 걸어도 계속 빗나간다 — 자리로 되돌아온다.
+    await wait(() => box.querySelector(".attmiss:not([hidden]):not(.wait)"),
+               15000, "다시 못 받은 자리");
+    say(`  (이 화면은 끝내 안 오게 세운 것이라 그 시도도 빗나가 자리로 돌아온다)`, "dim");
+
+    say(`\n③ 밀리던 것이 풀린 뒤 그 단추를 누르면 그림이 돌아오는가`);
+    // 일부러 빗나가게 하던 표식을 걷는다 = "이번엔 연결이 안 잘렸다".
+    // 클릭 경로 자체는 손대지 않는다 — 누르는 것은 여전히 사람의 클릭이다.
+    let healed = 0;
+    misses.forEach(m => {
+      const i = m.closest(".attbox").querySelector("img.attimg");
+      if (i && i.dataset.attbad){ i.removeAttribute("data-attbad"); healed++; }
+    });
+    say(`  빗나가게 하던 표식을 ${healed}장에서 걷었다 (연결이 살아난 상황)`, "dim");
+
+    let clicked = 0;
+    for (const m of misses){
+      const b2 = await wait(() => {
+        const mm = m.closest(".attbox").querySelector(".attmiss:not([hidden]):not(.wait)");
+        return mm && mm.querySelector("[data-attretry]");
+      }, 15000, "다시 단추");
+      b2.scrollIntoView({block: "center"});
+      realClick(win, doc, b2);
+      clicked++;
+    }
+    check(`${N}개의 단추를 실제 클릭으로 눌렀다`, clicked === N);
+
+    const back = await wait(() => {
+      const okAll = misses.every(m => {
+        const bx = m.closest(".attbox");
+        const i = bx.querySelector("img.attimg");
+        const mm = bx.querySelector(".attmiss");
+        return i.complete && i.naturalWidth > 0 && mm.hidden
+               && !bx.querySelector(".attlink").hidden;
+      });
+      return okAll ? true : null;
+    }, 20000, "그림 회수").catch(() => false);
+    check("눌러서 그림이 실제로 돌아왔다(naturalWidth>0 · 자리는 걷혔다)", back === true,
+          misses.map(m => {
+            const i = m.closest(".attbox").querySelector("img.attimg");
+            return i.naturalWidth + "px";
+          }).join(" · "));
+
+    await sleep(600);
+    const banner = (doc.getElementById("attstat") || {}).textContent || "";
+    check("배너의 못 받음이 0이다", /못 받음 0\b/.test(banner), banner);
+    // 보이는데 못 그린 그림 = 브라우저의 깨진 아이콘. 자리로 걷힌 것은 아니다.
+    const broken = [...doc.querySelectorAll("img.attimg")]
+      .filter(i => !i.closest(".attbox").querySelector(".attlink").hidden
+                   && i.complete && i.naturalWidth === 0).length;
+    check("브라우저의 깨진 아이콘이 남지 않았다", broken === 0, broken + "개");
+
+    check("JS 오류 0건", errs.length === 0, errs.join(" | "));
+
+    const bad = verdicts.filter(v => !v.pass);
+    say(`\n>>> ${bad.length ? "실패 " + bad.length + "건: " + esc(bad.map(v => v.name).join(", "))
+                            : "전부 통과 — 다시 단추는 눌리고, 눌러서 그림이 돌아온다"}`,
+        bad.length ? "bad" : "ok");
+    box0.scrollIntoView({block: "center"});
+  }catch(e){
+    say("\n하니스 실패: " + esc(e && e.message) + "\n" + esc(e && e.stack), "bad");
+  }finally{
+    win.open = realOpen;
+    /* iframe 안에서 부른 scrollIntoView 는 같은 출처라 **바깥 문서까지** 굴린다 —
+       그대로 두면 보고가 화면 위로 밀려나 캡처에 안 잡힌다. 되돌려 놓는다. */
+    window.scrollTo(0, 0);
+  }
+}
+</script>
+</body></html>

@@ -6,7 +6,7 @@ role: admin
 emails: ["claude01.pfe@example.invalid"]
 github: nicehugepark
 os_accounts: ["sjpark1"]
-machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-30T00:36:27+09:00"}]
+machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-30T13:36:06+09:00"}]
 ---
 
 ## Notes
@@ -126,3 +126,5 @@ machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpar
 - 2026-08-29T23:03:39+09:00 config pref_말투=서술어를 뭐뭐 했습니당 같은 말투로 바꿔 (by nicehugepark via dashboard)
 - 2026-08-29T23:04:19+09:00 config pref_말투=칭찬, 아부성 발언 절대금지, 존댓말 사용, 서술어를 뭐뭐 했습니당 (by nicehugepark via dashboard)
 - 2026-08-29T23:08:13+09:00 config pref_말투=칭찬, 아부성 발언 절대금지, 존댓말 사용 (by nicehugepark via dashboard)
+- 2026-08-30T13:36:02+09:00 config auto_resume_model=fable (by dashboard model change)
+- 2026-08-30T13:36:02+09:00 config s9code_args=--permission-mode auto --model fable (by dashboard model change)

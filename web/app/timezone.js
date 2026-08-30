@@ -279,7 +279,7 @@ function tzOpen(){
     pop.id = "tz-pop"; pop.className = "tzpop"; pop.setAttribute("role", "listbox");
     pop.addEventListener("mousedown", e => e.preventDefault());  // 눌러도 포커스 유지
     pop.addEventListener("click", e => {
-      const row = e.target.closest(".tzrow");
+      const row = evEl(e.target)?.closest(".tzrow");
       if (row) tzPick(+row.dataset.i);
     });
     document.body.appendChild(pop);

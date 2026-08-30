@@ -4,13 +4,11 @@
  "user": "",
  "history": [],
  "ses_doc": "SES-20260829-035-62x6",
- "attach_pid": "675381",
+ "attach_pid": "1645825",
  "entry": "code",
- "ended": "1",
+ "ended": "",
  "worker": "1",
- "active_reqs": [
-  "REQ-20260829-025-62x6"
- ],
+ "active_reqs": [],
  "claim_at": {
   "REQ-20260829-025-62x6": "2026-08-29T22:36:42+09:00"
  },

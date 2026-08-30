@@ -68,6 +68,19 @@
 .rvpt.work{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rvpt.work .rvcap{color:var(--c-inprogress)}
 .acts.stoprow{margin-top:5px}
+/* 사람이 중단해 둔 한 줄 (REQ-20260829-024 라운드4). 여기도 새 층은 없다 —
+   같은 `.rvpt` 한 줄 문법이고, 손잡이는 멈춘 카드의 것과 **같은** `.deed.wake`
+   라 잉크도 손맛도 그대로다.
+
+   **잉크를 갈라 쓰지 않는다** (designer 판정). 처음엔 "사람이 한 일"이라 상태
+   잉크에서 내려 볼까 했는데, 셋은 한 카드에 함께 서지 않는다 — 서버가 도는
+   작업이 있으면 멈춤을 안 싣고, 이 줄은 도는 작업이 있으면 서지 않으며,
+   중단해 둔 카드에서는 이 줄이 멈춤 줄을 이긴다. 나란히 서지 않는 둘에 색
+   대비를 주는 것은 없는 문제를 푸는 대신 색 하나를 더 배우게 하는 일이고,
+   같은 사실을 점(--c-inprogress 사각)과 글자가 두 색으로 말하게 된다.
+   구분은 색보다 강한 것이 이미 한다: 캡션 낱말 · 버튼 낱말 · 점 모양. */
+.rvpt.held{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rvpt.held .rvcap{color:var(--c-inprogress)}
 /* 세우는 중에는 눌리지 않는다 — 깨우기와 같은 규칙, 같은 잉크. */
 .acts button.stop[disabled]{cursor:default;color:var(--muted);
   border-color:var(--hairline);background:var(--panel)}

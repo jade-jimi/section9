@@ -1,0 +1,158 @@
+<!doctype html>
+<!-- REQ-20260830-010 검증 하니스 (same-origin 보조 페이지, DOC-20260830-001):
+     **글자를 끌면 조각이 죽던 그 자리**를 실제로 재현해 본다.
+
+     제보: `app/events.js:5 — TypeError: e.target.closest is not a function`.
+     판 위의 글자를 끌면 dragstart 의 target 이 텍스트 노드이고, 텍스트 노드에는
+     `closest` 가 없다. 그 예외 하나가 events.js 를 죽이면 판의 버튼이 전부 멎는다.
+
+     그래서 재는 것은 두 가지다 —
+       ① 텍스트 노드에서 이벤트를 던졌을 때 화면이 예외를 던지지 않는가
+       ② 그러고도 **버튼이 여전히 살아 있는가** (죽은 조각의 증상은 예외가
+          아니라 '아무 일도 안 일어남'이다).
+     ②를 위해 던지기 전후로 같은 단추를 눌러 반응을 견준다. -->
+<html><head><meta charset="utf-8"><title>verify evEl drag</title>
+<style>
+ html,body{margin:0;background:#111;color:#eee;font:13px/1.6 ui-monospace,monospace}
+ #out{padding:10px 14px;white-space:pre-wrap;font-size:14px}
+ .ok{color:#55c07a} .bad{color:#e06c5d} .hi{color:#d9b13b} .dim{color:#8b8f96}
+ iframe{border:0;width:1400px;height:820px;background:#000}
+</style>
+</head><body>
+<div id="out">초기화…</div>
+<iframe id="f" src="/?nosse"></iframe>
+<script>
+const out = document.getElementById("out");
+const lines = [];
+const say = (s, cls) => { lines.push(cls ? `<span class="${cls}">${s}</span>` : s);
+                          out.innerHTML = lines.join("\n"); };
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const desc = el => el ? esc(`<${el.tagName.toLowerCase()}`
+  + `${el.className ? " ." + String(el.className).trim().split(/\s+/).join(".") : ""}>`)
+  : "(null)";
+const wait = (fn, ms=20000, what="") => new Promise((res, rej) => {
+  const t0 = Date.now();
+  const t = setInterval(() => {
+    let v = null;
+    try{ v = fn(); }catch(e){}
+    if (v){ clearInterval(t); res(v); }
+    else if (Date.now() - t0 > ms){ clearInterval(t); rej(new Error("timeout: " + what)); }
+  }, 120);
+});
+const sleep = ms => new Promise(s => setTimeout(s, ms));
+
+let verdicts = [];
+const check = (name, pass, detail) => {
+  verdicts.push({name, pass});
+  say(`  ${pass ? "✓" : "✗"} ${esc(name)}${detail ? "  — " + esc(detail) : ""}`,
+      pass ? "ok" : "bad");
+};
+
+/* 첫 텍스트 노드 하나 — 사람이 끌어 잡는 것이 바로 이것이다. */
+function firstText(root){
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: n => n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT
+                                        : NodeFilter.FILTER_REJECT});
+  return w.nextNode();
+}
+
+const f = document.getElementById("f");
+let loads = 0;
+f.addEventListener("load", () => { loads++; if (loads === 1) run(); });
+
+async function run(){
+  const win = f.contentWindow, doc = f.contentDocument;
+  const errs = [];
+  win.addEventListener("error", e => errs.push(String(e.message)));
+  win.addEventListener("unhandledrejection", e => errs.push("reject: " + e.reason));
+
+  try{
+    say("대상  판(Board) — 카드 위의 글자를 끌었을 때", "hi");
+
+    const card = await wait(() => doc.querySelector('.card[draggable="true"]'),
+                            20000, "끌 수 있는 카드");
+    card.scrollIntoView({block: "center"});
+    await sleep(150);
+
+    const txt = firstText(card);
+    say(`\n[재료] 카드 ${desc(card)} 안의 글자 노드 — “${esc((txt.nodeValue||"").trim().slice(0,40))}”`, "dim");
+    check("끌리는 것이 요소가 아니라 텍스트 노드다",
+          txt && txt.nodeType === 3, "nodeType=" + (txt && txt.nodeType));
+    check("그 노드에는 closest 가 없다 (제보의 그 조건)",
+          typeof txt.closest !== "function");
+
+    /* ① 예외가 나는가. 텍스트 노드도 EventTarget 이므로 그대로 던질 수 있고,
+       document 에 달린 처리기는 사람이 끌 때와 똑같이 이 target 을 받는다. */
+    say(`\n① 글자를 끌어 본다 — dragstart · dragover · drop · click`);
+    const before = errs.length;
+    const dt = new win.DataTransfer();
+    for (const type of ["dragstart", "dragover", "drop"]){
+      txt.dispatchEvent(new win.DragEvent(type, {bubbles: true, cancelable: true,
+                                                 view: win, dataTransfer: dt}));
+    }
+    txt.dispatchEvent(new win.MouseEvent("click", {bubbles: true, cancelable: true,
+                                                   view: win, button: 0}));
+    await sleep(200);
+    const raised = errs.slice(before);
+    check("예외가 하나도 안 났다", raised.length === 0,
+          raised.join(" / ") || "조용하다");
+    check("‘closest is not a function’ 이 없다",
+          !raised.some(m => /closest is not a function/.test(m)));
+
+    /* ② 조각이 살아 있는가. 죽은 조각의 증상은 예외가 아니라 침묵이다 —
+       events.js 가 죽으면 판의 탭조차 안 바뀐다. 그래서 실제로 눌러 본다. */
+    say(`\n② 조각이 살아 있는가 — 탭을 눌러 화면이 바뀌는지 본다`);
+    const tabBtn = await wait(() => doc.querySelector('[data-tab="graph"]'),
+                              10000, "Graph 탭");
+    const was = win.location.hash;
+    const r = tabBtn.getBoundingClientRect();
+    const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+    const top = doc.elementFromPoint(cx, cy);
+    const mk = t => new win.MouseEvent(t, {bubbles: true, cancelable: true, view: win,
+                                           clientX: cx, clientY: cy, button: 0});
+    if (top){ top.dispatchEvent(mk("mousedown")); top.dispatchEvent(mk("mouseup"));
+              top.dispatchEvent(mk("click")); }
+    await sleep(600);
+    check("클릭이 탭에 닿았다", top === tabBtn || tabBtn.contains(top), desc(top));
+    // 탭 전환의 증거는 해시가 아니라 **화면**이다 — 라우팅은 pushState 라
+    // 해시만 보면 놓친다. 눌린 탭에 active 가 붙는 것이 events.js 가 그
+    // 처리기를 끝까지 돌았다는 뜻이다.
+    check("눌린 탭이 실제로 켜졌다 — events.js 가 살아 있다",
+          tabBtn.classList.contains("active"),
+          `class="${esc(tabBtn.className)}" · hash ${esc(was || "(빈)")} → `
+          + esc(win.location.hash || "(빈)"));
+
+    /* ③ 문이 하나인가. 조각마다 자기 방어를 두면 조각 수만큼 구멍이 남는다. */
+    say(`\n③ 대상을 요소로 바꾸는 문이 하나인가`);
+    check("evEl 이 화면에 서 있다", typeof win.evEl === "function");
+    check("텍스트 노드는 감싼 요소로 올라간다",
+          win.evEl(txt) === card || card.contains(win.evEl(txt)),
+          desc(win.evEl(txt)));
+    check("요소는 그대로 돌려준다", win.evEl(card) === card);
+    check("문서·null 은 null 이다",
+          win.evEl(doc) === null && win.evEl(null) === null);
+
+    /* ④ 이 화면이 어떻게 실려 왔고, 죽은 조각이 있는가 — 위의 판정이
+       엇갈릴 때 어디를 봐야 하는지가 여기 있다. */
+    say(`\n④ 이 화면의 사정`);
+    const bundle = win.__S9_BUNDLE;
+    say(`   실려 온 방식: ${bundle ? "이어 붙인 한 장 (" + bundle.length + "조각)"
+                                  : "조각 낱장"}`, "dim");
+    say(`   typeof $ = ${typeof win.$} · typeof evEl = ${typeof win.evEl}`
+        + ` · typeof sizeDocs = ${typeof win.sizeDocs}`, "dim");
+    const oops = doc.getElementById("s9-oops") || doc.querySelector(".s9oops");
+    say(`   지킴이가 알린 죽은 조각: `
+        + esc(oops ? oops.textContent.replace(/\s+/g, " ").slice(0, 200) : "없음"),
+        oops ? "bad" : "dim");
+    if (errs.length) say(`   이 화면이 낸 오류 전부: ${esc(errs.join(" / "))}`, "bad");
+
+    const bad = verdicts.filter(v => !v.pass);
+    say(`\n판정: ${bad.length ? "✗ " + bad.length + "건 실패" : "✓ 전부 통과"} `
+        + `(${verdicts.length}건)`, bad.length ? "bad" : "ok");
+  }catch(e){
+    say(`\n하니스 자체가 멈췄다: ${esc(e && e.message || e)}`, "bad");
+  }
+  window.scrollTo(0, 0);          // iframe 안 scrollIntoView 가 바깥까지 굴린다
+}
+</script>
+</body></html>

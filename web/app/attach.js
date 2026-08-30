@@ -82,7 +82,7 @@ document.addEventListener("load", e => {
   attStat();
 }, true);
 document.addEventListener("click", e => {
-  const b = e.target.closest && e.target.closest("[data-attretry]");
+  const b = evEl(e.target)?.closest("[data-attretry]");
   if (!b) return;
   e.preventDefault(); e.stopPropagation();
   const box = b.closest(".attbox"), img = box && box.querySelector(".attimg");

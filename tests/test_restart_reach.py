@@ -141,7 +141,9 @@ class RestartReach(unittest.TestCase):
         tell = self._code("restartTell")
         self.assertIn("restartBusy", tell, "일하는 중인 것을 알아보지 못한다")
         self.assertRegex(tell, r'kind: "confirm"', "묻지 않고 넘어간다")
-        self.assertIn("멈추고 바꾸기", tell, "무엇을 하는 버튼인지 이름이 없다")
+        # 「멈추기」는 이제 **상태**의 낱말이라 행동에서 뺐다 (REQ-20260829-024
+        # 라운드4 반려). 계약은 그대로다 — 버튼이 무엇을 하는지 이름이 말한다.
+        self.assertIn("중단하고 바꾸기", tell, "무엇을 하는 버튼인지 이름이 없다")
         self.assertRegex(tell, r'cancel: "그대로 두기"', "안 멈출 길이 없다")
         # 되돌릴 수 있다는 사실을 말한다 — 대화가 끊기는 줄 알면 아무도 못 누른다
         self.assertIn("대화는 그대로 이어지므로", tell)

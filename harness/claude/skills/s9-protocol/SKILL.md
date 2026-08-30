@@ -7,6 +7,11 @@ description: section9 외부기억 작업 규약. 어떤 역할이든 작업 기
 
 전체 규약 원문: `~/section9/harness/common/PROTOCOL.md` 를 Read하라. 핵심 요약:
 
+- **핵심 가치관 넷** (조항이 부딪히면 여기로 돌아와 판정): ① 본질 파악과 이해 —
+  짐작이 아니라 확인한 사실로 ② 근원 해결 — 증상 덮기·우회·옆문 금지 ③ 재발 방지 —
+  회귀 시험·단일 게이트·실사고 문서화 ④ 지속 개선 — 드러난 마찰은 문서로 남겨
+  다음 라운드를 낫게.
+
 - 외부기억 = `~/section9`, CLI = `~/section9/bin/s9`. 컨텍스트가 아니라 문서만 영속한다.
 - 상황 파악: `s9 digest` → `s9 ls --status/--user` → `s9 show <id> [--meta]` → `s9 search <kw> --body`. 넓은 것부터 좁혀 토큰을 아껴라.
 - 작업 기록: 진행/결정은 `s9 note <REQ-id> "..." --label <역할명>`, 상태는 `s9 status <id> <to> --note`, 재사용 지식은 `s9 new knowledge`.

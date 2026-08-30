@@ -38,6 +38,38 @@
     return m ? m[1] : (url || "(어디인지 모름)");
   }
 
+  /* 묶음이 말하는 줄을 **조각의 줄**로 되돌린다 (REQ-20260829-039).
+
+     조각 마흔둘이 `/app/all.js` 한 장으로 묶이면서 콘솔이 말하는 자리가
+     "app/ccrender.js:41" 에서 "app/all.js:1834" 가 됐다 — 사람이 열 파일이
+     없어진 것이다. 껍데기의 되돌리기(낱개로 다시 걸기)는 묶음이 **한 줄도 못
+     돌았을 때만** 발동하므로, 일부가 돌다 죽은 경우에 이름을 되찾아 줄 사람은
+     이 조각뿐이다.
+
+     서버가 묶음 맨 앞에 표를 낸다 — `window.__S9_BUNDLE` = [[조각, 이 파일에서의
+     시작 줄], …] (bin/s9 `web_bundle`). 시작 줄은 그 조각의 이름 주석 줄이므로
+     조각 안에서의 줄은 `줄 - 시작` 이다.
+
+     되돌리지 않는 자리가 셋이다: 표가 없거나 망가졌을 때(옛 서버가 내준 묶음일
+     수 있다) · 줄 번호가 없을 때(자원이 통째로 안 온 것이라 조각 탓이 아니다) ·
+     표의 첫 조각보다 앞일 때(머리말과 표 자신의 자리다). 셋 다 **지어내는 것보다
+     모른다고 하는 편이 낫다** — 없는 조각을 지목하면 다음 사람이 엉뚱한 파일을
+     연다. 계약은 tests/test_bundle_lineno.py 에. */
+  function remap(file, line){
+    var T = window.__S9_BUNDLE;
+    if (!line || !/^\/?(?:app|css)\/all\.(?:js|css)$/.test(String(file))
+        || Object.prototype.toString.call(T) !== "[object Array]")
+      return {file: file, line: line};
+    var hit = null;
+    for (var i = 0; i < T.length; i++){
+      var e = T[i];
+      if (!e || typeof e[1] !== "number" || e[1] > line) continue;
+      if (!hit || e[1] > hit[1]) hit = e;
+    }
+    if (!hit || typeof hit[0] !== "string") return {file: file, line: line};
+    return {file: hit[0], line: line - hit[1]};
+  }
+
   /* 모양 조각은 오류를 **듣는 것만으로는** 못 잡는다: `<link>` 는 `<head>` 에 있어
      이 조각이 서기 전에 이미 실패가 지나간다. 그래서 시점에 기대지 않고 결과를
      본다. 문서 화면이 `css/docs.css` 없이 서면 사람 눈엔 그것도 "문서가 깨진"
@@ -81,7 +113,8 @@
       return;
     }
     if (!ours(e.filename)) return;
-    push(base(e.filename), e.lineno || 0,
+    var w = remap(base(e.filename), e.lineno || 0);
+    push(w.file, w.line,
          String((e.error && e.error.name ? e.error.name + ": " : "") + (e.message || "오류")));
   }, true);                                      // 캡처 단계 — 자원 오류는 버블하지 않는다
 

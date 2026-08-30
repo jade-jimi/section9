@@ -50,7 +50,7 @@ class GotoDispatch(unittest.TestCase):
     def test_tab_branch_only_takes_tab_names(self):
         """탭 점프 분기는 여전히 살아 있고, 전이 값은 넘보지 않는다."""
         self.assertIn('data-goto="graph"', self.src)
-        m = re.search(r'const go = e\.target\.closest\("\[data-goto\]"\);\s*'
+        m = re.search(r'const go = evEl\(e\.target\)\?\.closest\("\[data-goto\]"\);\s*'
                       r'if \((.+?)\)\{', self.src, re.S)
         self.assertIsNotNone(m, "탭 분기를 찾지 못했다")
         self.assertIn('includes("|")', m.group(1),
@@ -67,7 +67,7 @@ class GotoDispatch(unittest.TestCase):
         `judgeAct` 한 곳이고 디스패처는 **어디서 왔는지(from)를 넘길** 뿐이다.
         계약도 그 자리로 옮긴다 — 지우지 않는다.
         """
-        m = re.search(r'const gt = e\.target\.closest\("\[data-trans\]"\).*?'
+        m = re.search(r'const gt = evEl\(e\.target\)\?\.closest\("\[data-trans\]"\).*?'
                       r'\n\s*\}', self.src, re.S)
         self.assertIsNotNone(m)
         blk = m.group(0)

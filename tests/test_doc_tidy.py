@@ -216,6 +216,60 @@ class DocTidyTest(unittest.TestCase):
         self.assertIn('"/api/docs/tidy"', src)
         self.assertIn('"/api/trash"', src)
 
+    # --------------------------------------------------------------- S10
+    def test_s10_screen_handles_and_load_order(self):
+        """화면 — 손잡이가 다 있고, **스킨·밀도 뒤에** 실린다.
+
+        고르기 눈금은 줄 안쪽에 절대 배치로 서고 그 자리는 `.doclist.picking
+        .row{padding-left}` 가 낸다. 그런데 스킨(calm)과 밀도(compact)가 같은
+        무게로 `.doclist .row{padding}` 을 다시 쓴다 — 순서가 앞서면 눈금이
+        문서 번호 위에 겹쳐 앉는다(실측: `REQ-…` 의 첫 글자가 먹혔다).
+        무게로는 못 이기고 순서로 이기는 자리라, 순서를 시험이 잡아 둔다.
+        """
+        import webasset
+        css, app = webasset.parts()
+        self.assertIn("tidy.css", css)
+        self.assertIn("tidy.js", app)
+        for earlier in ("docs.css", "skins.css", "density.css", "calm.css"):
+            self.assertLess(css.index(earlier), css.index("tidy.css"),
+                            f"{earlier} 뒤에 실려야 눈금 자리가 살아남는다")
+
+        src = webasset.source()
+        self.assertIn(".doclist.picking .row{padding-left:", src)
+        # 목록(고르기·묶음 처리) · 문서 한 장 · 치운 것 판 — 세 자리의 손잡이
+        for handle in ("pick", "open", "tick", "all", "none",
+                       "archive", "rm", "arch1", "unarch1", "rm1",
+                       "back", "purge", "purgeall", "tab", "close"):
+            self.assertIn(f'"{handle}"', src, f"손잡이 {handle} 이 없다")
+
+    # --------------------------------------------------------------- S11
+    def test_s11_the_handler_never_trusts_the_target(self):
+        """손잡이가 화면을 죽이지 않는다 (REQ-20260830-006 실사고).
+
+        `TypeError: e.target.closest is not a function` — 이 조각의 클릭
+        리스너는 **문서 전체**를 캡처 단계에서 듣는다. 그러니 Element 가 아닌
+        대상도 온다. 종전에는 첫 줄만 `e.target.closest &&` 로 지키고, 판을
+        닫는 둘째 줄은 안 지켰다. 하필 그 줄은 판이 떠 있을 때만 도는 줄이라
+        평소에는 한 번도 안 밟혔고, 사용자가 휴지통을 열어 둔 채 클릭한 순간
+        조각 하나가 통째로 죽었다.
+
+        그래서 계약은 "지켰나"가 아니라 **"두 번 묻지 않는다"** 로 잡는다 —
+        지키는 자리가 둘이면 언젠가 한쪽만 지켜진다.
+        """
+        import webasset
+        js = open(os.path.join(os.path.dirname(webasset.WEB), "web", "app",
+                               "tidy.js"), encoding="utf-8").read()
+        self.assertEqual(js.count(".closest("), 1,
+                         "조상을 거슬러 찾는 자리가 둘 이상이다 — "
+                         "둘이면 언젠가 한쪽만 지켜진다")
+        self.assertIn("evEl(e.target)", js,
+                      "눌린 자리를 공용 문(evEl)으로 거르지 않는다 — "
+                      "조각마다 자기 방어를 두면 조각 수만큼 구멍이 남는다 "
+                      "(REQ-20260830-010 에서 events.js 가 같은 오류로 죽었다)")
+        self.assertIn('near("[data-tidy]")', js, "손잡이를 near 로 찾지 않는다")
+        self.assertIn('near(".tidypanel,.dlgbox")', js,
+                      "판 밖 판정을 near 로 하지 않는다")
+
 
 if __name__ == "__main__":
     unittest.main()

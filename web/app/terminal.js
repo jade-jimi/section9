@@ -763,15 +763,15 @@ function termStripBind(T){
   const st = document.querySelector("#cc-root .ccstatus");
   if (st) st.addEventListener("click", ev => {
     if (TERM !== T) return;
-    const tb = ev.target.closest("[data-target]");
+    const tb = evEl(ev.target)?.closest("[data-target]");
     if (tb){ ev.stopPropagation(); termTargetSet(T, tb.dataset.target); return; }
-    const row = ev.target.closest(".ccagrow");
+    const row = evEl(ev.target)?.closest(".ccagrow");
     if (row){ termAgentOpen(T, row.dataset.agent); return; }
-    if (ev.target.closest(".ccmain")) termAgentClose(T);
+    if (evEl(ev.target)?.closest(".ccmain")) termAgentClose(T);
   });
   const tgt = $("#cc-target");
   if (tgt) tgt.addEventListener("click", ev => {
-    if (TERM !== T || !ev.target.closest("#termTargetClear")) return;
+    if (TERM !== T || !evEl(ev.target)?.closest("#termTargetClear")) return;
     // 푸는 것은 한 동작이다 — 지금 서 있는 것이 무엇이든 이 버튼 하나가 푼다
     if (T.target) termTargetClear(T);
     else if (docTarget) docClear();

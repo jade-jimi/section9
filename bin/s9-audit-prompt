@@ -91,9 +91,60 @@ FRAGMENT_MAX = 20  # 이하 길이 + 명령형/질문 표지 없음 → 파편(R
 # (REQ-20260829-037).
 def _proc_backend():
     forced = (os.environ.get("S9_PROC_BACKEND") or "").strip()
-    if forced in ("proc", "ps", "none"):
+    if forced in ("proc", "ps", "win", "none"):
         return forced
-    return "proc" if os.path.isdir("/proc/self") else "ps"
+    if os.path.isdir("/proc/self"):
+        return "proc"
+    return "win" if os.name == "nt" else "ps"
+
+
+# 윈도우 갈래 — `/proc` 도 `ps` 도 없는 자리에서 프로세스 목록을 주는 것은
+# PowerShell 의 CIM 조회다 (s9._win_table 의 로컬 복제). 훅은 프롬프트마다
+# 도는 데다 조상 체인을 열 걸음 올라가므로, **이 프로세스 안에서 한 번만**
+# 묻고 캐시한다 — 매번 물으면 열 번 프로세스를 띄운다.
+_WIN_ROWS = {}          # {pid: (실행 파일 이름, 부모 pid, 명령줄)}
+_WIN_READ = [False]
+WIN_PS_SCRIPT = ("Get-CimInstance Win32_Process | ForEach-Object { "
+                 "$c = $_.CommandLine; if (-not $c) { $c = $_.Name }; "
+                 "[string]$_.ProcessId + ' ' + [string]$_.ParentProcessId "
+                 "+ ' ' + $c }")
+
+
+def _win_head(cmd):
+    head = (cmd or "").strip()
+    if not head:
+        return ""
+    if head.startswith('"'):
+        head = head[1:].split('"', 1)[0]
+    else:
+        head = head.split(" ", 1)[0]
+    return os.path.basename(head.replace("\\", "/"))
+
+
+def _win_rows():
+    """이름을 먼저 찾아보지 않고 **불러 본다**. `shutil` 을 들이지 않으려는
+    것이기도 하고(세션 훅은 자기 복사 구현을 되찾지 않기로 한 파일이다),
+    있는지 묻는 것보다 되는지 보는 편이 짧기도 하다 — PATH 에 있어도 실행
+    정책에 막히면 어차피 빈손이다."""
+    if _WIN_READ[0]:
+        return _WIN_ROWS
+    _WIN_READ[0] = True
+    out = ""
+    for exe in ("powershell", "pwsh"):
+        try:
+            out = subprocess.run([exe, "-NoProfile", "-NonInteractive",
+                                  "-Command", WIN_PS_SCRIPT],
+                                 capture_output=True, text=True,
+                                 timeout=25).stdout or ""
+        except Exception:
+            continue
+        if out.strip():
+            break
+    for ln in out.splitlines():
+        c = ln.strip().split(None, 2)
+        if len(c) == 3 and c[0].isdigit() and c[1].isdigit():
+            _WIN_ROWS[int(c[0])] = (_win_head(c[2]), int(c[1]), c[2].strip())
+    return _WIN_ROWS
 
 
 def _proc_info(pid):
@@ -111,6 +162,9 @@ def _proc_info(pid):
             return "", 0
     if _proc_backend() == "none":
         return "", 0
+    if _proc_backend() == "win":
+        r = _win_rows().get(int(pid))
+        return (r[0], r[1]) if r else ("", 0)
     try:
         out = subprocess.run(["ps", "-o", "ppid=,comm=", "-p", str(pid)],
                              capture_output=True, text=True, timeout=5).stdout
@@ -128,6 +182,14 @@ def _proc_info(pid):
 CLAUDE_COMMS = ("claude", "node", "bun", "deno")
 
 
+def _exe_name(comm):
+    """`node.exe` → `node` — s9.exe_name 의 로컬 복제. 이름을 그대로 견주면
+    윈도우에서 조상 체인이 중간 셸에서 멈추고, 그 셸의 pid 가 `attach_pid`
+    로 적힌다 (맥에서 났던 그 사고와 같은 모양)."""
+    c = (comm or "").strip()
+    return c[:-4] if c.lower().endswith(".exe") else c
+
+
 def _claude_pid():
     """이 훅을 실행한 claude 프로세스 pid — getppid는 소멸성 중간 셸일 수 있어
     (REQ-20260824-065: 신생 유휴 세션이 attach 죽음+활동 0으로 미검출)
@@ -142,7 +204,7 @@ def _claude_pid():
         if pid <= 1:
             break
         comm, ppid = _proc_info(pid)
-        if comm in CLAUDE_COMMS:
+        if _exe_name(comm) in CLAUDE_COMMS:
             return pid
         if not ppid:
             break
@@ -198,6 +260,8 @@ def _cmdlines():
             except OSError:
                 continue
         return out
+    if how == "win":
+        return [c for _, _, c in _win_rows().values()]
     try:
         r = subprocess.run(["ps", "-A", "-ww", "-o", "command="],
                            capture_output=True, text=True, timeout=10)

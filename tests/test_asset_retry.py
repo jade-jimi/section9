@@ -157,5 +157,75 @@ class TheRetry(unittest.TestCase):
                             "재 보고 두지 않기로 한 큐가 들어왔다")
 
 
+class ThePress(unittest.TestCase):
+    """눌러서 되찾는다 (REQ-20260830-003 · 부모 REQ-20260829-019).
+
+    부모 건은 미검증 하나를 남기고 닫혔다 — "`다시` 를 실제 클릭으로 눌러 보지
+    못했다(이 환경에 브라우저 조작 수단 없음)". **수단은 있었다**: 서버의
+    `/[\\w.-]+\\.html` 길이 web/ 아래 정적 html 을 same-origin 으로 내주고,
+    같은 출처면 iframe 안의 문서에 실제 좌표로 MouseEvent 를 던질 수 있다
+    (verify-gempty-click.html 이 이미 그렇게 범례를 눌렀다).
+
+    그 하니스(web/verify-attretry-click.html)로 눌러 봤다 — 못 받은 자리 3장,
+    좌표 hit-test 통과, 클릭이 링크를 열지 않았고, 밀리던 것이 풀린 뒤 그
+    단추를 눌러 3장이 전부 돌아왔다(배너: 뜸 40 · 다시 걸어서 3 · 못 받음 0).
+    여기 계약은 그 클릭 경로가 나중에 조용히 바뀌지 않게 못박는다.
+    """
+
+    HARNESS = os.path.join(os.path.dirname(HERE), "web",
+                           "verify-attretry-click.html")
+
+    @classmethod
+    def setUpClass(cls):
+        with open(INDEX, encoding="utf-8") as f:
+            cls.src = f.read()
+
+    def _press(self):
+        """`다시` 를 받는 처리기 한 덩이."""
+        i = self.src.find('closest("[data-attretry]")')
+        self.assertNotEqual(i, -1, "다시 단추를 받는 곳이 없다")
+        s = self.src.rfind('document.addEventListener("click"', 0, i)
+        self.assertNotEqual(s, -1, "그 처리기가 문서에 달려 있지 않다")
+        e = re.compile(r"\n\}, (?:true|false)\);").search(self.src, i)
+        self.assertIsNotNone(e, "그 처리기의 끝을 찾지 못했다")
+        return self.src[s:e.end()]
+
+    def test_the_press_is_caught_where_it_is_thrown(self):
+        """잡는 단계(capture)에 달아야 한다 — 문서를 다시 그려도 손이 남는다."""
+        self.assertRegex(self._press(), r"\}, true\);\s*$",
+                         "다시 단추의 클릭을 잡는 단계에서 받지 않는다")
+
+    def test_the_press_does_not_open_the_link(self):
+        """단추는 링크 옆에 있다 — 누른 것이 링크로 흘러가면 새 탭이 먼저 열린다."""
+        fn = self._press()
+        self.assertIn("preventDefault()", fn, "기본 동작을 막지 않는다")
+        self.assertIn("stopPropagation()", fn, "누른 것이 위로 샌다")
+
+    def test_the_press_is_a_fresh_try(self):
+        """사람이 누른 것도 한 번의 시도다 — 시도 수를 되돌리고 새 주소로 부른다.
+
+        캐시에 물린 실패를 다시 부르면 눌러도 같은 답이 온다(`attUrl` 의 `r=`).
+        """
+        fn = self._press()
+        self.assertRegex(fn, r"dataset\.atttry\s*=", "시도 수를 되돌리지 않는다")
+        self.assertRegex(fn, r"src\s*=\s*attUrl\(", "다시 부르지 않는다")
+        self.assertRegex(fn, r'attUrl\(img,\s*"u"', "재시도 주소로 갈리지 않는다")
+
+    def test_the_harness_that_presses_it_is_kept(self):
+        """실제로 눌러 본 자리를 남긴다 — 없으면 다음 사람이 또 "수단이 없다"고 적는다."""
+        self.assertTrue(os.path.isfile(self.HARNESS),
+                        "눌러 보는 하니스가 없다: web/verify-attretry-click.html")
+        with open(self.HARNESS, encoding="utf-8") as f:
+            h = f.read()
+        self.assertIn("MouseEvent", h, "실제 이벤트를 던지지 않는다")
+        self.assertIn("elementFromPoint", h,
+                      "덮여 있는지(좌표 hit-test)를 보지 않는다")
+        self.assertIn("data-attretry", h, "그 단추를 누르지 않는다")
+        # 손대는 것은 **빗나가게 하던 표식** 하나뿐이다. 클릭 경로를 대신
+        # 실행해 버리면 "눌러 봤다"가 아니라 "함수를 불러 봤다"가 된다.
+        self.assertIn('removeAttribute("data-attbad")', h,
+                      "밀리던 것이 풀린 상황을 만들지 않는다")
+
+
 if __name__ == "__main__":
     unittest.main()

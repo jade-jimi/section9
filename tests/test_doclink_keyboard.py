@@ -179,7 +179,7 @@ class DoclinkKeyboard(unittest.TestCase):
     # ---------- D. 수식키 클릭은 브라우저 몫 ----------
 
     def test_modifier_click_is_left_to_the_browser(self):
-        m = re.search(r'const doc = e\.target\.closest\("\[data-doc\]"\);(.{0,700})',
+        m = re.search(r'const doc = evEl\(e\.target\)\?\.closest\("\[data-doc\]"\);(.{0,700})',
                       self.src, re.S)
         self.assertIsNotNone(m, "문서 열기 클릭 위임을 찾지 못했다")
         b = m.group(1)
@@ -193,7 +193,7 @@ class DoclinkKeyboard(unittest.TestCase):
 
     def test_only_anchors_get_preventdefault(self):
         """카드·행(div)에는 기본 동작이 없다 — 앵커일 때만 막는다."""
-        m = re.search(r'const doc = e\.target\.closest\("\[data-doc\]"\);(.{0,700})',
+        m = re.search(r'const doc = evEl\(e\.target\)\?\.closest\("\[data-doc\]"\);(.{0,700})',
                       self.src, re.S)
         self.assertRegex(m.group(1), r'tagName === "A"|matches\("a',
                          "앵커인지 가려서 막아야 한다")

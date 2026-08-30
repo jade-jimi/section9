@@ -144,8 +144,8 @@ async function anchorSend(docId, anchor, text, r){
 function anchorBind(){
   const viewer = $("#viewer") || document;
   document.addEventListener("mouseup", e => {
-    if (e.target.closest && e.target.closest(".anchorpop")) return;
-    const host = e.target.closest && e.target.closest(".viewer");
+    if (evEl(e.target)?.closest(".anchorpop")) return;
+    const host = evEl(e.target)?.closest(".viewer");
     if (!host || !host.dataset.showing){ anchorPopClose(); return; }
     // 브라우저가 선택을 확정한 뒤에 잰다
     setTimeout(() => anchorPopShow(host, host.dataset.showing), 0);
@@ -155,7 +155,7 @@ function anchorBind(){
   });
   document.addEventListener("scroll", anchorPopClose, true);
   document.addEventListener("mousedown", e => {
-    if (!(e.target.closest && e.target.closest(".anchorpop"))) anchorPopClose();
+    if (!(evEl(e.target)?.closest(".anchorpop"))) anchorPopClose();
   });
 }
 /* ?anchor — 진단·헤드리스 캡처용 (?dlg·?pick 과 동형). 고른 상태는 손으로

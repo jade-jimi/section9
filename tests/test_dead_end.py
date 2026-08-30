@@ -202,7 +202,11 @@ class DeadEnd(unittest.TestCase):
             # 이 갈래의 조건 = 직전 분기 기호 이후 ~ 그 물음표까지
             cut = max(before.rfind(":", 0, q), before.rfind("(", 0, q))
             cond = before[cut + 1:q]
-            self.assertRegex(cond, r"\bst\b",
+            # 서버가 실어 준 판정은 이제 둘이다 (REQ-20260829-024 라운드4):
+            # `stalled_mins`(저절로 조용해졌다)와 `stopped`(사람이 중단했다).
+            # 계약은 그대로다 — 둘 다 **손잡이가 함께 서는** 사실이라,
+            # 마크가 서는 조건은 여전히 손잡이가 서는 조건의 부분집합이다.
+            self.assertRegex(cond, r"\b(st|r\.stopped)\b",
                              "정지 마크가 서버 판정 없이 선다: " + cond.strip())
 
     def test_w2_screen_never_measures_minutes_itself(self):

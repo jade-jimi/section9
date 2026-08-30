@@ -62,7 +62,7 @@ class AccountAndModel(unittest.TestCase):
         """계정에 관한 일은 계정이 적혀 있는 자리에서 된다."""
         self.assertIn("function claudeAccountSwitch", self.src,
                       "계정 바꾸기가 없다")
-        self.assertRegex(self.src, r'e\.target\.closest\("#usage-chip"\)[\s\S]{0,80}claudeAccountSwitch',
+        self.assertRegex(self.src, r'evEl\(e\.target\)\?\.closest\("#usage-chip"\)[\s\S]{0,80}claudeAccountSwitch',
                          "상단 계정 칩을 눌러도 계정 창이 안 열린다")
         # 눌리는 것이면 눌리게 보여야 한다
         self.assertRegex(self._css_chip(), r"cursor:pointer", "누를 수 있어 보이지 않는다")

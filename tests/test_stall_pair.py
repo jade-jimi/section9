@@ -247,8 +247,12 @@ class StallRendersTheSame(unittest.TestCase):
             # 세우기 손잡이가 같은 함수 안에서 그려진다 (REQ-20260829-024) —
             # 그리지 않는 행에는 빈 문자열이 오므로 이 시험의 판정은 그대로다.
             "const stopAt = new Map(); const STOP_HOLD = 20000;",
+            # 손잡이의 낱말은 상수 한 곳에서 온다 (REQ-20260829-024 라운드4)
+            'const WAKE_LABEL = "이어가기", WAKE_GOING = "이어가는 중…";',
+            'const STOP_LABEL = "중단하기", STOP_GOING = "중단 중…";',
             g("wokePending"), g("stopPending"), g("stallState"),
-            g("workRowHTML"), g("stallHTML"), g("cardHTML"),
+            g("workRowHTML"), g("stoppedRowHTML"), g("stallHTML"),
+            g("cardHTML"),
             "CAT = %s;" % json.dumps(rows),
             # 문서 화면이 짓는 자리와 **같은 표현식**
             "const out = CAT.map(r => ({id: r.id, card: cardHTML(r),"

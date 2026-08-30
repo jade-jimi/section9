@@ -55,20 +55,34 @@ function prioTier(p){ return p >= 90 ? "urgent" : p >= 75 ? "high" : p >= 50 ? "
 //   full 표기  → 문서 뷰어의 `보통 50/99` — 값과 척도를 함께 가르치는 자리
 // full 은 문서 뷰어만 참이다. 훑는 화면에 정확한 값을 다시 깔면 처음 상태로
 // 돌아간다 — 목록은 이미 이 값으로 정렬돼 있어 순위는 자리로 읽힌다.
+/* 표기가 곧 **손잡이**다 (REQ-20260829-029).
+   여태 이 축은 읽을 수만 있었다 — 값을 바꾸는 길은 hovercard 마지막 줄이
+   가르치는 `s9 set … --priority high` 뿐이었고, 그건 화면을 보는 사람에게
+   "여기서는 못 한다"는 말이다. 순서를 정하는 판은 보드인데 정하는 자리는
+   터미널에 있었다.
+
+   손잡이를 따로 만들지 않고 **보이는 그 글자**를 누르게 한다. 두 번째 자리를
+   만들면 "보이는 것과 누르는 것이 다른 자리"가 되고, 카드 한 장에 손잡이가
+   셋(집기·깨우기·순서)이 되면 카드가 손잡이 판이 된다.
+
+   누르는 값이 싸다 — 여는 창은 되돌리기 쉬운 고르기 하나이고(등급 넷),
+   잘못 눌러도 ESC 한 번이면 아무것도 바뀌지 않는다. 그래서 확인 단계를 겹치지
+   않는다 (dialog.js s9choose 가 세워 둔 그 규칙: 확인은 되돌릴 수 없는 것에만). */
 function prioHTML(r, full){
   if (!r || r.type !== "request") return "";
   const p = prioOf(r), tier = prioTier(p), name = PRIO_TIERS[tier];
   const tip = `우선순위 ${name} · ${p}/${PRIO_MAX} — 숫자가 클수록 먼저 집는다`
-    + ` (기본 ${PRIO_DEFAULT})`;
-  // 문서 뷰어 표기는 hovercard로 척도를 여는 손잡이가 된다 — 그래서 tabindex로
-  // 키보드도 닿게 하고, 그림 대신 문장을 읽는 도구에는 aria-label로 답한다.
-  // 훑는 자리는 손잡이가 아니라 표기라서 title 한 문장으로 끝낸다.
-  return `<span class="prio${full ? " pfull" : ""}" data-prio="${p}" data-tier="${tier}"`
-    + (full ? ` tabindex="0" data-prioscale="${p}" aria-label="${esc(tip)}"`
+    + ` (기본 ${PRIO_DEFAULT}) · 눌러서 바꾸기`;
+  // 문서 뷰어 표기는 hovercard로 척도를 여는 손잡이이기도 하다 — 그림 대신
+  // 문장을 읽는 도구에는 aria-label로 답한다. 훑는 자리는 title 한 문장이다.
+  // button 이라 키보드는 저절로 닿는다(전에는 tabindex를 손으로 놓았다).
+  return `<button type="button" class="prio${full ? " pfull" : ""}"`
+    + ` data-prio="${p}" data-tier="${tier}" data-prioset="${esc(r.id)}"`
+    + (full ? ` data-prioscale="${p}" aria-label="${esc(tip)}"`
             : ` title="${esc(tip)}"`)
     + `><b class="pname">${name}</b>`
     + (full ? `<i class="pnum">${p}/${PRIO_MAX}</i>` : "")
-    + `</span>`;
+    + `</button>`;
 }
 // Docs 타입바 순서 = 사용 빈도. question은 knowledge 다음 — 자주 열어보는 축이고,
 // session은 목록에서 자리만 지키는 축이라 그 앞에 둔다 (REQ-20260826-017).

@@ -526,14 +526,21 @@ class Visible(Repo):
         self.assertEqual((sp.get("workspace") or {}).get("reason"),
                          "dirty-spine", sp)
 
-    # V3. 손잡이의 답이 자리를 말한다.
+    # V3. 손잡이의 답이 자리를 말한다 — **이름이 아니라 뜻으로**.
     def test_v3_wake_says_where_it_sat_the_worker(self):
+        """자리 이름(`본 저장소`·`워크트리`)은 깃을 아는 사람의 말이라 창에
+        세우지 않는다 (REQ-20260830-007). 그래도 **뜻은 남아야 한다** — 사람이
+        이 답에서 얻어야 하는 것은 저장소의 생김새가 아니라 "내가 지금 보는
+        화면에서 그 결과를 볼 수 있나" 하나다. 여기가 비면 워크트리에서 고친
+        화면을 9909 에서 영영 찾는 그 헛수고가 돌아온다."""
         self.dirty("web/index.html")
         with _spawn_patch():
             res = self.m.wake_request(self.doc_tests, actor="tester", win=0)
         self.assertTrue(res.get("ok"), res)
-        self.assertTrue("본 저장소" in res["message"]
-                        or "워크트리" in res["message"], res)
+        self.assertIn(self.m.WS_MEANS_KO["main"], res["message"], res)
+        for word in ("본 저장소", "워크트리"):
+            self.assertNotIn(word, res["message"],
+                             "창에 깃 낱말이 그대로 섰다")
 
     # V4. 대기는 실패처럼 보이지 않는다 — 누가 무엇을 잡고 있는지 말한다.
     def test_v4_wake_reports_waiting_not_failure(self):

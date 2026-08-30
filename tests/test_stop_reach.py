@@ -44,12 +44,21 @@ def _fn(src, name):
     return m.group(0)
 
 
-def _load(name="s9stop"):
-    spec = importlib.util.spec_from_loader(
-        name, importlib.machinery.SourceFileLoader(name, S9))
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    return m
+def _load(name="s9stop", root=None):
+    old = os.environ.get("S9_ROOT")
+    if root:
+        os.environ["S9_ROOT"] = root
+    try:
+        spec = importlib.util.spec_from_loader(
+            name, importlib.machinery.SourceFileLoader(name, S9))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+    finally:
+        if old is None:
+            os.environ.pop("S9_ROOT", None)
+        else:
+            os.environ["S9_ROOT"] = old
 
 
 class TheOwnersDoor(unittest.TestCase):
@@ -350,6 +359,169 @@ class TheHandleOnTheScreen(unittest.TestCase):
         self.assertIn("r.worker =", probe, "진단이 행에 값을 안 얹는다")
         self.assertIn("workProbe(rows)", _fn(self.web, "stallProbe"),
                       "진단이 화면 갱신 길에 서 있지 않다 — 아무 일도 안 한다")
+
+
+class WhatWasStoppedCanStartAgain(unittest.TestCase):
+    """R1~R7 — 세운 것을 사람이 되돌릴 수 있다 (라운드4 반려).
+
+    사용자: "멈춰놓고선, 다시 시작할 수 있는 기능이 없다."
+
+    맞는 지적이었고, 막고 있던 것은 둘이었다.
+      · 세우면 그 사유가 문서에 적힌다 → 문서가 **방금** 움직인 것이 되어
+        멈춤 판정이 15분간 서지 않는다 → 깨우기 손잡이가 안 그려진다.
+      · 그 15분을 기다려도 per-REQ 쿨다운(600초)이 "방금 한 번 깨웠습니다"로
+        막는다. 세운 사람이 자기가 세운 것을 되돌릴 수 없었다.
+
+    그래서 세운 사실을 **표시로 남기고**, 그 표시가 있는 동안 ① 사람의 길은
+    쿨다운을 지나가고 ② 기계(워처)의 길은 막는다. 사람이 세운 것을 30초 뒤에
+    워처가 되살리면 세우기라는 행동 자체가 무의미해진다.
+    """
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="s9stopmark-")
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.m = _load("s9stop_m", self.root)
+        self.tmp = tempfile.mkdtemp(prefix="s9stopmk-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.m._auto_dir = lambda: self.tmp
+
+    def marker(self, doc=DOC, pid=PID, last=0):
+        with open(os.path.join(self.tmp, doc + ".json"), "w") as f:
+            json.dump({"pid": pid, "last": last}, f)
+
+    def stop_it(self, why="계정을 바꾼다"):
+        return self.m.worker_stop(DOC, session="", why=why, owner=True,
+                                  claims=lambda d, s: False,
+                                  kill=lambda *a: None, alive=lambda p: False,
+                                  wait=lambda _s: None,
+                                  note=lambda *a, **k: None)
+
+    def test_r1_the_stop_leaves_a_mark(self):
+        self.marker()
+        self.stop_it()
+        mk = self.m.stop_mark(DOC)
+        self.assertTrue(mk, "세운 사실이 아무 데도 안 남는다")
+        self.assertTrue(mk.get("at"))
+        self.assertIn("계정", mk.get("why", ""))
+
+    def test_r1b_stopping_nothing_marks_nothing(self):
+        """세울 것이 없었으면 세운 것이 아니다 — 없는 사실을 남기지 않는다."""
+        self.stop_it()
+        self.assertFalse(self.m.stop_mark(DOC))
+
+    def test_r2_the_person_is_not_held_by_the_cooldown(self):
+        """쿨다운이 재는 것은 겹쳐 붙는 손인데, 세운 자리에는 붙은 손이 없다."""
+        import time as _t
+        self.marker(last=_t.time())          # 방금 스폰한 것으로 둔다
+        self.assertTrue(self.m._auto_cap_block(DOC, {}, reason="wake"),
+                        "세우기 전이라면 쿨다운이 막는 것이 맞다")
+        self.stop_it()
+        self.assertEqual(self.m._auto_cap_block(DOC, {}, reason="wake"), "",
+                         "세워 둔 것을 사람이 다시 시작할 수 없다")
+
+    def test_r2b_the_human_budget_still_holds(self):
+        """쿨다운만 지나간다 — 하루치 예산까지 뚫으면 그건 문이 아니라 구멍이다."""
+        import time as _t
+        self.marker(last=_t.time())
+        self.stop_it()
+        import datetime as _dt
+        with open(self.m._auto_global_path(), "w") as f:
+            json.dump({"day": _dt.date.today().isoformat(),
+                       "hour": int(_t.time() // 3600),
+                       "wake_day_count": 99}, f)
+        self.assertTrue(self.m._auto_cap_block(DOC, {}, reason="wake"),
+                        "세운 표시가 하루 한도까지 뚫었다")
+
+    def test_r3_the_watcher_does_not_revive_what_a_person_stopped(self):
+        self.marker()
+        self.stop_it()
+        why = self.m._auto_cap_block(DOC, {})     # reason 없음 = 워처
+        self.assertTrue(why, "사람이 세운 것을 워처가 도로 띄운다")
+        self.assertNotIn("쿨다운", why)
+        self.assertRegex(why, r"세[웠운]", "사유가 세운 사실을 말하지 않는다")
+
+    def test_r4_starting_again_clears_the_mark(self):
+        self.marker()
+        self.stop_it()
+
+        class P:
+            pid = 777
+        self.m._auto_mark_pid(DOC, P())
+        self.assertFalse(self.m.stop_mark(DOC),
+                         "다시 시작했는데도 '세워 둠' 이 남는다")
+
+    def test_r5_the_mark_grows_old(self):
+        """천장 없는 보호는 교착의 다른 이름이다 — 이 저장소가 두 번 배운 것."""
+        self.marker()
+        self.stop_it()
+        p = self.m._stop_mark_path(DOC)
+        with open(p) as f:
+            mk = json.load(f)
+        mk["at"] = mk["at"] - self.m.STOP_HOLD_WIN - 60
+        with open(p, "w") as f:
+            json.dump(mk, f)
+        self.assertFalse(self.m.stop_mark(DOC), "늙은 표시가 아직 유효하다")
+        self.assertEqual(self.m._auto_cap_block(DOC, {}), "",
+                         "늙은 표시가 워처를 영원히 묶는다")
+
+    def test_r6_wake_does_not_call_a_stopped_request_moving(self):
+        """세운 그 자리가 곧 '조용하다'의 근거다 — 방금 적힌 사유가 아니라."""
+        i = SRC.find("def wake_request(")
+        blk = SRC[i:SRC.find("\ndef ", i + 10)]
+        self.assertIn("stop_mark", blk,
+                      "깨우기가 세운 표시를 모른다 — 세운 직후엔 moving 으로 거절한다")
+        j = blk.find("stop_mark")
+        k = blk.find("_wake_refusal")
+        self.assertLess(j, k, "표시를 보기 전에 이미 거절한다")
+
+    def test_r7_the_row_carries_the_stopped_fact(self):
+        i = SRC.find("def catalog_with_live(")
+        blk = SRC[i:SRC.find("\ndef ", i + 10)]
+        self.assertIn('r["stopped"]', blk, "행이 세워 둔 사실을 안 나른다")
+        # 도는 작업이 있으면 그건 세워 둔 것이 아니다 — 두 줄이 함께 서면 모순이다
+        self.assertRegex(blk, r"if not wk[\s\S]{0,200}r\[\"stopped\"\]",
+                         "작업이 도는 동안에도 '세워 둠' 을 싣는다")
+
+
+class TheRestartHandle(unittest.TestCase):
+    """R8 — 세워 둔 카드에 다시 시작할 손잡이가 선다."""
+
+    @classmethod
+    def setUpClass(cls):
+        from webasset import index_path
+        with open(index_path(), encoding="utf-8") as f:
+            cls.web = f.read()
+        cls.row = _fn(cls.web, "stoppedRowHTML")
+        cls.stall = _fn(cls.web, "stallHTML")
+
+    def test_r8_the_handle_takes_the_same_road_as_wake(self):
+        """중단한 것을 다시 맡기는 일은 멈춘 것을 맡기는 일과 **같다**.
+
+        낱말도 같고(「이어가기」) 응답도 같으니 길도 하나여야 한다 — 속성만
+        다른 이유는 그려지는 줄이 다르기 때문이고, 그 속성은 곧장 같은 함수로
+        들어간다."""
+        self.assertIn("r.stopped", self.row)
+        self.assertIn("data-restart=", self.row)
+        self.assertIn("이어가기", self.row, "손잡이의 낱말이 멈춘 카드와 다르다")
+        self.assertRegex(self.web, r"wakeDoc\(\w+\.dataset\.restart\)",
+                         "다시 맡기는 손잡이가 자기만의 길을 판다")
+        self.assertEqual(len(re.findall(r'"/api/wake"', self.web)), 1)
+
+    def test_r8b_one_handle_per_card(self):
+        """같은 일을 하는 손잡이를 한 카드에 둘 그리지 않는다."""
+        self.assertIn("stoppedRowHTML(r)", self.stall,
+                      "카드·문서가 함께 부르는 그 함수가 이 줄을 안 짓는다")
+        self.assertRegex(self.stall, r"if \(stopped\)[\s\S]{0,80}return",
+                         "세워 둔 카드에 멈춤 줄과 다시 시작이 함께 선다")
+
+    def test_r8c_the_press_paints_both_handles(self):
+        """누른 순간 잠기는 얼굴은 두 줄 모두에 온다 — 한쪽만 칠하면 그 카드는
+        눌러도 아무 일이 없는 것처럼 보인다."""
+        paint = _fn(self.web, "paintWake")
+        self.assertIn("data-restart", paint,
+                      "중단해 둔 카드의 손잡이는 눌러도 잠기지 않는다")
+        # 낱말은 상수 한 곳에서 온다 — 글자를 두 곳에 두면 개명 한 번에 갈린다
+        self.assertIn("WAKE_GOING", paint)
 
 
 if __name__ == "__main__":

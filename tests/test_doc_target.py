@@ -73,7 +73,7 @@ class DocTarget(unittest.TestCase):
         """해제 버튼 하나가 지금 서 있는 것을 푼다."""
         self.assertIn("termTargetClear", self._fn("termTargetRender"))
         self.assertIn("function docClear", self.src, "푸는 자리가 없다")
-        m = re.search(r'if \(TERM !== T \|\| !ev\.target\.closest\("#termTargetClear"\)\) return;'
+        m = re.search(r'if \(TERM !== T \|\| !evEl\(ev\.target\)\?\.closest\("#termTargetClear"\)\) return;'
                       r'[\s\S]{0,300}?\}\);', self.src)
         self.assertIsNotNone(m, "해제 버튼을 잡는 자리를 찾지 못했다")
         self.assertIn("docClear()", m.group(0), "문서 지목은 이 버튼으로 안 풀린다")
