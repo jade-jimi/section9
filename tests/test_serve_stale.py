@@ -24,12 +24,15 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S9 = os.path.join(HERE, "..", "bin", "s9")
 HOOK = os.path.join(HERE, "..", "bin", "s9-audit-prompt")
+
+from portpool import free_port, wait_server  # noqa: E402
 
 
 def _load(name, path):
@@ -46,6 +49,12 @@ class ServeStale(unittest.TestCase):
         os.makedirs(os.path.join(self.root, "state"), exist_ok=True)
         self.m = _load("s9_stale_" + os.path.basename(self.root), S9)
         self.m.ROOT = self.root
+        # 규범 포트 판정(s9_port)이 물려받은 환경에 흔들리지 않게 (REQ-030-005)
+        self._old_port_env = os.environ.pop("S9_PORT", None)
+
+    def tearDown(self):
+        if self._old_port_env is not None:
+            os.environ["S9_PORT"] = self._old_port_env
 
     def stamp(self, d):
         with open(os.path.join(self.root, "state", "serve-code.json"), "w",
@@ -65,9 +74,13 @@ class ServeStale(unittest.TestCase):
         self.stamp({"stamp": self.m.code_stamp(), "pid": os.getpid()})
         self.assertEqual(self.m.serve_stale(), "")
 
-    # B1. 서버가 안 돌면 낡을 것도 없다
+    # B1. 서버가 안 돌면 낡을 것도 없다 — "안 돈다"는 지문 pid 죽음 +
+    #     대시보드 포트에 리스너 없음이다 (REQ-20260830-005 뒤로는 죽은 pid
+    #     지문의 포트 대신 규범 포트를 본다. 이 머신의 진짜 9909 리스너가
+    #     시험에 새어들지 않게 B3·B4 처럼 실리스너 탐색을 막는다)
     def test_b1_dead_server_silent(self):
         self.stamp({"stamp": {"mtime": 1.0, "size": 10}, "pid": 999999999})
+        self.m._port_owner_pid = lambda port: 0
         self.assertEqual(self.m.serve_stale(), "")
 
     # B3. 지문을 남긴 프로세스가 죽었는데 **다른 쪽이 그 포트를 물고 있으면**
@@ -90,6 +103,20 @@ class ServeStale(unittest.TestCase):
                     "port": 9909})
         self.m._port_owner_pid = lambda port: 0
         self.assertEqual(self.m.serve_stale(), "")
+
+    # B5. 죽은 pid 의 지문은 **포트까지** 불신한다 (REQ-20260830-005).
+    #     실사고 2026-08-30 아침: 시험이 본 저장소 S9_ROOT 로 임시 포트에 띄운
+    #     서버가 지문을 갈아쓰고 죽었다. 죽은 pid 지문의 포트(임시 포트)로
+    #     실리스너를 찾으면 판정이 남의 자리로 끌려간다 — 찾을 자리는 이
+    #     저장소의 대시보드 포트(state/port 또는 9909)다.
+    def test_b5_dead_pid_distrusts_the_stamped_port(self):
+        self.stamp({"stamp": {"mtime": 1.0, "size": 10}, "pid": 999999999,
+                    "port": 18898})
+        asked = []
+        self.m._port_owner_pid = lambda p: asked.append(p) or 0
+        self.assertEqual(self.m.serve_stale(), "")
+        self.assertEqual(asked, [9909],
+                         "죽은 pid 지문의 임시 포트로 실리스너를 찾았다")
 
     # B2. 지문 파일이 없거나 깨졌으면 단정하지 않는다
     def test_b2_no_stamp_silent(self):
@@ -130,6 +157,85 @@ class ServeStale(unittest.TestCase):
         src = open(HOOK, encoding="utf-8").read()
         self.assertIn('"serve-stale"', src, "훅이 serve-stale 을 부르지 않는다")
         self.assertIn("{stale_serve}", src, "부르기만 하고 주입하지 않는다")
+
+
+class StampWanted(unittest.TestCase):
+    """지문을 남길 자격 — "이 포트가 이 저장소의 대시보드 포트인가"
+    (REQ-20260830-005 (가)).
+
+    지문 파일은 저장소당 하나뿐이다. 임시 포트로 뜬 서버(시험 등)가 그것을
+    갈아쓰면 죽은 뒤 doctor·배너가 남의 지문으로 거짓말을 한다."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="s9want-")
+        os.makedirs(os.path.join(self.root, "state"), exist_ok=True)
+        self.m = _load("s9_want_" + os.path.basename(self.root), S9)
+        self._old_port_env = os.environ.pop("S9_PORT", None)
+
+    def tearDown(self):
+        if self._old_port_env is not None:
+            os.environ["S9_PORT"] = self._old_port_env
+
+    # W1. 기본 워크스페이스(state/port 없음): 9909 만이 대시보드 포트다
+    def test_w1_default_port_writes(self):
+        self.assertTrue(self.m.serve_stamp_wanted(9909, root=self.root))
+        self.assertFalse(self.m.serve_stamp_wanted(18898, root=self.root))
+
+    # W2. state/port 가 지정한 포트는 대시보드 포트다 (인스턴스 워크스페이스)
+    def test_w2_state_port_wins(self):
+        with open(os.path.join(self.root, "state", "port"), "w") as f:
+            f.write("9911")
+        self.assertTrue(self.m.serve_stamp_wanted(9911, root=self.root))
+        self.assertFalse(self.m.serve_stamp_wanted(9909, root=self.root))
+
+    # W3. S9_PORT env 는 s9_port 와 같은 서열로 이긴다
+    def test_w3_env_wins(self):
+        os.environ["S9_PORT"] = "9912"
+        try:
+            self.assertTrue(self.m.serve_stamp_wanted(9912, root=self.root))
+            self.assertFalse(self.m.serve_stamp_wanted(9909, root=self.root))
+        finally:
+            os.environ.pop("S9_PORT", None)
+
+    # W4. 못 읽는 포트는 자격 없음 — 예외를 올리지 않는다
+    def test_w4_garbage_port_is_false(self):
+        self.assertFalse(self.m.serve_stamp_wanted(None, root=self.root))
+        self.assertFalse(self.m.serve_stamp_wanted("x", root=self.root))
+
+
+class TempPortNoStamp(unittest.TestCase):
+    """실사고 재현 (REQ-20260830-005 (가), 실서버 클래스당 1회).
+
+    임시 포트에 뜬 서버가 지문을 남기면, 죽은 뒤 doctor 는 죽은 포트를
+    두드리며 "안 떠 있다"고 하고 배너는 남의 지문으로 말한다 — 2026-08-30
+    아침 사용자가 세션이 다 죽은 줄 알고 s9 를 전부 내렸다 (REQ-20260830-004).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = tempfile.mkdtemp(prefix="s9tmpsrv-")
+        cls.env = {**os.environ, "S9_ROOT": cls.root, "S9_REWORK_WATCH": "off"}
+        cls.env.pop("S9_PORT", None)
+        cls.env.pop("S9_SESSION", None)
+        subprocess.run([S9, "init"], capture_output=True, env=cls.env,
+                       timeout=15)
+        cls.port = free_port()
+        cls.srv = subprocess.Popen(
+            [S9, "serve", "--host", "127.0.0.1", "--port", str(cls.port)],
+            env=cls.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        wait_server(cls.port)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.terminate()
+        cls.srv.wait(timeout=5)
+
+    def test_r1_temp_port_leaves_no_stamp(self):
+        self.assertFalse(
+            os.path.exists(os.path.join(self.root, "state",
+                                        "serve-code.json")),
+            "임시 포트 서버가 지문을 남겼다 — 죽은 뒤 doctor·배너가 "
+            "이 지문으로 거짓말을 한다")
 
 
 if __name__ == "__main__":

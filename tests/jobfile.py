@@ -35,6 +35,7 @@ def start(total, root=None, name="테스트", hint="tests", args=""):
     state = {"name": name, "hint": hint, "pid": os.getpid(),
              "started": time.time(),
              "session": (os.environ.get("S9_SESSION") or "")[:8],
+             "req": (os.environ.get("S9_JOB_REQ") or "")[:40],
              "args": str(args or "")[:120],
              "total": int(total or 0), "done": 0}
 

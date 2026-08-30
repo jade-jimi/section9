@@ -74,7 +74,9 @@ async function restartTell(T, sid, req, d, what, cap){
      경고가 되고, 정작 진짜인 순간에는 이미 배경이 되어 안 읽힌다. 되돌릴 수
      없는 일은 **그 순간에** 확인받는 것이 맞다. */
   restartChip("fail", what, d);
-  const go = await s9dlg({kind: "confirm", cap, stop: false,
+  // 맨 Enter 는 「그대로 두기」에 닿는다 (REQ-20260830-008) — 도는 일을 끊는
+  // 창은 전부 물러나는 쪽에서 시작한다.
+  const go = await s9dlg({kind: "confirm", cap, stop: false, safe: true,
     title: "지금 이 세션이 일하는 중입니다",
     desc: "하던 일을 중단하고 바꿀까요? 대화는 그대로 이어지므로, 다시 시작한 뒤"
       + " 하던 말을 이어서 하면 됩니다. 중단하지 않으면 지금 설정 그대로 둡니다.",
@@ -146,7 +148,10 @@ async function sessionRestart(sid, req, T, cap){
      주는 것은 사람이 예상할 수 없는 답이다. */
   const wk = liveWorkerRows();
   if (wk.length){
-    const go = await s9dlg({kind: "confirm", cap: cap || "다시 시작", stop: false,
+    // 한 번에 여러 건을 세우는 창이라 더더욱 물러나는 쪽에서 시작한다
+    // (REQ-20260830-008).
+    const go = await s9dlg({kind: "confirm", cap: cap || "다시 시작",
+      stop: false, safe: true,
       title: `진행 중인 자동 작업 ${wk.length}건을 중단하고 ${what} 바꿉니다`,
       desc: "이 재시작은 이 창만 바꿉니다 — 중단하지 않으면 그 작업들은 옛"
         + " 설정 그대로 계속 진행됩니다. 중단하면 각 문서에 중단한 사실과 사유가"

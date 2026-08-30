@@ -1,0 +1,232 @@
+"""확인 창의 맨 Enter 는 물러나는 쪽에 선다 (REQ-20260830-008-62x6).
+
+실사고: 세우기(중단) 확인 창이 바닥에 「그대로 두기 / 중단하기」를 세워 놓고
+`safe` 를 안 들고 있었다. 창은 열리자마자 「중단하기」에 초점을 주었고, 창을
+읽지 않고 Enter 를 치는 손이 도는 작업을 세웠다.
+
+`s9dlg` 는 이미 이 판단을 내려 두었다(dialog.js: "되돌릴 수 없는 창은 물러나는
+쪽에서 시작한다"). 문제는 그 판단이 **창마다 따로 손으로 켜지는 깃발**이라는
+것이다 — 새 창을 만드는 사람은 깃발이 있는지도 모른 채 지나간다. 실제로
+지나갔고, 훑어 보니 세우기 하나가 아니었다.
+
+한 창만 다르면 그 차이가 곧 손의 습관을 배신한다. 그래서 초점을 **대장으로
+못박는다**: 확인 창은 전부 이 표에 이름이 있어야 하고, 표가 적은 대로 초점을
+둔다. 새 창을 만들면 이 시험이 먼저 막는다 — 초점을 정하지 않고는 못 지난다.
+
+기준 하나: **되돌려도 그 사이에 잃는 것이 있으면 물러나는 쪽에서 시작한다.**
+  · 파괴적 — 되돌릴 수 없는 소실(영구 삭제·비밀 삭제·빈 계정 자리)
+  · 중단적 — 되돌릴 수 있어도 그 사이에 도는 작업이 하던 일을 잃는다
+  둘 중 하나면 safe. 되돌리면 원상복구고 잃는 것이 없으면 주 행동에 둔다
+  (휴지통으로·취소하기 — 창의 설명이 스스로 "되돌릴 수 있습니다"라고 적는다).
+
+계약 넷:
+  F1 확인 창은 전부 대장에 있다 (새 창은 초점을 정해야 지난다).
+  F2 대장이 safe 라 적은 창만 `safe` 를 들고 있다.
+  F3 `safe` 는 확인 창에만 선다 — 알림은 물러날 버튼이 없고, 쓰는 창은
+     초점이 상자로 가므로 거기 붙은 safe 는 지키지 못할 약속이다.
+  F4 세우기 창이 safe 를 들고 있다 (회귀).
+
+실행: python3 tests/ dialog_safe
+"""
+import os
+import re
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, ".."))
+APP = os.path.join(ROOT, "web", "app")
+
+
+def read(p):
+    with open(p, encoding="utf-8") as f:
+        return f.read()
+
+
+# ---- 창 모양 뽑기 ---------------------------------------------------------
+# `s9dlg({...})` 로 바로 부르는 자리와, 진단(diag.js)이 미리 세워 두고 나중에
+# 넘기는 모양 리터럴을 **함께** 잡아야 한다. 둘 다 결국 같은 창이 되고, 거울만
+# 옛 초점이면 캡처가 거짓을 증언한다. 그래서 호출을 좇지 않고 `kind` 를 적은
+# **객체 리터럴**을 좇는다.
+_KIND = re.compile(r'kind:\s*"(alert|confirm|prompt|choose)"')
+
+
+def _obj_span(src, at):
+    """`at` 을 품은 가장 안쪽 `{...}` — 문자열·주석 안의 괄호는 세지 않는다."""
+    open_at, stack = None, []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            j = src.find("\n", i)
+            i = n if j < 0 else j + 1
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            j = src.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        if c in "\"'`":
+            j = i + 1
+            while j < n:
+                if src[j] == "\\":
+                    j += 2
+                    continue
+                if src[j] == c:
+                    break
+                j += 1
+            i = j + 1
+            continue
+        if c == "{":
+            stack.append(i)
+        elif c == "}":
+            if not stack:
+                i += 1
+                continue
+            start = stack.pop()
+            if start <= at < i:
+                return (start, i + 1)
+        i += 1
+    return (open_at, None)
+
+
+def _field(body, key):
+    """`key: "값"` 의 값, 또는 `key: IDENT` 의 이름. 없으면 None."""
+    m = re.search(r'(?<![\w$])%s:\s*"([^"]*)"' % key, body)
+    if m:
+        return m.group(1)
+    m = re.search(r'(?<![\w$])%s:\s*([A-Za-z_$][\w$]*)' % key, body)
+    return m.group(1) if m else None
+
+
+def dialog_shapes():
+    """[(파일, kind, ok, cancel, safe인가)] — 화면이 세우는 창 전부.
+
+    `kind` 를 적은 객체 리터럴을 좇되, **안 적은 것도 함께** 잡는다:
+    `s9dlg` 의 기본값이 confirm 이라(`const kind = o.kind || "confirm"`)
+    kind 없이 부른 창은 조용히 확인 창이 되고, 대장을 그냥 지나가 버린다."""
+    out, seen = [], set()
+    for fn in sorted(os.listdir(APP)):
+        if not fn.endswith(".js"):
+            continue
+        src = read(os.path.join(APP, fn))
+        spans = []
+        for m in _KIND.finditer(src):
+            spans.append((_obj_span(src, m.start()), m.group(1)))
+        for m in re.finditer(r"s9dlg\(\{", src):
+            spans.append((_obj_span(src, m.end()), "confirm"))
+        for (a, b), kind in spans:
+            if b is None or (fn, a, b) in seen:
+                continue
+            seen.add((fn, a, b))
+            body = src[a:b]
+            safe = re.search(r'(?<![\w$])safe:\s*true', body) is not None
+            out.append((fn, kind, _field(body, "ok"),
+                        _field(body, "cancel"), safe))
+    return out
+
+
+# ---- 대장 -----------------------------------------------------------------
+# (파일, ok, cancel) → (safe 인가, 왜)
+#
+# 두 낱말을 함께 열쇠로 쓰는 것은 restart.js 가 같은 주 버튼(「중단하고 바꾸기」)
+# 으로 창을 둘 세우기 때문이다 — 물러나는 낱말이 그 둘을 가른다.
+CENSUS = {
+    ("app.js", "멤버 빼기", "그만두기"):
+        (False, "문서는 그대로 남고 접근만 끊긴다 — 다시 넣으면 원상복구다"),
+    ("session.js", "지우기", "그만두기"):
+        (True, "로그인 전 빈 자리를 지운다 — 되돌릴 수 없다"),
+    ("userform.js", "그래도 넣기", "그만두기"):
+        (False, "값을 하나 넣을 뿐이고, 넣어도 쓰이지 않는다"),
+    ("userform.js", "지우기", "그만두기"):
+        (True, "지운 비밀 값은 되살릴 수 없고 그 키를 쓰는 도구가 멈춘다"),
+    ("card.js", "STOP_LABEL", "그대로 두기"):
+        (True, "도는 작업을 세운다 — 되살려도 하던 일은 잃는다 (이 REQ)"),
+    ("card.js", "취소하기", "그만두기"):
+        (False, "창이 스스로 적는다 — 되돌리려면 다시 옮기면 된다"),
+    ("restart.js", "중단하고 바꾸기", "그대로 두기"):
+        (True, "이 세션이 하던 일을 중단한다"),
+    ("restart.js", "중단하고 바꾸기", "그만두기"):
+        (True, "도는 자동 작업 여러 건을 한꺼번에 중단한다"),
+    ("tidy.js", "영구 삭제", "그만두기"):
+        (True, "창 제목이 그대로 적는다 — 되돌릴 수 없다"),
+    ("tidy.js", "휴지통으로", "그만두기"):
+        (False, "휴지통에서 되돌릴 수 있다"),
+    # 진단이 세우는 거울 — 본 창과 같은 표를 따른다
+    ("diag.js", "취소하기", "그만두기"): (False, "card.js 취소하기의 거울"),
+    ("diag.js", "지우기", "그만두기"): (True, "session.js 계정 자리 지우기의 거울"),
+    ("diag.js", "멈추고 바꾸기", "그대로 두기"): (True, "restart.js 세션 중단의 거울"),
+}
+
+
+class DialogSafeFocus(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.shapes = dialog_shapes()
+        cls.confirms = [s for s in cls.shapes if s[1] == "confirm"]
+
+    def test_f0_shapes_were_actually_read(self):
+        self.assertGreater(len(self.shapes), 20, "창 모양을 못 읽었다")
+        self.assertGreater(len(self.confirms), 9, "확인 창을 못 읽었다")
+
+    # ---- F1. 확인 창은 전부 대장에 있다 ----------------------------------
+    def test_f1_every_confirm_is_on_the_census(self):
+        seen = set()
+        for fn, _k, ok, cancel, _safe in self.confirms:
+            key = (fn, ok, cancel)
+            seen.add(key)
+            self.assertIn(key, CENSUS,
+                          f"{fn}: 대장에 없는 확인 창이다 ({ok} / {cancel}) — "
+                          f"맨 Enter 가 어디에 닿아야 하는지 tests/"
+                          f"test_dialog_safe.py 의 CENSUS 에 적어라")
+        missing = sorted(set(CENSUS) - seen)
+        self.assertEqual(missing, [], "대장에는 있는데 화면에 없는 창이다 — "
+                                      "지웠으면 대장에서도 지워라")
+
+    # ---- F2. 대장이 적은 대로 초점을 둔다 --------------------------------
+    def test_f2_focus_matches_the_census(self):
+        for fn, _k, ok, cancel, safe in self.confirms:
+            want, why = CENSUS[(fn, ok, cancel)]
+            if want:
+                self.assertTrue(safe, f"{fn}: 「{ok}」 창이 물러나는 쪽에서 "
+                                      f"시작하지 않는다 — {why}. `safe: true` 를 "
+                                      f"세워라")
+            else:
+                self.assertFalse(safe, f"{fn}: 「{ok}」 창은 물러설 이유가 없다 "
+                                       f"— {why}. `safe` 를 빼라")
+
+    # ---- F3. safe 는 확인 창에만 선다 ------------------------------------
+    def test_f3_safe_only_where_it_can_be_kept(self):
+        """알림에는 물러날 버튼이 없고, 쓰는 창은 초점이 상자로 간다
+        (dialog.js: `if (ask){ … ta.focus(); }` 가 먼저다). 거기 붙은 safe 는
+        지켜지지 않으면서 읽는 사람에게는 지켜진다고 말한다."""
+        for fn, kind, ok, _cancel, safe in self.shapes:
+            if kind == "confirm" or not safe:
+                continue
+            self.fail(f"{fn}: {kind} 창(「{ok}」)에 safe 가 붙었다 — "
+                      f"이 종류는 초점을 그리로 옮기지 않는다")
+
+    # ---- F4. 세우기 창 (회귀) --------------------------------------------
+    def test_f4_the_stop_dialog_starts_on_leaving_it_alone(self):
+        """맨 Enter 가 「중단하기」에 닿던 그 자리. 낱말이 상수(STOP_LABEL)로
+        빠져 있어(REQ-20260829-024) 글자로는 못 짚으므로 모양으로 짚는다."""
+        hit = [s for s in self.confirms
+               if s[0] == "card.js" and s[2] == "STOP_LABEL"]
+        self.assertEqual(len(hit), 1, "세우기 확인 창을 못 찾았다 — "
+                                      "ok: STOP_LABEL 이 바뀌었나")
+        self.assertEqual(hit[0][3], "그대로 두기", "물러나는 낱말이 바뀌었다")
+        self.assertTrue(hit[0][4], "세우기 창의 맨 Enter 가 아직 「중단하기」에 "
+                                   "닿는다 — 읽지 않고 Enter 를 치는 손이 도는 "
+                                   "작업을 세운다 (REQ-20260830-008)")
+
+    # ---- 바닥 힌트가 같은 깃발을 읽는다 ----------------------------------
+    def test_f5_the_hint_reads_the_same_flag(self):
+        """손이 배우는 규칙과 화면이 적는 규칙이 갈리면 안 된다 — 초점이
+        물러나는 쪽에 서면 바닥도 `Enter 로 그대로 두기` 라고 적어야 한다."""
+        src = read(os.path.join(APP, "dialog.js"))
+        self.assertIn('o.safe ? (o.cancel || "그만두기")', src,
+                      "바닥 힌트가 safe 를 읽지 않는다")
+        self.assertIn("(o.safe && no ? no : yes).focus()", src,
+                      "초점이 safe 를 읽지 않는다")
+
+
+if __name__ == "__main__":
+    unittest.main()

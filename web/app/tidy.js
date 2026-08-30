@@ -289,8 +289,11 @@ async function tidyAct(what, el){
     const ids = what === "purge" ? [id] : (tidyTrash || []).map(r => r.id);
     if (!ids.length) return;
     /* 되돌릴 수 없는 유일한 층이라 여기서만 한 번 더 묻는다. 무엇이 사라지는지
-       이름으로 말한다 — 숫자만 보이면 무엇을 지우는지 모른 채 누른다. */
+       이름으로 말한다 — 숫자만 보이면 무엇을 지우는지 모른 채 누른다.
+       한 번 더 묻는 창이 맨 Enter 에 열려 있으면 되묻지 않은 것과 같으므로
+       초점은 「그만두기」에서 시작한다 (REQ-20260830-008). */
     const yes = await s9dlg({kind: "confirm", cap: "영구", stop: true,
+      safe: true,
       title: `${ids.length}건을 영구히 지웁니다 — 되돌릴 수 없습니다`,
       descHtml: tidyNames(ids, i => (tidyTrash || []).find(x => x.id === i))
         + `<p>번호는 계속 태워 둡니다 — 지운 번호가 다른 문서로 다시 나가는 `

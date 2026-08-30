@@ -34,6 +34,13 @@ def _reap(label):
 
 
 REPO = os.path.dirname(HERE)
+# 스모크 계층 (REQ-20260830-029, quality-assurance 선정): 핵심 계약 12파일,
+# 20초대 목표. --smoke 로 부른다. 목록을 고칠 때는 그 REQ 의 근거 노트를 함께.
+SMOKE = ("test_state_truth.py", "test_catalog_atomic.py",
+         "test_commit_gate.py", "test_note_guard.py", "test_relates_why.py",
+         "test_review_point_len.py", "test_changed_select.py",
+         "test_jobs_shard.py", "test_stall_trust.py", "test_wake.py",
+         "test_closed_no_worker.py", "test_stdlib_only.py")
 GREEN_STAMP = os.path.join(REPO, "state", "tests-last-green")
 # 이 파일들이 바뀌면 어느 시험이 닿는지 셀 수 없다 — 전체로 물러난다.
 COMMON = ("bin/s9", "tests/__main__.py", "tests/portpool.py",
@@ -219,8 +226,14 @@ def patterns(argv):
     """
     out = []
     for a in argv:
-        frag = (a or "").strip().removeprefix("tests/").removesuffix(".py")
-        frag = frag.removeprefix("test_")
+        raw = (a or "").strip().removeprefix("tests/")
+        # 정확한 파일명은 넓히지 않는다 (REQ-20260830-029): --smoke·--changed 가
+        # 고른 test_wake.py 를 test_*wake*.py 로 넓히면 wake 계열 전부가
+        # 끌려와 계층·선택의 뜻이 사라진다. 사람이 치는 조각(wake)만 넓힌다.
+        if raw.startswith("test_") and raw.endswith(".py"):
+            out.append(raw)
+            continue
+        frag = raw.removesuffix(".py").removeprefix("test_")
         if frag:
             out.append(f"test_*{frag}*.py")
     return out or ["test_*.py"]
@@ -284,19 +297,31 @@ def main():
             i = raw.index("--jobs")
             jobs = int(raw[i + 1]) if i + 1 < len(raw) else 4
             raw = raw[:i] + raw[i + 2:]
-        argv = [a for a in raw if a != "--changed"]
-        full_requested = not argv
+        # --smoke: 핵심 계약 12파일 · --gate: 스모크 ∪ --changed (커밋 게이트용,
+        # QA 판정: --changed 단독은 bin/s9 변경이 전체 폴백이라 게이트로 부족)
+        smoke = "--smoke" in raw or "--gate" in raw
+        if "--gate" in raw and "--changed" not in raw:
+            raw.append("--changed")
+        argv = [a for a in raw
+                if a not in ("--changed", "--smoke", "--gate")]
+        full_requested = not argv and not smoke
         sel = None
         if "--changed" in raw:
             sel = changed_selection()
-            if sel == []:
+            if sel == [] and not smoke:
                 print("변경 없음 — 마지막 전체 green 이후 시험에 닿는 파일이 "
                       "바뀌지 않았다. 아무것도 돌리지 않는다.", file=sys.stderr)
                 return 0
             if sel is not None:
                 argv = sel          # 파일명 자체가 부분일치 패턴으로 먹힌다
                 full_requested = False
+            elif smoke:
+                argv = []           # --gate 에서 전체 폴백이면 스모크 ∪ 전체 = 전체
+                smoke_full_fallback = True
             # None 이면 전체 폴백 — argv 그대로(비어 있음 = 전체)
+        if smoke and not (sel is None and "--gate" in sys.argv[1:]):
+            argv = sorted(set(argv) | set(SMOKE))
+            full_requested = False
         pats = patterns(argv)
         if jobs > 1 and not nested:
             files = matched_files(pats)

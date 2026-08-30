@@ -16,6 +16,7 @@ import importlib.util
 import json
 import os
 import subprocess
+import tempfile
 import unittest
 from importlib.machinery import SourceFileLoader
 
@@ -257,6 +258,55 @@ class Shape(unittest.TestCase):
         d = json.loads(r.stdout)
         self.assertIn("system", d)
         self.assertTrue(any(x["key"] == "boot" for x in d["system"]))
+
+
+class DeadStampDistrust(unittest.TestCase):
+    """D9. 죽은 pid 의 지문은 믿지 않는다 (REQ-20260830-005 (다)).
+
+    실사고 2026-08-30 아침: 시험이 남긴 임시 포트 지문(pid 죽음, port 18898)을
+    doctor 가 그대로 믿고 죽은 포트를 두드리며 "서버가 안 떠 있다"고 했다 —
+    실제 대시보드는 9909 에서 멀쩡히 돌고 있었다 (REQ-20260830-004)."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="s9doc-")
+        os.makedirs(os.path.join(self.root, "state"), exist_ok=True)
+        self._old_root = doctor.ROOT
+        doctor.ROOT = self.root
+        self._old_env = os.environ.pop("S9_PORT", None)
+        # 규범 포트를 아무도 안 듣는 포트로 — 실제 리스너에 붙지 않게.
+        # 임시 포트를 직접 bind 하면 안 된다(port_pool 계약): 병렬의 다른
+        # 시험이 그 순간 같은 포트를 받을 수 있다 — 실제로 두 번 충돌했다.
+        import portpool
+        self.canon = portpool.free_port()
+        with open(os.path.join(self.root, "state", "port"), "w") as f:
+            f.write(str(self.canon))
+
+    def tearDown(self):
+        doctor.ROOT = self._old_root
+        if self._old_env is not None:
+            os.environ["S9_PORT"] = self._old_env
+
+    def stamp(self, d):
+        with open(os.path.join(self.root, "state", "serve-code.json"),
+                  "w", encoding="utf-8") as f:
+            json.dump(d, f)
+
+    # D9a. 죽은 pid 지문 → 지문 포트가 아니라 규범 포트(state/port·9909)로
+    def test_dead_pid_falls_back_to_canonical_port(self):
+        self.stamp({"pid": 999999999, "port": 18898})
+        self.assertEqual(doctor.serve_info()["port"], self.canon)
+
+    # D9b. 살아 있는 pid 지문 → 지문 포트를 그대로 쓴다
+    def test_live_pid_stamp_is_trusted(self):
+        self.stamp({"pid": os.getpid(), "port": 18899})
+        self.assertEqual(doctor.serve_info()["port"], 18899)
+
+    # D9c. pid 가 없는(0 포함) 지문도 불신 — 지문 없음과 같이 규범 포트로
+    def test_no_pid_stamp_is_distrusted(self):
+        self.stamp({"port": 18898})
+        self.assertEqual(doctor.serve_info()["port"], self.canon)
+        os.unlink(os.path.join(self.root, "state", "serve-code.json"))
+        self.assertEqual(doctor.serve_info()["port"], self.canon)
 
 
 if __name__ == "__main__":

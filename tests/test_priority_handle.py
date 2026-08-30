@@ -577,6 +577,12 @@ class ChangedValueMovesTheQueue(unittest.TestCase):
             [S9, "new", "request", "--title", title, "--summary", "s",
              "--body", "b"], capture_output=True, text=True, env=self.env,
             timeout=90, stdin=subprocess.DEVNULL)
+        # rc·stderr 를 삼키면 병렬 부하의 간헐 실패가 IndexError 로 둔갑해
+        # 원인이 안 잡힌다 (REQ-20260830-029 계측이 실제로 겪은 것).
+        if r.returncode != 0 or not r.stdout.split():
+            raise AssertionError(
+                f"s9 new rc={r.returncode}\nstdout={r.stdout!r}\n"
+                f"stderr={r.stderr!r}")
         return r.stdout.split()[0].strip()
 
     def mod(self):

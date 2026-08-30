@@ -250,6 +250,68 @@ class TheAttribution(Base):
                          "무명 잡은 전역에는 보여야 한다")
 
 
+class TheWorkerDeclaration(Base):
+    """W1~W5 (REQ-20260830-026) — 워커의 잡은 S9_JOB_REQ 로 선언 귀속된다."""
+
+    def put_req_job(self, req):
+        os.makedirs(self.jdir, exist_ok=True)
+        j = {"name": "테스트", "hint": "python", "pid": os.getpid(),
+             "started": time.time(), "session": "", "req": req,
+             "total": 10, "done": 3}
+        with open(os.path.join(self.jdir, "tests-w.json"), "w",
+                  encoding="utf-8") as f:
+            f.write(json.dumps(j))
+
+    def mkreq(self):
+        subprocess.run([S9, "user", "add", "alice"], capture_output=True,
+                       env=self.env, timeout=30)
+        r = subprocess.run([S9, "new", "request", "--title", "워커 잡",
+                            "--summary", "s", "--size", "S", "--user", "alice",
+                            "--goal", "g", "--body", "x"],
+                           capture_output=True, text=True, env=self.env,
+                           timeout=30)
+        rid = r.stdout.split()[0]
+        subprocess.run([S9, "status", rid, "in-progress", "--note", "t"],
+                       capture_output=True, env=self.env, timeout=30)
+        return rid
+
+    def test_w1_spawn_env_carries_job_req(self):
+        # 스폰 봉투 계약 — env 조립부에 선언이 실재하는가 (모든 reason 공통 자리).
+        src = open(S9, encoding="utf-8").read()
+        i = src.index("def _spawn_worker(")
+        j = src.index("\ndef ", i + 10)
+        self.assertIn('env["S9_JOB_REQ"] = canon_id(doc_id)', src[i:j],
+                      "워커 봉투에 잡 선언이 없다 — 워커 테스트가 전역에만 뜬다")
+
+    def test_w2_jobfile_records_the_declaration(self):
+        os.environ["S9_JOB_REQ"] = "REQ-20260830-999-zzzz"
+        try:
+            jf = _jobfile()
+            bump, clear = jf.start(5, root=self.root)
+            p = os.path.join(self.jdir, f"tests-{os.getpid()}.json")
+            j = json.load(open(p, encoding="utf-8"))
+            self.assertEqual(j["req"], "REQ-20260830-999-zzzz")
+            clear()
+        finally:
+            os.environ.pop("S9_JOB_REQ", None)
+
+    def test_w3_declared_req_reaches_the_card_without_session(self):
+        rid = self.mkreq()
+        self.put_req_job(rid)
+        row = next(r for r in self.m.catalog_with_live() if r["id"] == rid)
+        self.assertTrue(row.get("jobs"), "req 선언 잡이 카드에 안 붙었다")
+        self.assertEqual(row.get("stall_state"), "attached", row)
+
+    def test_w5_unknown_req_stays_global(self):
+        rid = self.mkreq()
+        self.put_req_job("REQ-20200101-777-none")   # 실재하지 않는 문서
+        row = next(r for r in self.m.catalog_with_live() if r["id"] == rid)
+        self.assertFalse(row.get("jobs"),
+                         "없는 id 선언이 남의 카드에 붙었다")
+        self.assertEqual(len(self.m.jobs_running()), 1,
+                         "전역 표시까지 사라졌다 — 선언 실패는 전역 강등이어야")
+
+
 class TheScreen(Base):
     """J7 — 화면은 서버 필드를 소비만 한다."""
 

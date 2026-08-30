@@ -356,7 +356,11 @@ function heldProbe(rows){
    자체를 안 싣는다. 없으면 아무것도 그리지 않는다 — 빈 칸도, "미상"도 아니다.
    모르는 것에 자리를 주면 판이 매일 그 자리를 먹는다(같은 규칙을 취소 열에서
    한 번 더 쓴다 — REQ-20260829-031). */
-const WS_PLACE = {main: "본 저장소", worktree: "워크트리"};
+/* 자리 이름이 아니라 **결과**를 쓴다 (REQ-20260830-001, tech-writer 판정 +
+   translator 문안 + ux-writer 다듬음). 「본 저장소↔워크트리」는 대비로만 뜻이
+   서는 한 쌍이라 여러 사람이 쓰는 화면에서 둘 다 배워야 하는 말이었다 —
+   사용자: "둘의 차이를 잘 모르겠네." 축은 하나다: 언제 이 화면에 보이나. */
+const WS_PLACE = {main: "바로 보임", worktree: "끝나면 보임"};
 /* 자리에는 **표가 붙는다** (REQ-20260829-030 2차 반려: "어떤 화면에서 확인할 수
    있는지 모르겠다"). 1차는 낱말만 세웠는데, 메타 줄은 이미 이름·급·크기·태그가
    서는 자리라 낱말 하나는 지나가는 태그로 읽혔다 — 실제로 보드에 값이 붙은
@@ -382,23 +386,19 @@ const WS_FIX_SWEEP = "다 쓴 워크트리를 거두면 다시 워크트리로 �
    자리 이름을 문장 안에 다시 적지 않는다 — 이름은 WS_PLACE 한 곳에서만 온다. */
 const WS_MEANS = {main: "고친 것은 지금 보고 있는 이 화면에 바로 나타납니다",
   worktree: "고친 것은 따로 떼어 둔 사본에 있어, 커밋되기 전까지 이 화면에 나타나지 않습니다"};
+/* 사유 중 **결과 말로 옮겨도 첫 줄(WS_MEANS)의 되풀이가 되는 것들은 내렸다**
+   (REQ-20260830-001: off·create-failed·worktree-pile 은 시스템 낱말이 남고,
+   fresh·fresh-outside·worktree-exists 는 옮기면 "그래서 나중에 보입니다"로
+   수렴한다 — translator 판정 + ux-writer 동의). 운영자는 s9 doctor 로 본다. */
 const WS_WHY = {
-  "off": ["워크트리를 쓰지 않도록 설정돼 있습니다", ""],
-  "fresh": ["미커밋 코드가 없어 새 워크트리를 냈습니다", ""],
-  "fresh-outside": ["미커밋 코드가 이 요청이 고칠 범위 밖이라 워크트리를 냈습니다", ""],
-  "worktree-exists": ["이 요청의 워크트리가 이미 살아 있어 둘째를 만들지 않았습니다", ""],
-  "worktree-pile": ["워크트리가 한도까지 쌓여 더 만들지 않습니다", WS_FIX_SWEEP],
-  "dirty-spine": ["모두가 쓰는 파일이 아직 커밋되지 않아, 워크트리에 앉히면 "
+  "dirty-spine": ["모두가 쓰는 파일이 아직 커밋되지 않아, 따로 떼어 놓고 하면 "
                   + "그 코드가 빠진 낡은 사본에서 일하게 됩니다", WS_FIX_COMMIT],
   "dirty-overlap": ["이 요청이 고칠 파일이 아직 커밋되지 않았습니다", WS_FIX_COMMIT],
   "dirty-unknown": ["아직 커밋되지 않은 코드가 있고, 이 요청이 어느 파일을 "
                     + "고칠지는 문서에 적혀 있지 않습니다", WS_FIX_COMMIT],
   // 문장 안에 줄표를 넣지 않는다 — 손 위의 문장이 이미 줄표로 사유를 잇는다.
-  // 한 문장에 줄표가 둘이면 어디까지가 사유인지 눈이 다시 훑는다.
-  "live-verify": ["살아 있는 서버로 확인해야 하는 작업이라서입니다(워크트리에서 고친 "
-                  + "화면은 그 서버에 나타나지 않습니다)", ""],
-  "self-edit": ["작업 도구 자신을 고치는 일이라서입니다(워크트리에서는 그 도구가 잘립니다)", ""],
-  "create-failed": ["워크트리를 만들지 못했습니다", ""],
+  "live-verify": ["살아 있는 서버로 확인해야 하는 작업이라서입니다", ""],
+  "self-edit": ["작업 도구 자신을 고치는 일이라서입니다", ""],
 };
 /* 반환 null(그릴 것이 없다) 또는 {kind, wt, place, why, fix}.
    조건은 stallState 와 같은 자리에 둔다 — 카드와 문서 화면이 각자 관문을 가지면
@@ -408,17 +408,14 @@ function wsState(r){
   const w = r.workspace;
   if (!w || !WS_PLACE[w.kind]) return null;   // 없는 것은 그리지 않는다
   const why = WS_WHY[w.reason] || ["", ""];
-  return {kind: w.kind, wt: w.wt || "", place: WS_PLACE[w.kind],
+  return {kind: w.kind, place: WS_PLACE[w.kind],
           why: why[0], fix: why[1]};
 }
 // 손 위의 문장도 한 곳에서 짓는다 — 칩·창·헤더가 같은 말을 쓴다.
 function wsTitle(s){
-  // 낱말은 WS_PLACE 한 곳에서 온다 — 여기에 다시 적으면 자리 이름이 두 벌이 된다.
-  // 워크트리는 **어느 워크트리인지**까지 말한다(사람이 cd 해서 볼 자리다).
-  // `wt` 는 kind 가 main 일 때도 실릴 수 있어서(이미 있는 워크트리를 두고 본
-  // 저장소로 간 경우) 이름을 붙이는 조건은 kind 로 본다.
-  const where = s.kind === "worktree" && s.wt ? `${s.place} ${s.wt}` : s.place;
-  return `이 요청을 이어서 하는 자동 작업이 ${where}에서 돕니다`
+  // 자리 이름·워크트리 이름은 화면에서 내렸다 (REQ-20260830-001) — 뜻은
+  // WS_MEANS 한 곳에서 온다. cd 할 사람의 값(w-xxxx)은 s9 worktree ls 의 몫.
+  return `${WS_MEANS[s.kind] || ""}`
     + (s.why ? ` — ${s.why}` : "") + (s.fix ? `. ${s.fix}` : "");
 }
 /* 카드에는 서지 않는다 (REQ-20260829-030 4차 반려).
@@ -475,9 +472,10 @@ function wsChip(r){
 function wsOpen(id){
   const s = wsState(catFind(id));
   if (!s) return;
-  const where = s.kind === "worktree" && s.wt ? `${s.place} ${s.wt}` : s.place;
-  s9dlg({kind: "alert", cap: "작업 자리", stop: false,
-    title: `${shortId(id)} 를 이어서 하는 자동 작업은 ${where}에서 돕니다`,
+  // 제목은 무엇에 대한 창인가만 진다 (ux-writer) — 답은 첫 줄(WS_MEANS)이,
+  // 상태는 카드의 「진행 중」 줄이 이미 말한다.
+  s9dlg({kind: "alert", cap: "자동 작업", stop: false,
+    title: `${shortId(id)} 의 자동 작업`,
     descHtml: `<div class="wsrow wsans">${esc(WS_MEANS[s.kind] || "")}.</div>`
       + (s.why ? `<div class="wsrow">${esc(s.why)}.</div>` : "")
       + (s.fix ? `<div class="wsfix">${esc(s.fix)}.</div>` : ""),
@@ -645,8 +643,12 @@ function paintStop(id){
    규칙). 화면이 읽는 것은 `ok` 와 `message` 둘뿐이다. */
 async function stopDoc(id){
   if (stopPending(id)) return;              // 연타 — 이미 세우는 중이다
+  /* 맨 Enter 는 「그대로 두기」에 닿는다 (`safe` — REQ-20260830-008). 세우기는
+     되돌릴 수 있는 일이지만("이어가기"), **되살릴 수 있다와 실수로 눌러도
+     괜찮다는 다른 말이다**: 그 사이에 도는 작업이 하던 일을 잃는다. 창을 읽지
+     않고 Enter 를 치는 손이 있고, 그 손이 배우는 규칙은 창마다 같아야 한다. */
   const go = await s9dlg({kind: "confirm", cap: STOP_LABEL, stop: false,
-    doc: shortId(id),
+    safe: true, doc: shortId(id),
     // 어느 요청인지는 창머리의 주소가 말한다 — 제목은 물음 하나만 한다.
     title: "진행 중인 자동 작업을 중단할까요?",
     desc: "지금 하던 일은 문서에 적힌 데까지만 남고, 그 뒤로 진행 중이던 것은"

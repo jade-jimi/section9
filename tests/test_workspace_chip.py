@@ -142,7 +142,7 @@ class WorkspaceChip(unittest.TestCase):
                             json.dumps(self.row(workspace=ws)),
                             json.dumps(self.row(status="done", workspace=ws)),
                             json.dumps(self.row(type="knowledge", workspace=ws))))
-        self.assertIn("본 저장소", r["prog"])
+        self.assertIn("바로 보임", r["prog"])
         self.assertEqual(r["done"], "", "끝난 카드가 아직 어디서 돈다고 말한다")
         self.assertEqual(r["know"], "", "요청이 아닌 문서에까지 자리를 그렸다")
 
@@ -155,10 +155,10 @@ class WorkspaceChip(unittest.TestCase):
                             json.dumps(self.row(workspace={
                                 "kind": "worktree", "reason": "fresh",
                                 "wt": "w-829-030-62x6"}))))
-        self.assertIn("본 저장소", r["main"])
-        self.assertIn("워크트리", r["wt"])
+        self.assertIn("바로 보임", r["main"])
+        self.assertIn("끝나면 보임", r["wt"])
         # 낱말이 다르므로 색이 없어도 읽힌다 (s9-design 7: 색만으로 구분 금지)
-        self.assertNotIn("본 저장소", r["wt"])
+        self.assertNotIn("바로 보임", r["wt"])
 
     # W4 — 사유는 사람 말로, 풀리는 법은 풀 수 있을 때만
     def test_w4_reason_and_remedy(self):
@@ -175,12 +175,16 @@ class WorkspaceChip(unittest.TestCase):
                                 "kind": "worktree", "reason": "fresh",
                                 "wt": "w-829-030-62x6"}))))
         self.assertIn("커밋하면", r["dirty"], "커밋하면 풀린다는 말이 없다")
-        self.assertIn("거두면", r["pile"], "워크트리를 거두면 풀린다는 말이 없다")
+        # worktree-pile 문장은 화면에서 내렸다 (REQ-20260830-001) — 옮기면
+        # 첫 줄의 되풀이가 된다. 운영 사유는 s9 doctor 의 몫이다.
+        self.assertNotIn("거두면", r["pile"],
+                         "내리기로 판정된 pile 문장이 화면에 되살아났다")
         # 풀 것이 없는 자리에 할 일을 지어내지 않는다 — 매번 참인 문장은 안 읽힌다
         self.assertNotIn("커밋하면", r["self"])
         self.assertNotIn("커밋하면", r["wt"])
-        # 워크트리는 어느 워크트리인지까지 말한다 (cd 해서 볼 자리다)
-        self.assertIn("w-829-030-62x6", r["wt"])
+        # 워크트리 이름(w-xxxx)은 화면에서 내렸다 — cd 할 사람의 값이고,
+        # 그 자리는 s9 worktree ls 다 (REQ-20260830-001 tech-writer 판정).
+        self.assertNotIn("w-829-030-62x6", r["wt"])
 
     # W5 — 서버가 내는 사유 코드에 빠짐이 없다
     def test_w5_every_server_reason_has_words(self):
@@ -192,14 +196,24 @@ class WorkspaceChip(unittest.TestCase):
         codes = set(re.findall(r'(?:^|\s)[MW]\("([a-z-]+)"', s9, re.M))
         self.assertGreaterEqual(len(codes), 10,
                                 "서버에서 사유 코드를 못 읽었다 — 판정 함수가 바뀌었나")
+        # 계약 개정 (REQ-20260830-001): 전 사유 문장화가 아니라 **판정된 사전**이다.
+        # 내린 여섯(off·fresh·fresh-outside·worktree-exists·worktree-pile·
+        # create-failed)은 옮기면 첫 줄(WS_MEANS)의 되풀이가 되어 화면에서
+        # 내렸다 — 그 사유들은 첫 줄만 서고(W6 의 그 길), 운영은 s9 doctor 로.
+        DROPPED = {"off", "fresh", "fresh-outside", "worktree-exists",
+                   "worktree-pile", "create-failed"}
         for c in sorted(codes):
-            self.assertIn(f'"{c}"', self.why, f"사유 {c!r} 를 화면이 모른다")
+            if c in DROPPED:
+                self.assertNotIn(f'"{c}"', self.why,
+                                 f"내리기로 판정된 사유 {c!r} 가 되살아났다")
+            else:
+                self.assertIn(f'"{c}"', self.why, f"사유 {c!r} 를 화면이 모른다")
 
     # W6 — 모르는 코드가 와도 화면이 무너지지 않는다
     def test_w6_unknown_reason_still_names_the_place(self):
         r = self.run_js("console.log(JSON.stringify(wsState(%s)));" % json.dumps(
             self.row(workspace={"kind": "main", "reason": "무언가-새-사유"})))
-        self.assertEqual(r["place"], "본 저장소")
+        self.assertEqual(r["place"], "바로 보임")
         self.assertEqual(r["why"], "", "모르는 사유에 말을 지어냈다")
         self.assertEqual(r["fix"], "")
 
@@ -282,7 +296,7 @@ class WorkspaceChip(unittest.TestCase):
         self.assertIn("wsChip(catFind(m.id))", self.src,
                       "문서 화면이 자리를 안 말한다")
         # 낱말은 한 곳에만 있다
-        self.assertEqual(self.src.count('"본 저장소"'), 1,
+        self.assertEqual(self.src.count('"바로 보임"'), 1,
                          "자리 낱말이 두 곳에 적혀 있다")
 
     # W10 — 줄이 아니라 칩이고, 그 칩이 서는 곳은 **문서의 메타 표**다
@@ -334,7 +348,7 @@ class WorkspaceChip(unittest.TestCase):
         self.assertIn(mark, r["main"], "문서의 자리 칸에 표가 없다")
         self.assertIn(mark, r["wt"])
         # 표가 낱말을 밀어내지는 않는다 — 표만으로는 어느 자리인지 못 읽는다
-        self.assertIn("본 저장소", r["main"])
+        self.assertIn("바로 보임", r["main"])
 
     # W15 — 손 위의 글만으로는 못 찾은 사람에게 답이 안 된다: **누를 수 있다**
     def test_w15_the_chip_can_be_pressed(self):
@@ -380,7 +394,10 @@ class WorkspaceChip(unittest.TestCase):
         self.assertIn("바로 나타납니다", r["a"]["descHtml"])
         self.assertIn("나타나지 않습니다", r["b"]["descHtml"])
         # 워크트리는 어느 워크트리인지까지 말한다 (사람이 cd 해서 볼 자리다)
-        self.assertIn("w-829-030-62x6", r["b"]["title"])
+        # 워크트리 이름은 제목에서 내렸다 (REQ-20260830-001) — 제목은
+        # 주소+대상만 지고, 답은 첫 줄(WS_MEANS)이 진다.
+        self.assertNotIn("w-829-030-62x6", r["b"]["title"])
+        self.assertIn("나타나지 않습니다", r["b"]["descHtml"])
         # 풀 것이 없는 자리에 할 일을 지어내지 않는다
         self.assertNotIn("커밋하면", r["b"]["descHtml"])
         # 대기·자리는 고장이 아니다 — 붉은 눈썹을 달지 않는다

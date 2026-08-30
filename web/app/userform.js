@@ -442,7 +442,9 @@ function showUserForm(u, host, isAdminEdit){
       // 묻기 전에 말한다.
       const both = b.dataset.both === "1";
       const place = both ? "저장소 안과 밖 양쪽" : (WHERE_KO[w] || "저장소 안");
-      if (!await s9dlg({kind: "confirm", cap: "삭제",
+      // 되살릴 수 없는 창이라 맨 Enter 는 「그만두기」에 닿는다
+      // (REQ-20260830-008 — 계정 자리 지우기가 이미 서 있는 그 자리).
+      if (!await s9dlg({kind: "confirm", cap: "삭제", safe: true,
             titleHtml: `<code>${esc(key)}</code> 를 지울까요?`,
             desc: `${place}에 있는 파일을 지웁니다. 지운 값은 되살릴 수 없습니다. 이 키를 쓰는 도구는 다음 실행부터 멈춥니다.`,
             ok: "지우기", cancel: "그만두기"})) return;

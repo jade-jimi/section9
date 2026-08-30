@@ -6086,6 +6086,10 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
     env.update(wt_env)
     env["S9_AUTO_RESUME"] = "1"
     env["S9_USER"] = owner
+    # 워커가 돌리는 긴 잡(테스트 러너)의 선언 귀속 (REQ-20260830-026):
+    # S9_SESSION 은 아래서 걷히므로(세션 의미론), 잡 전용 선언을 따로 싣는다.
+    # jobfile 이 이 값을 req 필드로 적고, 카탈로그가 그 카드에 붙인다.
+    env["S9_JOB_REQ"] = canon_id(doc_id)
     env.pop("S9_SESSION", None)
     sid = ""
     if allow_resume:
@@ -8977,6 +8981,7 @@ def jobs_running(now=None):
             quiet = 0
         out.append({"name": str(j.get("name") or "작업"), "pid": pid,
                     "args": str(j.get("args") or ""),
+                    "req": str(j.get("req") or ""),
                     "mins": int(max(0, now - started) // 60),
                     "quiet_sec": quiet,
                     "total": int(j.get("total") or 0),
@@ -9895,6 +9900,23 @@ def running_code_stamp():
     return {"s9": code_stamp(), "hook": code_stamp(hook_path())}
 
 
+def serve_stamp_wanted(port, root=None):
+    """이 포트로 뜬 서버가 지문(state/serve-code.json)을 남겨야 하는가
+    (REQ-20260830-005).
+
+    지문 파일은 저장소당 하나뿐이라 **이 저장소의 대시보드**만 써야 한다.
+    시험이 본 저장소 S9_ROOT 로 임시 포트에 띄운 서버가 지문을 갈아쓰고
+    죽으면, doctor 는 죽은 포트를 두드리며 "안 떠 있다"고 하고 훅 배너는
+    남의 지문으로 말한다 — 2026-08-30 아침 사용자가 세션이 다 죽은 줄 알고
+    s9 를 전부 내린 실사고가 여기서 났다 (REQ-20260830-004).
+    대시보드 포트 판정은 s9_port 그대로다: S9_PORT > state/port > 9909.
+    """
+    try:
+        return int(port) == s9_port(root)
+    except (TypeError, ValueError):
+        return False
+
+
 def _as_multi(stamp):
     """옛 단일 지문({mtime,size})을 새 형식으로 맞춘다.
 
@@ -10010,10 +10032,14 @@ def serve_stale():
         # 못 뺏고 물러났는데 새 프로세스가 지문만 남기고 죽었고, 07:51 에 뜬
         # 옛 서버가 계속 응답했다. 그 사이 `serve-stale` 은 "최신"이라고 답했다 —
         # **모른다고 말해야 할 자리에서 안심시켰다.**
-        live = _port_owner_pid(d.get("port"))
+        # 죽은 pid 의 지문은 **포트까지** 불신한다 (REQ-20260830-005) —
+        # 시험이 남긴 임시 포트 지문을 믿으면 판정이 남의 자리로 끌려간다.
+        # 실리스너는 이 저장소의 대시보드 포트(s9_port)에서 찾는다.
+        dash = s9_port()
+        live = _port_owner_pid(dash)
         if not live:
             return ""      # 아무도 안 물고 있다 — 낡을 것도 없다
-        return (f"대시보드 포트 {d.get('port')} 를 pid {live} 가 물고 있는데 "
+        return (f"대시보드 포트 {dash} 를 pid {live} 가 물고 있는데 "
                 f"그건 기동 지문을 남긴 프로세스(pid {pid}, 죽음)가 아니다 — "
                 f"지금 응답하는 코드가 무엇인지 알 수 없다. "
                 f"`s9 serve --restart` 로 다시 띄워 확실히 하라.")
@@ -14246,6 +14272,12 @@ def catalog_with_live(stall_win=None):
     # 싣고, 없으면 전역 칩(serveinfo)까지만 간다 — 귀속을 추측하면 근원 B 다.
     job_rows = {}
     for _j in jobs_running(now=now):
+        # 선언 귀속 1순위: 잡 파일의 req (REQ-20260830-026 — 워커는 S9_SESSION
+        # 이 걷힌 채 돌아 세션 경로가 없다). 실재하는 행과 만나야만 붙으므로
+        # 없는 id 를 선언한 잡은 저절로 전역까지만 간다.
+        if _j.get("req"):
+            job_rows.setdefault(canon_id(_j["req"]), []).append(_j)
+            continue
         if not _j.get("session"):
             continue
         _b = read_binding(current_machine(), _j["session"]) or {}
@@ -16083,12 +16115,16 @@ def cmd_serve(args):
         die(f"포트 {args.port} 를 잡지 못했다: {e}\n"
             f"  다른 프로세스가 물고 있다면 그쪽이 계속 응답한다 — "
             f"`bin/s9 serve --stop` 으로 내린 뒤 다시 띄워라.")
+    # 임시 포트 서버(시험 등)는 지문을 남기지 않는다 (REQ-20260830-005) —
+    # 자격 판정은 serve_stamp_wanted 하나다.
     try:
-        os.makedirs(os.path.join(ROOT, "state"), exist_ok=True)
-        with open(os.path.join(ROOT, "state", "serve-code.json"), "w",
-                  encoding="utf-8") as _f:
-            json.dump({"stamp": SERVE_CODE_STAMP, "started": SERVE_STARTED,
-                       "pid": os.getpid(), "port": args.port}, _f)
+        if serve_stamp_wanted(args.port):
+            os.makedirs(os.path.join(ROOT, "state"), exist_ok=True)
+            with open(os.path.join(ROOT, "state", "serve-code.json"), "w",
+                      encoding="utf-8") as _f:
+                json.dump({"stamp": SERVE_CODE_STAMP,
+                           "started": SERVE_STARTED,
+                           "pid": os.getpid(), "port": args.port}, _f)
     except OSError:
         pass
     print(f"section9 dashboard: http://{args.host}:{args.port}/  (Ctrl-C to stop)")

@@ -41,8 +41,14 @@ class Patterns(unittest.TestCase):
         self.assertEqual(runner.patterns([""]), ["test_*.py"])
 
     def test_three_shapes_of_one_name(self):
-        for arg in ("uid", "test_uid", "tests/test_uid.py"):
+        # 조각 형태는 넓힌다 — 사람이 치는 것.
+        for arg in ("uid", "test_uid"):
             self.assertEqual(runner.patterns([arg]), ["test_*uid*.py"], arg)
+        # 정확한 파일명은 넓히지 않는다 (REQ-20260830-029): 커밋 게이트·--smoke·
+        # --changed 가 고른 파일이 이웃(test_uid_extra 등)까지 끌고 오면 계층과
+        # 선택의 뜻이 사라진다. 정확 일치도 그 파일 하나는 그대로 돈다.
+        self.assertEqual(runner.patterns(["tests/test_uid.py"]),
+                         ["test_uid.py"])
 
     def test_many_names_become_many_patterns(self):
         self.assertEqual(runner.patterns(["uid", "tags"]),

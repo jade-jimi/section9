@@ -817,11 +817,34 @@ def disk_info():
     return rows
 
 
+def _dash_port():
+    """이 저장소의 대시보드 포트 — bin/s9 s9_port 와 같은 서열:
+    S9_PORT > state/port > 9909."""
+    if os.environ.get("S9_PORT"):
+        try:
+            return int(os.environ["S9_PORT"])
+        except ValueError:
+            pass
+    try:
+        with open(os.path.join(ROOT, "state", "port")) as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return 9909
+
+
 def serve_info():
-    port = 9909
+    # 지문(serve-code.json)의 포트는 **그 pid 가 살아 있을 때만** 믿는다
+    # (REQ-20260830-005). 실사고 2026-08-30 아침: 시험이 남긴 죽은 임시 포트
+    # 지문을 그대로 믿고 두드리며 "서버가 안 떠 있다"고 했다 — 실제 대시보드는
+    # 9909 에서 멀쩡히 돌고 있었다 (REQ-20260830-004). 죽었으면 규범 포트로.
+    port = _dash_port()
     try:
         with open(os.path.join(ROOT, "state", "serve-code.json")) as f:
-            port = int((json.load(f) or {}).get("port") or port)
+            d = json.load(f) or {}
+        pid = int(d.get("pid") or 0)
+        if pid > 0:
+            os.kill(pid, 0)          # 죽었으면 OSError → 지문 불신
+            port = int(d.get("port") or port)
     except Exception:
         pass
     out = {"port": port, "listening": False, "responds": False,
