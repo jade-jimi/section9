@@ -290,7 +290,10 @@ class TheHandleOnTheScreen(unittest.TestCase):
     def test_s10_the_row_stands_on_the_server_fact(self):
         self.assertIn("r.worker", self.workrow,
                       "화면이 서버가 준 사실 말고 다른 것으로 손잡이를 세운다")
-        self.assertIn('data-stop="${esc(r.id)}"', self.workrow)
+        # ⏸ 를 그리는 자리는 하나로 모였다 (REQ-20260830-035 — 갈래가 넷이라
+        # 줄마다 베끼면 네 벌이 된다). 행의 사실을 읽는 계약은 그 조각이 진다.
+        self.assertIn("stopBtnHTML(r)", self.workrow, "진행 중 줄이 ⏸ 를 안 세운다")
+        self.assertIn('data-stop="${esc(r.id)}"', _fn(self.web, "stopBtnHTML"))
         # 점으로 대신하면 클레임 뒤에 손잡이가 사라진다
         self.assertNotIn("live_kind", self.workrow,
                          "손잡이가 점의 값을 읽는다 — 클레임 뒤에 사라진다")
@@ -345,7 +348,8 @@ class TheHandleOnTheScreen(unittest.TestCase):
         self.assertIn('class="acts stoprow"', self.workrow)
         # 뒤에 상태 갈래(`ico`·`busy`)가 붙는다 — REQ-20260830-032 로 손잡이
         # 얼굴이 ⏸ 글리프가 됐다. 무는 것은 낱말이 아니라 입은 옷이다.
-        self.assertRegex(self.workrow, r'class="deed stop[ `$]')
+        # 그리는 자리는 공용 조각 하나다 (REQ-20260830-035).
+        self.assertRegex(_fn(self.web, "stopBtnHTML"), r'class="deed stop[ `$]')
         m = re.search(r"\.acts\.stoprow\{([^}]*)\}", self.web)
         self.assertIsNotNone(m, ".acts.stoprow 규칙이 없다")
         for banned in ("background", "animation", "border-left"):

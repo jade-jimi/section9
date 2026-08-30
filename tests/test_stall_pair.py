@@ -266,7 +266,12 @@ class StallRendersTheSame(unittest.TestCase):
             _const(self.src, "GLYPH_PLAY"),
             _const(self.src, "GLYPH_PAUSE"),
             g("wokePending"), g("stopPending"), g("stallState"),
+            # 세우기 손잡이의 네 갈래 (REQ-20260830-035) — 문안 표와 공용
+            # 조각도 원문에서 떠 온다. 베끼면 두 벌이 되고, 새 줄(맡은 손·
+            # 조용한 자리)이 카드에만 서고 문서엔 안 서는 것을 못 잡는다.
+            _const(self.src, "STOP_KIND"),
             g("workRowHTML"), g("stoppedRowHTML"), g("handRowHTML"),
+            g("stopBtnHTML"), g("holdRowHTML"),
             g("stallHTML"),
             g("cardHTML"),
             "CAT = %s;" % json.dumps(rows),
@@ -300,7 +305,59 @@ class StallRendersTheSame(unittest.TestCase):
         # 도는 중 — 초록
         {"id": "REQ-E", "type": "request", "status": "in-progress",
          "title": "돈다", "user": "u", "live": True, "live_age": 3},
+        # ---- 세우기 네 갈래 (REQ-20260830-035) — 카드와 문서가 같아야 한다 ----
+        # 창이 집은 것: 안 멈췄으니 「맡은 창」 줄 하나가 새로 선다
+        {"id": "REQ-F", "type": "request", "status": "in-progress",
+         "title": "창이 맡았다", "user": "u",
+         "stoppable": {"kind": "session", "session": "abcd1234"}},
+        # 일손이 붙은 것
+        {"id": "REQ-G", "type": "request", "status": "in-progress",
+         "title": "일손이 붙었다", "user": "u",
+         "stoppable": {"kind": "agent", "session": "abcd1234", "agent": "a1"}},
+        # 아무도 없는 것: 줄 없이 ⏸ 하나만
+        {"id": "REQ-H", "type": "request", "status": "in-progress",
+         "title": "조용하다", "user": "u", "stoppable": {"kind": "idle"}},
+        # 멈췄고 창도 집고 있는 것 — ▶ 와 ⏸ 가 한 줄에 나란히 서는 유일한 자리
+        {"id": "REQ-I", "type": "request", "status": "in-progress",
+         "title": "멈췄는데 창이 집고 있다", "user": "u", "stalled_mins": 40,
+         "updated": "2026-08-29T16:45:00+09:00",
+         "stoppable": {"kind": "session", "session": "abcd1234"}},
     ]
+
+    def test_every_in_progress_card_can_be_stopped(self):
+        """모든 in-progress 에 ⏸ 가 선다 — 그리고 **한 장에 하나뿐이다**.
+
+        네 갈래(자동 작업·창·일손·조용)가 서로 다른 줄에 붙는데, 자리 규칙이
+        갈라지면 한 카드에 둘이 서거나(멈춤 줄 + 맡은 손 줄) 하나도 안 선다."""
+        out = self.render(self.ROWS)
+        for r in self.ROWS:
+            card = out[r["id"]]["card"]
+            n = card.count("data-stop=")
+            if r.get("stoppable"):
+                self.assertEqual(n, 1, "%s: ⏸ 가 %d 개다" % (r["id"], n))
+            else:
+                self.assertEqual(n, 0, "%s: 서버가 안 준 ⏸ 가 섰다" % r["id"])
+
+    def test_the_stalled_and_held_card_shows_both_handles_on_one_line(self):
+        """멈췄는데 누가 집고 있는 카드 — ▶ 와 ⏸ 가 **같은 줄**에 선다.
+
+        둘은 반대말이 아니라 한 축의 두 방향이라(재생기의 ▶⏸) 나란히 세운다.
+        따로 세우면 27px 짜리가 줄 하나를 더 먹는다 (REQ-20260830-032)."""
+        card = self.render(self.ROWS)["REQ-I"]["card"]
+        i, j = card.find("data-wake="), card.find("data-stop=")
+        self.assertGreater(i, 0, "멈춘 카드에 ▶ 가 없다")
+        self.assertGreater(j, i, "⏸ 가 ▶ 보다 앞에 선다")
+        # 둘 사이에 새 줄(.deedrow)이 끼면 각자 줄을 차지한 것이다
+        self.assertNotIn("deedrow", card[i:j], "▶ 와 ⏸ 가 따로 줄을 찼다")
+
+    def test_the_pause_name_is_one_word_in_every_branch(self):
+        """갈래가 넷이어도 손잡이의 **이름**은 하나다 (ux-writer 뼈대).
+        뜻은 툴팁·창·응답이 가른다 — 낱말을 갈래마다 지으면 네 벌이 된다."""
+        out = self.render(self.ROWS)
+        for rid in ("REQ-F", "REQ-G", "REQ-H", "REQ-I"):
+            card = out[rid]["card"]
+            self.assertIn('aria-label="중단하기"', card,
+                          "%s: ⏸ 의 이름이 「중단하기」가 아니다" % rid)
 
     def test_card_and_document_render_the_same_stall_block(self):
         out = self.render(self.ROWS)

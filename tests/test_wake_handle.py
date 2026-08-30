@@ -169,6 +169,8 @@ class WakeHandle(unittest.TestCase):
 
     def test_it_reuses_the_button_the_card_already_has(self):
         """.acts/.deed 를 그대로 입는다 — 그래야 스킨이 따라온다."""
+        # 이제 사실 줄과 한 껍데기(.deedrow) 안에 함께 선다 — 입은 옷은 그대로다.
+        self.assertRegex(self.stall, r'class="deedrow\$\{')
         self.assertIn('class="acts wakerow"', self.stall)
         # `deed wake` 뒤에 상태 갈래(`ico`·`busy`)가 붙는다 (REQ-20260830-032:
         # 손잡이 얼굴이 글리프로 바뀌었다). 계약은 낱말 그대로가 아니라 **입은
@@ -183,11 +185,15 @@ class WakeHandle(unittest.TestCase):
         self.assertNotIn("wakebanner", self.src)
 
     def test_calm_skin_does_not_lose_the_row(self):
-        """calm 은 카드를 order 로 다시 세운다 — 자리를 안 주면 제목 위로 튄다."""
+        """calm 은 카드를 order 로 다시 세운다 — 자리를 안 주면 제목 위로 튄다.
+
+        손잡이가 사실 줄과 한 줄로 묶이면서(REQ-20260830-032) 카드의 직계
+        자식이 `.acts` 에서 그 껍데기(`.deedrow`)로 바뀌었다. 무는 것은 옛
+        이름이 아니라 **그 자식이 order:3 을 받는가**다."""
         self.assertRegex(
             self.src,
-            r'\[data-skin="calm"\] \.card>\.acts\{order:3\}',
-            "calm 스킨에서 깨우기 줄이 카드 맨 위로 올라간다")
+            r'\[data-skin="calm"\] \.card>\.deedrow\{order:3\}',
+            "calm 스킨에서 손잡이 줄이 카드 맨 위로 올라간다")
 
     # ---------- 배선 ----------
 

@@ -138,8 +138,11 @@ CENSUS = {
         (False, "값을 하나 넣을 뿐이고, 넣어도 쓰이지 않는다"),
     ("userform.js", "지우기", "그만두기"):
         (True, "지운 비밀 값은 되살릴 수 없고 그 키를 쓰는 도구가 멈춘다"),
-    ("card.js", "STOP_LABEL", "그대로 두기"):
-        (True, "도는 작업을 세운다 — 되살려도 하던 일은 잃는다 (이 REQ)"),
+    # 세우기 창은 갈래(자동 작업·창·일손)마다 문안이 다르지만 **자리는 하나**다
+    # — 주 낱말이 표(STOP_KIND)에서 오므로 대장의 열쇠도 그 표를 읽는 이름이다
+    # (REQ-20260830-035). 물러나는 낱말은 넷 다 「그대로 두기」로 같다.
+    ("card.js", "stopAsk", "그대로 두기"):
+        (True, "도는 작업을 세운다 — 되살려도 하던 일은 잃는다 (REQ-20260829-024)"),
     ("card.js", "취소하기", "그만두기"):
         (False, "창이 스스로 적는다 — 되돌리려면 다시 옮기면 된다"),
     ("restart.js", "중단하고 바꾸기", "그대로 두기"):
@@ -153,7 +156,7 @@ CENSUS = {
     # 진단이 세우는 거울 — 본 창과 같은 표를 따른다
     ("diag.js", "취소하기", "그만두기"): (False, "card.js 취소하기의 거울"),
     ("diag.js", "지우기", "그만두기"): (True, "session.js 계정 자리 지우기의 거울"),
-    ("diag.js", "멈추고 바꾸기", "그대로 두기"): (True, "restart.js 세션 중단의 거울"),
+    ("diag.js", "중단하고 바꾸기", "그대로 두기"): (True, "restart.js 세션 중단의 거울"),
 }
 
 
@@ -206,12 +209,13 @@ class DialogSafeFocus(unittest.TestCase):
 
     # ---- F4. 세우기 창 (회귀) --------------------------------------------
     def test_f4_the_stop_dialog_starts_on_leaving_it_alone(self):
-        """맨 Enter 가 「중단하기」에 닿던 그 자리. 낱말이 상수(STOP_LABEL)로
-        빠져 있어(REQ-20260829-024) 글자로는 못 짚으므로 모양으로 짚는다."""
+        """맨 Enter 가 「중단하기」에 닿던 그 자리. 낱말이 표(STOP_KIND)에서
+        오므로(REQ-20260830-035) 글자로는 못 짚어 모양으로 짚는다. 창이 하나인
+        것도 계약이다 — 갈래마다 창을 지으면 고친 창이 사람이 보는 창이 아니다."""
         hit = [s for s in self.confirms
-               if s[0] == "card.js" and s[2] == "STOP_LABEL"]
+               if s[0] == "card.js" and s[2] == "stopAsk"]
         self.assertEqual(len(hit), 1, "세우기 확인 창을 못 찾았다 — "
-                                      "ok: STOP_LABEL 이 바뀌었나")
+                                      "ok: stopAsk.ok 가 바뀌었나")
         self.assertEqual(hit[0][3], "그대로 두기", "물러나는 낱말이 바뀌었다")
         self.assertTrue(hit[0][4], "세우기 창의 맨 Enter 가 아직 「중단하기」에 "
                                    "닿는다 — 읽지 않고 Enter 를 치는 손이 도는 "

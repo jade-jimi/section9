@@ -12,6 +12,58 @@
 const WAKE_LABEL = "이어가기", WAKE_GOING = "이어가는 중…";
 const STOP_LABEL = "중단하기", STOP_GOING = "중단 중…";
 const DRIFT_LABEL = "끝났는지 확인";
+/* ⏸ 의 네 갈래 (REQ-20260830-035). 손잡이의 **이름은 넷 다 「중단하기」**다 —
+   뜻은 툴팁·창·응답이 가른다(낱말을 갈래마다 새로 지으면 낱말이 네 벌이 되고,
+   사람이 배운 한 낱말이 화면마다 다른 것을 가리키게 된다).
+
+   문안은 ux-writer 가 REQ-035 문서에 적은 것을 **그대로** 옮겼다. 화면이 문장을
+   짓지 않는다 — 서버 응답도 `d.message` 를 그대로 띄운다.
+
+   `row` = 사실 줄이 말하는 것 · `tip` = 손잡이에 손이 얹혔을 때 · `ask` = 확인 창.
+   `ask` 가 없는 갈래(idle)는 창을 세우지 않는다: 잃는 것이 없고 「이어가기」 한
+   번으로 되돌아간다(s9-design 4절 — 확인은 되돌릴 수 없을 때만). */
+const STOP_KIND = {
+  worker: {
+    tip: "진행 중인 자동 작업을 중단합니다 — 하던 일이 거기서 끝나고 사유가 문서에 남습니다",
+    ask: {title: "진행 중인 자동 작업을 중단할까요?",
+      desc: "지금 하던 일은 문서에 적힌 데까지만 남고, 그 뒤로 진행 중이던 것은"
+        + " 사라집니다. 중단한 사실과 사유는 문서에 남습니다. 다시 맡기려면 같은"
+        + " 자리에 생기는 「이어가기」를 누르면 됩니다.",
+      ok: STOP_LABEL}},
+  session: {
+    row: "이 요청을 맡은 창이 지금 일하고 있습니다 — 중단하면 멈추라는 말이 그 창에"
+      + " 전해지고, 하던 말을 마치는 데 잠깐 걸릴 수 있습니다",
+    cap: "맡은 창",
+    fact: "일하는 중",
+    tip: "일하는 창에 중단하라고 전합니다 — 곧바로 멎지 않을 수 있습니다",
+    ask: {title: "일하는 창에 중단하라고 전할까요?",
+      desc: "지금 하던 말은 그 창이 마치는 데까지 이어질 수 있어 곧바로 멎지"
+        + " 않습니다. 멈추면 어디까지 했는지와 사유가 문서에 남습니다. 그동안"
+        + " 자동 작업은 이 요청을 다시 집지 않고, 다시 맡기려면 같은 자리의"
+        + " 「이어가기」를 누르면 됩니다.",
+      ok: "중단하라고 전하기"}},
+  agent: {
+    row: "이 요청을 나눠 맡은 일손이 조각 하나를 진행 중입니다 — 중단하면 하던"
+      + " 조각은 마치고 멈춥니다",
+    cap: "일손",
+    fact: "조각 하나 진행 중",
+    tip: "나눠 맡은 일손에 중단하라고 전합니다 — 하던 조각은 마치고 멈춥니다",
+    ask: {title: "나눠 맡은 일손에 중단하라고 전할까요?",
+      desc: "지금 붙잡은 조각은 마치고 멈추므로 곧바로 멎지 않습니다. 어디까지"
+        + " 했는지와 중단한 사유는 문서에 남습니다. 다시 맡기려면 같은 자리의"
+        + " 「이어가기」를 누르면 됩니다.",
+      ok: "중단하라고 전하기"}},
+  /* idle 은 ux-writer 가 "줄을 세우지 말라"고 했다("도는 것이 없으니 적을
+     사실이 없다"). 화면에 세우고 보니 그 권고가 만드는 그림은 **글리프 하나가
+     빈 줄을 혼자 쓰는 카드**였다 — 오너가 방금 반려한 바로 그 모양이다.
+     줄은 ⏸ 때문에 어차피 서므로, 비워 두는 대신 그 ⏸ 가 왜 거기 있는지를
+     적었다: 「맡은 손 없음」. 높이는 1px 도 안 늘고, "진행 중"을 주장하지
+     않는다는 권고의 뜻은 그대로 지킨다(캡션이 진행이 아니라 손을 말한다). */
+  idle: {
+    row: "지금 이 요청에 붙어 일하는 손길이 없습니다 — 세워 두면 자동 작업이 다시 집지 않습니다",
+    cap: "맡은 손", fact: "없음",
+    tip: "지금은 붙어 있는 손길이 없습니다 — 자동 작업이 이 요청을 다시 집지 않도록 세워 둡니다"},
+};
 /* 손잡이의 **얼굴**은 글리프, **이름**은 그대로 낱말 (REQ-20260830-032 오너 판정).
 
    사용자: "세우고 깨우고 관련 디자인을 일반적인 play, pause 버튼(영어 글자
@@ -127,6 +179,43 @@ function handRowHTML(r){
     + (r.hand_mins < 1 ? "방금" : `${fmtStall(r.hand_mins).replace(/째$/, "")} 전`)
     + ` · ${fmtStall(r.quiet_mins)} 조용</div>`;
 }
+/* ⏸ 한 개의 HTML. **카드에 ⏸ 는 하나뿐**이고, 그 자리는 "지금 무엇이 붙어
+   있는가"를 가장 구체적으로 말하는 줄이다:
+
+       진행 중(worker) 줄  >  멈춤 줄  >  맡은 손(창·일손) 줄  >  조용한 자리
+
+   같은 카드에 ▶ 와 ⏸ 가 함께 서는 자리는 멈춤 줄 하나뿐이다(그 카드는 "안
+   나아가는 중"이면서 동시에 "누가 집고 있는 중"일 수 있다). 둘은 서로 반대말이
+   아니라 **한 축의 두 방향**이라 나란히 세운다 — 재생기의 ▶⏸ 가 그렇듯이.
+   이름·툴팁·창이 갈래를 가르므로 그림이 같아도 뜻이 섞이지 않는다. */
+function stopBtnHTML(r){
+  const kind = (r.stoppable || {}).kind;
+  if (!kind) return "";
+  const going = stopPending(r.id);
+  const tip = (STOP_KIND[kind] || {}).tip || STOP_KIND.idle.tip;
+  return `<button type="button" class="deed stop ico${going ? " busy" : ""}"`
+    + ` data-stop="${esc(r.id)}" data-kind="${esc(kind)}"${going ? " disabled" : ""}`
+    + ` data-name="${STOP_LABEL}" data-tip="${esc(tip)}"`
+    + ` aria-label="${going ? STOP_GOING : STOP_LABEL}"`
+    + ` title="${going ? STOP_GOING : esc(tip)}">${GLYPH_PAUSE}</button>`;
+}
+/* 맡은 손 줄 (REQ-20260830-035) — 무인 작업자도 멈춤도 아닌데 누가 집고 있는
+   카드가 "왜 여기 ⏸ 가 서 있나"를 스스로 말한다. 새 문법이 아니라 진행 중 줄과
+   같은 `.rvpt` 한 줄이고, 잉크도 같은 in-progress 색이다.
+   문안 표에 줄이 없는 갈래(서버가 뒷날 다섯째를 더한다면)는 ⏸ 만 오른쪽 끝에
+   세운다 — 모르는 갈래라고 손잡이를 지우면 세울 수 없는 카드가 생긴다. */
+function holdRowHTML(r){
+  const kind = (r.stoppable || {}).kind;
+  if (!kind || kind === "worker") return "";
+  const k = STOP_KIND[kind] || {};
+  if (!k.row){
+    return `<div class="deedrow bare"><div class="acts stoprow">`
+      + stopBtnHTML(r) + `</div></div>`;
+  }
+  return `<div class="deedrow"><div class="rvpt hold" title="${esc(k.row)}">`
+    + `<span class="rvcap">${esc(k.cap)}</span>${esc(k.fact)}</div>`
+    + `<div class="acts stoprow">` + stopBtnHTML(r) + `</div></div>`;
+}
 function stallHTML(r){
   const work = workRowHTML(r);
   const stopped = stoppedRowHTML(r);
@@ -138,13 +227,21 @@ function stallHTML(r){
      그쪽을 세운다(마커 판정이 점을 이기는 그 규칙과 같다). */
   if (stopped) return work + stopped;
   const hand = handRowHTML(r);
-  if (!st && !work && !hand) return "";
-  if (!st) return work + hand;
+  // worker 는 진행 중 줄이 이미 ⏸ 를 갖는다 — 여기서 또 세우면 한 카드에 둘이다.
+  const hold = (r.stoppable || {}).kind && (r.stoppable || {}).kind !== "worker"
+    ? holdRowHTML(r) : "";
+  if (!st && !work && !hand && !hold) return "";
+  if (!st) return work + hand + hold;
   // 마지막 시각을 못 읽으면 그 조각만 빠진다 — "· 마지막 " 로 끝나는 줄은 값이
   // 있는데 못 그린 것처럼 보인다.
   const last = fmtLast(r.updated || r.status_since);
   const going = wokePending(r.id);
-  return `<div class="rvpt stall" title="이 문서가 마지막으로 바뀐 지 `
+  /* 손잡이는 자기 줄을 차지하지 않는다 (REQ-20260830-032 재반려: "너무 크고
+     카드 전체에서 혼자 row 를 단독 차지한다"). 상태 줄과 손잡이를 한 줄에
+     세운다 — 글리프의 폭 이점(낱말 87px → 27px)은 이 합침에서 비로소 값을
+     낸다. `.deedrow` 는 자리만 잡는 껍데기라 색면·테두리를 갖지 않는다. */
+  return `<div class="deedrow${r.commit_drift ? " wordy" : ""}">`
+    + `<div class="rvpt stall" title="이 문서가 마지막으로 바뀐 지 `
     + `${st.mins}분 됐습니다 — 그동안 이 문서에 아무것도 적히지 않았습니다`
     // 죽음이 기록돼 있으면 그 말을 함께 싣는다 — 점의 툴팁과 같은 문장이다.
     + (st.face === "dead" && st.reason ? ` (${esc(st.reason)})` : "") + `">`
@@ -178,7 +275,10 @@ function stallHTML(r){
     // 글리프 단추는 이름을 글자가 아니라 여기로 실어 낸다 — 낭독기에도, 손에도.
     + (r.commit_drift ? "" : ` aria-label="${going ? WAKE_GOING : WAKE_LABEL}"`)
     + `>${r.commit_drift ? (going ? WAKE_GOING : DRIFT_LABEL) : GLYPH_PLAY}`
-    + `</button></div>` + work;
+    + `</button>`
+    // 멈춘 카드에서는 ▶ 옆에 ⏸ 가 나란히 선다 (자리 규칙은 stopBtnHTML 주석).
+    + (hold ? stopBtnHTML(r) : "")
+    + `</div></div>` + work;
 }
 /* 도는 작업자와 그 손잡이 — 깨우기의 반대편 (REQ-20260829-024).
 
@@ -210,22 +310,17 @@ function workRowHTML(r){
   }
   const going = stopPending(r.id);
   const mins = fmtStall(Math.floor((+r.worker.age || 0) / 60));
-  return `<div class="rvpt work" title="자동 작업이 이 요청을 맡아 진행 중입니다`
+  // 멈춤 줄과 같은 규칙: ⏸ 는 「진행 중」 줄의 오른쪽 끝 조각이다.
+  return `<div class="deedrow"><div class="rvpt work" title="자동 작업이 이 요청을 맡아 진행 중입니다`
     + ` — 중단하면 지금 하던 일이 거기서 끝나고, 중단한 사유가 문서에 남습니다">`
     // 캡션이 이미 "진행 중"을 말한다 — 본문이 그 말을 되풀이하면 좁은 줄에서
     // 낱말 하나(`작업`)가 세 번 선다. 멈춤 줄과 같은 틀이다: 캡션 + 사실.
     + `<span class="rvcap">진행 중</span>자동 작업 ${mins}`
     + (jbit ? ` · ${jbit}` : "") + `</div>`
     // ⏸ — 세워 놓은 두 획. 이름은 낱말 그대로 aria-label·title 이 나른다.
-    + `<div class="acts stoprow"><button type="button" class="deed stop ico`
-    + `${going ? " busy" : ""}"`
-    + ` data-stop="${esc(r.id)}"${going ? " disabled" : ""}`
-    + ` data-name="${STOP_LABEL}"`
-    + ` data-tip="진행 중인 자동 작업을 중단합니다 — 계정이나 모델을 바꾸기 전에 씁니다"`
-    + ` aria-label="${going ? STOP_GOING : STOP_LABEL}"`
-    + ` title="${going ? STOP_GOING
-      : "진행 중인 자동 작업을 중단합니다 — 계정이나 모델을 바꾸기 전에 씁니다"}">`
-    + `${GLYPH_PAUSE}</button></div>`;
+    // 툴팁은 갈래 표에서 온다: ⏸ 가 모든 in-progress 에 서는 순간, "계정이나
+    // 모델을 바꾸기 전에 씁니다"는 한 가지 쓰임만 말해 나머지 셋과 어긋난다.
+    + `<div class="acts stoprow">` + stopBtnHTML(r) + `</div></div>`;
 }
 /* 사람이 세워 둔 요청과 그것을 되돌리는 손잡이 (REQ-20260829-024 라운드4).
 
@@ -246,7 +341,7 @@ function stoppedRowHTML(r){
   // 세운 틀). 분은 서버가 준 초를 단위만 바꿔 옮긴다.
   const mins = fmtStall(Math.floor((+r.stopped.age || 0) / 60))
     .replace(/째$/, " 전");
-  return `<div class="rvpt held" title="이 요청의 자동 작업을 사람이 중단했습니다`
+  return `<div class="deedrow"><div class="rvpt held" title="이 요청의 자동 작업을 사람이 중단했습니다`
     + ` — 「이어가기」를 누르기 전까지는 저절로 이어지지 않습니다">`
     + `<span class="rvcap">중단</span>${mins}</div>`
     // 손잡이의 낱말이 멈춘 카드의 것과 **같다**: 하는 일이 같기 때문이다
@@ -260,7 +355,7 @@ function stoppedRowHTML(r){
     + ` aria-label="${going ? WAKE_GOING : WAKE_LABEL}"`
     + ` title="${going ? WAKE_GOING
       : "중단한 이 요청을 자동 작업이 다시 이어서 진행합니다"}">`
-    + `${GLYPH_PLAY}</button></div>`;
+    + `${GLYPH_PLAY}</button></div></div>`;
 }
 /* ?stall=<분>[&stallkind=stalled|spawn_failed][&stalldep][&stallhold] — 멈춤 줄과
    `깨우기` 를 **진짜로 세운다** (REQ-20260828-041 반려).
@@ -305,12 +400,38 @@ function handProbe(rows){
   }
   return rows;
 }
+/* ?hold[=<갈래>] — 세우기의 네 갈래를 진짜로 세운다 (REQ-20260830-035).
+
+   이 손잡이는 **서버가 `stoppable` 을 실어야** 그려지는데, 갈래 넷을 한 화면에
+   모으려면 창 하나·일손 하나·조용한 것 하나를 실제로 만들어야 한다. 진단이
+   없으면 이 화면도 "만들었다는데 본 적은 없는" 것이 된다(깨우기가 두 번 그렇게
+   올라갔다). 여기서도 그림을 따로 짓지 않는다 — 서버가 줬을 값을 얹고 평소
+   그리던 길이 그대로 그린다. 갈래를 안 적으면 넷을 돌아가며 얹는다. */
+function stopProbe(rows){
+  const m = /[?&]hold(?:=(\w+))?\b/.exec(location.search);
+  if (!m || !Array.isArray(rows)) return rows;
+  const only = m[1], ring = ["worker", "session", "agent", "idle"];
+  let n = 0;
+  for (const r of rows){
+    if (r.type !== "request" || r.status !== "in-progress") continue;
+    const kind = only || ring[n % ring.length];
+    // 서버의 우선순위를 그대로 흉내 낸다: worker 갈래는 도는 작업자가 근거다.
+    if (kind === "worker" && !r.worker) r.worker = {pid: 515151 + n, age: 380 + 61 * n};
+    if (kind !== "worker") delete r.worker;
+    r.stoppable = kind === "idle" ? {kind: "idle", claimed: false}
+      : kind === "worker" ? {kind: "worker"}
+      : {kind: kind, session: "abcd1234", agent: kind === "agent" ? "a1" : undefined};
+    n++;
+  }
+  return rows;
+}
 function stallProbe(rows){
   // 한 카드의 두 손잡이는 부르는 자리를 하나로 둔다 — 진단이 늘어날 때마다
   // 파이프라인에 줄이 붙으면, 어느 진단이 어느 화면을 세우는지 흩어진다.
   workProbe(rows);
   heldProbe(rows);
   handProbe(rows);
+  stopProbe(rows);
   driftProbe(rows);
   const m = /[?&]stall=(\d+)/.exec(location.search);
   if (!m || !Array.isArray(rows)) return rows;
@@ -701,20 +822,31 @@ function paintStop(id){
    답은 서버의 `message` 를 그대로 옮긴다 — `action` 으로 문구를 갈라 쓰면 같은
    말이 서버와 화면 두 벌이 되고, 그때부터 한 벌만 고쳐진다(깨우기가 세운
    규칙). 화면이 읽는 것은 `ok` 와 `message` 둘뿐이다. */
+/* 누를 때의 갈래는 **그릴 때 서버가 준 그 값**을 그대로 읽는다 (`data-kind`).
+   화면이 카탈로그를 다시 뒤져 재판정하면 그리기와 누름이 두 벌이 되고, 그
+   사이에 갈래가 바뀌면 사람이 본 창과 서버가 하는 일이 어긋난다. 못 찾으면
+   창을 세우는 쪽(worker)으로 기운다 — 물어보는 실수가 안 물어보는 실수보다 싸다. */
+function stopKindOf(id){
+  const b = document.querySelector(`[data-stop="${CSS.escape(id)}"]`);
+  return (b && b.dataset.kind) || "worker";
+}
 async function stopDoc(id){
   if (stopPending(id)) return;              // 연타 — 이미 세우는 중이다
   /* 맨 Enter 는 「그대로 두기」에 닿는다 (`safe` — REQ-20260830-008). 세우기는
      되돌릴 수 있는 일이지만("이어가기"), **되살릴 수 있다와 실수로 눌러도
      괜찮다는 다른 말이다**: 그 사이에 도는 작업이 하던 일을 잃는다. 창을 읽지
      않고 Enter 를 치는 손이 있고, 그 손이 배우는 규칙은 창마다 같아야 한다. */
-  const go = await s9dlg({kind: "confirm", cap: STOP_LABEL, stop: false,
+  /* 창은 **한 자리에서만** 선다 (REQ-20260829-030 의 규칙). 갈래가 넷이라고
+     창을 넷 지으면, 보고 고친 창이 사람이 보는 창이 아니게 된다 — 갈래는
+     문안 표(STOP_KIND)에서 오고 세우는 자리는 여기 하나다.
+     `ask` 가 없는 갈래(idle)는 창 없이 곧장 간다: 붙어 있는 손이 없어 잃는
+     것이 없고, 「이어가기」 한 번으로 되돌아간다. */
+  const stopAsk = (STOP_KIND[stopKindOf(id)] || {}).ask;
+  const go = !stopAsk || await s9dlg({kind: "confirm", cap: STOP_LABEL, stop: false,
     safe: true, doc: shortId(id),
     // 어느 요청인지는 창머리의 주소가 말한다 — 제목은 물음 하나만 한다.
-    title: "진행 중인 자동 작업을 중단할까요?",
-    desc: "지금 하던 일은 문서에 적힌 데까지만 남고, 그 뒤로 진행 중이던 것은"
-      + " 사라집니다. 중단한 사실과 사유는 문서에 남습니다. 다시 맡기려면 같은"
-      + " 자리에 생기는 「이어가기」를 누르면 됩니다.",
-    ok: STOP_LABEL, cancel: "그대로 두기"});
+    title: stopAsk.title, desc: stopAsk.desc,
+    ok: stopAsk.ok, cancel: "그대로 두기"});
   if (!go) return;
   stopAt.set(id, Date.now());
   paintStop(id);
