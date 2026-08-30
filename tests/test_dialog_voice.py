@@ -348,6 +348,31 @@ class DialogVoice(unittest.TestCase):
                          "자리의 뜻을 서버와 화면이 다르게 말한다 — 두 벌이면 "
                          "한 벌만 고쳐진다")
 
+    # ---- V3b. 진단 답본은 서버 실문장이다 (REQ-20260830-048) -------------
+    def test_v3b_the_diag_fixture_speaks_the_server_sentence(self):
+        """`?dlg=wakespawn` 의 고정 답본으로 창을 캡처·검증하는데, 그 문안이
+        서버와 어긋나면 진단으로 고친 창이 사람이 보는 창이 아니게 된다 —
+        실제로 어긋나 있었다(designer 실측). V3 과 같은 병의 다른 자리다."""
+        def module_const(name):
+            for n in ast.walk(self.tree):
+                if isinstance(n, ast.Assign) and any(
+                        isinstance(t, ast.Name) and t.id == name
+                        for t in n.targets):
+                    return ast.literal_eval(n.value)
+            return None
+        tmpl = module_const("WAKE_SPAWNED_KO")
+        means = module_const("WS_MEANS_KO")
+        self.assertIsNotNone(tmpl, "bin/s9 에 WAKE_SPAWNED_KO 가 없다")
+        want = tmpl.format(means=means["main"])
+        self.assertEqual(plain_hits(want), [], "깨우기 성공 문장에 반말이 섞였다")
+        diag = read(os.path.join(APP, "diag.js"))
+        m = re.search(r'action: "spawned",.*?message: (.*?)\};', diag, re.S)
+        self.assertIsNotNone(m, "diag.js 에 wakespawn 답본이 없다")
+        got = "".join(re.findall(r'"([^"]*)"', m.group(1)))
+        self.assertEqual(got, want,
+                         "진단 답본이 서버 실문장과 다르다 — 캡처가 사람이 "
+                         "보는 창을 비추지 못한다")
+
     # ---- V4. 눈썹은 사람이 누른 그 낱말이다 ------------------------------
     def test_v4_the_eyebrow_repeats_the_button(self):
         """`깨움`·`세움` 은 동사를 명사로 굳힌 시스템의 말이다. 사람이 누른 것은

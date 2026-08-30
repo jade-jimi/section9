@@ -391,13 +391,14 @@ class WorkspaceChip(unittest.TestCase):
         self.assertIn("커밋되지 않았습니다", r["a"]["descHtml"])
         self.assertIn("커밋하면", r["a"]["descHtml"])
         # 그래서 나에게 무슨 뜻인가 — 자리가 다르면 답도 달라야 한다
-        self.assertIn("바로 나타납니다", r["a"]["descHtml"])
-        self.assertIn("나타나지 않습니다", r["b"]["descHtml"])
+        # (낱말은 REQ-20260830-048 판정 — 「바로 보임 / 끝나면 보임」의 결)
+        self.assertIn("바로 보입니다", r["a"]["descHtml"])
+        self.assertIn("끝난 뒤에", r["b"]["descHtml"])
         # 워크트리는 어느 워크트리인지까지 말한다 (사람이 cd 해서 볼 자리다)
         # 워크트리 이름은 제목에서 내렸다 (REQ-20260830-001) — 제목은
         # 주소+대상만 지고, 답은 첫 줄(WS_MEANS)이 진다.
         self.assertNotIn("w-829-030-62x6", r["b"]["title"])
-        self.assertIn("나타나지 않습니다", r["b"]["descHtml"])
+        self.assertIn("끝난 뒤에 이 화면에 보입니다", r["b"]["descHtml"])
         # 풀 것이 없는 자리에 할 일을 지어내지 않는다
         self.assertNotIn("커밋하면", r["b"]["descHtml"])
         # 대기·자리는 고장이 아니다 — 붉은 눈썹을 달지 않는다

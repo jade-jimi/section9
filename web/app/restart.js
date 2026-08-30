@@ -201,10 +201,10 @@ async function termInterrupt(T){
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || "중단 요청 실패");
     if (TERM === T && out && w){
-      // signal=sent → SIGINT 즉시 중단 (REQ-20260825-008), skipped → 협조적 폴백
-      const body = d.signal === "sent"
-        ? `<span style="color:var(--cc-yellow)">⚡ 인터럽트 — 진행 중 턴을 즉시 중단</span>`
-        : `<span style="color:var(--cc-dim)">중단 요청 큐잉${d.reason ? ` · ${esc(d.reason)}` : ""} — 세션은 다음 도구 경계에서 멈춘다</span>`;
+      // 전달은 수신함 큐잉 한 길이다 — 프로세스 신호(SIGINT 즉시 중단)는
+      // 세션을 통째로 죽여서 제거됐다 (REQ-20260830-047). 서버 응답에도
+      // signal 필드가 더는 없다.
+      const body = `<span style="color:var(--cc-dim)">중단 요청 큐잉 — 세션은 다음 도구 경계에서 멈춘다</span>`;
       w.insertAdjacentHTML("beforebegin", ccLine("⨯", "var(--cc-dim)", body));
       out.scrollTop = out.scrollHeight;
     }
