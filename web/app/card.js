@@ -99,11 +99,17 @@ function stallHTML(r){
     // 죽음이 기록돼 있으면 그 말을 함께 싣는다 — 점의 툴팁과 같은 문장이다.
     + (st.face === "dead" && st.reason ? ` (${esc(st.reason)})` : "") + `">`
     + `<span class="rvcap">멈춤</span>${fmtStall(st.mins)} 진전 없음`
-    + (last ? ` · 마지막 ${esc(last)}` : "") + `</div>`
+    + (last ? ` · 마지막 ${esc(last)}` : "")
+    /* 커밋 드리프트 (REQ-20260830-018): 서버가 잰 사실을 그리기만 한다 —
+       커밋은 있는데 문서가 안 닫힌 카드는 "이어서 일할 것"이 아니라
+       "검증해 닫을 것"이라, 손잡이의 낱말이 거기에 맞게 바뀐다. */
+    + (r.commit_drift ? ` · 커밋 있음` : "") + `</div>`
     + `<div class="acts wakerow"><button type="button" class="deed wake"`
     + ` data-wake="${esc(r.id)}"${going ? " disabled" : ""}`
-    + ` title="자동 작업이 이 요청을 이어서 진행합니다">`
-    + `${going ? WAKE_GOING : WAKE_LABEL}</button></div>` + work;
+    + ` title="${r.commit_drift
+      ? "커밋 기록이 있습니다 — 자동 작업이 목표 대비 검증해서, 됐으면 닫고 안 됐으면 이어갑니다"
+      : "자동 작업이 이 요청을 이어서 진행합니다"}">`
+    + `${going ? WAKE_GOING : (r.commit_drift ? "닫기 검토" : WAKE_LABEL)}</button></div>` + work;
 }
 /* 도는 작업자와 그 손잡이 — 깨우기의 반대편 (REQ-20260829-024).
 

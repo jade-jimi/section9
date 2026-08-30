@@ -8,9 +8,11 @@
  "entry": "code",
  "ended": "",
  "capture_paused": true,
- "active_reqs": [],
+ "active_reqs": [
+  "REQ-20260830-018-62x6"
+ ],
  "claim_at": {
-  "REQ-20260830-016-62x6": "2026-08-30T13:55:56+09:00"
+  "REQ-20260830-018-62x6": "2026-08-30T14:15:35+09:00"
  },
  "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f.jsonl",
  "last_req": "REQ-20260830-013-62x6",
