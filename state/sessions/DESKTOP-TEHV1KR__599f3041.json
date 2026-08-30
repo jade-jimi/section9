@@ -7,9 +7,7 @@
  "attach_pid": "620783",
  "ended": "",
  "worker": "1",
- "active_reqs": [
-  "REQ-20260830-022-62x6"
- ],
+ "active_reqs": [],
  "claim_at": {
   "REQ-20260830-022-62x6": "2026-08-30T16:08:17+09:00"
  },

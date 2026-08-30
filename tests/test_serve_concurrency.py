@@ -125,10 +125,16 @@ class ServeConcurrency(unittest.TestCase):
         self.assertGreaterEqual(int(m.group(1)), 32, m.group(0))
 
     # R1. 서버가 다시 단일 스레드로 바뀌면 잡는다 — N2 보다 먼저, 명시적으로
+    # (REQ-20260830-028 뒤로 바인드 지점은 QuietDisconnectServer 지만, 그것이
+    #  ThreadingHTTPServer 의 자식이라는 사실까지 함께 계약한다 — 이름만 보면
+    #  단일 스레드 부모로 바꿔치기해도 이 시험이 침묵한다.)
     def test_r1_server_is_threaded(self):
         src = open(os.path.join(HERE, "..", "bin", "s9"), encoding="utf-8").read()
-        self.assertIn("ThreadingHTTPServer((", src.replace(" ", ""),
-                      "serve 가 단일 스레드 HTTPServer 로 되돌아갔다")
+        flat = src.replace(" ", "")
+        self.assertIn("QuietDisconnectServer((", flat,
+                      "serve 바인드 지점이 사라졌다")
+        self.assertIn("classQuietDisconnectServer(http.server.ThreadingHTTPServer)",
+                      flat, "serve 가 단일 스레드 HTTPServer 로 되돌아갔다")
 
 
 if __name__ == "__main__":

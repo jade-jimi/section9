@@ -33,6 +33,92 @@ def _reap(label):
     return reaped
 
 
+REPO = os.path.dirname(HERE)
+GREEN_STAMP = os.path.join(REPO, "state", "tests-last-green")
+# 이 파일들이 바뀌면 어느 시험이 닿는지 셀 수 없다 — 전체로 물러난다.
+COMMON = ("bin/s9", "tests/__main__.py", "tests/portpool.py",
+          "tests/tmproot.py", "tests/jobfile.py", "tests/precious.py")
+
+
+def _git(repo, *a):
+    import subprocess
+    try:
+        r = subprocess.run(["git", *a], capture_output=True, text=True,
+                           cwd=repo, timeout=30)
+    except OSError:
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def changed_selection(repo=None, here=None, stamp=None):
+    """--changed 의 선택 (REQ-20260830-027 1단계).
+
+    마지막 전체 green 스탬프 이후 바뀐 파일에 닿는 시험만 고른다 — 같은 날
+    전체 스위트를 다섯 번 돌린 낭비가 이 스위치의 존재 이유다.
+    반환: None(전체 폴백) · [](돌 것 없음) · [디스커버리 패턴…].
+    보수 쪽으로 기운다: 스탬프가 없거나 git 이 안 되면 전체, 미커밋 변경도
+    변경으로 센다(더러운 트리에서 놓치는 것보다 다시 도는 게 낫다)."""
+    repo = repo or REPO
+    here = here or HERE
+    stamp = stamp or GREEN_STAMP
+    try:
+        with open(stamp, encoding="utf-8") as f:
+            base = f.read().strip()
+    except OSError:
+        return None
+    if not base:
+        return None
+    diff = _git(repo, "diff", "--name-only", f"{base}..HEAD")
+    porc = _git(repo, "status", "--porcelain")
+    if diff is None or porc is None:
+        return None      # git 이 안 되면 전체로 물러난다 — 좁게 틀리지 않는다
+    files = {ln.strip() for ln in diff.splitlines() if ln.strip()}
+    files |= {ln[3:].strip() for ln in porc.splitlines() if len(ln) > 3}
+    files.discard("")
+    # 문서·상태는 시험을 유발하지 않는다
+    files = {f for f in files
+             if not f.startswith(("vault/", "state/", "docs/", "projects/",
+                                  "users/"))}
+    if not files:
+        return []
+    for f in files:
+        if f in COMMON or f.startswith("bin/s9-"):
+            return None
+    pats, code_basenames = set(), set()
+    for f in files:
+        b = os.path.basename(f)
+        if f.startswith("tests/test_") and f.endswith(".py"):
+            pats.add(b)
+        else:
+            code_basenames.add(b)
+    if code_basenames:
+        for fn in os.listdir(here):
+            if not (fn.startswith("test_") and fn.endswith(".py")):
+                continue
+            try:
+                body = open(os.path.join(here, fn), encoding="utf-8").read()
+            except OSError:
+                continue
+            if any(b in body for b in code_basenames):
+                pats.add(fn)
+    return sorted(pats)
+
+
+def write_green_stamp(repo=None, stamp=None):
+    """전체 green 만 스탬프를 쓴다 — 부분·실패 실행이 쓰면 --changed 가 거짓말한다."""
+    repo = repo or REPO
+    stamp = stamp or GREEN_STAMP
+    head = (_git(repo, "rev-parse", "HEAD") or "").strip()
+    if not head:
+        return
+    try:
+        os.makedirs(os.path.dirname(stamp), exist_ok=True)
+        with open(stamp, "w", encoding="utf-8") as f:
+            f.write(head + "\n")
+    except OSError:
+        pass
+
+
 def patterns(argv):
     """인자들을 discovery 패턴으로 바꾼다 (REQ-20260829-006).
 
@@ -102,7 +188,20 @@ def main():
     tmp_root, prev_tmpdir = tmproot.make_run_root()
     ok, empty, leaked = False, [], []
     try:
-        pats = patterns(sys.argv[1:])
+        argv = [a for a in sys.argv[1:] if a != "--changed"]
+        full_requested = not argv
+        sel = None
+        if "--changed" in sys.argv[1:]:
+            sel = changed_selection()
+            if sel == []:
+                print("변경 없음 — 마지막 전체 green 이후 시험에 닿는 파일이 "
+                      "바뀌지 않았다. 아무것도 돌리지 않는다.", file=sys.stderr)
+                return 0
+            if sel is not None:
+                argv = sel          # 파일명 자체가 부분일치 패턴으로 먹힌다
+                full_requested = False
+            # None 이면 전체 폴백 — argv 그대로(비어 있음 = 전체)
+        pats = patterns(argv)
         suite, empty = discover(pats)
         for p in empty:
             print(f"no tests matched: {p}", file=sys.stderr)
@@ -143,6 +242,8 @@ def main():
         print(f"실패: 고르지 못한 패턴 {len(empty)}개 — {', '.join(empty)}",
               file=sys.stderr)
         return 1
+    if ok and full_requested and not nested:
+        write_green_stamp()     # 전체 green 만 --changed 의 기준점이 된다
     return 0 if ok else 1
 
 
