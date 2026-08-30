@@ -213,14 +213,32 @@ class CommitGate(unittest.TestCase):
                 self.m.staged_tests_gate(["tests/test_anything.py"])
         self.assertEqual(cm.exception.code, 1)
 
-    def test_g6_no_staged_test_runs_nothing(self):
-        """G6. 테스트가 안 담겼으면 아무것도 돌리지 않는다 — 매 커밋마다 2분을
-        물리면 그 무게가 규율을 먼저 죽인다."""
+    def test_g6_docs_only_commit_runs_nothing(self):
+        """G6(개정, REQ-20260830-029). 문서·상태만 담긴 커밋은 아무것도 안 돌린다.
+        코드가 담기면 스모크가 돈다 — 옛 '2분 무게' 반론은 스모크 병렬 30~40초로
+        유계가 되면서 풀렸다(그 무게 계약은 G6b 가 잇는다)."""
         called = []
         with mock.patch.object(subprocess, "run",
                                side_effect=lambda *a, **k: called.append(a)):
-            self.m.staged_tests_gate(["bin/s9", "docs/x.md"])
+            self.m.staged_tests_gate(["docs/x.md", "vault/requests/y.md"])
         self.assertEqual(called, [])
+
+    def test_g6b_code_commit_runs_the_smoke_tier(self):
+        """G6b. 코드가 담기면 담긴 시험이 없어도 스모크가 게이트로 돈다 —
+        goal 의 '필수 계층만으로 커밋 게이트가 돈다'의 그 조각이다."""
+        seen = {}
+
+        def fake(argv, *a, **k):
+            seen["argv"] = argv
+
+            class R:
+                returncode = 0
+            return R()
+        with mock.patch.object(subprocess, "run", side_effect=fake):
+            self.m.staged_tests_gate(["bin/s9", "docs/x.md"])
+        self.assertIn("--smoke", seen.get("argv", ()),
+                      "코드 커밋인데 스모크가 게이트로 안 돈다")
+        self.assertIn("--jobs", seen["argv"], "게이트가 직렬로 돌면 무게 반론이 되살아난다")
 
     def test_g8_subagents_count_too(self):
         """G8. 서브에이전트도 '도는 작업자'다 (REQ-20260827-002).

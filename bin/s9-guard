@@ -186,24 +186,32 @@ def clean_git_env(env=None):
 
 
 def staged_tests_gate(staged):
-    """커밋에 테스트 파일이 있으면 그것만이라도 돌린다.
+    """커밋 게이트 = 담긴 시험 ∪ 스모크 (REQ-20260830-029, 필수 계층 배선).
 
     21:42 커밋은 같은 커밋에 들어 있던 테스트조차 통과 못 했다. 전체 스위트는
-    2분이라 매 커밋에 물리면 규율이 먼저 죽으므로, **담긴 테스트**로 좁힌다.
+    분 단위라 매 커밋에 물리면 규율이 먼저 죽는다 — 그래서 담긴 시험에
+    **핵심 계약 12파일(--smoke)** 만 합친다: 병렬(--jobs 4)로 30~40초에 유계다.
+    --changed 를 여기 쓰지 않는 이유: bin/s9 는 미커밋 변경이 잦아 매번 전체
+    폴백(4분대)으로 밀린다 — 전체 확인은 review/done 전 수동 실행의 몫이다.
+    담긴 시험은 정확한 파일명으로 넘긴다(러너가 정확명은 넓히지 않는다) —
+    조각으로 넘기면 이웃 파일까지 끌려와 게이트가 뚱뚱해진다.
     """
-    names = [os.path.basename(f)[len("test_"):-len(".py")]
+    names = [os.path.basename(f)
              for f in staged
              if f.startswith("tests/test_") and f.endswith(".py")]
-    if not names:
-        return
-    r = subprocess.run(["python3", "tests/", *names], capture_output=True,
+    if not names and not any(f.startswith(("bin/", "web/", "tests/"))
+                             for f in staged):
+        return   # 코드가 안 담겼으면(문서·상태 커밋) 게이트 생략 — 종전과 같다
+    r = subprocess.run(["python3", "tests/", "--smoke", "--jobs", "4", *names],
+                       capture_output=True,
                        text=True, cwd=ROOT, timeout=600,
                        env=clean_git_env())
     if r.returncode == 0:
         return
-    print("s9-guard: 이 커밋에 담긴 테스트가 실패합니다 — 커밋을 멈춥니다.",
+    print("s9-guard: 커밋 게이트(담긴 시험 ∪ 스모크)가 실패합니다 — 커밋을 멈춥니다.",
           file=sys.stderr)
-    print(f"  대상: {' '.join(names)}", file=sys.stderr)
+    print(f"  대상: 스모크 12파일 ∪ {' '.join(names) or '(담긴 시험 없음)'}",
+          file=sys.stderr)
     tail = (r.stdout + r.stderr).strip().splitlines()[-25:]
     for line in tail:
         print(f"  {line}", file=sys.stderr)
