@@ -17,6 +17,7 @@ import shutil
 import socket
 import struct
 import sys
+import threading
 import time
 import zlib
 
@@ -433,22 +434,54 @@ def walk_docs():
                 yield os.path.join(dirpath, fn)
 
 
+# load_catalog 프로세스 캐시 (REQ-20260831-001). /api/catalog 한 패스가 이
+# 함수를 44회 불러 json.loads 를 34,133회 돌렸고(737문서, 3.556s CPU), 폴링이
+# 겹치자 스레드마다 같은 재파싱이 쌓여 GIL 정체로 응답이 분 단위가 됐다.
+# 키는 인덱스 파일의 stat(mtime_ns·size·ino) — rebuild_index 가 os.replace
+# (원자 교체, ino 가 반드시 바뀐다)로만 쓰므로 갱신 즉시 무효화된다.
+# gen 은 파싱 세대(시험·디버깅 관측용). lock 은 이중 역할: 캐시 일관성과,
+# 동시 스레드가 같은 파일을 겹쳐 파싱하지 않게 하는 한-번-계산 공유.
+_CATALOG_CACHE = {"key": None, "rows": [], "gen": 0}
+_CATALOG_LOCK = threading.Lock()
+# id_alias 파생 캐시 — 카탈로그 캐시 키에 종속 (정의는 id_alias 참조)
+_ALIAS_CACHE = {"key": (), "map": {}, "gen": 0}
+_ALIAS_LOCK = threading.Lock()
+
+
 def load_catalog():
     """카탈로그 로드. tombstone(.trash) 행은 조회 단계에서도 배제한다
     (REQ-20260825-051): 재생성은 이미 .trash를 제외하지만, 낡은 코드·중단된
-    쓰기 등으로 섞여 들어오면 삭제한 문서가 보드에 되살아난다 — 이중 방어."""
-    rows = []
-    if os.path.exists(CATALOG):
-        with open(CATALOG, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                r = json.loads(line)
-                if ".trash/" in (r.get("path") or "").replace("\\", "/"):
-                    continue          # 삭제(tombstone) 문서 — 조회에서 배제
-                rows.append(r)
-    return rows
+    쓰기 등으로 섞여 들어오면 삭제한 문서가 보드에 되살아난다 — 이중 방어.
+
+    프로세스 캐시(REQ-20260831-001): 파일 stat 이 같으면 재파싱하지 않는다 —
+    관문은 여기 한 곳뿐이다(엔드포인트별 캐시 분기 금지). 반환 행은 매 호출
+    얕은 복사라 호출자(catalog_with_live 등)가 r["live"]=… 로 최상위 키를
+    덧써도 캐시가 오염되지 않는다. 중첩값(tags·contributions…)을 제자리에서
+    변형하는 호출자는 없다(전수 확인) — 새로 만들지 마라: 필요하면 행을
+    직접 고치지 말고 새 dict 를 지어라."""
+    with _CATALOG_LOCK:
+        try:
+            f = open(CATALOG, encoding="utf-8")
+        except OSError:
+            _CATALOG_CACHE["key"], _CATALOG_CACHE["rows"] = None, []
+            return []
+        with f:
+            st = os.fstat(f.fileno())     # 연 그 파일의 stat — 교체 경합 없음
+            key = (st.st_mtime_ns, st.st_size, st.st_ino)
+            if key != _CATALOG_CACHE["key"]:
+                rows = []
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    r = json.loads(line)
+                    if ".trash/" in (r.get("path") or "").replace("\\", "/"):
+                        continue      # 삭제(tombstone) 문서 — 조회에서 배제
+                    rows.append(r)
+                _CATALOG_CACHE["key"] = key
+                _CATALOG_CACHE["rows"] = rows
+                _CATALOG_CACHE["gen"] += 1
+        return [dict(r) for r in _CATALOG_CACHE["rows"]]
 
 
 def _all_doc_ids():
@@ -579,7 +612,23 @@ def id_alias(rows=None):
     rework_claimed가 '아무도 안 집었다'로 오판해 워처가 중복 스폰했다
     (REQ-20260825-086). 후보가 둘 이상인 짧은 형태는 매핑하지 않는다 —
     잘못 집는 것보다 못 찾는 편이 낫다."""
-    rows = load_catalog() if rows is None else rows
+    if rows is not None:                 # 명시 rows(부분집합 가능) — 캐시 밖
+        return _build_id_alias(rows)
+    # 파생 캐시 (REQ-20260831-001): alias 맵은 카탈로그의 순수 파생물이라
+    # 카탈로그 캐시 키가 같으면 다시 짓지 않는다 — 한 catalog 패스가 이 맵을
+    # 18회 재구축하던 비용(canon_id 가 alias 없이 불릴 때마다)을 지운다.
+    # 반환은 복사본 — 호출자 변형이 캐시에 스미지 않는다.
+    with _ALIAS_LOCK:
+        rows = load_catalog()
+        key = _CATALOG_CACHE["key"]
+        if key != _ALIAS_CACHE["key"]:
+            _ALIAS_CACHE["map"] = _build_id_alias(rows)
+            _ALIAS_CACHE["key"] = key
+            _ALIAS_CACHE["gen"] += 1
+        return dict(_ALIAS_CACHE["map"])
+
+
+def _build_id_alias(rows):
     ids = {r["id"] for r in rows}
     alias = {}
     for r in rows:
@@ -14273,6 +14322,54 @@ def _guard_detach(port, host="127.0.0.1", root=None):
 
 
 
+# catalog_with_live 동시 공유 게이트 (REQ-20260831-001 ②). 대시보드 폴링이
+# 겹치면 스레드마다 같은 패스를 통째로 다시 돌았고(요청당 ~1s CPU), 그 중복이
+# GIL 을 나눠 먹으며 응답이 분 단위로 밀리는 나선이 됐다(실측 72~91s→120s
+# 타임아웃). 기본 호출(stall_win=None — /api/catalog 폴링 경로)은 계산이 이미
+# 도는 중이면 새로 돌지 않고 그 결과를 기다려 받는다 — 낡음의 상한은 계산
+# 한 번의 길이다. stall_win 을 명시한 호출(CLI·wake 경로)은 다른 창의
+# 판정이므로 섞지 않는다. 데코레이터인 이유: 판정 본문이 `def
+# catalog_with_live` 블록 안에 그대로 남아야 한다 — 구조 시험(stop_branch·
+# stop_reach)이 "화면과 누름이 같은 판정을 지난다"는 계약을 그 블록에서 읽는다.
+_CWL_COND = threading.Condition()
+_CWL_STATE = {"busy": False, "seq": 0, "result": None}
+
+
+def _share_default_pass(fn):
+    def gate(stall_win=None):
+        if stall_win is not None:
+            return gate._compute(stall_win)
+        with _CWL_COND:
+            if _CWL_STATE["busy"]:
+                seq = _CWL_STATE["seq"]
+                while _CWL_STATE["busy"] and _CWL_STATE["seq"] == seq:
+                    # 상한은 계산자가 죽었을 때의 탈출구 — 평시엔 notify 로 깬다
+                    _CWL_COND.wait(timeout=30)
+                if _CWL_STATE["seq"] != seq \
+                        and _CWL_STATE["result"] is not None:
+                    # 응답끼리 dict 를 공유하지 않는다 — 한 응답의 장식이
+                    # 다른 응답에 배면 두 화면이 같은 거짓을 그린다
+                    return [dict(r) for r in _CWL_STATE["result"]]
+                # 계산자가 죽었거나 결과가 없다 — 직접 돈다
+            _CWL_STATE["busy"] = True
+        rows, done = None, False
+        try:
+            rows = gate._compute(None)
+            done = True
+            return rows
+        finally:
+            with _CWL_COND:
+                _CWL_STATE["busy"] = False
+                if done:
+                    _CWL_STATE["result"] = rows
+                    _CWL_STATE["seq"] += 1
+                _CWL_COND.notify_all()
+    gate._compute = fn      # 시험이 계산부를 바꿔 끼우는 이음매
+    gate.__name__, gate.__doc__ = fn.__name__, fn.__doc__
+    return gate
+
+
+@_share_default_pass
 def catalog_with_live(stall_win=None):
     """catalog + 실제 LLM 동작 신호(live). 문서 상태 in-progress와 별개로,
     live(녹색 점멸)는 **세션의 명시 실행 등록**이 있을 때만 (REQ-20260823-080/082):

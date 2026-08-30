@@ -52,6 +52,43 @@
   [data-skin="soft"] .card{transition:border-color .12s ease}
   [data-skin="soft"] .card:hover{transform:none}
 }
+/* 경과 시각은 id 줄을 떠나 **카드의 마지막 줄**로 내려온다 (REQ-20260830-052).
+
+   soft 만 자리를 바꾼다. 이 스킨은 좌측 셸(232px)이 판을 먼저 먹어, 1440px에서
+   열이 216px까지 좁아지고 카드 글자 폭이 170px밖에 안 된다. 그 줄에 서야 하는
+   것은 넷이다 — 식별자 97 · 벨트 27 · 경과 56 · 집는 손잡이 62(뒤 둘은 시간축
+   으로 교대하므로 자리는 62 하나를 비워 둔다). 97+62+27 = 186 > 170.
+   낱말이면 접히지만 **27px 과녁은 접히지 않는다**: 벨트가 통째로 아랫줄 왼쪽에
+   홀로 감겨 id 줄이 27 → 44px 로 부풀었다(사용자 실측 캡처, REQ-20260830-043).
+
+   그래서 줄을 넓히는 대신 **줄에서 하나를 내보낸다.** 셋 중 나갈 것은 정해져
+   있다: 식별자는 카드의 이름이라 못 나가고, ▶·⏸ 는 점과 한 벨트에 선다는
+   규칙(REQ-20260830-040 규칙 4)이 방금 확정됐다. 경과 시각은 이미 손을 얹으면
+   숨는 값 — 셋 중 가장 늦게 읽히는 것이 나간다.
+
+   내보낸 자리는 카드의 마지막 줄이다(calm 이 낸 선례: 경과는 아래, 집는 손잡이는
+   그 칸을 빌려 쓴다). **흐름 안에 세운다** — 모서리에 띄우면 승인/반려 단추와
+   대기 사유를 덮는다. 흐름에 서면 무엇이 카드에 더 붙든 그 아래에 앉는다.
+   덤: 제목의 56px 예약도 함께 걷힌다. 위 모서리에 아무도 없으니 제목이 카드
+   폭을 다 쓰고(114 → 170px), 두 줄로 접히던 제목이 대개 한 줄로 선다 — 새로
+   생긴 마지막 줄(21px)을 접힘 한 줄(20px)이 거의 그대로 갚는다. 1440px 실측:
+   보통 카드 121.1 → 122.6px, 벨트 카드 154.1 → 161.6px.
+
+   왜 열을 넓히지 않았나: 1440px에서 열은 min-width(210)가 아니라 남는 폭을
+   나눈 216.4px 이다. 벨트가 서려면 231px이 필요한데, 그러면 5열 합이 판(1138px)
+   을 넘어 **1440px에서 보드에 가로 스크롤**이 생긴다 — 한 화면에 다섯 열이
+   보이는 것을 27px 손잡이와 맞바꾸는 셈이다. 게다가 폭은 창이 좁아지면 다시
+   잃는 값이라, 예약을 걷어내는 쪽만이 최소폭(210px)에서도 성립한다. */
+[data-skin="soft"] .card .id,[data-skin="soft"] .card .t{padding-right:0}
+[data-skin="soft"] .card .elapsed{position:static;display:block;text-align:right;
+  margin-top:7px;line-height:1.4}
+/* 집는 손잡이는 경과 시각이 선 칸을 빌려 쓴다 — soft 는 그 칸이 아래쪽이다.
+   (카드 안쪽 여백 11px 14px 에 맞춰 같은 줄에 정확히 겹친다.) */
+[data-skin="soft"] .card .pickdoc{top:auto;bottom:11px;right:14px}
+/* 밀도가 여백을 줄이면 그 칸도 따라 줄어든다 (compact 카드 여백 5px 10px) */
+[data-skin="soft"][data-density="compact"] .card .elapsed{margin-top:4px}
+[data-skin="soft"][data-density="compact"] .card .pickdoc{bottom:5px;right:10px}
+
 /* 사이드바 셸: 신원·사용량 줄이 nowrap이라 232px 밖으로 밀려 잘리고 가로
    스크롤바가 생겼다 — 좌측 정렬 + 줄바꿈으로 폭 안에 앉힌다. */
 [data-skin="soft"] .pgroup.idcol{align-items:flex-start}
