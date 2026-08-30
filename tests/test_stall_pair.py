@@ -52,6 +52,16 @@ def _code(js):
     return re.sub(r"(?m)^\s*//.*$", " ", js)
 
 
+def _server_src():
+    """서버 원문 — 화면이 베껴 가진 상수가 원본과 갈라지지 않았는지 대조한다.
+
+    임계를 화면에도 두는 것은 서버가 그 수를 행에 실어 주지 않기 때문이다
+    (REQ-20260830-040). 베낀 값은 언젠가 갈라지므로, 갈라지는 순간 이 시험이
+    잡는다 — 근원(서버가 실어 보내기)이 열리면 이 대조는 없어진다."""
+    with open(os.path.join(HERE, "..", "bin", "s9"), encoding="utf-8") as f:
+        return f.read()
+
+
 def _grab(src, name):
     m = re.search(r"\nfunction %s\([^)]*\)\{[\s\S]*?\n\}" % name, src)
     assert m, name
@@ -65,6 +75,10 @@ class StallOnePredicate(unittest.TestCase):
             cls.src = f.read()
         cls.state = _code(_grab(cls.src, "stallState"))
         cls.stall = _grab(cls.src, "stallHTML")
+        # 손잡이는 사실 줄을 떠나 id 줄의 벨트로 갔다 (REQ-20260830-040 규칙 4) —
+        # 짓는 자리는 여전히 한 곳씩이라, 술어 하나라는 계약은 그대로다.
+        cls.belt = _grab(cls.src, "deedBeltHTML") + _grab(cls.src, "wakeBtnHTML") \
+            + _grab(cls.src, "driftBtnHTML") + _grab(cls.src, "stopBtnHTML")
         cls.card = _code(_grab(cls.src, "cardHTML"))
         cls.col = _code(_grab(cls.src, "colHTML"))
         cls.board = _grab(cls.src, "renderBoard")
@@ -124,11 +138,39 @@ class StallOnePredicate(unittest.TestCase):
         self.assertIn("stalled_mins", self.state, "문을 여는 것이 서버의 분이 아니다")
         self.assertIn("spawn_failed", self.state, "얼굴을 고르는 자리가 없다")
         self.assertIn("face", self.state, "얼굴을 돌려주지 않는다")
-        # 손잡이를 짓는 자리는 하나뿐, 그리고 안 멈춘 행은 빈 문자열
-        self.assertEqual(1, self.stall.count("data-wake="),
-                         "손잡이를 짓는 자리가 하나가 아니다")
-        self.assertIn('return "";', self.stall,
-                      "안 멈춘 행을 부르는 쪽이 걸러야 한다 — 조건이 두 벌이 된다")
+        # 손잡이를 짓는 자리는 **둘, 그리고 각각 하나**다 (REQ-20260830-040):
+        # 글리프는 벨트(wakeBtnHTML), 낱말 갈래는 자기 줄(driftBtnHTML).
+        wake = _code(_grab(self.src, "wakeBtnHTML"))
+        drift = _code(_grab(self.src, "driftBtnHTML"))
+        self.assertEqual(1, wake.count('data-wake="'),
+                         "글리프 ▶ 를 짓는 자리가 하나가 아니다")
+        self.assertEqual(1, wake.count('data-restart="'),
+                         "중단해 둔 것을 되돌리는 자리가 하나가 아니다")
+        self.assertEqual(1, drift.count('data-wake="'),
+                         "낱말 손잡이를 짓는 자리가 하나가 아니다")
+        # 그리지 않는 행에는 빈 문자열 — 부르는 쪽이 조건을 따로 갖지 않게 한다
+        for name in ("stoppedRowHTML", "slowRowHTML", "deedBeltHTML"):
+            self.assertIn('return "";', _grab(self.src, name),
+                          "%s 가 빈 문자열을 안 돌려준다 — 조건이 두 벌이 된다" % name)
+
+    # ---------- F9. 선은 그룹 위 하나 (REQ-20260830-040 규칙 5) ----------
+    def test_f9_calm_draws_one_hairline_above_the_group(self):
+        """calm 은 사실 줄마다 헤어라인 + 23px 을 얹었다 — 줄이 둘만 돼도 카드가
+        카드가 아니게 됐다(실측 210px, 같은 열의 open 카드 90px).
+
+        선이 나누는 것은 "메타 이야기와 상태 이야기"이지 상태 이야기 **안**이
+        아니다 — 안은 간격이 나눈다. 첫 줄만 선을 갖는다."""
+        css = self.src[self.src.index('[data-skin="calm"]'):]
+        i = css.find('.card>.rvpt ~ .rvpt')
+        self.assertGreater(i, 0, "둘째 줄부터 선을 지우는 규칙이 없다")
+        rule = css[i:css.index("}", i)]
+        for want in ("border-top:0", "padding-top:0"):
+            self.assertIn(want, rule.replace(" ", ""),
+                          "둘째 줄이 아직 %s 를 안 지운다" % want)
+        # 네 조합을 다 덮는다 — 사실 줄은 .rvpt 이거나 .deedrow(낱말 갈래)다
+        for sel in (".card>.rvpt ~ .deedrow", ".card>.deedrow ~ .rvpt",
+                    ".card>.deedrow ~ .deedrow"):
+            self.assertIn(sel, css, "%s 조합이 빠져 선이 두 번 그어진다" % sel)
 
     # ---------- F4. 거꾸로도 한 벌 ----------
     def test_f4_handle_implies_stopped_dot(self):
@@ -246,7 +288,7 @@ class StallRendersTheSame(unittest.TestCase):
         with open(INDEX, encoding="utf-8") as f:
             cls.src = f.read()
 
-    def render(self, rows):
+    def render(self, rows, pre=""):
         g = lambda n: _grab(self.src, n)
         script = "\n".join([
             STUBS,
@@ -267,23 +309,33 @@ class StallRendersTheSame(unittest.TestCase):
             _const(self.src, "GLYPH_PAUSE"),
             g("wokePending"), g("stopPending"), g("stallState"),
             # 세우기 손잡이의 네 갈래 (REQ-20260830-035) — 문안 표와 공용
-            # 조각도 원문에서 떠 온다. 베끼면 두 벌이 되고, 새 줄(맡은 손·
-            # 조용한 자리)이 카드에만 서고 문서엔 안 서는 것을 못 잡는다.
+            # 조각도 원문에서 떠 온다. 베끼면 두 벌이 되고, 갈래 하나가 카드에만
+            # 서고 문서엔 안 서는 것을 못 잡는다.
+            _const(self.src, "STOP_HOLD_LABEL"),
+            _const(self.src, "STOP_ASK_TAIL"),
             _const(self.src, "STOP_KIND"),
-            g("workRowHTML"), g("stoppedRowHTML"), g("handRowHTML"),
-            g("stopBtnHTML"), g("holdRowHTML"),
-            g("stallHTML"),
+            _const(self.src, "SLOW_WIN"), _const(self.src, "DRIFT_TIP"),
+            g("jobBit"), g("factTail"), g("heldState"),
+            g("slowRowHTML"), g("stoppedRowHTML"),
+            g("stopBtnHTML"), g("holdTell"), g("holdTellHTML"),
+            g("wakeBtnHTML"), g("driftBtnHTML"),
+            g("deedBeltHTML"), g("holdLockHTML"), g("stallHTML"),
             g("cardHTML"),
             "CAT = %s;" % json.dumps(rows),
-            # 문서 화면이 짓는 자리와 **같은 표현식**
+            # 눌린 직후의 기억 상태를 세우는 자리 — 서버 왕복 없이 그 얼굴만 본다
+            pre,
+            # 문서 화면이 짓는 자리와 **같은 표현식** — 조각이 둘이 된 뒤로도
+            # 둘 다 같은 함수에서 온다 (REQ-20260830-040).
             "const out = CAT.map(r => ({id: r.id, card: cardHTML(r),"
-            "  doc: stallHTML(catFind(r.id))}));",
+            "  row: stallHTML(catFind(r.id)), belt: deedBeltHTML(catFind(r.id)),"
+            "  tell: holdTellHTML(catFind(r.id)), lock: holdLockHTML(catFind(r.id))}));",
             "console.log(JSON.stringify(out));",
         ])
         p = subprocess.run([NODE, "-e", script], capture_output=True,
                            text=True, timeout=30)
         self.assertEqual(p.returncode, 0, "node 실행 실패:\n" + p.stderr[-2000:])
         return {o["id"]: o for o in json.loads(p.stdout.strip().splitlines()[-1])}
+
 
     ROWS = [
         # 멈춘 것 — 손잡이가 서야 한다
@@ -306,93 +358,397 @@ class StallRendersTheSame(unittest.TestCase):
         {"id": "REQ-E", "type": "request", "status": "in-progress",
          "title": "돈다", "user": "u", "live": True, "live_age": 3},
         # ---- 세우기 네 갈래 (REQ-20260830-035) — 카드와 문서가 같아야 한다 ----
-        # 창이 집은 것: 안 멈췄으니 「맡은 창」 줄 하나가 새로 선다
+        # 창이 맡은 것: 정상이므로 **줄은 서지 않고** ⏸ 만 id 줄에 선다
         {"id": "REQ-F", "type": "request", "status": "in-progress",
          "title": "창이 맡았다", "user": "u",
          "stoppable": {"kind": "session", "session": "abcd1234"}},
-        # 일손이 붙은 것
+        # 나눠 맡은 일손이 붙은 것 — 역시 정상
         {"id": "REQ-G", "type": "request", "status": "in-progress",
          "title": "일손이 붙었다", "user": "u",
          "stoppable": {"kind": "agent", "session": "abcd1234", "agent": "a1"}},
-        # 아무도 없는 것: 줄 없이 ⏸ 하나만
+        # 아무도 없는 것: 줄도 없고 ⏸ 하나만
         {"id": "REQ-H", "type": "request", "status": "in-progress",
          "title": "조용하다", "user": "u", "stoppable": {"kind": "idle"}},
-        # 멈췄고 창도 집고 있는 것 — ▶ 와 ⏸ 가 한 줄에 나란히 서는 유일한 자리
+        # 멈췄고 창도 맡고 있는 것 — ▶ 와 ⏸ 가 한 벨트에 나란히 서는 유일한 자리
         {"id": "REQ-I", "type": "request", "status": "in-progress",
-         "title": "멈췄는데 창이 집고 있다", "user": "u", "stalled_mins": 40,
+         "title": "멈췄는데 창이 맡고 있다", "user": "u", "stalled_mins": 40,
          "updated": "2026-08-29T16:45:00+09:00",
+         "stoppable": {"kind": "session", "session": "abcd1234"}},
+        # 임계 **미만**으로 도는 자동 작업 — 정상이라 줄이 없어야 한다 (규칙 3)
+        {"id": "REQ-K", "type": "request", "status": "in-progress",
+         "title": "막 시작한 자동 작업", "user": "u",
+         "worker": {"pid": 1, "age": 180},
+         "jobs": [{"name": "테스트", "mins": 3}],
+         "stoppable": {"kind": "worker"}},
+        # 임계 **초과** — 「오래 걸림」 줄이 서고 잡 조각이 그 꼬리로 붙는다
+        {"id": "REQ-L", "type": "request", "status": "in-progress",
+         "title": "오래 도는 자동 작업", "user": "u",
+         "worker": {"pid": 2, "age": 1500},
+         "jobs": [{"name": "테스트", "mins": 20}],
+         "stoppable": {"kind": "worker"}},
+        # 사람이 중단해 둔 것 — 진행 축의 맨 위
+        {"id": "REQ-M", "type": "request", "status": "in-progress",
+         "title": "중단해 뒀다", "user": "u",
+         "stopped": {"at": 0, "by": "u", "age": 600},
+         "stoppable": {"kind": "idle"}},
+        # 붙어 있으나 조용한 것 — 손길 사실은 줄이 아니라 신원 문장으로 간다
+        {"id": "REQ-N", "type": "request", "status": "in-progress",
+         "title": "붙어 있는데 조용하다", "user": "u", "stall_state": "attached",
+         "hand_mins": 3, "quiet_mins": 34,
          "stoppable": {"kind": "session", "session": "abcd1234"}},
     ]
 
-    def test_every_in_progress_card_can_be_stopped(self):
-        """모든 in-progress 에 ⏸ 가 선다 — 그리고 **한 장에 하나뿐이다**.
+    # 진행 축이 세울 수 있는 캡션은 셋뿐이다 (규칙 1·2). 「진행 중」·「담당」·
+    # 「손길」 캡션이 이 목록에 없는 것이 이 개정의 전부다.
+    AXIS_CAPS = ("중단", "멈춤", "오래 걸림")
+    DEAD_CAPS = ("진행 중", "담당", "손길", "맡은 손")
 
-        네 갈래(자동 작업·창·일손·조용)가 서로 다른 줄에 붙는데, 자리 규칙이
-        갈라지면 한 카드에 둘이 서거나(멈춤 줄 + 맡은 손 줄) 하나도 안 선다."""
+    @staticmethod
+    def _caps(html):
+        return re.findall(r'<span class="rvcap">([^<]*)</span>', html)
+
+    # ---------- 규칙 1·2: 줄 자격과 「축마다 하나」 ----------
+    def test_normal_progress_says_nothing_in_letters(self):
+        """정상은 줄이 아니다 — 점과 툴팁이 말한다.
+
+        「진행 중 자동 작업 0분째」·「담당 없음」·「맡은 창 일하는 중」·
+        「손길 3분 전 · 34분째 조용」은 전부 in-progress 열 이름과 점이 이미 한
+        말이었다. 그 넷이 카드마다 한 줄씩 서면서 다듬어 둔 카드가 다시
+        어지러워졌다 (사용자 반려, REQ-20260830-040)."""
         out = self.render(self.ROWS)
-        for r in self.ROWS:
-            card = out[r["id"]]["card"]
-            n = card.count("data-stop=")
-            if r.get("stoppable"):
-                self.assertEqual(n, 1, "%s: ⏸ 가 %d 개다" % (r["id"], n))
-            else:
-                self.assertEqual(n, 0, "%s: 서버가 안 준 ⏸ 가 섰다" % r["id"])
+        for rid in ("REQ-F", "REQ-G", "REQ-H", "REQ-K", "REQ-N"):
+            caps = self._caps(out[rid]["row"])
+            self.assertEqual([], caps,
+                             "%s: 정상인데 사실 줄이 섰다 (%s)" % (rid, caps))
 
-    def test_the_stalled_and_held_card_shows_both_handles_on_one_line(self):
-        """멈췄는데 누가 집고 있는 카드 — ▶ 와 ⏸ 가 **같은 줄**에 선다.
-
-        둘은 반대말이 아니라 한 축의 두 방향이라(재생기의 ▶⏸) 나란히 세운다.
-        따로 세우면 27px 짜리가 줄 하나를 더 먹는다 (REQ-20260830-032)."""
-        card = self.render(self.ROWS)["REQ-I"]["card"]
-        i, j = card.find("data-wake="), card.find("data-stop=")
-        self.assertGreater(i, 0, "멈춘 카드에 ▶ 가 없다")
-        self.assertGreater(j, i, "⏸ 가 ▶ 보다 앞에 선다")
-        # 둘 사이에 새 줄(.deedrow)이 끼면 각자 줄을 차지한 것이다
-        self.assertNotIn("deedrow", card[i:j], "▶ 와 ⏸ 가 따로 줄을 찼다")
-
-    def test_the_pause_name_is_one_word_in_every_branch(self):
-        """갈래가 넷이어도 손잡이의 **이름**은 하나다 (ux-writer 뼈대).
-        뜻은 툴팁·창·응답이 가른다 — 낱말을 갈래마다 지으면 네 벌이 된다."""
+    def test_the_progress_axis_never_stands_twice(self):
+        """진행 축은 카드마다 최대 한 줄이다 — 사다리 밖에서 따로 서는 갈래가
+        있으면 그 자리가 곧 지난번 반려 화면이다."""
         out = self.render(self.ROWS)
-        for rid in ("REQ-F", "REQ-G", "REQ-H", "REQ-I"):
-            card = out[rid]["card"]
-            self.assertIn('aria-label="중단하기"', card,
-                          "%s: ⏸ 의 이름이 「중단하기」가 아니다" % rid)
+        for rid, o in out.items():
+            caps = self._caps(o["row"])
+            self.assertLessEqual(len(caps), 1,
+                                 "%s: 진행 축에 줄이 %d 개다 (%s)"
+                                 % (rid, len(caps), caps))
+            for c in caps:
+                self.assertIn(c, self.AXIS_CAPS,
+                              "%s: 자격 없는 캡션 「%s」가 줄로 섰다" % (rid, c))
 
-    def test_card_and_document_render_the_same_stall_block(self):
+    def test_the_dead_captions_are_gone_from_the_whole_card(self):
         out = self.render(self.ROWS)
-        for r in self.ROWS:
-            o = out[r["id"]]
-            if o["doc"]:
-                self.assertIn(o["doc"], o["card"],
-                              "%s: 카드와 문서의 멈춤 덩어리가 다르다" % r["id"])
-            else:
-                self.assertNotIn("data-wake=", o["card"],
-                                 "%s: 문서엔 없는 손잡이가 카드엔 있다" % r["id"])
+        for rid, o in out.items():
+            for c in self.DEAD_CAPS:
+                self.assertNotIn('<span class="rvcap">%s</span>' % c, o["card"],
+                                 "%s: 폐지된 캡션 「%s」가 아직 선다" % (rid, c))
 
-    def test_a_blocked_row_keeps_its_handle(self):
+    def test_the_ladder_puts_the_human_stop_on_top(self):
+        """중단 > 멈춤 > 오래 걸림. 사람이 자기 손으로 한 것이 가장 구체적이다."""
         out = self.render(self.ROWS)
-        b = out["REQ-B"]["card"]
+        self.assertEqual(["중단"], self._caps(out["REQ-M"]["row"]))
+        self.assertEqual(["멈춤"], self._caps(out["REQ-A"]["row"]))
+        self.assertEqual(["오래 걸림"], self._caps(out["REQ-L"]["row"]))
+
+    def test_the_relation_axis_still_stands_beside_the_progress_axis(self):
+        """선행 대기(관계)와 멈춤(시계)은 다른 축이라 함께 선다 —
+        REQ-20260828-041 2차 반려가 확정한 자리는 그대로다."""
+        b = self.render(self.ROWS)["REQ-B"]["card"]
         self.assertIn("선행 대기", b, "선행 대기 줄이 사라졌다")
-        self.assertIn("data-wake=", b, "선행 대기가 손잡이를 먹었다")
         self.assertIn("30분째 진전 없음", b)
+        self.assertIn("data-wake=", b, "선행 대기가 손잡이를 먹었다")
 
-    def test_the_dot_and_the_handle_stand_or_fall_together(self):
+    # ---------- 규칙 3: 임계는 서버의 수 하나 ----------
+    def test_the_slow_line_reuses_the_server_window(self):
+        """화면이 새 임계를 짓지 않는다 — 서버의 STALLED_WIN 을 그대로 쓴다.
+
+        두 수가 갈라지면 카드가 `s9 stalled` 와 다른 말을 하게 된다."""
+        m = re.search(r"^STALLED_WIN\s*=\s*(\d+)", _server_src(), re.M)
+        self.assertTrue(m, "서버에 STALLED_WIN 이 없다")
+        j = re.search(r"^const SLOW_WIN\s*=\s*(\d+)", self.src, re.M)
+        self.assertTrue(j, "화면에 SLOW_WIN 이 없다")
+        self.assertEqual(m.group(1), j.group(1),
+                         "화면의 임계(%s)가 서버의 멈춤 창(%s)과 다르다"
+                         % (j.group(1), m.group(1)))
+
+    def test_a_young_worker_gets_no_line(self):
+        out = self.render(self.ROWS)
+        self.assertEqual("", out["REQ-K"]["row"],
+                         "임계 미만인데 「오래 걸림」 줄이 섰다")
+        self.assertIn("오래 걸림", out["REQ-L"]["row"])
+
+    # ---------- 규칙 2 꼬리: 잡 조각은 자기 줄을 갖지 않는다 ----------
+    def test_the_job_bit_rides_the_winning_line(self):
+        out = self.render(self.ROWS)
+        self.assertIn("· 테스트 20분째", out["REQ-L"]["row"],
+                      "잡 조각이 이긴 줄의 꼬리로 안 붙었다")
+
+    def test_a_line_never_shows_a_broken_tail(self):
+        """꼬리는 하나뿐이다 (REQ-20260830-043 사용자 실측).
+
+        사용자 캡처: 「멈춤 42분째 진전 없음 · 마지막 20:39 · 테스트 …」.
+        조각을 무게순으로 잇고 넘치면 뒤부터 잘리게 두었는데, **잘린 조각은
+        정보가 아니라 고장으로 읽힌다** — 무엇이 몇 분째인지 하나도 말하지
+        못하면서 자리만 먹는다. 자르는 대신 고른다."""
+        rows = [dict(r) for r in self.ROWS]
+        for r in rows:
+            if r["id"] == "REQ-A":
+                r["jobs"] = [{"name": "테스트", "mins": 20}]
+        out = self.render(rows)
+        row = out["REQ-A"]["row"]
+        self.assertEqual(1, row.count(" · "),
+                         "멈춤 줄에 꼬리가 둘 이상이다: %s" % row)
+        self.assertIn("· 테스트 20분째", row, "이긴 꼬리가 잡 조각이 아니다")
+        # 손 위의 글(title)은 "마지막으로 바뀐 지"를 그대로 쓰므로 본문만 본다
+        body = row[row.index("</span>"):]
+        self.assertNotIn("마지막", body,
+                         "되풀이 조각(마지막 HH:MM)이 아직 자리를 먹는다")
+        # 떨어진 조각은 사라지지 않는다 — 신원 문장이 그대로 나른다
+        self.assertIn("테스트 20분째", out["REQ-A"]["tell"])
+
+    def test_the_evidence_for_the_word_handle_outranks_every_other_tail(self):
+        """「고친 것 있음」은 낱말 손잡이의 **근거**라 어떤 꼬리보다 앞선다 —
+        빠지면 버튼만 다른 이름으로 서는 근거 없는 손잡이가 된다."""
+        rows = [dict(r) for r in self.ROWS]
+        for r in rows:
+            if r["id"] == "REQ-A":
+                r["commit_drift"] = True
+                r["jobs"] = [{"name": "테스트", "mins": 20}]
+        row = self.render(rows)["REQ-A"]["row"]
+        self.assertIn("· 고친 것 있음", row)
+        self.assertEqual(1, row.count(" · "), "꼬리가 둘 이상이다: %s" % row)
+
+    def test_a_lone_line_still_shows_its_context(self):
+        """후보가 하나뿐이면 그것이 선다 — 규칙이 조각을 굶기지 않는다."""
+        row = self.render(self.ROWS)["REQ-A"]["row"]
+        self.assertIn("· 마지막 ", row, "붙일 자리가 있는데 꼬리가 비었다")
+
+    def test_the_job_bit_without_a_line_goes_to_the_tell(self):
+        """이긴 줄이 없으면 잡은 줄을 짓지 않고 신원 문장으로 간다."""
+        out = self.render(self.ROWS)
+        self.assertEqual("", out["REQ-K"]["row"], "잡이 혼자 줄을 세웠다")
+        self.assertIn("테스트 3분째", out["REQ-K"]["tell"],
+                      "잡 조각이 신원 문장에도 없다 — 사실이 통째로 사라졌다")
+
+    def test_the_quiet_hand_survives_without_a_line(self):
+        """손길 줄은 폐지됐지만 그 사실은 남는다 — "조용함을 감추지 않는다"
+        (REQ-20260830-019)의 뜻은 신원 문장이 진다."""
+        o = self.render(self.ROWS)["REQ-N"]
+        self.assertEqual("", o["row"], "손길이 아직 줄을 세운다")
+        self.assertIn("34분째 조용", o["tell"], "조용함이 통째로 사라졌다")
+
+    # ---------- 규칙 4: 손잡이는 id 줄의 벨트에 · 그리고 하나뿐 ----------
+    # 상태 × 노출 (REQ-20260830-042 designer 표). 값은 벨트에 서야 하는 속성이고,
+    # "" 는 벨트가 아예 없어야 한다는 뜻이다.
+    BELT = {"REQ-A": "data-wake=", "REQ-B": "data-wake=", "REQ-C": "data-wake=",
+            "REQ-D": "", "REQ-E": "",
+            "REQ-F": "data-stop=", "REQ-G": "data-stop=", "REQ-H": "",
+            "REQ-I": "data-stop=", "REQ-K": "data-stop=", "REQ-L": "data-stop=",
+            "REQ-M": "data-restart=", "REQ-N": "data-stop="}
+    HANDLES = ("data-wake=", "data-stop=", "data-restart=")
+
+    def test_the_belt_shows_one_handle_chosen_by_state(self):
+        """단추는 상태를 따른다 (REQ-20260830-042).
+
+        사용자: "이미 play, pause를 동시에 실행이 가능한 상태라는게 모순적이다.
+        상태에 따라 버튼을 노출시키는게 어때?"
+
+        붙어 있으면 끊는 쪽(⏸), 아니면 잇는 쪽(▶), 어느 쪽도 아니면 아무것도.
+        관문은 벨트 한 곳이라 두 단추 함수는 서로를 모른다."""
+        out = self.render(self.ROWS)
+        for rid, want in self.BELT.items():
+            belt = out[rid]["belt"]
+            for h in self.HANDLES:
+                n = belt.count(h)
+                self.assertEqual(n, 1 if h == want else 0,
+                                 "%s: 벨트에 %s 가 %d 개다 (기대: %s)"
+                                 % (rid, h, n, want or "없음"))
+            if not want:
+                self.assertEqual("", belt, "%s: 빈 벨트가 아니다" % rid)
+
+    def test_play_and_pause_never_stand_together(self):
+        """▶ 와 ⏸ 는 같은 카드에 함께 서지 않는다 — 사용자가 모순이라 부른 그 그림.
+
+        ▶⏸ 는 "한 축의 두 방향, 하나만 참"이라는 약속을 그림 자체로 한다.
+        idle 갈래에 같은 ⏸ 를 준 순간 그 약속이 깨졌고(도는 것이 없는데 중단
+        단추가 있다), 여기가 그 약속을 지키는 자리다."""
         out = self.render(self.ROWS)
         for rid, o in out.items():
             card = o["card"]
-            handle = "data-wake=" in card
-            stopped = "dot-stopped" in card
-            self.assertEqual(handle, stopped,
-                             "%s: 점과 손잡이가 어긋난다 (손잡이=%s 정지마크=%s)"
-                             % (rid, handle, stopped))
+            play = "data-wake=" in card or "data-restart=" in card
+            pause = "data-stop=" in card
+            self.assertFalse(play and pause,
+                             "%s: ▶ 와 ⏸ 가 한 카드에 함께 섰다" % rid)
+
+    def test_the_lock_moved_to_the_document(self):
+        """idle 의 잠금은 사라진 것이 아니라 문서로 옮겼다.
+
+        지금 내리는 행위가 아니라 앞으로에 대한 **정책**이라 층이 다르다.
+        길은 새로 파지 않는다 — 같은 stop 경로의 idle 갈래를 그대로 쓴다."""
+        out = self.render(self.ROWS)
+        lock = out["REQ-H"]["lock"]
+        self.assertIn("자동 작업 중단해 두기", lock, "문서에 낱말 단추가 없다")
+        self.assertIn('data-kind="idle"', lock, "idle 갈래로 안 간다")
+        self.assertIn("data-stop=", lock, "기존 stop 경로를 안 쓴다")
+        # 카드에는 서지 않는다 — 카드의 한 결정은 "지금 이어갈까" 하나다
+        self.assertNotIn("자동 작업 중단해 두기", out["REQ-H"]["card"])
+        # 붙어 있는 카드에는 잠글 것이 없다
+        for rid in ("REQ-F", "REQ-L"):
+            self.assertEqual("", out[rid]["lock"],
+                             "%s: 붙어 있는데 잠금 단추가 섰다" % rid)
+
+    def test_a_stalled_card_always_offers_something_to_press(self):
+        """멈췄다고 그려 놓고 누를 것이 없는 카드는 없다 (REQ-20260828-041).
+
+        배타 노출로 **어느** 단추가 서는지는 바뀌었지만(붙어 있으면 ⏸), 정지
+        마크가 선 카드에 손잡이가 있어야 한다는 계약은 그대로다."""
+        out = self.render(self.ROWS)
+        for rid, o in out.items():
+            if "dot-stopped" not in o["card"]:
+                continue
+            self.assertTrue(any(h in o["card"] for h in self.HANDLES)
+                            or "끝났는지 확인" in o["card"],
+                            "%s: 정지 마크는 섰는데 누를 것이 없다" % rid)
+
+    def test_the_handles_live_in_the_id_belt(self):
+        """▶·⏸ 는 사실 줄이 아니라 id 줄에 선다 (규칙 4).
+
+        사실 줄에 붙어 있는 동안 손잡이의 자리는 카드마다 달랐다 — 멈춤 줄·
+        진행 중 줄·담당 줄·빈 줄. 자리가 사실을 따라다니면 매번 찾아야 하고,
+        좁은 칸에서는 그 27px 이 문장에서 빼앗은 폭이라 멈춤 줄이 잘렸다."""
+        out = self.render(self.ROWS)
+        for rid in ("REQ-A", "REQ-I", "REQ-M", "REQ-L", "REQ-F"):
+            card, belt = out[rid]["card"], out[rid]["belt"]
+            self.assertIn("deedbelt", belt, "%s: 벨트가 없다" % rid)
+            self.assertIn(belt, card, "%s: 카드가 벨트를 안 싣는다" % rid)
+            # 벨트는 id 줄 **안**에 있다 — 제목보다 앞이고, 사실 줄보다 앞이다.
+            idrow = card[card.index('<div class="id"'):]
+            self.assertLess(idrow.index("deedbelt"), idrow.index('class="t"'),
+                            "%s: 벨트가 id 줄을 벗어났다" % rid)
+            # 사실 줄에는 손잡이가 남아 있지 않다
+            for h in self.HANDLES:
+                self.assertNotIn(h, out[rid]["row"],
+                                 "%s: 손잡이가 아직 사실 줄에 붙어 있다" % rid)
+
+    def test_the_word_handle_keeps_its_own_row(self):
+        """낱말 손잡이 「끝났는지 확인」만은 자기 줄을 지킨다 — 87px 를 id 줄에
+        얹으면 식별자를 밀어낸다. 그리고 그 카드의 벨트는 비어 있다."""
+        rows = [dict(r) for r in self.ROWS]
+        for r in rows:
+            if r["id"] == "REQ-A":
+                r["commit_drift"] = True
+        out = self.render(rows)
+        row, belt = out["REQ-A"]["row"], out["REQ-A"]["belt"]
+        self.assertIn("deedrow wordy", row, "낱말 손잡이가 자기 줄을 잃었다")
+        self.assertIn("끝났는지 확인", row)
+        self.assertEqual("", belt,
+                         "낱말 갈래인데 벨트에 글리프가 또 섰다 — 한 카드에 둘이다")
+
+    def test_the_pause_name_is_one_word_in_every_attached_branch(self):
+        """붙어 있는 갈래 셋의 ⏸ 이름은 하나다 (ux-writer 뼈대).
+        갈린 것은 붙지 않은 갈래의 낱말뿐이다 — 「중단해 두기」."""
+        out = self.render(self.ROWS)
+        for rid in ("REQ-F", "REQ-G", "REQ-I", "REQ-L", "REQ-N"):
+            self.assertIn('aria-label="중단하기"', out[rid]["card"],
+                          "%s: ⏸ 의 이름이 「중단하기」가 아니다" % rid)
+
+    # ---------- 규칙 4의 필수 조건: 신원은 툴팁 전용이 아니다 ----------
+    def test_identity_reaches_a_reader_without_a_pointer(self):
+        """신원이 줄에서 내려간 대가로 낭독기가 그것을 잃으면 안 된다 —
+        designer 가 이 개정을 통과시키며 단 조건이다. 손잡이가 없는 카드
+        (조용한 것)에서도 살아 있어야 한다 — 거기가 가장 말이 없는 카드다."""
+        out = self.render(self.ROWS)
+        want = {"REQ-F": "맡은 창", "REQ-G": "일손", "REQ-H": "담당하는 것이 없습니다",
+                "REQ-L": "자동 작업이 이 요청을 맡아"}
+        for rid, w in want.items():
+            tell = out[rid]["tell"]
+            self.assertIn('class="vh"', tell,
+                          "%s: 시각적 숨김 문장이 없다 (툴팁 전용은 접근성 후퇴)" % rid)
+            self.assertIn(w, tell, "%s: 신원 문장에 「%s」가 없다" % (rid, w))
+            self.assertIn(tell, out[rid]["card"], "%s: 카드가 그것을 안 싣는다" % rid)
+        # 손 위의 글은 식별자가 진다 — 벨트는 상자가 버튼뿐이라 과녁이 못 된다
+        self.assertRegex(out["REQ-F"]["card"], r'<span class="idn" title="[^"]*맡은 창')
+
+    # ---------- 배타가 새로 만드는 유일한 결함 ----------
+    def test_pressing_one_handle_clears_the_other_memory(self):
+        """한쪽을 누르면 반대편 눌림 기억을 지운다 (REQ-20260830-042 designer).
+
+        배타가 서면 한 자리에서 얼굴이 바뀐다(▶ → 몇 초 뒤 ⏸). 두 기억이 따로
+        살면 ▶ 를 누른 뒤 곧바로 ⏸ 로 중단했을 때 되돌아온 ▶ 가 남은 3분 잠금
+        때문에 죽어 있다 — 방금 자기가 중단한 것을 다시 못 켠다."""
+        def body(name):
+            i = self.src.index("async function %s(" % name)
+            return _code(self.src[i:self.src.index("\n}", i)])
+        wake, stop = body("wakeDoc"), body("stopDoc")
+        self.assertIn("stopAt.delete(id)", wake, "▶ 가 반대편 기억을 안 지운다")
+        self.assertIn("wokeAt.delete(id)", stop, "⏸ 가 반대편 기억을 안 지운다")
+
+    def test_the_returning_handle_is_not_locked(self):
+        """⏸ 를 누른 직후의 기억 상태로 그려도 ▶ 는 눌린다."""
+        # stopDoc 이 실제로 하는 두 줄을 그대로 세운다
+        out = self.render(self.ROWS,
+                          pre='wokeAt.delete("REQ-A");'
+                              ' stopAt.set("REQ-A", Date.now());')
+        self.assertNotIn("disabled", out["REQ-A"]["belt"],
+                         "되돌아온 ▶ 가 잠겨 있다 — 방금 중단한 것을 못 켠다")
+        # 지우지 않았다면 잠겼을 것이다 — 이 시험이 무엇을 잡는지 스스로 보인다
+        out2 = self.render(self.ROWS,
+                           pre='wokeAt.set("REQ-A", Date.now());'
+                               ' stopAt.set("REQ-A", Date.now());')
+        self.assertIn("disabled", out2["REQ-A"]["belt"],
+                      "잠금 자체가 사라졌다 — 연타 보호가 없다")
+
+    # ---------- 카드와 문서는 같은 조각을 쓴다 ----------
+    def test_card_and_document_render_the_same_pieces(self):
+        """조각이 둘로 나뉜 뒤로도 두 화면은 같은 함수에서 온다.
+        여기가 갈라지면 같은 요청이 카드에선 못 깨우고 문서에선 깨워진다."""
+        out = self.render(self.ROWS)
+        for r in self.ROWS:
+            o = out[r["id"]]
+            for part in ("row", "tell", "belt"):
+                if o[part]:
+                    self.assertIn(o[part], o["card"],
+                                  "%s: 카드와 문서의 %s 조각이 다르다"
+                                  % (r["id"], part))
+            if not o["belt"]:
+                self.assertNotIn("data-wake=", o["card"],
+                                 "%s: 문서엔 없는 손잡이가 카드엔 있다" % r["id"])
+
+    def test_the_dot_tells_the_same_story_as_the_line(self):
+        """점과 글이 어긋나지 않는다 — 어긋나면 사람은 **둘 다** 안 믿는다.
+
+        (손잡이와의 한 벌 계약은 배타 노출로 갈래가 늘어, 위
+        test_a_stalled_card_always_offers_something_to_press 가 이어받았다.)"""
+        out = self.render(self.ROWS)
         self.assertIn("dot-stopped mild", out["REQ-A"]["card"])
         self.assertIn('livedot dot-stopped" title="이 요청을 맡았던 작업이 멈췄습니다',
                       out["REQ-C"]["card"])
         self.assertIn("livedot on", out["REQ-E"]["card"])
+        for rid in ("REQ-A", "REQ-B", "REQ-C"):
+            self.assertIn("dot-stopped", out[rid]["card"])
+            self.assertIn("진전 없음", out[rid]["row"])
 
     def test_a_quiet_row_says_nothing(self):
         out = self.render(self.ROWS)
         for rid in ("REQ-D", "REQ-E"):
             self.assertNotIn("멈춤", out[rid]["card"], "%s 가 멈췄다고 말한다" % rid)
-            self.assertEqual("", out[rid]["doc"])
+            self.assertEqual("", out[rid]["row"])
+
+    # ---------- 낱말 (REQ-20260830-039) ----------
+    def test_no_coined_word_reaches_the_screen(self):
+        """조어 「맡은 손」과 반려어 잔재는 문안 표에도 화면에도 없다.
+
+        그린 것만 보면 확인 창 문안(ask)이 빠져나가므로 표 전문을 함께 읽는다.
+        유지 판정 낱말(맡은 창·일손)은 여기 없다 — 재론 금지 근거가
+        REQ-20260830-039 문서에 있다."""
+        out = self.render(self.ROWS)
+        table = _code(_const(self.src, "STOP_KIND"))
+        for w in ("맡은 손", "세워 두", "손길이 없", "붙어 있는 손길"):
+            self.assertNotIn(w, table, "문안 표에 「%s」가 남아 있다" % w)
+        for rid, o in out.items():
+            self.assertNotIn("맡은 손", o["card"],
+                             "%s: 화면에 조어 「맡은 손」이 섰다" % rid)
+
+    def test_the_idle_branch_speaks_of_a_named_owner(self):
+        """idle 갈래의 개념어는 「담당」이다 (039 리드 확정)."""
+        table = _code(_const(self.src, "STOP_KIND"))
+        self.assertIn("담당하는 것이 없습니다", table)
+        self.assertIn("중단해 두면", table, "반려어 「세워 두다」가 안 걷혔다")

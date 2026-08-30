@@ -128,15 +128,15 @@ function depSummaryHTML(rows){
         return `<div class="dsblk">${dot(b.status)}${dlink(b.id, esc(shortId(b.id)))}
           <span class="ti">${esc(b.title)}</span>
           <span class="dsmeta"><span class="st" style="color:${SCOLOR[b.status] || "var(--muted)"}">${esc(b.status)}</span><span
-            class="num" title="선행이 현재 상태로 머문 시간">${esc(fmtElapsed(b.status_since) || "-")}</span>${
-            mark ? `<span class="dshold" title="이 선행이 지금 붙잡고 있는 요청 수">${held}건 붙잡음</span>` : ""}</span></div>`;
+            class="num" title="선행 작업이 현재 상태로 머문 시간">${esc(fmtElapsed(b.status_since) || "-")}</span>${
+            mark ? `<span class="dshold" title="이 선행 작업이 지금 붙잡고 있는 요청 수">${held}건 붙잡음</span>` : ""}</span></div>`;
       }).join("")}
     </div>`).join("");
   return `<aside class="depsum" id="depsum">
     <div class="dshead"><span>선행 대기 현황</span>
       <span class="dscount">${d.groups.length}건이 막혀 있다</span>${scope}</div>
     ${lead}
-    <div class="dslegend">막힌 요청 <i>↳ 기다리는 선행</i></div>
+    <div class="dslegend">막힌 요청 <i>↳ 기다리는 선행 작업</i></div>
     <div class="dsbody" tabindex="0" role="group" aria-label="선행 대기 목록">${body}</div>
     ${hidden > 0 ? `<button class="more" data-depmore>${hidden}개 더 보기</button>`
       : (open && d.groups.length > DEP_ROWS ? `<button class="more" data-depmore>접기</button>` : "")}

@@ -278,6 +278,21 @@ class StallTrust(unittest.TestCase):
         self.assertTrue(self.m.unassigned_hands(),
                         "추정이 문서 한 줄로 확정이 됐다")
 
+    def test_c2f_named_fresh_hand_is_attached(self):
+        """REQ-20260830-044 실사고: `s9 claim --agent-transcript` 로 지명 등록된
+        손이 한창 쓰는 중인데 그 카드가 「멈춤 44분째」로 섰다 — 지명 손은
+        unassigned 에서 빠지는 순간 판정 어디에도 안 실렸다. 지명 + 신선이면
+        attached 다. 화면 경로와 단독 호출이 같은 답을 내야 한다(c3b 원칙)."""
+        self.clear_hands("lead1234")
+        self.hand("lead1234", req=self.A, age=5)
+        try:
+            v = self.verdict(self.A)
+            self.assertEqual(v["state"], "attached", v)
+            self.assertEqual(self.live_row(self.A).get("stall_state"),
+                             "attached", "화면 경로가 단독 판정과 다른 답을 낸다")
+        finally:
+            self.clear_hands("lead1234")
+
     def test_c2c_stale_hand_is_not_counted(self):
         """조용해진 손은 손이 아니다 — 천장 없는 보호는 교착의 다른 이름이다."""
         self.clear_hands("lead1234")

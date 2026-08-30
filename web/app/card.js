@@ -11,6 +11,17 @@
    쓴다 — 처지의 차이는 버튼이 아니라 그 위의 줄이 말한다. */
 const WAKE_LABEL = "이어가기", WAKE_GOING = "이어가는 중…";
 const STOP_LABEL = "중단하기", STOP_GOING = "중단 중…";
+/* 낱말이 갈린 이유는 뜻이 갈리기 때문이다 (REQ-20260830-042 ux-writer 판정).
+   도는 것을 끊는 쪽은 「중단하기」(지금 멈춘다), 앞으로 못 맡게 하는 쪽은
+   「중단해 두기」(앞으로 안 맡게 해 둔다). 한 낱말(중단)의 상만 다르므로
+   사용자가 고른 낱말은 지켜지고 뜻은 갈린다. 진행형은 공용 「중단 중…」. */
+const STOP_HOLD_LABEL = "자동 작업 중단해 두기";
+/* 확인 창 셋의 꼬리는 **한 문장**이다 (REQ-20260830-042 ux-writer).
+   전에는 「같은 자리에 생기는」·「같은 자리의」로 갈려 있었고, 무엇보다 ▶ 와 ⏸ 가
+   함께 서 있던 동안에는 이 문장이 거짓에 가까웠다 — 그 자리에 이미 둘이 있으니
+   "대신 선다"가 성립하지 않았다. 배타 노출이 이 문장을 참으로 만든다. */
+const STOP_ASK_TAIL = "다시 맡기려면 그 자리에 대신 서는 「이어가기」를"
+  + " 누르면 됩니다.";
 const DRIFT_LABEL = "끝났는지 확인";
 /* ⏸ 의 네 갈래 (REQ-20260830-035). 손잡이의 **이름은 넷 다 「중단하기」**다 —
    뜻은 툴팁·창·응답이 가른다(낱말을 갈래마다 새로 지으면 낱말이 네 벌이 되고,
@@ -19,50 +30,60 @@ const DRIFT_LABEL = "끝났는지 확인";
    문안은 ux-writer 가 REQ-035 문서에 적은 것을 **그대로** 옮겼다. 화면이 문장을
    짓지 않는다 — 서버 응답도 `d.message` 를 그대로 띄운다.
 
-   `row` = 사실 줄이 말하는 것 · `tip` = 손잡이에 손이 얹혔을 때 · `ask` = 확인 창.
-   `ask` 가 없는 갈래(idle)는 창을 세우지 않는다: 잃는 것이 없고 「이어가기」 한
-   번으로 되돌아간다(s9-design 4절 — 확인은 되돌릴 수 없을 때만). */
+   `who` = 지금 이 요청에 무엇이 붙어 있나(신원) · `tip` = 손잡이에 손이 얹혔을
+   때 · `ask` = 확인 창. `ask` 가 없는 갈래(idle)는 창을 세우지 않는다: 잃는 것이
+   없고 「이어가기」 한 번으로 되돌아간다(s9-design 4절 — 확인은 되돌릴 수 없을 때만).
+
+   **`row` 였던 것이 `who` 가 됐다** (REQ-20260830-040 designer 개정안 규칙 1).
+   이 문장들은 사실 줄의 손 위 글이었는데, 그 줄이 폐지됐다 — 「맡은 창 일하는 중」·
+   「담당 없음」은 in-progress 열 이름과 점이 이미 한 말의 되풀이였고, 카드마다
+   글자 줄을 하나씩 더 세워 오너가 다듬어 둔 카드를 다시 어지럽혔다. 신원은 이제
+   **점과 툴팁과 낭독기**가 진다: 이 문장 하나가 id 줄의 손 위 글이 되고, 같은
+   문장이 시각적 숨김 글자로 그 줄에 함께 실린다(툴팁 전용은 접근성 후퇴다).
+
+   낱말 판정 (REQ-20260830-039 tech-writer 전수 점검):
+     · 「맡은 손」 — 가리킬 실체가 없는 조어라 반려. 개념어는 「담당」·「없음」.
+     · 「손길」 — idle 본문에서 걷어냈다. 같은 카드의 캡션 「손길」(마지막으로
+       만진 때)과 같은 낱말이 다른 것을 가리키던 자리다.
+     · 「세워 두다」 — 사용자가 반려한 「세우기」의 활용형 잔재라 「중단해 두다」로.
+     · 「집다」 — 채택어 「담당」과 한 뿌리인 「맡다」로 모은다.
+     · 「조각」(서브에이전트 몫) — 은유를 걷고 「일 하나」·「하던 일」로.
+     · 유지: 「맡은 창」(실제 터미널 창을 가리킨다) · 「일손」(사전 낱말이고
+       늘 "나눠 맡은"을 달고 나온다) — 재론 금지 근거가 039 문서에 있다. */
 const STOP_KIND = {
   worker: {
-    tip: "진행 중인 자동 작업을 중단합니다 — 하던 일이 거기서 끝나고 사유가 문서에 남습니다",
+    who: "자동 작업이 이 요청을 맡아 진행 중입니다",
+    tip: "자동 작업이 돌고 있습니다 — 중단하면 하던 일이 거기서 끝나고 사유가"
+      + " 문서에 남습니다",
     ask: {title: "진행 중인 자동 작업을 중단할까요?",
       desc: "지금 하던 일은 문서에 적힌 데까지만 남고, 그 뒤로 진행 중이던 것은"
-        + " 사라집니다. 중단한 사실과 사유는 문서에 남습니다. 다시 맡기려면 같은"
-        + " 자리에 생기는 「이어가기」를 누르면 됩니다.",
+        + " 사라집니다. 중단한 사실과 사유는 문서에 남습니다. " + STOP_ASK_TAIL,
       ok: STOP_LABEL}},
   session: {
-    row: "이 요청을 맡은 창이 지금 일하고 있습니다 — 중단하면 멈추라는 말이 그 창에"
-      + " 전해지고, 하던 말을 마치는 데 잠깐 걸릴 수 있습니다",
-    cap: "맡은 창",
-    fact: "일하는 중",
-    tip: "일하는 창에 중단하라고 전합니다 — 곧바로 멎지 않을 수 있습니다",
+    who: "이 요청을 맡은 창이 지금 일하고 있습니다",
+    tip: "맡은 창이 일하고 있습니다 — 중단하라고 전하면 곧바로 멎지 않을 수 있습니다",
     ask: {title: "일하는 창에 중단하라고 전할까요?",
       desc: "지금 하던 말은 그 창이 마치는 데까지 이어질 수 있어 곧바로 멎지"
         + " 않습니다. 멈추면 어디까지 했는지와 사유가 문서에 남습니다. 그동안"
-        + " 자동 작업은 이 요청을 다시 집지 않고, 다시 맡기려면 같은 자리의"
-        + " 「이어가기」를 누르면 됩니다.",
+        + " 자동 작업은 이 요청을 다시 맡지 않습니다. " + STOP_ASK_TAIL,
       ok: "중단하라고 전하기"}},
   agent: {
-    row: "이 요청을 나눠 맡은 일손이 조각 하나를 진행 중입니다 — 중단하면 하던"
-      + " 조각은 마치고 멈춥니다",
-    cap: "일손",
-    fact: "조각 하나 진행 중",
-    tip: "나눠 맡은 일손에 중단하라고 전합니다 — 하던 조각은 마치고 멈춥니다",
+    who: "이 요청을 나눠 맡은 일손이 일 하나를 진행 중입니다",
+    tip: "나눠 맡은 일손이 일 하나를 하고 있습니다 — 중단하라고 전하면 하던 일은"
+      + " 마치고 멈춥니다",
     ask: {title: "나눠 맡은 일손에 중단하라고 전할까요?",
-      desc: "지금 붙잡은 조각은 마치고 멈추므로 곧바로 멎지 않습니다. 어디까지"
-        + " 했는지와 중단한 사유는 문서에 남습니다. 다시 맡기려면 같은 자리의"
-        + " 「이어가기」를 누르면 됩니다.",
+      desc: "지금 맡은 일은 마치고 멈추므로 곧바로 멎지 않습니다. 어디까지"
+        + " 했는지와 중단한 사유는 문서에 남습니다. " + STOP_ASK_TAIL,
       ok: "중단하라고 전하기"}},
-  /* idle 은 ux-writer 가 "줄을 세우지 말라"고 했다("도는 것이 없으니 적을
-     사실이 없다"). 화면에 세우고 보니 그 권고가 만드는 그림은 **글리프 하나가
-     빈 줄을 혼자 쓰는 카드**였다 — 오너가 방금 반려한 바로 그 모양이다.
-     줄은 ⏸ 때문에 어차피 서므로, 비워 두는 대신 그 ⏸ 가 왜 거기 있는지를
-     적었다: 「맡은 손 없음」. 높이는 1px 도 안 늘고, "진행 중"을 주장하지
-     않는다는 권고의 뜻은 그대로 지킨다(캡션이 진행이 아니라 손을 말한다). */
+  /* idle 은 ux-writer 가 처음부터 "줄을 세우지 말라"고 했다("도는 것이 없으니
+     적을 사실이 없다"). 그 권고를 지키지 못한 것은 ⏸ 가 줄을 필요로 했기
+     때문인데, 손잡이가 id 줄로 옮겨 간 지금은 세울 이유가 아예 없다 — 권고를
+     제자리로 돌린다. */
   idle: {
-    row: "지금 이 요청에 붙어 일하는 손길이 없습니다 — 세워 두면 자동 작업이 다시 집지 않습니다",
-    cap: "맡은 손", fact: "없음",
-    tip: "지금은 붙어 있는 손길이 없습니다 — 자동 작업이 이 요청을 다시 집지 않도록 세워 둡니다"},
+    who: "지금 이 요청을 담당하는 것이 없습니다 — 맡은 창도, 일손도, 자동 작업도 없습니다",
+    // 이 갈래의 단추는 카드를 떠나 문서 화면의 낱말 단추가 됐다(holdLockHTML) —
+    // 도는 것을 끊는 행위가 아니라 앞으로에 대한 정책이기 때문이다.
+    tip: "지금 담당이 없습니다 — 중단해 두면 자동 작업이 다시 맡지 않습니다"},
 };
 /* 손잡이의 **얼굴**은 글리프, **이름**은 그대로 낱말 (REQ-20260830-032 오너 판정).
 
@@ -166,28 +187,64 @@ function stallState(r){
    이미 한 번 겪은 갈래다. 둘은 사실상 배타적이다(도는 것은 멈춘 것이 아니다).
    그래도 겹쳐 서는 순간이 있으면 그대로 둘 다 그린다: 서버가 그렇게 말한
    것이고, 화면이 서버의 말을 지우는 자리는 두지 않는다. */
-/* 손길 줄 (REQ-20260830-019·021 designer 검토 ③) — 문서는 조용하지만 최근
-   손길이 있는 카드. 종전에는 카드가 아무 말도 안 해 건강한 카드와 구별되지
-   않았고, 그 사실이 문서로 들어가 깨우기를 눌러야 뜨는 거절 창에만 살았다 —
-   "조용함을 감추지 않는다"의 정면 위반. 같은 .rvpt 한 줄, 버튼 없음(버튼이
-   없는 것 자체가 "지금 할 일 없음"의 신호), 문장은 서버의 stall_why 그대로. */
-function handRowHTML(r){
-  if (!r || r.type !== "request" || r.stall_state !== "attached") return "";
-  if (r.hand_mins == null || r.quiet_mins == null) return "";
-  return `<div class="rvpt hand" title="${esc(r.stall_why || "")}">`
-    + `<span class="rvcap">손길</span>`
-    + (r.hand_mins < 1 ? "방금" : `${fmtStall(r.hand_mins).replace(/째$/, "")} 전`)
-    + ` · ${fmtStall(r.quiet_mins)} 조용</div>`;
+/* ---- 카드가 글자로 말할 자격 (REQ-20260830-040 designer 개정안) -------------
+
+   사용자: "기껏 중지, 시작 버튼을 작게 만들어서 카드를 다듬어뒀더니 또 디자인이
+   이렇다. 그리고 기능도 이게 맞는건가?"
+
+   맞는 지적이었고 원인은 둘이었다. ① 「⏸ 는 카드에 하나」 사다리가 **손잡이만**
+   지배하고 줄은 지배하지 않아, 잡 전용 갈래가 사다리 밖에서 따로 줄을 세우고
+   같은 카드에 담당 줄이 또 섰다. ② 줄 자격의 기준이 없었다 — 「진행 중 자동
+   작업 0분째」·「맡은 창 일하는 중」·「담당 없음」·「손길 3분 전 · 34분째 조용」은
+   전부 **정상의 서술**이고, in-progress 열 이름과 점이 이미 한 말이다.
+
+   그래서 자격을 세운다. **줄은 「정상이 아니다」 또는 「당신이 할 일이 있다」를
+   말할 때만 선다**:
+     줄(글자)  중단 · 멈춤(+고친 것 있음) · 선행 대기 · 오래 걸림
+     점        지금 무엇이 붙어 있는가 (livedot 다섯 얼굴)
+     툴팁·숨김 글자  신원 · 경과 분 · 잡 이름 (holdTell)
+   그리고 **축마다 하나, 최대 둘**이다: 관계 축(선행 대기, cardHTML) 1줄 +
+   진행 축 1줄. 진행 축 사다리는 중단 > 멈춤 > 오래 걸림 > (없음). */
+/* 서버의 멈춤 창과 **같은 수**를 쓴다 (개정안 규칙 3).
+
+   「테스트 4분째」·「자동 작업 0분째」는 사실이지 신호가 아니다 — 캡션이 정상을
+   서술하면 그 줄은 신호가 아니라 배경이 되고, 배경이 카드에서 가장 큰 자리를
+   먹는다(실측: 그 줄들이 선 카드 210px, 같은 열의 open 카드 90px).
+   새 수를 짓지 않는다: 서버가 이미 가진 STALLED_WIN 을 그대로 재사용해 그보다
+   오래 걸린 것만 「오래 걸림」으로 세운다. 「0분째」는 이 한 줄로 사라진다.
+   두 수가 갈라지면 화면이 CLI(`s9 stalled`)와 다른 말을 하게 되므로,
+   tests/test_stall_pair.py 가 bin/s9 의 수와 이 수를 대조한다. */
+// 단위는 초 — bin/s9 의 STALLED_WIN 과 **같은 수**여야 한다.
+const SLOW_WIN = 900;
+/* 긴 잡 조각 (REQ-20260830-022) — 서버가 pid 생존·명령줄 대조를 지나 실은 값만
+   옮긴다(화면 재판정 없음). **자기 줄은 갖지 않는다** (규칙 2): 이긴 사실 줄의
+   꼬리로 붙고, 이긴 줄이 없으면 신원 문장까지만 간다. 종전에는 이 조각이 한 줄을
+   통째로 쓰는 동안 정작 중요한 멈춤 줄이 폭을 잃고 잘렸다. */
+function jobBit(r){
+  return ((r && r.jobs) || [])
+    .map(j => `${esc(j.name)} ${fmtStall(+j.mins || 0)}`).join(" · ");
 }
-/* ⏸ 한 개의 HTML. **카드에 ⏸ 는 하나뿐**이고, 그 자리는 "지금 무엇이 붙어
-   있는가"를 가장 구체적으로 말하는 줄이다:
+/* 꼬리는 **하나뿐이다** (REQ-20260830-043 사용자 실측).
 
-       진행 중(worker) 줄  >  멈춤 줄  >  맡은 손(창·일손) 줄  >  조용한 자리
+   사용자: "레이아웃이 정확했으면 좋겠다." 캡처에서 멈춤 줄이 이렇게 끝났다 —
+   「멈춤 42분째 진전 없음 · 마지막 20:39 · 테스트 …」. 조각을 무게순으로 잇고
+   넘치면 뒤부터 잘리게 두었는데, **잘린 조각은 정보가 아니라 고장으로 읽힌다**:
+   「· 테스트 …」는 무엇이 몇 분째인지 하나도 말하지 못하면서 자리만 먹는다.
 
-   같은 카드에 ▶ 와 ⏸ 가 함께 서는 자리는 멈춤 줄 하나뿐이다(그 카드는 "안
-   나아가는 중"이면서 동시에 "누가 집고 있는 중"일 수 있다). 둘은 서로 반대말이
-   아니라 **한 축의 두 방향**이라 나란히 세운다 — 재생기의 ▶⏸ 가 그렇듯이.
-   이름·툴팁·창이 갈래를 가르므로 그림이 같아도 뜻이 섞이지 않는다. */
+   그래서 자르는 대신 **고른다**. 꼭 서야 하는 사실(N분째 진전 없음) 뒤에 무게순
+   후보를 늘어놓고 이긴 하나만 붙인다. 떨어진 조각은 사라지지 않는다 — 신원
+   문장(holdTell)이 툴팁과 숨김 글자로 그대로 나른다. 「이긴 줄이 없으면
+   툴팁으로」(REQ-20260830-040 규칙 2)를 「자리가 없으면 툴팁으로」까지 편 것이다.
+
+   무게 순서는 부르는 쪽이 정한다: 「고친 것 있음」은 손잡이의 낱말을 바꾸는
+   근거라 맨 앞이고, 「마지막 HH:MM」은 바로 앞의 「N분째」와 같은 사실을 다른
+   꼴로 되풀이하므로 맨 뒤다. */
+function factTail(...bits){
+  const t = bits.filter(Boolean)[0];
+  return t ? ` · ${t}` : "";
+}
+/* ⏸ 한 개의 HTML. **카드에 ⏸ 는 하나뿐**이고, 그 자리는 이제 사실 줄이 아니라
+   id 줄이다 (규칙 4) — 자리 규칙은 deedBeltHTML 주석에 있다. */
 function stopBtnHTML(r){
   const kind = (r.stoppable || {}).kind;
   if (!kind) return "";
@@ -199,86 +256,194 @@ function stopBtnHTML(r){
     + ` aria-label="${going ? STOP_GOING : STOP_LABEL}"`
     + ` title="${going ? STOP_GOING : esc(tip)}">${GLYPH_PAUSE}</button>`;
 }
-/* 맡은 손 줄 (REQ-20260830-035) — 무인 작업자도 멈춤도 아닌데 누가 집고 있는
-   카드가 "왜 여기 ⏸ 가 서 있나"를 스스로 말한다. 새 문법이 아니라 진행 중 줄과
-   같은 `.rvpt` 한 줄이고, 잉크도 같은 in-progress 색이다.
-   문안 표에 줄이 없는 갈래(서버가 뒷날 다섯째를 더한다면)는 ⏸ 만 오른쪽 끝에
-   세운다 — 모르는 갈래라고 손잡이를 지우면 세울 수 없는 카드가 생긴다. */
-function holdRowHTML(r){
-  const kind = (r.stoppable || {}).kind;
-  if (!kind || kind === "worker") return "";
-  const k = STOP_KIND[kind] || {};
-  if (!k.row){
-    return `<div class="deedrow bare"><div class="acts stoprow">`
-      + stopBtnHTML(r) + `</div></div>`;
-  }
-  return `<div class="deedrow"><div class="rvpt hold" title="${esc(k.row)}">`
-    + `<span class="rvcap">${esc(k.cap)}</span>${esc(k.fact)}</div>`
-    + `<div class="acts stoprow">` + stopBtnHTML(r) + `</div></div>`;
+/* 사람이 중단해 둔 자리인가 — 술어 하나 (REQ-20260829-024 라운드4).
+   줄(stoppedRowHTML)과 ▶ 의 갈래(wakeBtnHTML)가 각자 조건을 가지면 줄은 「중단」
+   이라 적었는데 손잡이는 「이어가기」가 아닌 다른 것을 부르는 조합이 생긴다 —
+   이 화면이 판정 버튼에서 세 번 배운 그 결함이다. */
+function heldState(r){
+  return !!(r && r.type === "request" && r.stopped && !r.worker);
 }
+/* 신원은 줄을 떠나 **툴팁과 낭독기**로 간다 (규칙 1, 그리고 규칙 4의 필수 조건).
+
+   한 문장을 두 곳이 함께 쓴다: id 줄에 손이 얹히면 `title` 로 읽히고, 눈으로
+   못 읽는 사람에게는 **같은 문장이 시각적 숨김 글자로 그 줄에 실린다**. 툴팁
+   전용으로 두면 키보드·낭독기 경로가 끊긴다 — designer 가 이 개정을 통과시키며
+   단 조건이 정확히 그것이다.
+
+   문장 = 신원(STOP_KIND[kind].who) + 사실 조각(경과 분·잡 이름·마지막 손길).
+   사실 조각은 괄호로 뒤에 붙인다: 신원 문장이 먼저 읽혀야 "무엇이 붙어 있나"에
+   답이 되고, 수는 그 답을 뒷받침하는 것이지 답이 아니다.
+
+   손길 사실(REQ-20260830-019·021)은 줄을 잃었지만 사라지지는 않는다 —
+   "조용함을 감추지 않는다"는 그 요청의 뜻은 여기서 지켜진다. 줄로 세우지 않을
+   뿐이다: 붙어 있는 카드가 조용한 것은 아직 정상이고, 정상은 줄이 아니라 점과
+   이 문장이 말한다. */
+function holdTell(r){
+  if (!r || r.type !== "request" || r.status !== "in-progress") return "";
+  const k = STOP_KIND[(r.stoppable || {}).kind] || {};
+  const bits = [];
+  // 분은 서버가 준 초를 단위만 바꿔 옮긴다 — 화면이 시계를 대면 CLI 와 갈린다.
+  if (r.worker) bits.push(fmtStall(Math.floor((+r.worker.age || 0) / 60)));
+  const jb = jobBit(r);
+  if (jb) bits.push(jb);
+  if (r.stall_state === "attached" && r.hand_mins != null && r.quiet_mins != null)
+    bits.push(`마지막 손길 `
+      + (r.hand_mins < 1 ? "방금" : `${fmtStall(r.hand_mins).replace(/째$/, "")} 전`)
+      + ` · ${fmtStall(r.quiet_mins)} 조용`);
+  return (k.who || "") + (bits.length ? ` (${bits.join(" · ")})` : "");
+}
+/* ▶ 는 카드에 하나다 — 멈춘 것을 이어가거나(`data-wake`), 사람이 중단해 둔 것을
+   되돌린다(`data-restart`). 둘은 배타적이다: 중단해 둔 카드는 멈춤 판정을 이긴다.
+   낱말 손잡이(「끝났는지 확인」)는 여기 서지 않는다 — 아래 driftBtnHTML 참조. */
+function wakeBtnHTML(r){
+  const held = heldState(r);
+  const st = held ? null : stallState(r);
+  if (!held && !st) return "";
+  if (st && r.commit_drift) return "";
+  const going = wokePending(r.id);
+  /* 손 위의 글은 **[이 카드의 처지] — [누르면 무엇이 되나]** 다 (REQ-20260830-042
+     ux-writer). 단추가 하나로 줄면 "왜 지금 이것 하나인가"가 화면에 없어지는데,
+     첫 마디를 붙이는 것으로 족하다.
+     멈춤 갈래의 꼬리 한 줄은 카드에서 사라진 정책(잠그기)의 길을 알려 준다 —
+     화면에 없는 단추를 툴팁이 부르지 않도록, 부르는 것은 단추가 아니라 문서다. */
+  const tip = held
+    ? "사람이 중단해 둔 요청입니다 — 누르면 자동 작업이 다시 이어서 진행합니다"
+    : "담당 없이 멈춰 있습니다 — 누르면 자동 작업이 이어서 진행합니다."
+      + " 자동 작업이 다시 맡지 않게 해 두려면 카드를 열어 주세요";
+  // 속성 이름을 조립하지 않는다(`data-${...}`) — 짓는 자리를 세는 회귀 시험도,
+  // 다음 사람의 grep 도 조립된 이름을 못 찾는다.
+  const at = held ? `data-restart="${esc(r.id)}"` : `data-wake="${esc(r.id)}"`;
+  return `<button type="button" class="deed wake ico${going ? " busy" : ""}"`
+    + ` ${at}${going ? " disabled" : ""}`
+    + ` data-name="${WAKE_LABEL}" data-tip="${esc(tip)}"`
+    // 글리프 단추는 이름을 글자가 아니라 여기로 실어 낸다 — 낭독기에도, 손에도.
+    + ` aria-label="${going ? WAKE_GOING : WAKE_LABEL}"`
+    + ` title="${going ? WAKE_GOING : esc(tip)}">${GLYPH_PLAY}</button>`;
+}
+/* 셋째 손잡이만 낱말이고, **자기 줄을 지킨다** (REQ-20260830-032 · -040 규칙 4).
+
+   ▶ 는 "이어간다"를 말하는데 드리프트 카드가 청하는 일은 "끝났는지 보라"다 —
+   같은 그림에 두 뜻을 실으면 그 둘을 가르는 것은 바로 위 줄의 「고친 것 있음」
+   뿐인데, 그 줄은 ellipsis 라 뒤부터 잘린다. ✓ 로 가르는 길도 막혀 있다:
+   같은 카드의 「승인 done」이 이미 승인의 그림이다. 규칙은 하나다 —
+   **전송 문법에 있는 것만 글리프, 나머지는 낱말.**
+   낱말은 87px 라 글리프처럼 id 줄에 얹으면 식별자를 밀어낸다. 드문 갈래 하나라
+   자기 줄(.deedrow.wordy)을 그대로 둔다. */
+const DRIFT_TIP = "고친 것이 있는데 문서가 안 닫혔습니다 — 자동 작업이 다"
+  + " 됐는지 확인해서, 됐으면 마무리하고 아니면 이어갑니다";
+function driftBtnHTML(r){
+  const going = wokePending(r.id);
+  return `<div class="acts wakerow"><button type="button" class="deed wake`
+    + `${going ? " busy" : ""}" data-wake="${esc(r.id)}"${going ? " disabled" : ""}`
+    + ` data-name="${DRIFT_LABEL}" data-tip="${esc(DRIFT_TIP)}"`
+    + ` title="${going ? WAKE_GOING : esc(DRIFT_TIP)}">`
+    + `${going ? WAKE_GOING : DRIFT_LABEL}</button></div>`;
+}
+/* 손잡이 벨트 — **▶ 와 ⏸ 는 사실 줄을 떠나 id 줄에 선다** (규칙 4).
+
+   글리프가 사실 줄의 오른쪽 끝에 붙어 있던 동안, 손잡이의 자리는 카드마다
+   달랐다(멈춤 줄 · 진행 중 줄 · 담당 줄 · 빈 줄). 자리가 사실을 따라다니면
+   사람은 매번 찾아야 하고, 좁은 칸에서는 그 27px 이 문장에서 빼앗은 폭이라
+   「멈춤 27분째 진전 없음…」이 잘렸다.
+
+   id 줄은 **모든 카드에 이미 있는 줄**이다. 여기 세우면 새 높이가 한 번뿐이고
+   (글리프 과녁 27px), 자리가 카드마다 고정되며, 점(무엇이 도나)과 손잡이(그것을
+   세운다)가 한 벨트에 선다 — 뜻이 맞는 이웃이다. 덤으로 멈춤 줄이 폭을 되찾는다.
+
+   벨트는 카드와 문서 화면이 **같은 것을 쓴다** — 조각을 둘로 나눠도 두 화면이
+   각자 짓기 시작하면 한쪽만 고쳐진다(REQ-20260828-041 이 걷어 들인 그 갈래). */
+/* 벨트에 서는 손잡이는 **하나뿐이고, 무엇이 설지는 상태가 정한다**
+   (REQ-20260830-042 — 사용자: "이미 play, pause를 동시에 실행이 가능한 상태라는게
+   모순적이다. 상태에 따라 버튼을 노출시키는게 어때?").
+
+   맞는 지적이고, 모순은 조합이 아니라 **한 칸**에 있었다. 붙어 있는 카드
+   (worker·session·agent)에는 ▶ 가 애초에 안 선다 — 서버가 붙은 것을 보면
+   `stalled_mins` 를 안 싣기 때문이다. 반대로 멈춤·중단 카드는 정의상 idle 인데
+   거기 ⏸ 가 「중단하기」라는 이름으로 섰다: **도는 것이 없는데 중단 단추가 있다.**
+
+   뿌리는 한 글리프에 두 축을 실은 것이다. worker·session·agent 의 ⏸ 는 지금
+   도는 것을 끊는 **행위**이고, idle 의 ⏸ 는 앞으로 안 맡게 잠그는 **정책**이었다.
+   재생기의 ⏸ 에는 둘째 뜻이 없다 — ▶⏸ 는 "한 축의 두 방향, 하나만 참"이라는
+   약속을 그림 자체로 한다. 그 약속을 지키려면 idle 에서 ⏸ 를 지우면 된다.
+
+   **관문은 여기 한 곳이다.** 두 단추 함수에 각자 조건을 심으면 두 벌이 되고,
+   이 파일이 세 번 덴 "한쪽만 고쳐진다"가 재발한다. 정책(idle 잠금)이 갈 곳은
+   문서 화면의 낱말 단추다 — 아래 holdLockHTML. */
+function deedBeltHTML(r){
+  const kind = (r.stoppable || {}).kind;
+  const attached = !!kind && kind !== "idle";
+  // 붙어 있으면 끊는 쪽, 아니면 잇는 쪽. 그 함수의 held/stall 조건이 멈춤과
+  // 중단을 다시 가르고, 어느 쪽도 아니면 빈 문자열이 온다.
+  const btn = attached ? stopBtnHTML(r) : wakeBtnHTML(r);
+  if (!btn) return "";
+  return `<span class="acts deedbelt">${btn}</span>`;
+}
+/* 신원 문장의 **낭독기 몫** — 눈으로는 없고 낭독기·검색에는 있다.
+
+   벨트에 실어 두었더니 손잡이가 없는 카드(그냥 조용한 것)에서 문장까지 함께
+   사라졌고, 손잡이가 있는 카드에서는 벨트 title 과 점 title 이 겹쳤다. 짓는
+   자리는 holdTell 하나로 두고 **놓는 자리만** 화면이 고른다: 카드는 id 줄,
+   문서는 사실 줄 뒤. 손 위의 글은 카드에서 식별자가 진다(cardHTML). */
+function holdTellHTML(r){
+  const t = holdTell(r);
+  return t ? `<span class="vh">${esc(t)}</span>` : "";
+}
+/* 「자동 작업 중단해 두기」 — **문서 화면에만** 서는 낱말 단추 (REQ-20260830-042).
+
+   idle 의 ⏸ 가 카드에서 사라지면서 갈 곳이 필요해진 기능 하나다. 이건 지금
+   내리는 행위가 아니라 앞으로에 대한 **정책**이고, 보드 카드의 한 결정은 "이
+   건을 지금 이어갈까"(=▶)다 — 판정 단추는 카드에 있어도 근거 전문은 문서가
+   펴는, 그 층위 분리와 같다. 카드가 좁혀 쓰던 낱말도 여기선 풀어 쓴다.
+
+   길은 **새로 파지 않는다**: 같은 `data-stop` + `data-kind="idle"` 이라 누르면
+   기존 stopDoc 이 그대로 받고, 확인 창이 없는 갈래인 것도 그대로다.
+   낱말이 갈린 이유는 뜻이 갈리기 때문이다 (ux-writer 판정) — 도는 것을 끊는
+   쪽은 「중단하기」, 앞으로 못 맡게 하는 쪽은 「중단해 두기」. 한 낱말의 상만
+   다르므로 사용자가 고른 낱말은 지켜지고 뜻은 갈린다. */
+function holdLockHTML(r){
+  if (!r || r.type !== "request" || r.status !== "in-progress") return "";
+  if ((r.stoppable || {}).kind !== "idle") return "";
+  const going = stopPending(r.id);
+  const tip = STOP_KIND.idle.tip;
+  return `<div class="acts lockrow"><button type="button" class="deed stop`
+    + `${going ? " busy" : ""}" data-stop="${esc(r.id)}" data-kind="idle"`
+    + `${going ? " disabled" : ""} data-name="${STOP_HOLD_LABEL}"`
+    + ` data-tip="${esc(tip)}" title="${going ? STOP_GOING : esc(tip)}">`
+    + `${going ? STOP_GOING : STOP_HOLD_LABEL}</button></div>`;
+}
+/* 진행 축의 **줄 하나** (REQ-20260830-040 규칙 2). 사다리는 구체성 순이다:
+
+       중단 (사람이 세운 것)  >  멈춤 (진전이 끊긴 것)  >  오래 걸림  >  (없음)
+
+   중단이 멈춤을 이기는 이유는 라운드4 반려가 세웠다: 중단하면 그 사유가 문서에
+   적히고, 15분이 지나면 그 문서는 다시 '조용한' 것이 되어 멈춤 줄이 함께 서려
+   한다 — 그러면 한 카드가 같은 요청을 두고 「멈춤」과 「중단」을 한꺼번에 말한다.
+   사람이 자기 손으로 한 것이 더 구체적인 근거다(마커가 점을 이기는 그 규칙).
+
+   **손잡이는 여기서 나오지 않는다** — ▶·⏸ 는 id 줄의 벨트(deedBeltHTML)가 진다.
+   이 함수가 돌려주는 것은 글자 줄뿐이고, 예외는 낱말 손잡이 한 갈래다. */
 function stallHTML(r){
-  const work = workRowHTML(r);
   const stopped = stoppedRowHTML(r);
+  if (stopped) return stopped;
   const st = stallState(r);
-  /* 중단해 둔 카드에는 **줄이 하나만** 선다 (라운드4 반려). 중단하면 그 사유가
-     문서에 적히고, 15분이 지나면 그 문서는 다시 '조용한' 것이 되어 멈춤 줄이
-     함께 서려 한다 — 그러면 한 카드가 같은 요청을 두고 「멈춤」과 「중단」을
-     한꺼번에 말한다. 사람이 자기 손으로 중단한 것이 더 구체적인 근거이므로
-     그쪽을 세운다(마커 판정이 점을 이기는 그 규칙과 같다). */
-  if (stopped) return work + stopped;
-  const hand = handRowHTML(r);
-  // worker 는 진행 중 줄이 이미 ⏸ 를 갖는다 — 여기서 또 세우면 한 카드에 둘이다.
-  const hold = (r.stoppable || {}).kind && (r.stoppable || {}).kind !== "worker"
-    ? holdRowHTML(r) : "";
-  if (!st && !work && !hand && !hold) return "";
-  if (!st) return work + hand + hold;
+  if (!st) return slowRowHTML(r);
   // 마지막 시각을 못 읽으면 그 조각만 빠진다 — "· 마지막 " 로 끝나는 줄은 값이
   // 있는데 못 그린 것처럼 보인다.
   const last = fmtLast(r.updated || r.status_since);
-  const going = wokePending(r.id);
-  /* 손잡이는 자기 줄을 차지하지 않는다 (REQ-20260830-032 재반려: "너무 크고
-     카드 전체에서 혼자 row 를 단독 차지한다"). 상태 줄과 손잡이를 한 줄에
-     세운다 — 글리프의 폭 이점(낱말 87px → 27px)은 이 합침에서 비로소 값을
-     낸다. `.deedrow` 는 자리만 잡는 껍데기라 색면·테두리를 갖지 않는다. */
-  return `<div class="deedrow${r.commit_drift ? " wordy" : ""}">`
-    + `<div class="rvpt stall" title="이 문서가 마지막으로 바뀐 지 `
+  /* 꼬리 후보는 결정 무게순이고 **이긴 하나만** 선다 (factTail 주석 참조).
+     「고친 것 있음」이 맨 앞인 것은 그것이 손잡이의 낱말을 바꾸는 근거라
+     빠지면 버튼만 다른 이름으로 서는 근거 없는 손잡이가 되기 때문이고,
+     「마지막 HH:MM」이 맨 뒤인 것은 바로 앞의 「N분째」와 같은 사실을 다른
+     꼴로 되풀이하기 때문이다. */
+  const row = `<div class="rvpt stall" title="이 문서가 마지막으로 바뀐 지 `
     + `${st.mins}분 됐습니다 — 그동안 이 문서에 아무것도 적히지 않았습니다`
     // 죽음이 기록돼 있으면 그 말을 함께 싣는다 — 점의 툴팁과 같은 문장이다.
     + (st.face === "dead" && st.reason ? ` (${esc(st.reason)})` : "") + `">`
-    /* 커밋 드리프트 (REQ-20260830-018, 낱말·순서는 REQ-20260830-021 검토):
-       고친 것은 있는데 문서가 안 닫힌 카드는 "이어서 일할 것"이 아니라
-       "끝났는지 확인할 것"이라 손잡이의 낱말이 바뀐다. 조각 순서는 시간순이
-       아니라 결정 무게순 — 이 줄은 ellipsis 라 뒤부터 잘리는데, 「고친 것
-       있음」이 잘리면 버튼만 다른 낱말로 서는 근거 없는 손잡이가 된다. */
     + `<span class="rvcap">멈춤</span>${fmtStall(st.mins)} 진전 없음`
-    + (r.commit_drift ? ` · 고친 것 있음` : "")
-    + (last ? ` · 마지막 ${esc(last)}` : "") + `</div>`
-    /* 손잡이의 얼굴 (REQ-20260830-032): 보통은 ▶ 글리프, 드리프트 카드는 낱말.
-
-       **셋째 손잡이만 낱말인 이유.** ▶ 는 "이어간다"를 말하는데 드리프트 카드가
-       청하는 일은 "끝났는지 보라"다 — 같은 그림에 두 뜻을 실으면, 그 둘을 가르는
-       것은 바로 위 줄의 「고친 것 있음」뿐인데 그 줄은 ellipsis 라 **뒤부터
-       잘린다**(위 주석이 이미 경고한 자리). 근거가 잘린 채 뜻이 바뀌는 손잡이가
-       된다. ✓ 로 가르는 길도 막혀 있다: 같은 카드의 「승인 done」이 이미 승인의
-       그림이라, ✓ 하나에 "승인"과 "확인하러 가기" 두 뜻이 겹친다.
-       그래서 규칙을 하나로 세운다 — **전송 문법에 있는 것만 글리프, 나머지는 낱말.** */
-    + `<div class="acts wakerow"><button type="button" class="deed wake`
-    + `${r.commit_drift ? "" : " ico"}${going ? " busy" : ""}"`
-    + ` data-wake="${esc(r.id)}"${going ? " disabled" : ""}`
-    + ` data-name="${r.commit_drift ? DRIFT_LABEL : WAKE_LABEL}"`
-    + ` data-tip="${r.commit_drift
-      ? "고친 것이 있습니다 — 자동 작업이 요청한 일이 다 됐는지 확인해서, 됐으면 마무리하고 아니면 이어갑니다"
-      : "자동 작업이 이 요청을 이어서 진행합니다"}"`
-    + ` title="${going ? WAKE_GOING : (r.commit_drift
-      ? "고친 것이 있습니다 — 자동 작업이 요청한 일이 다 됐는지 확인해서, 됐으면 마무리하고 아니면 이어갑니다"
-      : "자동 작업이 이 요청을 이어서 진행합니다")}"`
-    // 글리프 단추는 이름을 글자가 아니라 여기로 실어 낸다 — 낭독기에도, 손에도.
-    + (r.commit_drift ? "" : ` aria-label="${going ? WAKE_GOING : WAKE_LABEL}"`)
-    + `>${r.commit_drift ? (going ? WAKE_GOING : DRIFT_LABEL) : GLYPH_PLAY}`
-    + `</button>`
-    // 멈춘 카드에서는 ▶ 옆에 ⏸ 가 나란히 선다 (자리 규칙은 stopBtnHTML 주석).
-    + (hold ? stopBtnHTML(r) : "")
-    + `</div></div>` + work;
+    + factTail(r.commit_drift ? "고친 것 있음" : "", jobBit(r),
+               last ? `마지막 ${esc(last)}` : "") + `</div>`;
+  if (!r.commit_drift) return row;
+  return `<div class="deedrow wordy">` + row + driftBtnHTML(r) + `</div>`;
 }
 /* 도는 작업자와 그 손잡이 — 깨우기의 반대편 (REQ-20260829-024).
 
@@ -296,31 +461,18 @@ function stallHTML(r){
 
    분은 서버가 준 초를 단위만 바꿔 옮긴다 — 화면이 스스로 시계를 대면 CLI 와
    다른 수를 말하게 된다 (REQ-20260828-036). */
-function workRowHTML(r){
-  if (!r || r.type !== "request") return "";
-  /* 긴 잡 조각 (REQ-20260830-022): 이 요청에 귀속된 테스트 스위트 등. 서버가
-     pid 생존·명령줄 대조를 지나 실은 값만 그린다 — 화면 재판정 없음. */
-  const jbit = (r.jobs || [])
-    .map(j => `${esc(j.name)} ${fmtStall(+j.mins || 0)}`).join(" · ");
-  if (!r.worker){
-    if (!jbit) return "";
-    return `<div class="rvpt work" title="이 요청에 귀속된 작업이 돌고 있습니다`
-      + ` — 끝나면 저절로 이어집니다">`
-      + `<span class="rvcap">진행 중</span>${jbit}</div>`;
-  }
-  const going = stopPending(r.id);
-  const mins = fmtStall(Math.floor((+r.worker.age || 0) / 60));
-  // 멈춤 줄과 같은 규칙: ⏸ 는 「진행 중」 줄의 오른쪽 끝 조각이다.
-  return `<div class="deedrow"><div class="rvpt work" title="자동 작업이 이 요청을 맡아 진행 중입니다`
-    + ` — 중단하면 지금 하던 일이 거기서 끝나고, 중단한 사유가 문서에 남습니다">`
-    // 캡션이 이미 "진행 중"을 말한다 — 본문이 그 말을 되풀이하면 좁은 줄에서
-    // 낱말 하나(`작업`)가 세 번 선다. 멈춤 줄과 같은 틀이다: 캡션 + 사실.
-    + `<span class="rvcap">진행 중</span>자동 작업 ${mins}`
-    + (jbit ? ` · ${jbit}` : "") + `</div>`
-    // ⏸ — 세워 놓은 두 획. 이름은 낱말 그대로 aria-label·title 이 나른다.
-    // 툴팁은 갈래 표에서 온다: ⏸ 가 모든 in-progress 에 서는 순간, "계정이나
-    // 모델을 바꾸기 전에 씁니다"는 한 가지 쓰임만 말해 나머지 셋과 어긋난다.
-    + `<div class="acts stoprow">` + stopBtnHTML(r) + `</div></div>`;
+function slowRowHTML(r){
+  if (!r || r.type !== "request" || !r.worker) return "";
+  const age = +r.worker.age || 0;
+  // 임계 미만은 **정상**이다 — 정상은 줄이 아니라 점과 툴팁이 말한다.
+  if (age < SLOW_WIN) return "";
+  return `<div class="rvpt work" title="자동 작업이 이 요청을 맡은 지 `
+    + `${Math.floor(age / 60)}분 됐습니다 — 아직 도는 중이지만, 이만큼 걸리면`
+    + ` 대개 막혀 있습니다. 중단하고 다시 맡기는 편이 빠를 수 있습니다">`
+    // 캡션이 정상을 서술하면(「진행 중」) 그 줄은 신호가 아니다 — 캡션이 곧
+    // 줄의 자격이므로, 자격을 준 사실(임계 초과)을 캡션이 그대로 말한다.
+    + `<span class="rvcap">오래 걸림</span>자동 작업 `
+    + `${fmtStall(Math.floor(age / 60))}` + factTail(jobBit(r)) + `</div>`;
 }
 /* 사람이 세워 둔 요청과 그것을 되돌리는 손잡이 (REQ-20260829-024 라운드4).
 
@@ -335,27 +487,15 @@ function workRowHTML(r){
    길을 둘로 파면 한 벌만 고쳐진다 — 이 화면이 판정 버튼에서 세 번 배운 것이다.
    다른 것은 낱말뿐이라, 낱말만 손잡이가 들고 다닌다(`data-wlabel`). */
 function stoppedRowHTML(r){
-  if (!r || r.type !== "request" || !r.stopped || r.worker) return "";
-  const going = wokePending(r.id);
-  // 캡션이 이미 `중단` 을 말한다 — 본문은 언제였는지만 얹는다(`진행 중` 줄이
-  // 세운 틀). 분은 서버가 준 초를 단위만 바꿔 옮긴다.
+  if (!heldState(r)) return "";
+  // 캡션이 이미 `중단` 을 말한다 — 본문은 언제였는지만 얹는다. 분은 서버가 준
+  // 초를 단위만 바꿔 옮긴다. 손잡이(▶)는 id 줄의 벨트가 진다.
   const mins = fmtStall(Math.floor((+r.stopped.age || 0) / 60))
     .replace(/째$/, " 전");
-  return `<div class="deedrow"><div class="rvpt held" title="이 요청의 자동 작업을 사람이 중단했습니다`
+  return `<div class="rvpt held" title="이 요청의 자동 작업을 사람이 중단했습니다`
     + ` — 「이어가기」를 누르기 전까지는 저절로 이어지지 않습니다">`
-    + `<span class="rvcap">중단</span>${mins}</div>`
-    // 손잡이의 낱말이 멈춘 카드의 것과 **같다**: 하는 일이 같기 때문이다
-    // (같은 길·같은 응답). 처지의 차이는 버튼이 아니라 위의 줄이 말한다.
-    // 낱말도 얼굴도 멈춘 카드의 것과 같다 — ▶ 하나, 이름은 「이어가기」.
-    + `<div class="acts wakerow"><button type="button" class="deed wake ico`
-    + `${going ? " busy" : ""}"`
-    + ` data-restart="${esc(r.id)}"${going ? " disabled" : ""}`
-    + ` data-name="${WAKE_LABEL}"`
-    + ` data-tip="중단한 이 요청을 자동 작업이 다시 이어서 진행합니다"`
-    + ` aria-label="${going ? WAKE_GOING : WAKE_LABEL}"`
-    + ` title="${going ? WAKE_GOING
-      : "중단한 이 요청을 자동 작업이 다시 이어서 진행합니다"}">`
-    + `${GLYPH_PLAY}</button></div></div>`;
+    + `<span class="rvcap">중단</span>${mins}`
+    + factTail(jobBit(r)) + `</div>`;
 }
 /* ?stall=<분>[&stallkind=stalled|spawn_failed][&stalldep][&stallhold] — 멈춤 줄과
    `깨우기` 를 **진짜로 세운다** (REQ-20260828-041 반려).
@@ -373,9 +513,10 @@ function stoppedRowHTML(r){
    다음은 평소 그리던 길(cardHTML → stallHTML)이 그대로 그린다. 진단이 하는
    일은 값 하나를 넣는 것뿐이다. */
 /* ?drift — 멈춤 줄에 「고친 것 있음」과 「끝났는지 확인」 손잡이를 세운다.
-   ?hand=<분>[&handquiet=<분>] — 손길 줄을 세운다 (REQ-20260830-021 designer ④:
-   이 두 화면은 실데이터에선 캡처 순간에 거의 없어, 파라미터 없이는 또
-   "만들었다는데 본 적은 없는" 것이 된다). 서버가 줬을 값을 얹기만 한다. */
+   ?hand=<분>[&handquiet=<분>] — 붙어 있으나 조용한 카드를 세운다. 줄은 이제
+   서지 않고(REQ-20260830-040 규칙 1) 그 사실은 신원 문장(holdTell)으로 가지만,
+   파라미터는 그대로 둔다 — 툴팁·숨김 글자에 그 조각이 실리는지 눈으로 볼 길이
+   있어야 한다. 두 화면 다 실데이터에선 캡처 순간에 거의 없다. */
 function driftProbe(rows){
   if (!/[?&]drift\b/.test(location.search) || !Array.isArray(rows)) return rows;
   for (const r of rows)
@@ -403,7 +544,7 @@ function handProbe(rows){
 /* ?hold[=<갈래>] — 세우기의 네 갈래를 진짜로 세운다 (REQ-20260830-035).
 
    이 손잡이는 **서버가 `stoppable` 을 실어야** 그려지는데, 갈래 넷을 한 화면에
-   모으려면 창 하나·일손 하나·조용한 것 하나를 실제로 만들어야 한다. 진단이
+   모으려면 세션 하나·에이전트 하나·조용한 것 하나를 실제로 만들어야 한다. 진단이
    없으면 이 화면도 "만들었다는데 본 적은 없는" 것이 된다(깨우기가 두 번 그렇게
    올라갔다). 여기서도 그림을 따로 짓지 않는다 — 서버가 줬을 값을 얹고 평소
    그리던 길이 그대로 그린다. 갈래를 안 적으면 넷을 돌아가며 얹는다. */
@@ -458,8 +599,10 @@ function stallProbe(rows){
   }
   return rows;
 }
-/* ?work[=<분>][&workhold] — `작업 중` 줄과 `세우기` 를 진짜로 세운다
-   (REQ-20260829-024).
+/* ?work[=<분>][&workhold] — 도는 자동 작업과 ⏸ 를 진짜로 세운다
+   (REQ-20260829-024). 분이 임계(SLOW_WIN, 15분)를 넘으면 「오래 걸림」 줄까지
+   서고, 그 아래면 줄 없이 점·툴팁만 남는다 — 두 얼굴을 `?work=20` 과 `?work=3`
+   으로 나란히 볼 수 있어야 한다 (REQ-20260830-040 규칙 3).
 
    깨우기가 두 번 고쳐 올려지는 동안 한 번도 눈으로 확인된 적이 없던 이유가
    여기 그대로 있다: 이 손잡이는 **그 순간 무인 작업자가 돌고 있어야** 그려진다.
@@ -467,7 +610,7 @@ function stallProbe(rows){
    그러면 또 "만들었다는데 본 적은 없는" 것이 된다.
 
    그림을 따로 짓지 않는다 — 서버가 줬을 값(`worker`)을 행에 얹고, 그다음은
-   평소 그리던 길(cardHTML → stallHTML → workRowHTML)이 그대로 그린다. */
+   평소 그리던 길(cardHTML → stallHTML → slowRowHTML)이 그대로 그린다. */
 /* ?jobrow[=<분>] — 카드의 긴 잡 조각을 세운다 (REQ-20260830-022). */
 function jobRowProbe(rows){
   const m = /[?&]jobrow(?:=(\d+))?\b/.exec(location.search);
@@ -759,8 +902,17 @@ function paintWake(id){
    `ok=false` 는 **오류가 아니라 설명**이다. `capped`(한도 소진)·`busy`(이미
    붙어 있음)·`moving`(아직 멈춘 게 아님)은 전부 정상적인 답이라, 붉은 실패로
    그리지 않는다(창머리 잉크를 .stop 으로 올리지 않는다). */
+/* 눌림 기억의 **교차 청소** (REQ-20260830-042 designer — 배타가 새로 만드는
+   유일한 결함).
+
+   배타 노출이 서면 한 자리에서 얼굴이 바뀐다: ▶ 를 눌러 띄우면 몇 초 뒤 그
+   자리에 ⏸ 가 선다. 그런데 두 기억(`wokeAt` 3분 · `stopAt` 20초)이 따로 살면,
+   ▶ 를 누른 뒤 곧바로 ⏸ 로 중단했을 때 되돌아온 ▶ 가 **남은 3분 잠금** 때문에
+   「이어가는 중…」으로 죽어 있다 — 방금 자기가 중단한 것을 다시 못 켠다.
+   한쪽을 누르는 순간 반대편 기억은 뜻을 잃으므로 여기서 지운다. */
 async function wakeDoc(id){
   if (wokePending(id)) return;              // 연타 — 이미 도는 중이다
+  stopAt.delete(id);
   wokeAt.set(id, Date.now());
   paintWake(id);
   let d = null, reached = false;
@@ -778,7 +930,7 @@ async function wakeDoc(id){
     s9dlg({kind: "alert", cap: "연결", stop: true,
       title: reached ? "서버가 이어가기를 알지 못합니다"
                      : "서버에 닿지 못했습니다",
-      desc: reached ? "s9 serve 를 다시 띄우면 이 손잡이가 붙습니다."
+      desc: reached ? "s9 serve 를 다시 띄우면 이 버튼이 다시 생깁니다."
                     : "잠시 뒤 다시 시도해 주세요. 서버가 재기동 중일 수 있습니다.",
       ok: "닫기"});
     return;
@@ -848,6 +1000,7 @@ async function stopDoc(id){
     title: stopAsk.title, desc: stopAsk.desc,
     ok: stopAsk.ok, cancel: "그대로 두기"});
   if (!go) return;
+  wokeAt.delete(id);                        // 교차 청소 — wakeDoc 주석 참조
   stopAt.set(id, Date.now());
   paintStop(id);
   let d = null, reached = false;
@@ -864,7 +1017,7 @@ async function stopDoc(id){
     s9dlg({kind: "alert", cap: "연결", stop: true,
       title: reached ? "서버가 중단하기를 알지 못합니다"
                      : "서버에 닿지 못했습니다",
-      desc: reached ? "s9 serve 를 다시 띄우면 이 손잡이가 붙습니다."
+      desc: reached ? "s9 serve 를 다시 띄우면 이 버튼이 다시 생깁니다."
                     : "잠시 뒤 다시 시도해 주세요. 서버가 재기동 중일 수 있습니다.",
       ok: "닫기"});
     return;
@@ -953,9 +1106,21 @@ function cardHTML(r){
      멈춤은 **시계**(여기 아무도 안 적고 있다)다. 선행이 안 끝났는데 아무도 안
      붙어 있는 요청이야말로 사람이 깨워야 하는 것이다. 두 줄은 각각 한 줄이라
      문장 벽도 아니다. */
-  // 글자와 손잡이는 stallHTML 한 곳에서 짓는다 — 문서 화면이 같은 함수를
-  // 부르고, 안 멈춘 행에는 빈 문자열이 온다 (REQ-20260828-041).
+  /* 글자와 손잡이는 **조각 둘, 그리고 각각 한 곳**이다 (REQ-20260828-041 ·
+     REQ-20260830-040). 문서 화면이 같은 두 함수를 부르므로 갈라질 자리가 없다:
+     `stallHTML` 이 진행 축의 글자 줄 하나를, `deedBeltHTML` 이 손잡이 벨트를
+     짓는다. 안 멈춘·안 도는 행에는 둘 다 빈 문자열이 온다.
+     벨트가 카드에서 서는 자리는 사실 줄이 아니라 **id 줄**이다 — 그 줄은 모든
+     카드에 이미 있어서, 손잡이가 카드마다 다른 데 서던 것이 여기서 멎는다. */
   const stall = stallHTML(r);
+  const belt = deedBeltHTML(r);
+  /* 신원 한 문장이 두 채널로 나간다. 낭독기·검색에는 시각적 숨김 글자(`vh`),
+     손에는 식별자의 손 위 글(`tell`). **벨트에 걸지 않는 이유**는 둘이다:
+     ① 벨트의 상자는 글리프와 2px 틈이 전부라 손이 닿는 곳은 늘 버튼이고, 그
+     버튼에는 자기 툴팁(무엇을 세우는가)이 이미 있다. ② 손잡이가 없는 카드
+     (그냥 조용한 것)에서 벨트가 통째로 사라지는데, 하필 그 카드가 가장 말이
+     없어 신원이 가장 필요한 카드다. id 는 모든 카드에 있다. */
+  const tell = holdTell(r), vh = holdTellHTML(r);
   /* 점의 사다리. **멈춤이 초록보다 먼저 걸린다** (REQ-20260828-036).
      전에는 r.live 가 맨 위에 있어서, 문서가 한 시간째 안 움직인 요청도 그것을
      잡아 둔 세션이 살아 있기만 하면 초록으로 뛰었다 — 점이 재던 것은 "이
@@ -1002,13 +1167,13 @@ function cardHTML(r){
        : r.live_kind === "session"
          ? `<span class="livedot sess" title="이 요청을 맡은 쪽은 ${r.live_age}초 전까지 움직였습니다 — 다만 이 요청을 손대고 있다는 신호는 없습니다"></span>`
        : r.live_kind === "spawned"
-         ? `<span class="livedot spawn" title="자동 작업이 막 시작됐습니다 (${r.live_age}초 전) — 이 요청을 집기까지 잠시 걸립니다"></span>`
+         ? `<span class="livedot spawn" title="자동 작업이 막 시작됐습니다 (${r.live_age}초 전) — 이 요청을 맡기까지 잠시 걸립니다"></span>`
          : `<span class="livedot off" title="상태는 in-progress 인데 하는 일이 잠잠합니다 — 실제로는 돌고 있지 않을 수 있습니다"></span>`)
     : "";
   return `<div class="card" ${isReq ? 'draggable="true"' : ""} tabindex="0" role="button" style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
     <button type="button" class="pickdoc" data-pick="${esc(r.id)}"
       aria-label="${esc(shortId(r.id))} 에 이어 말하기">이어 말하기</button>
-    <div class="id">${liveDot}<span class="idn">${esc(shortId(r.id))}</span><span class="pkst" title="이어 말할 대상으로 골라 둔 카드입니다 — 「이어 말하기」를 다시 누르면 놓습니다">${PICKED_MARK}</span></div>
+    <div class="id">${liveDot}<span class="idn"${tell ? ` title="${esc(tell)}"` : ""}>${esc(shortId(r.id))}</span>${vh}<span class="pkst" title="이어 말할 대상으로 골라 둔 카드입니다 — 「이어 말하기」를 다시 누르면 놓습니다">${PICKED_MARK}</span>${belt}</div>
     <div class="t">${esc(r.title)}</div>
     <div class="m">
       <span class="badge" style="--ah:${tagHue(r.user||"?")}"><i class="av">${esc((r.user||"?").slice(0,1).toUpperCase())}</i>${esc(r.user)}</span>

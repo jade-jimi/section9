@@ -21,7 +21,7 @@ function sessItems(rows, cur){
     hint: [r.model && "모델 " + r.model,
            r.account && "계정 " + r.account,
            r.worker && "자동 작업 진행 중",
-           r.reqs && r.reqs.length && "붙은 일 " + r.reqs.join(" · "),
+           r.reqs && r.reqs.length && "맡은 요청 " + r.reqs.join(" · "),
            r.last && "마지막 움직임 " + String(r.last).slice(0, 19).replace("T", " ")]
       .filter(Boolean).join(" · "),
     cur: r.sid === cur}));
@@ -32,7 +32,7 @@ function sessItems(rows, cur){
    세운다: 고르는 일이 아니라 만드는 일이라 줄에 두면 안 된다. */
 const SESS_FOOT = `<div class="dlgsub">그 밖에</div>`
   + `<button type="button" class="dlgact" data-act="wake">`
-  + `＋ 여기서 세션 깨우기</button>`
+  + `＋ 여기서 세션 시작</button>`
   + `<p class="dlgs" style="margin-top:6px">새 터미널 창이 열리고 세션이`
   + ` 시작됩니다 — 몇 초 뒤 이 화면이 그 세션에 붙습니다.</p>`;
 function sessShape(d, cur){
@@ -50,7 +50,7 @@ function sessShape(d, cur){
     desc: somewhere
       ? "고른 세션의 출력과 대화가 여기 이어집니다. 세션 자체는 건드리지 않으니"
         + " 다시 눌러 돌아오면 그만입니다."
-      : "지금 옮겨 갈 수 있는 세션이 없습니다 — 아래 깨우기로 새 세션을 시작할 수 있습니다.",
+      : "지금 옮겨 갈 수 있는 세션이 없습니다 — 아래에서 새 세션을 시작할 수 있습니다.",
     sub: "세션",
     items: sessItems(rows, cur),
     empty: d && Array.isArray(d.sessions) ? SESS_EMPTY
@@ -346,9 +346,9 @@ async function acctRemove(name, rows){
   }catch(ex){}
   if (!d || !d.message){
     await s9dlg({kind: "alert", cap: "계정", stop: true,
-      title: reached ? "서버가 자리 지우기를 알지 못합니다"
+      title: reached ? "서버가 계정 지우기를 알지 못합니다"
                      : "서버에 닿지 못했습니다",
-      desc: reached ? "세션 터미널에서 serve 를 다시 띄우면 이 손잡이가 붙습니다."
+      desc: reached ? "세션 터미널에서 serve 를 다시 띄우면 이 버튼이 다시 생깁니다."
                     : "잠시 뒤 다시 시도해 주세요. 서버가 재기동 중일 수 있습니다.",
       ok: "닫기"});
     claudeAccountSwitch();

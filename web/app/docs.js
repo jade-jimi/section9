@@ -369,7 +369,18 @@ async function loadDoc(id, bg){
      관문을 문서 쪽에 복사해 맞출 수도 있었지만, 조건을 두 벌 두는 한 다음에도
      한 벌만 고쳐진다 — 그래서 조건 자체를 stallHTML 안으로 걷어 들였다. 여기
      남은 판단은 **없다**: 행을 넘기면 줄이 서거나 안 선다. */
-  const stallRow = stallHTML(catFind(m.id));
+  /* 조각이 둘이 됐다 (REQ-20260830-040): 사실 줄 하나와 손잡이 벨트. 카드는
+     벨트를 id 줄에 싣고 문서는 사실 줄 뒤에 세우지만, **짓는 자리는 여전히 한
+     곳씩**이라 두 화면이 갈라질 데가 없다. 여기서 벨트를 빼면 문서 화면만
+     손잡이를 잃는다 — 카드에만 관문이 있어 같은 요청이 두 자리에서 다른 말을
+     하던 그 결함(REQ-20260828-041 2차)의 거울상이다. */
+  const stallDoc = catFind(m.id);
+  /* 문서에는 조각이 하나 더 선다 (REQ-20260830-042): 「자동 작업 중단해 두기」.
+     idle 의 ⏸ 가 카드에서 사라지면서, 앞으로 안 맡게 잠그는 **정책**은 지금
+     내리는 행위들과 층을 나눠 문서로 왔다. 새 경로가 아니라 같은 stop 길의
+     idle 갈래다 — 카드에서 옮겨 왔을 뿐이다. */
+  const stallRow = stallHTML(stallDoc) + holdTellHTML(stallDoc)
+    + deedBeltHTML(stallDoc) + holdLockHTML(stallDoc);
   // review/blocked 문서: 판단 근거(전이 --note)가 본문 최하단 History에 묻힌다
   // (REQ-20260825-006 반려) — 현재 회차의 note를 상단 callout으로, 과거 회차
   // (이전 확인 포인트·반려 사유)는 접힘 이력으로 (REQ-20260825-011 반려:

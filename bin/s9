@@ -9164,7 +9164,7 @@ STALLED_DEAD_WIN = 180
 STALLED_SHOW = 3        # 매 턴 주입되므로 이만큼만 보이고 나머지는 숫자로
 
 
-def stall_verdict(r, now, win, hands=None):
+def stall_verdict(r, now, win, hands=None, assigned=None):
     """이 요청의 멈춤 판정 — **판정이 사는 유일한 자리** (REQ-20260829-036).
 
     사용자(2026-08-29 20:33): "멈춤으로 나오는건 진짜인가? 신뢰경험이
@@ -9254,6 +9254,21 @@ def stall_verdict(r, now, win, hands=None):
         who = act.split(":")[1] if act.startswith("sub:") and ":" in act[4:] \
             else (act or "위임된 작업자")
         return dict(v, state="attached", why=f"{who} 가 이 요청을 맡고 있습니다")
+    # 지명 등록된 위임 손 (REQ-20260830-044). `s9 claim <REQ> --agent-transcript`
+    # 가 남긴 agent_req 지명은 unassigned 에서 빠지는 순간 판정 어디에도 안
+    # 실렸다 — 규약이 시키는 등록 경로(훅 없는 하네스·리드 수동 등록)가 판정에서
+    # 끊겨, 한창 쓰는 손이 붙은 카드가 「멈춤 44분째」로 섰다(21:22 실측).
+    # 지명 + 신선(AGENT_FRESH_SEC)이면 붙어 있는 것이다. 조용한 시간은 그대로 낸다.
+    if assigned is None:
+        assigned = {}
+        for _h in live_agents():
+            if _h.get("req"):
+                assigned.setdefault(canon_id(_h["req"]), _h)
+    ah = assigned.get(canon_id(r["id"]))
+    if ah:
+        return dict(v, state="attached",
+                    why="위임된 작업자가 이 요청을 맡아 진행 중입니다 — "
+                        f"{int(ah.get('age') or 0)}초 전까지 움직였습니다")
     if age is not None and age < win:
         # 방금 착수한 것 — 아직 멈춘 게 아니다
         return dict(v, state="moving", why="방금 움직였습니다")
@@ -13417,6 +13432,12 @@ def _sweep_before_shot():
 PORT_GUARD_EVERY = 60      # 회수 주기 (초) — 고아가 살아 있을 수 있는 최대 시간
 PORT_GUARD_WARN = 0.30     # 이 비율을 넘으면 기록에 남긴다 (평시 1~3%)
 PORT_GUARD_AUTO = 0.90     # 마지막 안전망 — 여기까지 온 것 자체가 결함이다
+# 중간 안전망 (REQ-20260830-037): 최다 점유자가 WSL 중계(dllhost)일 때만.
+# 호스트 중계가 닫힌 연결의 포트를 반환하지 않는 누수는 우리 코드 밖이라
+# "쌓일 수 없게"가 불가능하고, 회수는 싸다(실측 0.3초·세션 생존) — 그래서
+# 사람이 84% 경고를 읽고 손으로 돌리기 전에 여기서 돌려받는다.
+# 실측 2026-08-30: 폴링만 돌던 한 시간에 65%→84%, 사람이 놀라 물었다.
+PORT_GUARD_RELAY_AUTO = 0.60
 # 같은 말을 되풀이하지 않는다 (REQ-20260827-019). 경고가 1분마다 그대로 다시
 # 나와 serve 로그를 덮었다 — 사용자가 12분치 로그를 붙여 왔는데 열한 줄이 글자
 # 하나까지 같았다. **정보가 없는 반복은 정보를 가린다**: 그 사이에 있었을
@@ -13515,6 +13536,21 @@ def port_guard_tick():
                    f"작동. 여기까지 온 것은 누수 차단에 구멍이 있다는 뜻이다.")
         rr = _doctor("--recover", "--yes")
         verdict["action"] = "recover"
+        verdict["ok"] = bool(rr and rr.returncode == 0)
+        _guard_log("자동 회수 결과: "
+                   + ("정상" if verdict["ok"] else "실패 — 사람 확인 필요"))
+    elif ratio >= PORT_GUARD_RELAY_AUTO \
+            and _is_wsl_relay(win.get("top_name", "")):
+        # 중간 안전망 (REQ-20260830-037) — **중계 독식일 때만**. 최종 판정은
+        # doctor 의 relay_hoarder(독식 비율+이름 이중 게이트) 한 곳이다:
+        # 여기서 넓게 부르고 저쪽이 좁게 판정해야 게이트가 두 벌로 안 갈린다.
+        # 사용자 브라우저·앱이 최다면 이 분기에 못 들어온다(P2).
+        _guard_log(f"동적 포트 {bound}/{total} ({ratio:.0%}) — WSL 중계"
+                   f"({win.get('top_name')})가 {win.get('top_count', 0):,}개를 "
+                   f"쥐고 있어 자동으로 돌려받는다 (중계는 다시 뜨고 세션은 "
+                   f"살아남는다).")
+        rr = _doctor("--recover", "--yes")
+        verdict["action"] = "relay-recover"
         verdict["ok"] = bool(rr and rr.returncode == 0)
         _guard_log("자동 회수 결과: "
                    + ("정상" if verdict["ok"] else "실패 — 사람 확인 필요"))
@@ -14426,6 +14462,11 @@ def catalog_with_live(stall_win=None):
     # 멈춤은 live 판정이 다 선 뒤에 잰다 — spawned(기동 중)를 읽어야 하기 때문.
     win = STALLED_WIN if stall_win is None else stall_win
     hands = unassigned_hands(now=now)     # 한 번만 센다 — 행마다 세면 n제곱이다
+    # 지명 손도 한 번만 (REQ-20260830-044) — 행마다 바인딩 glob 을 다시 돌지 않는다.
+    assigned_hands = {}
+    for _h in live_agents():
+        if _h.get("req"):
+            assigned_hands.setdefault(canon_id(_h["req"]), _h)
     # 세우기 갈래의 재료도 한 번만 (REQ-20260830-035) — 판정 자체는 누름과
     # 같은 stoppable_verdict 하나를 지난다.
     stop_agents, stop_claims = _stop_agent_map(), _stop_claim_map(alias)
@@ -14443,7 +14484,10 @@ def catalog_with_live(stall_win=None):
         if not _j.get("session"):
             continue
         _b = read_binding(current_machine(), _j["session"]) or {}
-        for _rid in ([_b.get("last_req")] + list(_b.get("active_reqs") or [])):
+        # last_req 는 귀속 근거가 아니다 (REQ-20260830-040 실측): 훅이 매
+        # 프롬프트마다 최신 REQ로 회전시키는 값이라, 한 테스트 런이 대화만
+        # 스친 카드에도 「테스트 N분째」로 섰다. 클레임(active_reqs)만 믿는다.
+        for _rid in (_b.get("active_reqs") or []):
             if _rid:
                 job_rows.setdefault(canon_id(_rid), []).append(_j)
     for r in rows:
@@ -14455,7 +14499,7 @@ def catalog_with_live(stall_win=None):
         # 구별되지 않는다"의 서버 쪽 절반이다.
         if job_rows.get(canon_id(r["id"])):
             r["jobs"] = job_rows[canon_id(r["id"])]
-        v = stall_verdict(r, now, win, hands=hands)
+        v = stall_verdict(r, now, win, hands=hands, assigned=assigned_hands)
         # 커밋 드리프트 — 손잡이가 「닫기 검토」로 서는 근거 (REQ-20260830-018).
         # 화면은 이 필드를 그리기만 한다(클라이언트 재판정 금지). in-progress
         # 행만 읽으므로 폴 한 바퀴의 추가 비용은 문서 몇 장이다.

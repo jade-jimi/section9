@@ -220,13 +220,18 @@ class DeadEnd(unittest.TestCase):
 
         같은 행동이 두 화면에 각자 조건을 가지면 한쪽만 고쳐진다 — 실제로
         갈라져 있었다(카드는 선행 대기가 있으면 손잡이를 지웠고 문서는 아니었다).
-        이제 판정은 stallState 한 곳뿐이고, 두 화면은 stallHTML 을 조건 없이
-        부른다: 안 멈춘 행에는 빈 문자열이 온다.
+        이제 판정은 stallState 한 곳뿐이고, 두 화면은 같은 두 조각(사실 줄과
+        손잡이 벨트)을 조건 없이 부른다: 그릴 것이 없는 행에는 빈 문자열이 온다
+        (REQ-20260830-040 으로 손잡이가 id 줄로 옮겨 가며 조각이 둘이 됐다).
         """
         self.assertIn("const stall = stallHTML(r);", self.card)
-        m = re.search(r"const stallRow = (.+);", self.src)
-        self.assertTrue(m)
-        self.assertEqual(m.group(1).strip(), "stallHTML(catFind(m.id))")
+        self.assertIn("const belt = deedBeltHTML(r);", self.card)
+        m = re.search(r"const stallRow = ([\s\S]+?);\n", self.src)
+        self.assertTrue(m, "문서 화면이 조각을 잇는 자리가 없다")
+        made = " ".join(m.group(1).split())
+        self.assertEqual(made,
+                         "stallHTML(stallDoc) + holdTellHTML(stallDoc) "
+                         "+ deedBeltHTML(stallDoc) + holdLockHTML(stallDoc)")
 
     # ---------- ⑥ 눈으로 볼 길 ----------
 

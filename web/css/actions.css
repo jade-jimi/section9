@@ -45,9 +45,14 @@
    뜻을 얹고, 그 자리는 바로 위 선행 대기 줄이 이미 쓴다. */
 .rvpt.stall{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rvpt.stall .rvcap{color:var(--c-inprogress)}
-/* 손길 줄 (REQ-20260830-021) — 멈춤과 같은 문법·같은 잉크, 버튼만 없다 */
-.rvpt.hand{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rvpt.hand .rvcap{color:var(--c-inprogress)}
+/* 눈으로는 없고 낭독기·검색에는 있는 글자 (REQ-20260830-040 필수 조건).
+
+   신원(무엇이 이 요청에 붙어 있나)이 줄에서 툴팁으로 내려갔다 — 손이 없는
+   사람에게 툴팁은 없는 것과 같으므로, **같은 문장을 이 글자로 함께 싣는다.**
+   `display:none` 이 아니다: 그건 낭독기에서도 지운다. 1px 상자로 접어 두고
+   화면 밖으로 내보내되 문서에는 남긴다. */
+.vh{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
 /* 멈춘 것을 깨우는 손잡이 (REQ-20260828-041). **새 컴포넌트를 만들지 않는다** —
    카드가 이미 쓰는 행동 줄(.acts)과 행위 버튼(.deed)을 그대로 입는다. 그래야
    열 몇 벌의 스킨이 따라오고, 판정 버튼과 같은 손맛이 된다.
@@ -82,30 +87,51 @@
 .deedrow.wordy{flex-wrap:wrap;row-gap:5px}
 .deedrow.wordy>.rvpt{flex:1 0 100%}
 .acts.wakerow{margin-top:5px}
+/* 손잡이 벨트 — ▶·⏸ 가 서는 **한 자리** (REQ-20260830-040 규칙 4).
+
+   사실 줄에 붙어 있는 동안 손잡이의 자리는 카드마다 달랐다(멈춤 줄·진행 중 줄·
+   담당 줄·빈 줄). 이제 id 줄 하나에만 선다 — 모든 카드에 이미 있는 줄이라 새
+   높이가 한 번이고, 자리가 고정되며, 점과 손잡이가 한 벨트에서 만난다.
+   `margin-top:0` 으로 `.acts` 기본(8px)을 지운다: 이 벨트는 자기 줄이 아니라
+   남의 줄에 얹히는 조각이다. */
+/* `.acts.deedbelt` 로 잠근다 — `.acts` 기본이 이 파일 아래쪽에 있어, 같은
+   특이도로 쓰면 뒤에 선 그쪽이 이긴다(display:flex·margin-top:8px 가 되살아난다).
+
+   **왼쪽 여백은 0이다** (REQ-20260830-043 사용자 실측: "id 옆에 떠 있음").
+   글리프 단추는 27px 과녁 안에 11px 그림을 담으므로 자기 상자 안에 이미 8px
+   씩의 시각 여백을 갖는다. 거기에 margin 8px 을 더하면 식별자와의 **보이는**
+   틈이 22px 이 되어(2배 캡처로 실측) 줄의 다른 간격(8px)과 어긋나고, 손잡이가
+   줄에 얹힌 것이 아니라 떠 있는 것으로 읽힌다. 여백은 단추가 이미 갖고 있다. */
+.acts.deedbelt{display:inline-flex;align-items:center;gap:2px;flex:0 0 auto;
+  /* 눈이 재는 것은 상자가 아니라 잉크 사이의 흰 자리다. 상자를 0 으로 붙여도
+     보이는 틈은 13.5px 이었다(2배 캡처 실측) — 과녁 27px 안의 그림이 11px 이라
+     상자 안에 이미 흰 자리가 있기 때문이다. 줄의 다른 틈(점~식별자 8px)에
+     맞추려고 그만큼을 되돌린다. 과녁은 1px 도 안 줄인다 — 밀도 축이 여백을
+     줄이는 축이지 과녁을 깎는 축이 아닌 것과 같은 이유다. */
+  margin:0 0 0 -4px}
+/* 줄 안에 서는 손잡이는 **테두리와 면을 벗는다** — 한 줄 안에서 네모난 알약이
+   글자 옆에 서면 그 줄이 두 덩어리로 읽힌다. 평소엔 잉크만, 손이 얹히면 그때
+   원이 돈다(카드가 이미 쓰는 그 반전, 네모 대신 원). */
+.deedrow .acts button.deed.ico,.deedbelt button.deed.ico{border-color:transparent;
+  background:none;color:var(--muted)}
+.deedrow .acts button.deed.ico:hover,.deedbelt button.deed.ico:hover{
+  background:var(--text);color:var(--bg);border-color:var(--text)}
 /* 도는 중에는 눌리지 않는다. 색면·붉은 실패로 그리지 않고, 잉크를 한 급 낮춰
    "지금은 내 차례가 아니다"만 말한다. */
 .acts button.wake[disabled]{cursor:default;color:var(--muted);
   border-color:var(--hairline);background:var(--panel)}
 .acts button.wake[disabled]:hover{background:var(--panel);color:var(--muted);
   border-color:var(--hairline)}
-/* 도는 작업자 한 줄과 그것을 세우는 손잡이 (REQ-20260829-024) — 멈춤 줄·깨우기의
-   반대편이다. 여기서도 **새 컴포넌트를 만들지 않는다**: 같은 한 줄 문법(.rvpt)과
-   같은 행동 줄(.acts .deed)을 그대로 입어야 열 몇 벌의 스킨이 따라온다.
-   캡션 잉크는 멈춤 줄과 같은 in-progress 색이다 — 둘이 말하는 것은 같은 상태의
-   두 얼굴(나아가는 중 / 나아가지 않는 중)이라 잉크를 갈라 쓸 이유가 없고,
-   한 카드에 둘이 함께 서는 일도 사실상 없다(도는 것은 멈춘 것이 아니다). */
+/* 「오래 걸림」 한 줄 (REQ-20260829-024, 자격은 -040 규칙 3) — 멈춤 줄의
+   반대편이다. 여기서도 **새 컴포넌트를 만들지 않는다**: 같은 한 줄 문법(.rvpt)을
+   그대로 입어야 열 몇 벌의 스킨이 따라온다. 캡션 잉크는 멈춤 줄과 같은
+   in-progress 색이다 — 둘이 말하는 것은 같은 상태의 두 얼굴(오래 도는 중 /
+   나아가지 않는 중)이라 잉크를 갈라 쓸 이유가 없고, 한 카드에 둘이 함께 서는
+   일도 없다(사다리가 하나만 세운다).
+   종전의 「진행 중」 줄이 여기 있었다. 임계(SLOW_WIN) 미만은 이제 줄을 얻지
+   못한다 — 정상을 서술하는 캡션은 신호가 아니라 배경이기 때문이다. */
 .rvpt.work{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rvpt.work .rvcap{color:var(--c-inprogress)}
-/* 맡은 손 줄 (REQ-20260830-035) — 무인 작업자도 멈춤도 아닌데 누가 집고 있는
-   카드가 "왜 여기 ⏸ 가 서 있나"를 스스로 말한다. 새 문법도 새 잉크도 아니다:
-   진행 중 줄과 같은 한 줄, 같은 in-progress 색. 셋이 말하는 것은 같은 상태의
-   세 얼굴(무인이 도는 중 / 사람이 맡은 중 / 나눠 맡은 중)이다. */
-.rvpt.hold{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rvpt.hold .rvcap{color:var(--c-inprogress)}
-/* 붙어 있는 손이 없는 카드(idle)에는 적을 사실이 없다 — 줄을 짓지 않고 ⏸ 만
-   오른쪽 끝에 세운다. 빈 문장을 지어 채우면 화면이 서버보다 많이 말하게 된다. */
-.deedrow.bare{justify-content:flex-end}
-.acts.stoprow{margin-top:5px}
 /* 사람이 중단해 둔 한 줄 (REQ-20260829-024 라운드4). 여기도 새 층은 없다 —
    같은 `.rvpt` 한 줄 문법이고, 손잡이는 멈춘 카드의 것과 **같은** `.deed.wake`
    라 잉크도 손맛도 그대로다.
@@ -248,13 +274,6 @@
    뒤집히고, 열 몇 벌의 스킨·톤이 자기 잉크를 그대로 물려준다. 색면 없음. */
 .acts button.deed.ico{display:inline-flex;align-items:center;justify-content:center;
   min-width:27px;min-height:27px;padding:0;line-height:1;border-radius:999px}
-/* 사실 줄 안에 서는 손잡이는 **테두리와 면을 벗는다** — 한 줄 안에서 네모난
-   알약이 문장 옆에 서면 그 줄이 두 덩어리로 읽힌다. 평소엔 잉크만, 손이
-   얹히면 그때 원이 돈다(카드가 이미 쓰는 그 반전, 네모 대신 원). */
-.deedrow .acts button.deed.ico{border-color:transparent;background:none;
-  color:var(--muted)}
-.deedrow .acts button.deed.ico:hover{background:var(--text);color:var(--bg);
-  border-color:var(--text)}
 .acts button.deed.ico .gly{display:block;width:11px;height:11px}
 /* 도는 중: 낱말이 없으니 **숨으로** 말한다. 옅히기만 하면 꺼진 단추와 구별이
    안 되고(그건 "못 누른다"는 뜻이다), 이건 "지금 하고 있다"는 뜻이다.

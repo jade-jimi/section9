@@ -53,6 +53,12 @@ class WakeHandle(unittest.TestCase):
         with open(INDEX, encoding="utf-8") as f:
             cls.src = f.read()
         cls.stall = _grab(cls.src, "stallHTML")
+        # 손잡이가 사실 줄을 떠나 id 줄의 벨트로 갔다 (REQ-20260830-040 규칙 4).
+        # 계약은 그대로다 — 짓는 자리가 하나이고, 안 멈춘 행에는 빈 문자열이
+        # 오며, 카드와 문서가 같은 함수를 부른다. 보는 덩어리만 넓힌다.
+        cls.handle = "\n".join([cls.stall, _grab(cls.src, "wakeBtnHTML"),
+                                _grab(cls.src, "driftBtnHTML"),
+                                _grab(cls.src, "deedBeltHTML")])
         # 답을 창으로 옮기는 자리가 wakeDlg 로 갈라졌다 (REQ-20260829-030) —
         # 진단(`?dlg=wakewait`)이 사람이 누를 때와 **같은 함수**를 부르게 하려는
         # 것이라, 이 시험이 보는 "깨우기의 길"은 그 둘을 합한 것이다.
@@ -63,16 +69,21 @@ class WakeHandle(unittest.TestCase):
 
     # ---------- ① 손잡이는 멈춤 줄에만 ----------
 
-    def test_the_handle_lives_on_the_stall_line(self):
-        """깨우기는 멈춤 줄을 짓는 그 함수 안에서만 그려진다."""
-        self.assertIn("data-wake=", self.stall, "멈춤 줄에 손잡이가 없다")
-        # 그리는 자리는 하나뿐이다 (paintWake 의 `[data-wake="…"]` 는 이미
-        # 그려진 것을 **찾는** 자리라 세지 않는다).
-        self.assertEqual(len(re.findall(r'data-wake="\$\{esc\(', self.src)), 1,
+    def test_the_handle_lives_in_the_id_belt(self):
+        """깨우기는 **id 줄의 벨트** 안에서만 그려진다 (REQ-20260830-040 규칙 4).
+
+        멈춤 줄에 붙어 있던 동안 손잡이의 자리는 카드마다 달랐고, 좁은 칸에서는
+        그 27px 이 문장에서 빼앗은 폭이라 정작 멈춤 줄이 잘렸다. 자리는 옮겼지만
+        **짓는 자리는 여전히 하나**다 — 그것이 이 시험이 지키는 것이다."""
+        self.assertIn("data-wake=", self.handle, "손잡이를 짓는 자리가 없다")
+        # 그리는 자리는 둘뿐이다 — 글리프 갈래(wakeBtnHTML)와 낱말 갈래
+        # (driftBtnHTML). paintWake 의 `[data-wake="…"]` 는 이미 그려진 것을
+        # **찾는** 자리라 세지 않는다.
+        self.assertEqual(len(re.findall(r'data-wake="\$\{esc\(', self.src)), 2,
                          "손잡이를 그리는 자리가 여럿이다 — 한 벌만 고쳐진다")
         # 낱말은 상수 한 곳에서 온다 (REQ-20260829-024 라운드4) — 글자를 짓는
         # 자리와 다시 칠하는 자리 두 곳에 두었더니 개명 한 번에 갈렸다.
-        self.assertIn("WAKE_LABEL", self.stall)
+        self.assertIn("WAKE_LABEL", self.handle)
 
     def test_a_card_that_is_not_stalled_has_no_handle(self):
         """멈춘 카드가 아니면 빈 문자열이 온다.
@@ -86,7 +97,11 @@ class WakeHandle(unittest.TestCase):
         self.assertIsNotNone(m, "카드가 멈춤 줄을 다는 자리가 없다")
         self.assertIn("stallHTML", m.group(1))
         self.assertIn("stallState(r)", self.stall, "줄 짓는 함수가 판정을 안 지난다")
-        self.assertIn('return "";', self.stall, "안 멈춘 행에 빈 줄을 안 돌려준다")
+        self.assertIn("stallState(r)", _grab(self.src, "wakeBtnHTML"),
+                      "손잡이가 판정을 안 지난다")
+        for name in ("slowRowHTML", "stoppedRowHTML", "wakeBtnHTML", "deedBeltHTML"):
+            self.assertIn('return "";', _grab(self.src, name),
+                          "%s 가 안 멈춘 행에 빈 문자열을 안 돌려준다" % name)
 
     def test_the_screen_never_measures_the_minutes_itself(self):
         """분은 서버가 잰다 — 화면이 다시 재면 CLI 와 다른 말을 하게 된다."""
@@ -105,7 +120,11 @@ class WakeHandle(unittest.TestCase):
         self.assertGreaterEqual(len(calls), 3,
                                 "짓는 자리(1) + 부르는 자리(보드·문서)가 없다")
         self.assertIn("stallHTML(r)", self.card, "보드 카드가 안 부른다")
-        self.assertIn("stallHTML(catFind(m.id))", self.src, "문서 화면이 안 부른다")
+        self.assertIn("stallHTML(stallDoc)", self.src, "문서 화면이 안 부른다")
+        # 조각이 둘이 된 뒤로도 **둘 다** 같은 함수에서 온다 (REQ-20260830-040) —
+        # 벨트를 문서에서 빼면 문서 화면만 손잡이를 잃는다.
+        self.assertIn("deedBeltHTML(r)", self.card, "보드 카드가 벨트를 안 부른다")
+        self.assertIn("deedBeltHTML(stallDoc)", self.src, "문서 화면이 벨트를 안 부른다")
         # 문서 화면은 **자기 조건을 갖지 않는다** (REQ-20260828-041 2차) —
         # 카탈로그 행을 넘길 뿐이고, 멈춤인지는 stallState 한 곳이 답한다.
         self.assertNotIn("srow", self.src.split("const stallRow")[1][:200],
@@ -160,22 +179,24 @@ class WakeHandle(unittest.TestCase):
         # 낱말이 「깨우기」에서 「이어가기」로 바뀌었다 (REQ-20260829-024 반려:
         # "깨우기, 세우기 라는 용어가 너무 어색한데"). 계약은 그대로다 —
         # 누른 뒤의 얼굴이 자기가 도는 중임을 말해야 한다.
-        self.assertIn("WAKE_GOING", self.stall)
+        self.assertIn("WAKE_GOING", self.handle)
         self.assertIn("이어가는 중…", self.src)
-        self.assertIn("disabled", self.stall,
+        self.assertIn("disabled", self.handle,
                       "다시 그려도 도는 중인 손잡이가 되살아난다")
 
     # ---------- ⑥ 새 층 없음 ----------
 
     def test_it_reuses_the_button_the_card_already_has(self):
         """.acts/.deed 를 그대로 입는다 — 그래야 스킨이 따라온다."""
-        # 이제 사실 줄과 한 껍데기(.deedrow) 안에 함께 선다 — 입은 옷은 그대로다.
-        self.assertRegex(self.stall, r'class="deedrow\$\{')
-        self.assertIn('class="acts wakerow"', self.stall)
+        # 이제 글리프는 id 줄의 벨트에, 낱말 갈래만 자기 줄(.deedrow.wordy)에
+        # 선다 (REQ-20260830-040) — 입은 옷은 그대로다.
+        self.assertIn('class="deedrow wordy"', self.stall)
+        self.assertIn('class="acts deedbelt"', self.handle)
+        self.assertIn('class="acts wakerow"', self.handle)
         # `deed wake` 뒤에 상태 갈래(`ico`·`busy`)가 붙는다 (REQ-20260830-032:
         # 손잡이 얼굴이 글리프로 바뀌었다). 계약은 낱말 그대로가 아니라 **입은
         # 옷**이다 — 카드가 이미 쓰는 .deed 를 그대로 입었는가.
-        self.assertRegex(self.stall, r'class="deed wake[ `$]')
+        self.assertRegex(self.handle, r'class="deed wake[ `$]')
         # 새 배지·색면·띠를 만들지 않는다
         m = re.search(r"\.acts\.wakerow\{([^}]*)\}", self.src)
         self.assertIsNotNone(m, ".acts.wakerow 규칙이 없다")

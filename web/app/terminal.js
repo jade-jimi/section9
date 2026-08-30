@@ -274,7 +274,7 @@ function termWaitingGuide(T){
     ccLine("✻", "var(--cc-dim)",
       '<span style="color:var(--cc-dim)">Waiting for a live Claude session…</span>') +
     ccLine("⎿", null, `라이브 클로드 세션이 없습니다.
-  <button class="ccwake" id="cc-wake">▶ 여기서 세션 깨우기</button>  새 터미널 창이 열리고 세션이 시작됩니다.
+  <button class="ccwake" id="cc-wake">▶ 여기서 세션 시작</button>  새 터미널 창이 열리고 세션이 시작됩니다.
   수동으로 하려면: <span class="cccode">${cmd}</span>`, "sub"));
   const wb = $("#cc-wake");
   if (wb) wb.addEventListener("click", () => termWake(T));

@@ -282,7 +282,11 @@ class TheHandleOnTheScreen(unittest.TestCase):
         from webasset import index_path
         with open(index_path(), encoding="utf-8") as f:
             cls.web = f.read()
-        cls.workrow = _fn(cls.web, "workRowHTML")
+        # 「진행 중」 줄이 「오래 걸림」 줄이 되고, ⏸ 는 그 줄을 떠나 id 줄의
+        # 벨트로 갔다 (REQ-20260830-040). 계약은 그대로다 — 손잡이는 서버가 준
+        # 사실 위에만 서고, 그리는 자리는 공용 조각 하나다.
+        cls.workrow = _fn(cls.web, "slowRowHTML") + "\n" \
+            + _fn(cls.web, "deedBeltHTML") + "\n" + _fn(cls.web, "holdTell")
         cls.stop = _fn(cls.web, "stopDoc")
         cls.stall = _fn(cls.web, "stallHTML")
         cls.restart = _fn(cls.web, "sessionRestart")
@@ -292,7 +296,7 @@ class TheHandleOnTheScreen(unittest.TestCase):
                       "화면이 서버가 준 사실 말고 다른 것으로 손잡이를 세운다")
         # ⏸ 를 그리는 자리는 하나로 모였다 (REQ-20260830-035 — 갈래가 넷이라
         # 줄마다 베끼면 네 벌이 된다). 행의 사실을 읽는 계약은 그 조각이 진다.
-        self.assertIn("stopBtnHTML(r)", self.workrow, "진행 중 줄이 ⏸ 를 안 세운다")
+        self.assertIn("stopBtnHTML(r)", self.workrow, "벨트가 ⏸ 를 안 세운다")
         self.assertIn('data-stop="${esc(r.id)}"', _fn(self.web, "stopBtnHTML"))
         # 점으로 대신하면 클레임 뒤에 손잡이가 사라진다
         self.assertNotIn("live_kind", self.workrow,
@@ -306,11 +310,34 @@ class TheHandleOnTheScreen(unittest.TestCase):
                       "판정을 새로 지었다 — 워처와 화면이 다른 말을 하게 된다")
 
     def test_s11_board_and_document_grow_the_same_handle(self):
-        """문서 화면은 stallHTML 하나만 부른다 — 거기 없으면 문서엔 손잡이가 없다."""
-        self.assertIn("workRowHTML(r)", self.stall,
-                      "카드·문서가 함께 부르는 그 함수가 세우기를 안 짓는다")
-        self.assertEqual(len(re.findall(r'data-stop="\$\{esc\(', self.web)), 1,
-                         "손잡이를 그리는 자리가 여럿이다 — 한 벌만 고쳐진다")
+        """카드와 문서가 **같은 두 조각**을 부른다 (REQ-20260830-040).
+
+        조각이 사실 줄(stallHTML)과 손잡이 벨트(deedBeltHTML) 둘로 나뉘었지만,
+        짓는 자리는 여전히 한 곳씩이고 두 화면이 그 둘을 다 부른다 — 한쪽이
+        벨트를 안 부르면 그 화면만 손잡이를 잃는다."""
+        self.assertIn("stopBtnHTML(r)", _fn(self.web, "deedBeltHTML"),
+                      "벨트가 세우기를 안 짓는다")
+        for caller in ("cardHTML", "loadDoc"):
+            seg = _fn(self.web, caller) if caller != "loadDoc" \
+                else self.web[self.web.index("async function loadDoc("):]
+            self.assertIn("deedBeltHTML(", seg,
+                          "%s 가 손잡이 벨트를 안 부른다" % caller)
+            self.assertIn("stallHTML(", seg,
+                          "%s 가 사실 줄을 안 부른다" % caller)
+        # 자리는 둘이다 — 카드의 글리프(stopBtnHTML)와 문서의 낱말
+        # (holdLockHTML). 갈래가 갈린 것은 뜻이 갈렸기 때문이고
+        # (REQ-20260830-042: 도는 것을 끊는 행위 vs 앞으로 못 맡게 하는 정책),
+        # 길은 하나다 — 둘 다 같은 data-stop 을 달고 같은 stopDoc 으로
+        # 들어가며, 갈래는 data-kind 가 나른다.
+        places = {n for n in ("stopBtnHTML", "holdLockHTML")
+                  if 'data-stop="${esc(' in _fn(self.web, n)}
+        self.assertEqual({"stopBtnHTML", "holdLockHTML"}, places,
+                         "손잡이를 그리는 자리가 그 둘이 아니다")
+        self.assertEqual(len(re.findall(r'data-stop="\$\{esc\(', self.web)), 2,
+                         "손잡이를 그리는 자리가 또 늘었다 — 한 벌만 고쳐진다")
+        for n in ("stopBtnHTML", "holdLockHTML"):
+            self.assertIn("data-kind=", _fn(self.web, n),
+                          "%s 가 갈래를 안 실어 stopKindOf 가 worker 로 떨어진다" % n)
         self.assertIn("stopDoc(sp.dataset.stop)", self.web,
                       "누른 것이 아무 데도 닿지 않는다")
 
@@ -345,13 +372,13 @@ class TheHandleOnTheScreen(unittest.TestCase):
 
     def test_s15_it_reuses_what_the_card_already_wears(self):
         """새 층을 만들지 않는다 — 색면·띠 없이 있는 문법을 그대로 입는다."""
-        self.assertIn('class="acts stoprow"', self.workrow)
+        self.assertIn('class="acts deedbelt"', self.workrow)
         # 뒤에 상태 갈래(`ico`·`busy`)가 붙는다 — REQ-20260830-032 로 손잡이
         # 얼굴이 ⏸ 글리프가 됐다. 무는 것은 낱말이 아니라 입은 옷이다.
         # 그리는 자리는 공용 조각 하나다 (REQ-20260830-035).
         self.assertRegex(_fn(self.web, "stopBtnHTML"), r'class="deed stop[ `$]')
-        m = re.search(r"\.acts\.stoprow\{([^}]*)\}", self.web)
-        self.assertIsNotNone(m, ".acts.stoprow 규칙이 없다")
+        m = re.search(r"\.acts\.deedbelt\{([^}]*)\}", self.web)
+        self.assertIsNotNone(m, ".acts.deedbelt 규칙이 없다")
         for banned in ("background", "animation", "border-left"):
             self.assertNotIn(banned, m.group(1),
                              "세우기 줄이 %s 로 새 층을 만든다" % banned)
@@ -507,12 +534,17 @@ class TheRestartHandle(unittest.TestCase):
         다른 이유는 그려지는 줄이 다르기 때문이고, 그 속성은 곧장 같은 함수로
         들어간다."""
         self.assertIn("r.stopped", self.row)
-        self.assertIn("data-restart=", self.row)
+        # 손잡이는 줄을 떠나 id 줄의 벨트로 갔다 (REQ-20260830-040 규칙 4) —
+        # 줄과 손잡이의 조건이 갈라지지 않게 술어(heldState) 하나를 함께 먹는다.
+        self.assertIn("heldState(r)", self.row, "줄이 술어를 안 지난다")
+        wake = _fn(self.web, "wakeBtnHTML")
+        self.assertIn("heldState(r)", wake, "손잡이가 같은 술어를 안 지난다")
+        self.assertIn("data-restart=", wake)
         # 낱말은 상수 한 곳에서 온다 — 글리프가 된 뒤로 이름은 눈에 보이는
         # 글자가 아니라 aria-label·title 이 나른다 (REQ-20260830-032). 원문에
         # 박힌 글자를 물면 주석 한 줄에도 통과하므로 상수를 문다.
-        self.assertIn("WAKE_LABEL", self.row, "손잡이의 낱말이 멈춘 카드와 다르다")
-        self.assertRegex(self.row, r'aria-label="\$\{[^"]*WAKE_LABEL',
+        self.assertIn("WAKE_LABEL", wake, "손잡이의 낱말이 멈춘 카드와 다르다")
+        self.assertRegex(wake, r'aria-label="\$\{[^"]*WAKE_LABEL',
                          "글리프 손잡이가 이름을 낭독기에 안 실어 보낸다")
         self.assertRegex(self.web, r"wakeDoc\(\w+\.dataset\.restart\)",
                          "다시 맡기는 손잡이가 자기만의 길을 판다")

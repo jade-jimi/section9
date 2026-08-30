@@ -238,6 +238,24 @@ class TheAttribution(Base):
         self.assertIsNone(row.get("stalled_mins"),
                           "잡이 도는데 깨우기 손잡이가 선다")
 
+    def test_j4c_last_req_alone_does_not_attach(self):
+        """REQ-20260830-040 실측: 훅이 매 프롬프트 회전시키는 last_req 를 잡
+        귀속이 믿어, 한 테스트 런이 대화만 스친 카드에도 「테스트 4분째」로
+        섰다(스크린샷: 037·039 두 카드 동시). 클레임(active_reqs)만 귀속 근거다."""
+        subprocess.run([S9, "user", "add", "nicehugepark"],
+                       capture_output=True, env=self.env, timeout=30)
+        mine = self.mkreq("cafe9999")            # cafe9999 의 클레임
+        other = self.mkreq("beef8888")           # 남의 클레임 — 대화만 스친 카드
+        env = dict(self.env)
+        env["S9_SESSION"] = "cafe9999"
+        subprocess.run([S9, "last", other], capture_output=True, env=env,
+                       timeout=30)               # 훅 회전 흉내: last_req 만 other
+        self.put_job(session="cafe9999")
+        rows = {r["id"]: r for r in self.m.catalog_with_live()}
+        self.assertTrue(rows[mine].get("jobs"), "클레임 카드에서 잡이 사라졌다")
+        self.assertFalse(rows[other].get("jobs"),
+                         "last_req 만으로 잡이 남의 카드에 붙었다 — 오귀속")
+
     def test_j4b_anonymous_job_stays_global(self):
         subprocess.run([S9, "user", "add", "nicehugepark"],
                        capture_output=True, env=self.env, timeout=30)

@@ -82,7 +82,10 @@ class TestWake(unittest.TestCase):
             html = f.read()
         self.assertIn("cc-wake", html)
         self.assertIn("/api/session/wake", html)
-        self.assertIn("여기서 세션 깨우기", html)
+        # 낱말이 바뀌었다 (REQ-20260830-039): 사용자가 라운드4에서 반려한
+        # 「깨우기」의 마지막 잔재다. 실동작도 새 세션 시작이라 '깨움' 은유가
+        # 사실과 어긋났다. 계약(버튼이 있고 길이 닿는다)은 그대로다.
+        self.assertIn("여기서 세션 시작", html)
 
 
 if __name__ == "__main__":

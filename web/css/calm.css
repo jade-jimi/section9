@@ -199,6 +199,10 @@
 [data-skin="calm"] .card>.deedrow{order:3}
 [data-skin="calm"] .card .id{order:4;margin-top:11px;display:flex;align-items:center;gap:2px;
   flex-wrap:wrap;font-size:10px;color:var(--calm-quiet);letter-spacing:.03em}
+/* 손잡이 벨트는 id 줄에 얹히는 조각이라 `.acts` 의 세로 여백을 안 받는다 —
+   calm 의 `.acts{margin-top:10px}` 가 baseline 을 밀어 벨트만 아래로 처진다.
+   특이도가 같은 두 규칙이라(둘 다 0,2,0) 여기서 한 번 더 못박는다. */
+[data-skin="calm"] .acts.deedbelt{margin:0 0 0 -4px;gap:2px}
 [data-skin="calm"] .card .elapsed{position:absolute;right:16px;bottom:12px;top:auto;
   font-size:10px;color:var(--calm-quiet);letter-spacing:.01em}
 /* 집는 손잡이는 경과 시각이 선 칸을 빌려 쓴다 — calm 은 그 칸이 아래쪽이다 */
@@ -244,6 +248,17 @@
    카드의 직계 자식이 아니라 이 규칙이 안 닿는다(선이 통째로 사라졌던 자리). */
 [data-skin="calm"] .card>.rvpt,[data-skin="calm"] .card>.deedrow{margin-top:12px;
   padding-top:11px;border-top:1px solid var(--hairline)}
+/* **선은 그룹 위 하나다** (REQ-20260830-040 규칙 5).
+
+   사실 줄마다 헤어라인 + 23px 을 얹으니 줄이 둘만 돼도 카드가 카드 아닌 것이
+   됐다(실측 210px, 같은 열의 open 카드 90px). 선이 나누는 것은 "메타 이야기와
+   상태 이야기"이지 상태 이야기 **안**이 아니다 — 안은 간격이 나눈다.
+   줄 수가 둘로 묶인 지금(관계 축 하나 + 진행 축 하나) 첫 줄만 선을 갖는다.
+   `~` 인 것은 사이에 `.rvmore` 가 낄 수 있어서다(잘린 대기 사유의 손잡이). */
+[data-skin="calm"] .card>.rvpt ~ .rvpt,
+[data-skin="calm"] .card>.rvpt ~ .deedrow,
+[data-skin="calm"] .card>.deedrow ~ .rvpt,
+[data-skin="calm"] .card>.deedrow ~ .deedrow{border-top:0;padding-top:0;margin-top:6px}
 /* max-height 와 그 전이는 **뺐다** (REQ-20260829-009). 둘 다 호버 전개를
    여닫으려고 있던 것이고, 전개가 사라진 지금은 클램프와 싸우기만 한다:
    대기 사유 줄(.card>.rvpt)은 padding-top:11px 을 얹고 서는데 border-box 에서

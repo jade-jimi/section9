@@ -36,10 +36,10 @@ class FakeRun:
         self.returncode = rc
 
 
-def fake_doctor(bound, total=16384, calls=None):
+def fake_doctor(bound, total=16384, calls=None, top_name="dllhost.exe"):
     """--json 은 진단을, 나머지 플래그는 성공을 돌려주는 가짜 s9-doctor."""
     payload = json.dumps({"windows_ports": {"bound": bound, "count": total,
-                                            "top_name": "dllhost.exe",
+                                            "top_name": top_name,
                                             "top_pid": 31172,
                                             "top_count": bound}})
 
@@ -61,9 +61,31 @@ class PortGuard(unittest.TestCase):
     def tearDown(self):
         s9._doctor, s9._guard_log = self._orig
 
-    def tick(self, bound, total=16384):
-        s9._doctor = fake_doctor(bound, total, self.calls)
+    def tick(self, bound, total=16384, top_name="dllhost.exe"):
+        s9._doctor = fake_doctor(bound, total, self.calls, top_name)
         return s9.port_guard_tick()
+
+    # ---- 중간 안전망 (REQ-20260830-037): 중계 독식이면 60%부터 돌려받는다.
+    # 실사고 2026-08-30: 호스트 중계(dllhost)가 닫힌 연결의 포트를 반환하지
+    # 않아 폴링만 돌던 한 시간에 65%→84% — 사람이 84% 경고를 읽고 손으로
+    # 회수했다. 회수는 싸고(0.3초·세션 생존) 게이트는 doctor 의 relay_hoarder
+    # 한 곳이 최종 판정한다.
+    def test_p1_relay_hoard_recovers_from_sixty(self):
+        v = self.tick(10650)                      # 65% + 최다=중계
+        self.assertEqual(v["action"], "relay-recover")
+        self.assertIn(("--recover", "--yes"), self.calls)
+        self.assertTrue(any("돌려받는다" in m for m in self.logged))
+
+    def test_p2_user_process_hoard_is_never_touched(self):
+        v = self.tick(10650, top_name="chrome.exe")   # 65% 인데 최다=브라우저
+        self.assertEqual(v["action"], "watch",
+                         "사용자 프로세스가 최다인데 회수를 불렀다 — 불가침")
+        self.assertNotIn(("--recover", "--yes"), self.calls)
+
+    def test_p3_below_threshold_is_unchanged(self):
+        v = self.tick(8000)                       # 49% — 중계여도 문턱 미만
+        self.assertEqual(v["action"], "watch")
+        self.assertNotIn(("--recover", "--yes"), self.calls)
 
     def test_reclaims_every_tick_regardless_of_pressure(self):
         """핵심: 회수는 소진도와 무관하게 매번 돈다.

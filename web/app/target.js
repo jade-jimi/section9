@@ -72,7 +72,7 @@ function termTargetRender(T){
     + `<span class="dtl">「${esc(docTarget.title)}」</span>에 남깁니다</span>`
     // 이미 끝난 요청이면 미리 말한다 — 보내고 나서 알려 주면 되돌릴 수 없다
     + (end ? `<span class="dend">· 이미 ${esc(docTarget.status)} — 다시 열리지는 않는다</span>` : "")
-    + `<button id="termTargetClear" title="집기 해제 — 새 요청으로 남는다">× 해제</button>`;
+    + `<button id="termTargetClear" title="문서 지목 해제 — 새 요청으로 남는다">× 해제</button>`;
 }
 /* ?pick=<문서id> — 진단·헤드리스 캡처용 (?dlg·?ccjump 와 동형). 집힌 상태는
    카드를 눌러야 만들어지는데 헤드리스에는 손이 없다. */

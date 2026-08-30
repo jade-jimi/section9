@@ -471,7 +471,7 @@ async function termWake(T){
     w.insertAdjacentHTML("beforebegin", ccLine("▶", "var(--cc-dim)", body));
     out.scrollTop = out.scrollHeight;
   }
-  if (btn){ btn.disabled = false; btn.textContent = "▶ 여기서 세션 깨우기"; }
+  if (btn){ btn.disabled = false; btn.textContent = "▶ 여기서 세션 시작"; }
 }
 
 /* ------- 세션 고르기 (REQ-20260829-023) -------
