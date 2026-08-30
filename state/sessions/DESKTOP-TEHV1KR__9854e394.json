@@ -9,10 +9,12 @@
  "ended": "",
  "capture_paused": true,
  "active_reqs": [
-  "REQ-20260830-018-62x6"
+  "REQ-20260830-019-62x6",
+  "REQ-20260830-021-62x6"
  ],
  "claim_at": {
-  "REQ-20260830-018-62x6": "2026-08-30T14:15:35+09:00"
+  "REQ-20260830-019-62x6": "2026-08-30T14:31:21+09:00",
+  "REQ-20260830-021-62x6": "2026-08-30T14:43:26+09:00"
  },
  "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f.jsonl",
  "last_req": "REQ-20260830-013-62x6",
@@ -24,7 +26,9 @@
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a94504d509eac6e67.output",
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a9ca7a6d5fefd0c60.output",
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/ae6a6a89e308736da.output",
-  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a9bfd3372ff975682.output"
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a9bfd3372ff975682.output",
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a06cee00ce49e3168.output",
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a8c170c9867671bfa.output"
  ],
  "agent_req": {
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/ad1fab5cf2eeb21a5.output": "REQ-20260830-017-62x6",
@@ -32,6 +36,9 @@
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a94504d509eac6e67.output": "REQ-20260830-017-62x6",
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a9ca7a6d5fefd0c60.output": "REQ-20260830-017-62x6",
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/ae6a6a89e308736da.output": "REQ-20260830-017-62x6",
-  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a9bfd3372ff975682.output": "REQ-20260830-017-62x6"
- }
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a9bfd3372ff975682.output": "REQ-20260830-017-62x6",
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a06cee00ce49e3168.output": "REQ-20260830-021-62x6",
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a8c170c9867671bfa.output": "REQ-20260830-021-62x6"
+ },
+ "pending_qst": ""
 }

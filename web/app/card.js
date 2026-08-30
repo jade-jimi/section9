@@ -78,6 +78,19 @@ function stallState(r){
    이미 한 번 겪은 갈래다. 둘은 사실상 배타적이다(도는 것은 멈춘 것이 아니다).
    그래도 겹쳐 서는 순간이 있으면 그대로 둘 다 그린다: 서버가 그렇게 말한
    것이고, 화면이 서버의 말을 지우는 자리는 두지 않는다. */
+/* 손길 줄 (REQ-20260830-019·021 designer 검토 ③) — 문서는 조용하지만 최근
+   손길이 있는 카드. 종전에는 카드가 아무 말도 안 해 건강한 카드와 구별되지
+   않았고, 그 사실이 문서로 들어가 깨우기를 눌러야 뜨는 거절 창에만 살았다 —
+   "조용함을 감추지 않는다"의 정면 위반. 같은 .rvpt 한 줄, 버튼 없음(버튼이
+   없는 것 자체가 "지금 할 일 없음"의 신호), 문장은 서버의 stall_why 그대로. */
+function handRowHTML(r){
+  if (!r || r.type !== "request" || r.stall_state !== "attached") return "";
+  if (r.hand_mins == null || r.quiet_mins == null) return "";
+  return `<div class="rvpt hand" title="${esc(r.stall_why || "")}">`
+    + `<span class="rvcap">손길</span>`
+    + (r.hand_mins < 1 ? "방금" : `${fmtStall(r.hand_mins).replace(/째$/, "")} 전`)
+    + ` · ${fmtStall(r.quiet_mins)} 조용</div>`;
+}
 function stallHTML(r){
   const work = workRowHTML(r);
   const stopped = stoppedRowHTML(r);
@@ -88,8 +101,9 @@ function stallHTML(r){
      한꺼번에 말한다. 사람이 자기 손으로 중단한 것이 더 구체적인 근거이므로
      그쪽을 세운다(마커 판정이 점을 이기는 그 규칙과 같다). */
   if (stopped) return work + stopped;
-  if (!st && !work) return "";
-  if (!st) return work;
+  const hand = handRowHTML(r);
+  if (!st && !work && !hand) return "";
+  if (!st) return work + hand;
   // 마지막 시각을 못 읽으면 그 조각만 빠진다 — "· 마지막 " 로 끝나는 줄은 값이
   // 있는데 못 그린 것처럼 보인다.
   const last = fmtLast(r.updated || r.status_since);
@@ -98,18 +112,20 @@ function stallHTML(r){
     + `${st.mins}분 — 그동안 이 문서에 아무것도 적히지 않았다`
     // 죽음이 기록돼 있으면 그 말을 함께 싣는다 — 점의 툴팁과 같은 문장이다.
     + (st.face === "dead" && st.reason ? ` (${esc(st.reason)})` : "") + `">`
+    /* 커밋 드리프트 (REQ-20260830-018, 낱말·순서는 REQ-20260830-021 검토):
+       고친 것은 있는데 문서가 안 닫힌 카드는 "이어서 일할 것"이 아니라
+       "끝났는지 확인할 것"이라 손잡이의 낱말이 바뀐다. 조각 순서는 시간순이
+       아니라 결정 무게순 — 이 줄은 ellipsis 라 뒤부터 잘리는데, 「고친 것
+       있음」이 잘리면 버튼만 다른 낱말로 서는 근거 없는 손잡이가 된다. */
     + `<span class="rvcap">멈춤</span>${fmtStall(st.mins)} 진전 없음`
-    + (last ? ` · 마지막 ${esc(last)}` : "")
-    /* 커밋 드리프트 (REQ-20260830-018): 서버가 잰 사실을 그리기만 한다 —
-       커밋은 있는데 문서가 안 닫힌 카드는 "이어서 일할 것"이 아니라
-       "검증해 닫을 것"이라, 손잡이의 낱말이 거기에 맞게 바뀐다. */
-    + (r.commit_drift ? ` · 커밋 있음` : "") + `</div>`
+    + (r.commit_drift ? ` · 고친 것 있음` : "")
+    + (last ? ` · 마지막 ${esc(last)}` : "") + `</div>`
     + `<div class="acts wakerow"><button type="button" class="deed wake"`
     + ` data-wake="${esc(r.id)}"${going ? " disabled" : ""}`
     + ` title="${r.commit_drift
-      ? "커밋 기록이 있습니다 — 자동 작업이 목표 대비 검증해서, 됐으면 닫고 안 됐으면 이어갑니다"
+      ? "고친 것이 있습니다 — 자동 작업이 요청한 일이 다 됐는지 확인해서, 됐으면 마무리하고 아니면 이어갑니다"
       : "자동 작업이 이 요청을 이어서 진행합니다"}">`
-    + `${going ? WAKE_GOING : (r.commit_drift ? "닫기 검토" : WAKE_LABEL)}</button></div>` + work;
+    + `${going ? WAKE_GOING : (r.commit_drift ? "끝났는지 확인" : WAKE_LABEL)}</button></div>` + work;
 }
 /* 도는 작업자와 그 손잡이 — 깨우기의 반대편 (REQ-20260829-024).
 
@@ -185,11 +201,41 @@ function stoppedRowHTML(r){
    그림을 따로 만들지 않는다 — 서버가 준 행에 **서버가 줬을 값**을 얹고, 그
    다음은 평소 그리던 길(cardHTML → stallHTML)이 그대로 그린다. 진단이 하는
    일은 값 하나를 넣는 것뿐이다. */
+/* ?drift — 멈춤 줄에 「고친 것 있음」과 「끝났는지 확인」 손잡이를 세운다.
+   ?hand=<분>[&handquiet=<분>] — 손길 줄을 세운다 (REQ-20260830-021 designer ④:
+   이 두 화면은 실데이터에선 캡처 순간에 거의 없어, 파라미터 없이는 또
+   "만들었다는데 본 적은 없는" 것이 된다). 서버가 줬을 값을 얹기만 한다. */
+function driftProbe(rows){
+  if (!/[?&]drift\b/.test(location.search) || !Array.isArray(rows)) return rows;
+  for (const r of rows)
+    if (r.type === "request" && r.status === "in-progress")
+      r.commit_drift = true;
+  return rows;
+}
+function handProbe(rows){
+  const m = /[?&]hand=(\d+)/.exec(location.search);
+  if (!m || !Array.isArray(rows)) return rows;
+  const q = +((/[?&]handquiet=(\d+)/.exec(location.search) || [])[1] || 34);
+  let n = 0;
+  for (const r of rows){
+    if (r.type !== "request" || r.status !== "in-progress") continue;
+    // 서버 규칙 그대로: attached 는 stalled_mins 를 싣지 않는다.
+    r.stall_state = "attached";
+    r.hand_mins = Math.max(0, +m[1] + n);
+    r.quiet_mins = q + 7 * n;
+    r.stall_why = "다른 곳에서 이 요청을 만지는 중입니다 — 진단으로 세운 값";
+    r.stalled_mins = null;
+    n++;
+  }
+  return rows;
+}
 function stallProbe(rows){
   // 한 카드의 두 손잡이는 부르는 자리를 하나로 둔다 — 진단이 늘어날 때마다
   // 파이프라인에 줄이 붙으면, 어느 진단이 어느 화면을 세우는지 흩어진다.
   workProbe(rows);
   heldProbe(rows);
+  handProbe(rows);
+  driftProbe(rows);
   const m = /[?&]stall=(\d+)/.exec(location.search);
   if (!m || !Array.isArray(rows)) return rows;
   const mins = Math.max(1, Math.min(9999, +m[1] || 20));

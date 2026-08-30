@@ -45,6 +45,9 @@
    뜻을 얹고, 그 자리는 바로 위 선행 대기 줄이 이미 쓴다. */
 .rvpt.stall{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rvpt.stall .rvcap{color:var(--c-inprogress)}
+/* 손길 줄 (REQ-20260830-021) — 멈춤과 같은 문법·같은 잉크, 버튼만 없다 */
+.rvpt.hand{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rvpt.hand .rvcap{color:var(--c-inprogress)}
 /* 멈춘 것을 깨우는 손잡이 (REQ-20260828-041). **새 컴포넌트를 만들지 않는다** —
    카드가 이미 쓰는 행동 줄(.acts)과 행위 버튼(.deed)을 그대로 입는다. 그래야
    열 몇 벌의 스킨이 따라오고, 판정 버튼과 같은 손맛이 된다.

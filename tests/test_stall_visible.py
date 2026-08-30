@@ -99,6 +99,14 @@ class StallJudgmentServer(unittest.TestCase):
                          else f"updated: {ts}" if ln.startswith("updated:")
                          else ln) for ln in t.splitlines()) + "\n"
                     open(q, "w", encoding="utf-8").write(t)
+                    # 손길도 같이 되감는다 (REQ-20260830-019) — 문서만 되감으면
+                    # 방금 만든 하트비트가 '1시간 조용한데 손길은 방금'이라는,
+                    # 현실에 없는 조합을 만든다. 실제로 1시간 손 뗀 요청은
+                    # 손길도 1시간 낡아 있다.
+                    hb = os.path.join(cls.root, "state", "heartbeat", rid)
+                    if os.path.exists(hb):
+                        t0 = time.time() - secs
+                        os.utime(hb, (t0, t0))
                     cls.cli(None, "index", "rebuild")
                     return
         raise AssertionError(f"문서 없음: {rid}")

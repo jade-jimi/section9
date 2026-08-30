@@ -228,7 +228,7 @@ class TheCard(Base):
                   encoding="utf-8") as f:
             js = f.read()
         self.assertIn("commit_drift", js, "카드가 서버 필드를 안 읽는다")
-        self.assertIn("닫기 검토", js, "드리프트 카드의 손잡이 낱말이 없다")
+        self.assertIn("끝났는지 확인", js, "드리프트 카드의 손잡이 낱말이 없다")
         self.assertNotIn("commit (", js,
                          "카드가 커밋 판정을 스스로 지었다 — 클라이언트 재판정 금지")
 

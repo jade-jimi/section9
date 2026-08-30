@@ -251,7 +251,8 @@ class StallRendersTheSame(unittest.TestCase):
             'const WAKE_LABEL = "이어가기", WAKE_GOING = "이어가는 중…";',
             'const STOP_LABEL = "중단하기", STOP_GOING = "중단 중…";',
             g("wokePending"), g("stopPending"), g("stallState"),
-            g("workRowHTML"), g("stoppedRowHTML"), g("stallHTML"),
+            g("workRowHTML"), g("stoppedRowHTML"), g("handRowHTML"),
+            g("stallHTML"),
             g("cardHTML"),
             "CAT = %s;" % json.dumps(rows),
             # 문서 화면이 짓는 자리와 **같은 표현식**

@@ -1577,6 +1577,10 @@ def do_transition(doc_id, new_status, note="", user=None, force=False, auto=Fals
         maybe_sync(f"{doc_id} {old}->{new_status}")   # REQ-048: 전이마다 순차 동기화
     except Exception:
         pass
+    # 닫힌 문서의 손길을 거둔다 (REQ-20260830-019) — 남으면 그 신호가 15분간
+    # 아무 뜻 없이 살아 있다.
+    if new_status in TERMINAL_STATUSES:
+        heartbeat_gc(doc_id)
     return old
 
 
@@ -6302,6 +6306,15 @@ def _wake_refusal(cid, row, win, updated, now):
                 "message": f"자동 작업이 이미 이 요청을 진행하고 있습니다 "
                            f"({_ago_text(row.get('live_age'))} 시작했습니다). "
                            f"어디까지 왔는지는 Stream 탭에서 볼 수 있습니다."}
+    # 손길 분기 (REQ-20260830-021 ux-writer 검토): 이 분기가 없으면 카드는
+    # 손길을 말하는데 창은 "아직 멈추지 않았습니다" 라는 정반대 문장을 낸다.
+    # 위임·워커 붙음은 위의 busy 문장(누가·무엇을)이 더 구체적이라 먼저 선다 —
+    # 여기 오는 attached 는 손길(하트비트)뿐이다.
+    if state == "attached":
+        return {"ok": False, "id": cid, "action": "attached", "mins": None,
+                "message": f"{(row or {}).get('stall_why') or '다른 곳에서 이 요청을 만지는 중입니다'}"
+                           f". 겹쳐 시작하면 같은 파일을 둘이 고치게 됩니다 — "
+                           f"잠시 뒤 다시 눌러 주세요."}
     try:
         age = now - datetime.datetime.fromisoformat(updated or "").timestamp()
     except (ValueError, TypeError):
@@ -6612,6 +6625,16 @@ def rework_watch_tick(grace=None, now=None):
     try:
         lease_prune()
     except Exception:
+        pass
+    # 고아 손길도 함께 거둔다 (REQ-20260830-019) — 잘못 친 id 는 terminal
+    # 전이가 영영 없어 gc 를 못 만난다. 7일 넘은 파일은 어차피 무신호다.
+    try:
+        _hbd = os.path.join(ROOT, "state", "heartbeat")
+        for _fn in (os.listdir(_hbd) if os.path.isdir(_hbd) else []):
+            _fp = os.path.join(_hbd, _fn)
+            if _time.time() - os.path.getmtime(_fp) > 7 * 86400:
+                os.unlink(_fp)
+    except OSError:
         pass
     nowt = now or _time.time()
     # 후보가 여럿이면 우선순위 높은 것부터 집는다 (REQ-20260826-005) —
@@ -8861,6 +8884,66 @@ def reopened_requests():
 
 
 STALLED_WIN = 900       # 이만큼 진전이 없으면 "멈췄다" (초)
+HEARTBEAT_ATTACH_WIN = 900   # 손길이 '붙어 있음'으로 서는 창 (초)
+# 손길로 치는 것은 **문서를 고치는** CLI 명령뿐이다 (REQ-20260830-019, v3 보정 1).
+# show·ls·search 를 넣으면 남의 문서를 열람만 해도 멈춤 경보가 숨는다 —
+# 제3자 조회 오염과 "워커가 s9 show 만 쳐도 도장" 위조 표면이 같은 구멍이다.
+HEARTBEAT_WRITE_CMDS = {"note", "status", "claim", "last", "link", "set", "tag"}
+
+
+def heartbeat_path(doc_id):
+    return os.path.join(ROOT, "state", "heartbeat",
+                        safe_name(canon_id(str(doc_id))))
+
+
+def heartbeat_touch(doc_id, cmd="", session=""):
+    """손길 도장 — CLI dispatch 한 곳만 부른다. 어떤 실패도 원 명령을 못 죽인다(C9).
+
+    문서 `updated` 는 안 건드린다: 그쪽은 진전의 시계고(REQ-20260829-034 —
+    도장이 시계를 되감으면 "한 일이 없는데 경보만 꺼진다"), 이쪽은 주의(attention)
+    신호다. 소비는 mtime 만, 내용(actor·cmd)은 사람이 감사할 때 읽는다."""
+    try:
+        d = os.path.join(ROOT, "state", "heartbeat")
+        os.makedirs(d, exist_ok=True)
+        path = heartbeat_path(doc_id)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "actor": os.environ.get("S9_USER", ""),
+                "session": session or os.environ.get("S9_SESSION", ""),
+                "cmd": cmd}, ensure_ascii=False))
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
+def heartbeat_age(doc_id, now=None):
+    """손길의 나이(초) — 없거나 못 읽거나 미래 시각이면 None(무신호=현행, C7)."""
+    import time as _time
+    now = _time.time() if now is None else now
+    try:
+        age = now - os.path.getmtime(heartbeat_path(doc_id))
+    except OSError:
+        return None
+    return age if age >= 0 else None
+
+
+def heartbeat_session(doc_id):
+    """손길에 적힌 세션 — 못 읽으면 빈 문자열(무신호 취급의 한 갈래, C7)."""
+    try:
+        with open(heartbeat_path(doc_id), encoding="utf-8") as f:
+            return str((json.loads(f.read()) or {}).get("session") or "")
+    except Exception:
+        return ""
+
+
+def heartbeat_gc(doc_id):
+    """terminal 전이가 그 문서의 손길을 거둔다 — 닫힌 문서에 attached 가 남지 않게."""
+    try:
+        os.unlink(heartbeat_path(doc_id))
+    except OSError:
+        pass
+
 # 붙어 있던 주체가 **죽었다고 판정된** 행은 더 기다릴 이유가 없다
 # (REQ-20260828-041 라운드1). 900초는 "손을 뗐나"를 재는 시계인데, 아무도 안
 # 붙어 있음이 이미 증명된 행에까지 그 시계를 쓰면 화면은 '멈췄다'고 그려 놓고
@@ -8967,6 +9050,26 @@ def stall_verdict(r, now, win, hands=None):
         return dict(v, state="unknown",
                     why=f"어느 요청의 것인지 모르는 작업 {len(hands)}건이 "
                         f"아직 돌고 있습니다")
+    # 손길 (REQ-20260830-019): 문서는 조용한데 이 문서를 고치는 s9 명령이 방금
+    # 지나갔다 — 누군가 붙어 있다. **attached 까지만이다** (계약 C2): moving 으로
+    # 올리면 s9 호출 한 번이 진전으로 둔갑하고(REQ-034 의 병), 스폰 게이트·
+    # 리스는 이 신호를 모른다. 조용한 시간은 그대로 낸다(감추지 않는다).
+    # **귀속 없는 손길은 손길이 아니다** (근원 B 와 같은 원칙). 그리고 손길은
+    # 그 세션이 지금도 살아 있을 때만 선다 — 여기가 REQ-034 의 재발 방지선이다:
+    # 깨운 워커가 클레임만 하고 죽으면, 종전에는 문서 도장이 경보를 15분 껐다.
+    # 손길은 세션이 죽는 순간(활동 신선도 소진) 함께 죽는다.
+    hb = heartbeat_age(r["id"], now=now)
+    if hb is not None and hb < HEARTBEAT_ATTACH_WIN:
+        _hbs = heartbeat_session(r["id"])
+        _hbb = read_binding(current_machine(), _hbs) if _hbs else None
+        if _hbb and not _hbb.get("ended") and chat_live(_hbb):
+            # 낱말은 사용자 말로, 세션 8자는 내지 않는다 (REQ-20260830-021
+            # ux-writer 검토: 그 글자로 사람이 할 수 있는 일이 없다).
+            # hand_mins 는 카드의 손길 줄이 먹는다 (designer 검토 ③).
+            return dict(v, state="attached", hand_mins=int(hb // 60),
+                        why=f"다른 곳에서 이 요청을 만지는 중입니다 — "
+                            f"{int(hb // 60)}분 전까지 움직였고, 문서에는 "
+                            f"{v['quiet_mins']}분째 새 기록이 없습니다")
     return dict(v, state="stalled", mins=v["quiet_mins"],
                 why=f"{v['quiet_mins']}분째 진전 없음")
 
@@ -14101,6 +14204,8 @@ def catalog_with_live(stall_win=None):
             r["quiet_mins"] = v["quiet_mins"]
         if v["mins"] is not None:
             r["stalled_mins"] = v["mins"]
+        if v.get("hand_mins") is not None:
+            r["hand_mins"] = v["hand_mins"]
         if v["wait"]:
             r["wait_kind"] = v["wait"]["kind"]
             r["wait_why"] = v["wait"]["why"]
@@ -17347,6 +17452,14 @@ def main():
         cmd_code(ns)
         return
     args = p.parse_args()
+    # 손길 도장 (REQ-20260830-019) — 문서를 고치는 명령만, 실패 무해(C9).
+    # 대시보드 서버·워처는 in-process 호출이라 여기를 지나지 않는다(C1).
+    if sys.argv[1:] and sys.argv[1] in HEARTBEAT_WRITE_CMDS:
+        _hb_id = getattr(args, "id", None)
+        for _i in (_hb_id if isinstance(_hb_id, list) else [_hb_id]):
+            if _i:
+                heartbeat_touch(_i, cmd=sys.argv[1],
+                                session=getattr(args, "session", "") or "")
     args.fn(args)
 
 
