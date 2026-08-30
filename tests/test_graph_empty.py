@@ -27,6 +27,8 @@
 import os
 import re
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -137,7 +139,7 @@ class GraphEmpty(unittest.TestCase):
     def test_styles_are_token_only_and_theme_agnostic(self):
         """6개 tone 전부에서 성립하려면 색은 토큰으로만 쓴다."""
         css = self._css()
-        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
+        websrc.no_hex(self, css)
         self.assertNotRegex(css, r"\[data-(?:skin|theme)=",
                             "특정 스킨/톤 전용 스타일이 아니다")
         self.assertIn("pointer-events", css,
@@ -216,8 +218,7 @@ class GraphEmpty(unittest.TestCase):
         self.assertNotIn("background", css, "색면 하이라이트 금지")
         self.assertNotIn("text-decoration:none", css.replace(" ", ""),
                          "취소선을 지우면 '꺼져 있다'는 사실이 사라진다")
-        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
-
+        websrc.no_hex(self, css)
     def test_toggle_handler_records_what_was_turned_on(self):
         """켠 종류를 기록한다 — 끈 것은 기록하지 않는다(의도적 축소다)."""
         m = re.search(r'const gt2 = evEl\(e\.target\)\?\.closest\("\[data-gtype\]"\);'
@@ -330,8 +331,7 @@ class GraphEmpty(unittest.TestCase):
         self.assertIn("dashed", css)
         self.assertNotIn("background", css, "색면 하이라이트 금지")
         self.assertNotIn("border-left", css, "좌측 세로 띠 금지")
-        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
-
+        websrc.no_hex(self, css)
     def test_no_guess_when_several_conditions_overlap(self):
         """범인이 하나로 좁혀지지 않으면 지목하지 않는다."""
         m = re.search(r"function condHiding\(type\)\{[\s\S]*?\n\}", self.src)

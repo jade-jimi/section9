@@ -229,6 +229,14 @@ function liveBlockers(r){
 """
 
 
+def _const(src, name):
+    """`const NAME = …;` 선언 한 덩어리를 원문 그대로 떠 온다 (여러 줄 허용)."""
+    m = re.search(r"^const %s\s*=[\s\S]*?;\n" % re.escape(name), src, re.M)
+    if not m:
+        raise AssertionError("원문에 const %s 선언이 없다" % name)
+    return m.group(0)
+
+
 @unittest.skipUnless(NODE, "node 없음 — 실행 검증 생략")
 class StallRendersTheSame(unittest.TestCase):
     """정적 검사는 '조건이 한 곳인가'를 보고, 여기서는 **그려서** 확인한다."""
@@ -250,6 +258,13 @@ class StallRendersTheSame(unittest.TestCase):
             # 손잡이의 낱말은 상수 한 곳에서 온다 (REQ-20260829-024 라운드4)
             'const WAKE_LABEL = "이어가기", WAKE_GOING = "이어가는 중…";',
             'const STOP_LABEL = "중단하기", STOP_GOING = "중단 중…";',
+            # 셋째 낱말과 두 글리프는 **원문에서 떠 온다** (REQ-20260830-032).
+            # 여기에 베껴 두면 두 벌이 되고, 손잡이가 바뀔 때 한 벌만 고쳐진다 —
+            # 이 파일이 낱말 상수를 한 곳에 모은 바로 그 이유다. 글리프는 카드와
+            # 문서가 같은 그림을 그리는지 보는 이 시험의 판정 대상이기도 하다.
+            _const(self.src, "DRIFT_LABEL"),
+            _const(self.src, "GLYPH_PLAY"),
+            _const(self.src, "GLYPH_PAUSE"),
             g("wokePending"), g("stopPending"), g("stallState"),
             g("workRowHTML"), g("stoppedRowHTML"), g("handRowHTML"),
             g("stallHTML"),

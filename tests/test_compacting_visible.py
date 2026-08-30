@@ -24,6 +24,8 @@
 import os
 import re
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -73,7 +75,7 @@ class CompactingVisible(unittest.TestCase):
         self.assertIn("압축 중", fn, "상태줄에 낱말이 없다")
         css = self._css()
         blk = ";".join(re.findall(r"\.cc(?:compact|cmpk)[^{]*\{([^}]*)\}", css))
-        self.assertNotRegex(blk, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
+        websrc.no_hex(self, blk)
         for v in re.findall(r"(?:background|color|border-color)\s*:\s*([^;}\n]+)", blk):
             self.assertRegex(v.strip(), r"^var\(--cc-[a-z]+\)$",
                              "터미널 팔레트 토큰 밖의 색: %s" % v)
@@ -115,9 +117,7 @@ class CompactingVisible(unittest.TestCase):
     # ---------- helpers ----------
 
     def _fn(self, name):
-        m = re.search(r"(?:async )?function %s\([^)]*\)\{[\s\S]*?\n\}" % name, self.src)
-        self.assertIsNotNone(m, "%s() 를 찾지 못했다" % name)
-        return m.group(0)
+        return websrc.fn(self, self.src, name)
 
     def _css(self):
         m = re.search(r"/\* -+ 컨텍스트 압축 중[\s\S]*?\*/([\s\S]*?)\n\n", self.src)

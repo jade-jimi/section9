@@ -30,6 +30,8 @@ REQ-20260826-018 이 서버 자동 복구 기록을 헤더 3행에 올렸다. �
 import os
 import re
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -151,7 +153,7 @@ class HeaderNoticeArea(unittest.TestCase):
             self.assertIn(bg.strip(), ("none", "transparent"),
                           "칩에 색면을 깔지 않는다: %s" % bg)
         self.assertNotIn("border-left", blk, "좌측 세로 띠 금지")
-        self.assertNotRegex(blk, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
+        websrc.no_hex(self, blk)
         self.assertNotRegex(blk, r"border-radius\s*:\s*(?!0)",
                             "라운드 금지 — 계기판/장부 언어")
 
@@ -169,10 +171,7 @@ class HeaderNoticeArea(unittest.TestCase):
     # ---------- helpers ----------
 
     def _fn(self, name):
-        m = re.search(r"(?:async )?function %s\([^)]*\)\{[\s\S]*?\n\}" % name,
-                      self.src)
-        self.assertIsNotNone(m, "%s() 를 찾지 못했다" % name)
-        return m.group(0)
+        return websrc.fn(self, self.src, name)
 
     def _css(self):
         m = re.search(r"/\* ── 서버 자동 복구 기록[\s\S]*?\*/([\s\S]*?)\n\n",

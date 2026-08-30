@@ -201,6 +201,27 @@
    본문체로 세운다. 한글에 트래킹을 거는 것은 이 문서가 이미 금한 것이기도 하다.
    생김새가 다르면 같은 줄에 있어도 헷갈리지 않는다. */
 .acts button.deed{font-family:inherit;font-size:11.5px;letter-spacing:0;font-weight:600}
+/* 글리프 손잡이 — ▶ 이어가기 · ⏸ 중단하기 (REQ-20260830-032 오너 판정).
+
+   **그림은 작아도 손이 닿는 자리는 안 줄인다.** 낱말 단추가 서 있던 자리와
+   같은 높이(27px)를 min-height 로 못박는다 — 아이콘으로 바꾼 대가가 더 작은
+   과녁이면 안 된다. `.acts` 는 flex 라 min-* 이 그대로 선다. density=compact
+   이 padding·font-size 를 줄여도 이 값은 안 줄어든다(특이도 0,3,1 이 이긴다):
+   밀도 축은 여백을 줄이는 축이지 과녁을 깎는 축이 아니다.
+
+   그림은 `currentColor` 다 — hover 반전(.acts button:hover)에서 배경과 함께
+   뒤집히고, 열 몇 벌의 스킨·톤이 자기 잉크를 그대로 물려준다. 색면 없음. */
+.acts button.deed.ico{display:inline-flex;align-items:center;justify-content:center;
+  min-width:27px;min-height:27px;padding:0 8px;line-height:1}
+.acts button.deed.ico .gly{display:block;width:11px;height:11px}
+/* 도는 중: 낱말이 없으니 **숨으로** 말한다. 옅히기만 하면 꺼진 단추와 구별이
+   안 되고(그건 "못 누른다"는 뜻이다), 이건 "지금 하고 있다"는 뜻이다.
+   대기 상태에서만 도는 반복이라 이 문서가 허락한 자리다. */
+@keyframes deedbusy{0%,100%{opacity:.4}50%{opacity:.85}}
+.acts button.deed.busy{animation:deedbusy 1.4s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){
+  .acts button.deed.busy{animation:none;opacity:.55}
+}
 /* 한 줄, 한 문법: **[행위][도착지]** (REQ-20260828-007 5차).
 
    사용자(4차): "review 문서만 버튼이 한국어라 다른 상태의 영어 이름과 섞인다."

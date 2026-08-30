@@ -167,6 +167,11 @@ class StallJudgmentServer(unittest.TestCase):
 
     # S5. 판정을 두 벌 만들지 않는다 — stalled 는 읽기만 한다
     def test_s5_single_judgment(self):
+        """CLI 소비자(stalled_requests)가 판정을 다시 재지 않는지 본다.
+        판정 '정의'는 stall_trust c6, 화면 JS 술어는 stall_pair f1 몫 —
+        같은 계약의 다른 층이라 셋을 접지 않는다 (REQ-20260830-029).
+        뮤테이션 실측(2026-08-30): stalled_mins 읽기를 지우면 이 시험이
+        Red — 살아 있다."""
         src = open(S9, encoding="utf-8").read()
         i = src.index("def stalled_requests(")
         seg = src[i:src.index("\ndef ", i + 10)]

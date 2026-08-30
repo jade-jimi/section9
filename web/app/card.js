@@ -11,6 +11,42 @@
    쓴다 — 처지의 차이는 버튼이 아니라 그 위의 줄이 말한다. */
 const WAKE_LABEL = "이어가기", WAKE_GOING = "이어가는 중…";
 const STOP_LABEL = "중단하기", STOP_GOING = "중단 중…";
+const DRIFT_LABEL = "끝났는지 확인";
+/* 손잡이의 **얼굴**은 글리프, **이름**은 그대로 낱말 (REQ-20260830-032 오너 판정).
+
+   사용자: "세우고 깨우고 관련 디자인을 일반적인 play, pause 버튼(영어 글자
+   버튼이 아니고, 세모와 이퀄사인을 세워놓은 것)을 사용해보는 건 어때?"
+
+   낱말은 죽이지 않는다 — 사용자가 직접 고른 말이고(라운드4), 눈으로 못 읽어도
+   손이 얹히면(title) 읽히고 화면 낭독기(aria-label)에는 그대로 들린다. 글리프는
+   `<svg>` 다: 이모지는 폰트마다 다른 그림이 나오고 색이 잉크를 안 따른다.
+   `currentColor` 라 hover 반전에서 배경과 함께 뒤집힌다.
+
+   **전송 문법에 있는 두 행위만** 글리프다(▶ 이어가기 · ⏸ 중단하기). 셋째
+   손잡이 「끝났는지 확인」은 낱말로 남는다 — 아래 stallHTML 에 근거를 적었다. */
+const GLYPH_PLAY = '<svg class="gly" viewBox="0 0 12 12" aria-hidden="true"'
+  + ' focusable="false"><path d="M3.2 1.4 L10.2 6 L3.2 10.6 Z" fill="currentColor"/></svg>';
+const GLYPH_PAUSE = '<svg class="gly" viewBox="0 0 12 12" aria-hidden="true"'
+  + ' focusable="false"><rect x="2.9" y="1.5" width="2.5" height="9" fill="currentColor"/>'
+  + '<rect x="6.6" y="1.5" width="2.5" height="9" fill="currentColor"/></svg>';
+/* 눌린 뒤의 얼굴을 한 붓이 칠한다 — 글리프 단추와 낱말 단추 둘 다.
+
+   **이름은 요소가 들고 다닌다**(`data-name`). 칠하는 쪽이 상수를 골라 쓰면
+   드리프트 카드에서 실제로 틀렸다: 「끝났는지 확인」을 눌렀다 거절당하면
+   paintWake 가 WAKE_LABEL 을 박아 「이어가기」로 바뀌어 돌아왔다. 이름을
+   그리는 자리와 되돌리는 자리가 갈라지면 늘 이렇게 된다.
+
+   `textContent` 로 글리프 단추를 칠하면 `<svg>` 가 통째로 지워진다 — 글리프
+   단추는 이름을 **글자가 아니라 aria-label 로** 갈아 끼운다. */
+function faceDeed(b, going, goingLabel){
+  b.disabled = going;
+  b.classList.toggle("busy", going);
+  const name = going ? goingLabel : (b.dataset.name || "");
+  // 얹은 손에게 하는 말: 평소엔 무슨 일이 일어나는지(data-tip), 도는 중엔 그 사실.
+  b.title = going ? goingLabel : (b.dataset.tip || name);
+  if (b.classList.contains("ico")) b.setAttribute("aria-label", name);
+  else b.textContent = name;
+}
 const wokeAt = new Map();          // REQ id → 누른 시각(ms)
 const WOKE_HOLD = 180000;          // 3분. 스폰이 조용히 죽어도 다시 누를 수 있게
 function wokePending(id){
@@ -120,12 +156,29 @@ function stallHTML(r){
     + `<span class="rvcap">멈춤</span>${fmtStall(st.mins)} 진전 없음`
     + (r.commit_drift ? ` · 고친 것 있음` : "")
     + (last ? ` · 마지막 ${esc(last)}` : "") + `</div>`
-    + `<div class="acts wakerow"><button type="button" class="deed wake"`
+    /* 손잡이의 얼굴 (REQ-20260830-032): 보통은 ▶ 글리프, 드리프트 카드는 낱말.
+
+       **셋째 손잡이만 낱말인 이유.** ▶ 는 "이어간다"를 말하는데 드리프트 카드가
+       청하는 일은 "끝났는지 보라"다 — 같은 그림에 두 뜻을 실으면, 그 둘을 가르는
+       것은 바로 위 줄의 「고친 것 있음」뿐인데 그 줄은 ellipsis 라 **뒤부터
+       잘린다**(위 주석이 이미 경고한 자리). 근거가 잘린 채 뜻이 바뀌는 손잡이가
+       된다. ✓ 로 가르는 길도 막혀 있다: 같은 카드의 「승인 done」이 이미 승인의
+       그림이라, ✓ 하나에 "승인"과 "확인하러 가기" 두 뜻이 겹친다.
+       그래서 규칙을 하나로 세운다 — **전송 문법에 있는 것만 글리프, 나머지는 낱말.** */
+    + `<div class="acts wakerow"><button type="button" class="deed wake`
+    + `${r.commit_drift ? "" : " ico"}${going ? " busy" : ""}"`
     + ` data-wake="${esc(r.id)}"${going ? " disabled" : ""}`
-    + ` title="${r.commit_drift
+    + ` data-name="${r.commit_drift ? DRIFT_LABEL : WAKE_LABEL}"`
+    + ` data-tip="${r.commit_drift
       ? "고친 것이 있습니다 — 자동 작업이 요청한 일이 다 됐는지 확인해서, 됐으면 마무리하고 아니면 이어갑니다"
-      : "자동 작업이 이 요청을 이어서 진행합니다"}">`
-    + `${going ? WAKE_GOING : (r.commit_drift ? "끝났는지 확인" : WAKE_LABEL)}</button></div>` + work;
+      : "자동 작업이 이 요청을 이어서 진행합니다"}"`
+    + ` title="${going ? WAKE_GOING : (r.commit_drift
+      ? "고친 것이 있습니다 — 자동 작업이 요청한 일이 다 됐는지 확인해서, 됐으면 마무리하고 아니면 이어갑니다"
+      : "자동 작업이 이 요청을 이어서 진행합니다")}"`
+    // 글리프 단추는 이름을 글자가 아니라 여기로 실어 낸다 — 낭독기에도, 손에도.
+    + (r.commit_drift ? "" : ` aria-label="${going ? WAKE_GOING : WAKE_LABEL}"`)
+    + `>${r.commit_drift ? (going ? WAKE_GOING : DRIFT_LABEL) : GLYPH_PLAY}`
+    + `</button></div>` + work;
 }
 /* 도는 작업자와 그 손잡이 — 깨우기의 반대편 (REQ-20260829-024).
 
@@ -163,10 +216,16 @@ function workRowHTML(r){
     // 낱말 하나(`작업`)가 세 번 선다. 멈춤 줄과 같은 틀이다: 캡션 + 사실.
     + `<span class="rvcap">진행 중</span>자동 작업 ${mins}`
     + (jbit ? ` · ${jbit}` : "") + `</div>`
-    + `<div class="acts stoprow"><button type="button" class="deed stop"`
+    // ⏸ — 세워 놓은 두 획. 이름은 낱말 그대로 aria-label·title 이 나른다.
+    + `<div class="acts stoprow"><button type="button" class="deed stop ico`
+    + `${going ? " busy" : ""}"`
     + ` data-stop="${esc(r.id)}"${going ? " disabled" : ""}`
-    + ` title="진행 중인 자동 작업을 중단합니다 — 계정이나 모델을 바꾸기 전에 씁니다">`
-    + `${going ? STOP_GOING : STOP_LABEL}</button></div>`;
+    + ` data-name="${STOP_LABEL}"`
+    + ` data-tip="진행 중인 자동 작업을 중단합니다 — 계정이나 모델을 바꾸기 전에 씁니다"`
+    + ` aria-label="${going ? STOP_GOING : STOP_LABEL}"`
+    + ` title="${going ? STOP_GOING
+      : "진행 중인 자동 작업을 중단합니다 — 계정이나 모델을 바꾸기 전에 씁니다"}">`
+    + `${GLYPH_PAUSE}</button></div>`;
 }
 /* 사람이 세워 둔 요청과 그것을 되돌리는 손잡이 (REQ-20260829-024 라운드4).
 
@@ -192,10 +251,16 @@ function stoppedRowHTML(r){
     + `<span class="rvcap">중단</span>${mins}</div>`
     // 손잡이의 낱말이 멈춘 카드의 것과 **같다**: 하는 일이 같기 때문이다
     // (같은 길·같은 응답). 처지의 차이는 버튼이 아니라 위의 줄이 말한다.
-    + `<div class="acts wakerow"><button type="button" class="deed wake"`
+    // 낱말도 얼굴도 멈춘 카드의 것과 같다 — ▶ 하나, 이름은 「이어가기」.
+    + `<div class="acts wakerow"><button type="button" class="deed wake ico`
+    + `${going ? " busy" : ""}"`
     + ` data-restart="${esc(r.id)}"${going ? " disabled" : ""}`
-    + ` title="중단한 이 요청을 자동 작업이 다시 이어서 진행합니다">`
-    + `${going ? WAKE_GOING : WAKE_LABEL}</button></div>`;
+    + ` data-name="${WAKE_LABEL}"`
+    + ` data-tip="중단한 이 요청을 자동 작업이 다시 이어서 진행합니다"`
+    + ` aria-label="${going ? WAKE_GOING : WAKE_LABEL}"`
+    + ` title="${going ? WAKE_GOING
+      : "중단한 이 요청을 자동 작업이 다시 이어서 진행합니다"}">`
+    + `${GLYPH_PLAY}</button></div>`;
 }
 /* ?stall=<분>[&stallkind=stalled|spawn_failed][&stalldep][&stallhold] — 멈춤 줄과
    `깨우기` 를 **진짜로 세운다** (REQ-20260828-041 반려).
@@ -562,10 +627,7 @@ function paintWake(id){
   // 낱말도 같고, 다른 것은 그 위에 선 줄뿐이다 (REQ-20260829-024 라운드4).
   const q = CSS.escape(id);
   document.querySelectorAll(`[data-wake="${q}"],[data-restart="${q}"]`)
-    .forEach(b => {
-      b.disabled = going;
-      b.textContent = going ? WAKE_GOING : WAKE_LABEL;
-    });
+    .forEach(b => faceDeed(b, going, WAKE_GOING));
 }
 /* 멈춘 요청 하나를 사람이 눌러 다시 굴린다 (REQ-20260828-041).
 
@@ -626,10 +688,8 @@ function wakeDlg(id, d){
 /* 눌린 순간 화면이 먼저 답한다 — 깨우기와 같은 규칙이다. */
 function paintStop(id){
   const going = stopPending(id);
-  document.querySelectorAll(`[data-stop="${CSS.escape(id)}"]`).forEach(b => {
-    b.disabled = going;
-    b.textContent = going ? STOP_GOING : STOP_LABEL;
-  });
+  document.querySelectorAll(`[data-stop="${CSS.escape(id)}"]`)
+    .forEach(b => faceDeed(b, going, STOP_GOING));
 }
 /* 도는 작업자를 사람이 눌러 세운다 (REQ-20260829-024).
 

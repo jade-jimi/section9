@@ -77,6 +77,39 @@ class TestDepEdges(unittest.TestCase):
                     return row
         raise AssertionError(f"{rid} not in catalog")
 
+    # D8 — 선행은 미완의 요청만이다 (REQ-20260830-036 실사고: 긴급 카드가
+    # published 지식 문서에 막혀 굳었다 — 그 선행은 영원히 "안 끝난다")
+    def test_d8_published_doc_is_never_a_blocker(self):
+        a = self.new("막히는 쪽")
+        doc = self.cli("new", "knowledge", "--title", "근거 문서",
+                       "--summary", "s", "--body", "b").split()[0]
+        self.cli("status", a, "in-progress", "--note", "t")
+        self.cli("status", a, "blocked",
+                 "--note", f"근거는 {doc} 에 있다 — 패치 적용 대기")
+        self.assertEqual(self.meta(a).get("blocked_by") or [], [],
+                         "published 지식 문서가 선행으로 잡혔다")
+
+    def test_d8b_done_request_is_never_a_blocker(self):
+        a = self.new("막히는 쪽2")
+        b = self.new("이미 끝난 쪽")
+        self.cli("status", b, "in-progress", "--note", "t")
+        self.cli("status", b, "done", "--note", "goal 충족: g")
+        self.cli("status", a, "in-progress", "--note", "t")
+        self.cli("status", a, "blocked", "--note", f"{b} 뒤에 하려 했으나 이미 끝났다")
+        self.assertEqual(self.meta(a).get("blocked_by") or [], [],
+                         "끝난 요청이 선행으로 잡혔다")
+
+    def test_d8c_dep_edges_drops_stale_pollution(self):
+        # 이미 적혀 버린 오염(구버전이 남긴 blocked_by)은 판독이 거른다.
+        a = self.new("낡은 오염")
+        doc = self.cli("new", "knowledge", "--title", "옛 근거",
+                       "--summary", "s", "--body", "b").split()[0]
+        self.cli("status", a, "in-progress", "--note", "t")
+        self.cli("link", a, "--blocked-by", doc, expect=None)  # 강제 기록 경로
+        edges = [e for e in mod.dep_edges() if e.get("from") == a]
+        self.assertEqual(edges, [],
+                         "published 선행이 dep_edges 판독에 살아 있다")
+
     # D1
     def test_d1_link_records_one_side_only(self):
         a, b = self.new("D1 대기"), self.new("D1 선행")

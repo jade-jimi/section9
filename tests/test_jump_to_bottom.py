@@ -25,6 +25,8 @@
 import os
 import re
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -95,7 +97,7 @@ class JumpToBottom(unittest.TestCase):
                       "인버스(잉크 반전)가 아니다")
         # 색상 하드코딩 금지 — 터미널 팔레트 토큰만 쓴다
         blk = ";".join(re.findall(r"\.ccjump[^{]*\{([^}]*)\}", css))
-        self.assertNotRegex(blk, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
+        websrc.no_hex(self, blk)
         self.assertNotRegex(blk, r"\bborder-left\b", "좌측 세로 띠 금지")
         for v in re.findall(r"(?:background|color|border-color)\s*:\s*([^;}\n]+)", blk):
             self.assertRegex(v.strip(), r"^var\(--cc-[a-z]+\)$",
@@ -131,9 +133,7 @@ class JumpToBottom(unittest.TestCase):
     # ---------- helpers ----------
 
     def _fn(self, name):
-        m = re.search(r"(?:async )?function %s\([^)]*\)\{[\s\S]*?\n\}" % name, self.src)
-        self.assertIsNotNone(m, "%s() 를 찾지 못했다" % name)
-        return m.group(0)
+        return websrc.fn(self, self.src, name)
 
     def _css(self):
         m = re.search(r"/\* -+ 바닥으로 내려가는 손잡이[\s\S]*?\*/([\s\S]*?)\n\n", self.src)

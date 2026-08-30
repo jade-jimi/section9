@@ -76,6 +76,8 @@ import sys
 import tempfile
 import unittest
 
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = index_path()
 S9 = os.path.join(HERE, "..", "bin", "s9")
@@ -302,7 +304,7 @@ class JudgeDialog(unittest.TestCase):
                 continue
             self.fail("색면을 깔지 않는다: %s" % bg)
         self.assertNotIn("border-left", css, "좌측 세로 띠 금지")
-        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
+        websrc.no_hex(self, css)
         self.assertNotRegex(css, r"\[data-(?:skin|theme)=",
                             "특정 스킨/톤 전용 스타일이 아니다")
 
@@ -525,9 +527,7 @@ class JudgeDialog(unittest.TestCase):
             (a or b) for a, b in re.findall(r'(?:"([^"]+)"|([a-z-]+))\s*:', m.group(1))]
 
     def _fn(self, name):
-        m = re.search(r"(?:async )?function %s\([^)]*\)\{[\s\S]*?\n\}" % name, self.src)
-        self.assertIsNotNone(m, "%s() 를 찾지 못했다" % name)
-        return m.group(0)
+        return websrc.fn(self, self.src, name)
 
     def _rule(self, sel):
         """선택자 하나의 선언 블록 — 여러 규칙에 나뉘어 있으면 이어 붙인다."""

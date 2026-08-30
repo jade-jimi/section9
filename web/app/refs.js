@@ -31,7 +31,11 @@ const CC_SHORT_VECTORS = [
 // 엣지는 사라지고 근거는 History 에만 남는다. 서버(trigger_dependents·linkcheck)가
 // 청소하기 전 — 수동 편집, 아직 안 돈 카탈로그 — 에도 화면이 과거로 채워지지
 // 않도록 카드·문서·그래프가 같은 기준으로 한 번 더 거른다.
-const DEP_DEAD = new Set(["done", "cancelled"]);
+/* published 도 죽은 선행이다 (REQ-20260830-036): 지식·질문의 종결 상태라
+   영원히 "안 끝나" — 실사고에서 긴급 카드가 published 문서에 막혀 굳었다.
+   근원은 서버(수집기·dep_edges)가 막지만, 낡은 데이터가 남아도 화면이
+   거짓 선행을 그리지 않게 같은 잣대를 여기도 둔다. */
+const DEP_DEAD = new Set(["done", "cancelled", "published"]);
 function liveBlockers(r){
   if (!r || DEP_DEAD.has(r.status)) return [];   // 이미 끝난 문서는 기다릴 게 없다
   return (r.blocked_by || []).map(catFind).filter(b => b && !DEP_DEAD.has(b.status));

@@ -28,6 +28,8 @@
 import os
 import re
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -121,8 +123,7 @@ class SecretUI(unittest.TestCase):
         self.assertNotIn("border-left:", css, "세로 띠를 두른다")
         self.assertNotIn("border-radius", css, "라운드를 쓴다")
         self.assertNotIn("box-shadow", css, "그림자를 쓴다")
-        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색을 하드코딩한다")
-
+        websrc.no_hex(self, css, "색을 하드코딩한다")
     # ---------- ⑦ 손 없이 넣고 지운다 (그리고 진짜 비밀은 못 건드린다) ----------
 
     def test_it_can_be_exercised_without_hands(self):

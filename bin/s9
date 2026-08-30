@@ -1562,6 +1562,16 @@ def do_transition(doc_id, new_status, note="", user=None, force=False, auto=Fals
         for cand in DOC_ID_RE.findall(note):
             if cand == doc_id or cand in cur or not locate(cand):
                 continue
+            # 선행은 **미완의 요청**만이다 (REQ-20260830-036 실사고): blocked
+            # 노트가 근거로 인용한 지식 문서(DOC, published)가 선행으로 잡히면
+            # 그 문서는 영원히 "안 끝나" 카드가 없는 선행에 막힌 채 굳는다 —
+            # 긴급 카드가 정확히 그렇게 굳었다. 끝난 요청도 이미 선행이 아니다.
+            try:
+                _cm, _ = read_doc(locate(cand))
+            except (OSError, ValueError):
+                continue
+            if _cm.get("type") != "request"                     or _cm.get("status") in TERMINAL_STATUSES:
+                continue
             if dep_would_cycle(doc_id, cand):
                 continue
             cur.append(cand)
@@ -6705,9 +6715,14 @@ DOC_ID_RE = re.compile(
 
 def dep_edges(rows=None):
     """선행 의존 엣지 — {from: 막힌 문서, to: 선행 문서, rel: blocked_by}.
-    대상이 카탈로그에 없으면 버린다(그래프에 끊긴 화살표를 그리지 않는다)."""
+    대상이 카탈로그에 없으면 버린다(그래프에 끊긴 화살표를 그리지 않는다).
+    **미완의 요청만 선행이다** (REQ-20260830-036) — 쓰기 쪽(do_transition)과
+    같은 잣대를 읽기 쪽에도 세워, 이미 적힌 오염도 판에 오르지 않는다."""
     rows = rows if rows is not None else load_catalog()
-    ids = {r["id"] for r in rows}
+    ids = {r["id"]: r for r in rows}
+    ids = {i for i, r in ids.items()
+           if r.get("type") == "request"
+           and r.get("status") not in TERMINAL_STATUSES}
     out = []
     for r in rows:
         for b in (r.get("blocked_by") or []):

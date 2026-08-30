@@ -35,6 +35,8 @@
 import os
 import re
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -204,7 +206,7 @@ class ServeGuardUI(unittest.TestCase):
     def test_styles_are_token_only(self):
         """tone 6종 전부에서 성립하려면 색은 토큰으로만."""
         css = self._css()
-        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
+        websrc.no_hex(self, css)
         self.assertNotRegex(css, r"\[data-(?:skin|theme)=",
                             "특정 스킨/톤 전용 스타일이 아니다")
 
@@ -227,10 +229,7 @@ class ServeGuardUI(unittest.TestCase):
     # ---------- helpers ----------
 
     def _fn(self, name):
-        m = re.search(r"(?:async )?function %s\([^)]*\)\{[\s\S]*?\n\}" % name,
-                      self.src)
-        self.assertIsNotNone(m, "%s() 를 찾지 못했다" % name)
-        return m.group(0)
+        return websrc.fn(self, self.src, name)
 
     def _copy(self):
         """화면에 나가는 문장 후보 — 자동 복구 블록 안의 한글 문자열."""

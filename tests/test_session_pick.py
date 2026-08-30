@@ -29,6 +29,8 @@ import os
 import re
 import tempfile
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from unittest import mock
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
@@ -194,10 +196,7 @@ class TestPickerScreen(unittest.TestCase):
             cls.src = f.read()
 
     def _fn(self, name):
-        m = re.search(r"(?:async )?function %s\([^)]*\)\{[\s\S]*?\n\}" % name,
-                      self.src)
-        self.assertIsNotNone(m, "%s() 를 찾지 못했다" % name)
-        return m.group(0)
+        return websrc.fn(self, self.src, name)
 
     # P12. 상태줄의 대상 세션이 눌린다 — 누를 수 있으면 눌리게 보여야 한다.
     def test_p12_target_sid_is_a_handle(self):

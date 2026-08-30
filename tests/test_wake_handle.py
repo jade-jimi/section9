@@ -170,7 +170,10 @@ class WakeHandle(unittest.TestCase):
     def test_it_reuses_the_button_the_card_already_has(self):
         """.acts/.deed 를 그대로 입는다 — 그래야 스킨이 따라온다."""
         self.assertIn('class="acts wakerow"', self.stall)
-        self.assertIn('class="deed wake"', self.stall)
+        # `deed wake` 뒤에 상태 갈래(`ico`·`busy`)가 붙는다 (REQ-20260830-032:
+        # 손잡이 얼굴이 글리프로 바뀌었다). 계약은 낱말 그대로가 아니라 **입은
+        # 옷**이다 — 카드가 이미 쓰는 .deed 를 그대로 입었는가.
+        self.assertRegex(self.stall, r'class="deed wake[ `$]')
         # 새 배지·색면·띠를 만들지 않는다
         m = re.search(r"\.acts\.wakerow\{([^}]*)\}", self.src)
         self.assertIsNotNone(m, ".acts.wakerow 규칙이 없다")

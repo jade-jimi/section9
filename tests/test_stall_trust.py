@@ -352,14 +352,22 @@ class StallTrust(unittest.TestCase):
 
     # ---- C6. 판정이 사는 자리는 하나다 -----------------------------------
     def test_c6_single_verdict_function(self):
+        """판정 '정의'가 한 벌인지 본다 — 소비자 쪽은 stall_visible s5(CLI)·
+        stall_pair f1(화면 JS)이 각각 맡는다. 세 시험은 같은 계약의 다른 층이라
+        접지 않는다 (REQ-20260830-029 정독 판정).
+
+        2026-08-30 뮤테이션 실측: 종전의 assertIn("stall_verdict(", body) 는
+        docstring 산문의 `stall_verdict()` 언급에 걸려, 호출을 지워도 Green
+        이었다(dead-spot — 행동 시험 c7 이 대신 잡았다). 그래서 산문이 흉내낼
+        수 없는 **호출문 자체**를 본다."""
         src = open(S9, encoding="utf-8").read()
         self.assertIn("def stall_verdict(", src)
         # stall_mins 는 그 함수의 얇은 껍데기여야 한다 — 나이를 다시 재면
         # 두 벌이 된다.
         i = src.index("def stall_mins(")
         body = src[i:src.index("\ndef ", i + 10)]
-        self.assertIn("stall_verdict(", body,
-                      "stall_mins 가 판정을 따로 갖고 있다")
+        self.assertRegex(body, r"\n\s*return stall_verdict\(",
+                         "stall_mins 가 판정을 따로 갖고 있다")
 
 
 if __name__ == "__main__":

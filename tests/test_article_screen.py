@@ -27,6 +27,8 @@
 import os
 import re
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -113,8 +115,7 @@ class ArticleScreen(unittest.TestCase):
                          "한 줄이 너무 길어 다음 줄 첫 글자를 못 찾는다")
         self.assertRegex(css, r"\.artdoc \.artmd\{[^}]*line-height:1\.[89]",
                          "행간이 훑는 글 그대로다")
-        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
-
+        websrc.no_hex(self, css)
     # ---------- ⑥ 절 경계 ----------
 
     def test_section_boundaries_are_named_sections_only(self):
@@ -132,9 +133,7 @@ class ArticleScreen(unittest.TestCase):
     # ---------- helpers ----------
 
     def _fn(self, name):
-        m = re.search(r"(?:async )?function %s\([^)]*\)\{[\s\S]*?\n\}" % name, self.src)
-        self.assertIsNotNone(m, "%s() 를 찾지 못했다" % name)
-        return m.group(0)
+        return websrc.fn(self, self.src, name)
 
     def _css(self):
         m = re.search(r"/\* -+ 아티클 \(REQ-20260827-073\)[\s\S]*?\*/([\s\S]*?)\n\n", self.src)

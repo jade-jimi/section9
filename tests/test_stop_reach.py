@@ -343,7 +343,9 @@ class TheHandleOnTheScreen(unittest.TestCase):
     def test_s15_it_reuses_what_the_card_already_wears(self):
         """새 층을 만들지 않는다 — 색면·띠 없이 있는 문법을 그대로 입는다."""
         self.assertIn('class="acts stoprow"', self.workrow)
-        self.assertIn('class="deed stop"', self.workrow)
+        # 뒤에 상태 갈래(`ico`·`busy`)가 붙는다 — REQ-20260830-032 로 손잡이
+        # 얼굴이 ⏸ 글리프가 됐다. 무는 것은 낱말이 아니라 입은 옷이다.
+        self.assertRegex(self.workrow, r'class="deed stop[ `$]')
         m = re.search(r"\.acts\.stoprow\{([^}]*)\}", self.web)
         self.assertIsNotNone(m, ".acts.stoprow 규칙이 없다")
         for banned in ("background", "animation", "border-left"):
@@ -502,7 +504,12 @@ class TheRestartHandle(unittest.TestCase):
         들어간다."""
         self.assertIn("r.stopped", self.row)
         self.assertIn("data-restart=", self.row)
-        self.assertIn("이어가기", self.row, "손잡이의 낱말이 멈춘 카드와 다르다")
+        # 낱말은 상수 한 곳에서 온다 — 글리프가 된 뒤로 이름은 눈에 보이는
+        # 글자가 아니라 aria-label·title 이 나른다 (REQ-20260830-032). 원문에
+        # 박힌 글자를 물면 주석 한 줄에도 통과하므로 상수를 문다.
+        self.assertIn("WAKE_LABEL", self.row, "손잡이의 낱말이 멈춘 카드와 다르다")
+        self.assertRegex(self.row, r'aria-label="\$\{[^"]*WAKE_LABEL',
+                         "글리프 손잡이가 이름을 낭독기에 안 실어 보낸다")
         self.assertRegex(self.web, r"wakeDoc\(\w+\.dataset\.restart\)",
                          "다시 맡기는 손잡이가 자기만의 길을 판다")
         self.assertEqual(len(re.findall(r'"/api/wake"', self.web)), 1)

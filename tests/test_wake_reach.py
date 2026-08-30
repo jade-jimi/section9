@@ -77,7 +77,11 @@ class TheDeadClaimLetsGo(unittest.TestCase):
         self.assertEqual(self.m.judge_health("sub:x:1", age=None)[0], "unknown")
 
     def test_w2_an_unknown_claim_expires(self):
-        """신호가 없는 클레임도 유예 뒤에는 멈춘 것으로 판정된다."""
+        """신호가 없는 클레임도 유예 뒤에는 멈춘 것으로 판정된다.
+
+        wake_effect r3c 와 한 벌이되 층이 다르다: 여기는 judge_health 의
+        유예 경계값(유닛 — 60초는 안 죽이고 7200초는 죽인다), r3c 는
+        --apply 통합 경로. 접지 않는다 (REQ-20260830-029 정독)."""
         self.assertEqual(
             self.m.judge_health("sub:x:1", age=None, claim_age=60)[0],
             "unknown", "유예 안에서는 섣불리 죽이지 않는다")

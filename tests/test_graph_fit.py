@@ -57,6 +57,8 @@
 import os
 import re
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -187,7 +189,7 @@ class GraphFit(unittest.TestCase):
     def test_handle_wears_ink_not_a_colour_field(self):
         """색면 하이라이트·세로 띠 금지, 색은 잉크로."""
         css = self._css()
-        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
+        websrc.no_hex(self, css)
         self.assertNotRegex(css, r"\bborder-left\b", "좌측 세로 띠 금지")
         for v in re.findall(r"(?:background|color|border(?:-color)?)\s*:\s*([^;}\n]+)", css):
             v = v.strip()

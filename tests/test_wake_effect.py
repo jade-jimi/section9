@@ -176,7 +176,12 @@ class TheDeadWorkerReleasesTheWork(IsolatedVault):
                          "죽은 워커의 기여가 running 으로 남았다")
 
     def test_r3c_a_claim_with_no_signal_at_all_expires(self):
-        """신호가 하나도 없는 클레임도 유예 뒤에는 종결된다 — 영구 running 금지."""
+        """신호가 하나도 없는 클레임도 유예 뒤에는 종결된다 — 영구 running 금지.
+
+        wake_reach w2 와 겹쳐 보이지만 층이 다르다: w2 는 judge_health 의
+        유예 경계(유닛), 여기는 health --apply 가 stalled 판정을 실제로
+        되써서 클레임을 닫는 통합 경로다. --apply 가 failed(r3a)만 되쓰고
+        stalled 를 건너뛰는 회귀는 이 시험만 잡는다 (REQ-20260830-029 정독)."""
         rid = self.new_req("신호가 없는 건")
         self.s9("contrib", rid, "--actor", "sub:designer:ab64fee2",
                 "--item", "손", "--result", "running")

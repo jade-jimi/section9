@@ -34,6 +34,8 @@
 import os
 import re
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -261,7 +263,7 @@ class AnchorNote(unittest.TestCase):
         self.assertIn("anchor.slice(0, 60)", ask, "긴 구간을 그대로 흘린다")
         # 색면 금지 · 스킨 전용 스타일 금지
         css = self._css()
-        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
+        websrc.no_hex(self, css)
         self.assertNotRegex(css, r"\[data-(?:skin|theme)=", "스킨 전용 스타일 금지")
         for v in re.findall(r"background\s*:\s*([^;}\n]+)", css):
             self.assertIn(v.strip(), ("none", "transparent", "var(--panel)", "var(--text)"),
@@ -343,9 +345,7 @@ class AnchorNote(unittest.TestCase):
     # ---------- helpers ----------
 
     def _fn(self, name):
-        m = re.search(r"(?:async )?function %s\([^)]*\)\{[\s\S]*?\n\}" % name, self.src)
-        self.assertIsNotNone(m, "%s() 를 찾지 못했다" % name)
-        return m.group(0)
+        return websrc.fn(self, self.src, name)
 
     def _nocomment(self, js):
         """주석을 걷어낸 코드. 설명문에 적힌 낱말이 검사에 걸리지 않게."""

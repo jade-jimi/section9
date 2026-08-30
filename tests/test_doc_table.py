@@ -35,6 +35,8 @@
 import os
 import re
 import unittest
+
+import websrc  # 공용 원문 도우미 (REQ-20260830-029)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -140,8 +142,7 @@ class DocTable(unittest.TestCase):
         css = self._css()
         self.assertNotIn("--cc-", css,
                          "문서 뷰어 표가 터미널 팔레트를 빌려 쓴다")
-        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,6}\b", "색 하드코딩 금지")
-
+        websrc.no_hex(self, css)
     def test_document_table_is_lines_not_fills(self):
         """색면 얼룩말 금지 — 구획은 헤어라인으로."""
         css = self._css()
