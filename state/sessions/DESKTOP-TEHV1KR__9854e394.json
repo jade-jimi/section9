@@ -8,9 +8,7 @@
  "entry": "code",
  "ended": "",
  "capture_paused": true,
- "active_reqs": [
-  "REQ-20260830-027-62x6"
- ],
+ "active_reqs": [],
  "claim_at": {
   "REQ-20260830-027-62x6": "2026-08-30T16:16:00+09:00",
   "REQ-20260830-030-62x6": "2026-08-30T16:57:08+09:00"

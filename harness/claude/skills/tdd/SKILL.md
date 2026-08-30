@@ -44,3 +44,22 @@ s9 note <REQ-id> --label tdd "
 
 `S9_ROOT=$(mktemp -d)` 격리 필수 — 라이브 vault를 오염시키지 않는다. UI 구현이면
 `browser-verify` 스킬의 실브라우저 검증(WSL이면 `s9 shot`)까지가 Green 조건이다.
+
+## 빠른 시험 규칙 (REQ-20260830-027 — 일회성이 아니라 앞으로 모든 시험의 기준)
+
+전체 스위트는 병렬(--jobs)로 도는 구조다. 새 시험은 그 구조를 깨지 않아야 하고,
+그 자체로 빨라야 한다. 실측 근거: 느린 것은 로직이 아니라 **프로세스 기동**이다
+(s9 subprocess 1회 0.15~0.18초 × 수천 회 = 직렬 523초).
+
+- **s9 subprocess 를 아껴라**: setUp 마다 init+new 를 반복하지 말고 setUpClass 로
+  한 번, 판정은 CLI 왕복 대신 모듈 로드(SourceFileLoader) 후 함수 직접 호출로.
+- **sleep 폴링 금지**: 고정 sleep 대신 조건 대기(짧은 간격 폴 + 타임아웃).
+  실서버 기동은 클래스당 1회를 넘기지 마라.
+- **병렬 안전이 기본**: 임시 루트(tmproot 가 자동)와 portpool 밖의 전역 자원
+  (실제 repo state/·고정 포트·환경변수)을 만지면 그 파일은 러너의 SERIAL
+  목록(tests/__main__.py)에 올려야 한다 — 올리는 순간 전체 실행의 직렬 꼬리가
+  길어지니 애초에 안 만지는 설계가 우선이다. 물려받은 환경(S9_TESTS_NESTED 등)에
+  기대지 말고 setUp 에서 정리하라.
+- **실행 습관**: 개발 중 `python3 tests/ --changed`(변경에 닿는 것만) 또는 표적
+  패턴, review/done 전 전체는 `python3 tests/ --jobs 4`. 종료 코드는 파이프에
+  가리지 말고 실측하라(`; echo exit=$?`).
