@@ -130,7 +130,10 @@ def write_green_stamp(repo=None, stamp=None):
 # 본대에 넣으면 서로(또는 자식들의 포트 슬롯을) 밟는다. 부모가 직렬로 돈다.
 SERIAL = ("test_jobfile.py", "test_runner_patterns.py", "test_tmp_hygiene.py",
           "test_port_pool.py", "test_install_hooks_path.py",
-          "test_doctor_system.py")
+          "test_doctor_system.py",
+          # 계정 전환 live 시험 — 계정 전역 상태를 만져 병렬에서만 흔들린다
+          # (2026-08-30 19:26 실측: 단독 4회 green, --jobs 에서 1회 red).
+          "test_claude_usage.py")
 
 
 def shard(files, n):
