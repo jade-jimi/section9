@@ -53,6 +53,10 @@ class Base(unittest.TestCase):
         os.environ["S9_ROOT"] = self.root
         os.environ["S9_MACHINE"] = "testbox"
         os.environ.pop("S9_SESSION", None)
+        # 병렬 러너의 직렬 꼬리는 S9_TESTS_NESTED=1 환경에서 돈다 — 이 스위트가
+        # 검사하는 것이 바로 그 스위치라, 물려받은 값을 걷어야 한다(안 걷으면
+        # start() 가 전부 무음이 되어 다섯 건이 한꺼번에 빨개진다 — 실측).
+        os.environ.pop("S9_TESTS_NESTED", None)
         self.env = {**os.environ}
         subprocess.run([S9, "init"], capture_output=True, env=self.env,
                        timeout=30)

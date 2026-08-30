@@ -372,8 +372,12 @@ function renderSvChip(){
         + (one.done ? ` · ${Number(one.done).toLocaleString("ko-KR")}건` : "")
         + (+one.quiet_sec >= 60 ? ` · ${one.quiet_sec}초 잠잠` : "");
     items.push({tone: "sv-run", mark: "↻", spin: true, label,
-      title: `${esc(one.name)}가 ${mx}분째 돌고 있습니다 — 누르면 Terminal `
-        + `탭에서 진행을 볼 수 있습니다`,
+      /* 못 지킬 약속은 하지 않는다 (REQ-20260830-030): 백그라운드 실행의
+         출력은 Terminal 탭에 흐르지 않는다 — 사용자가 실제로 되물었다.
+         진행은 이 숫자 자체다. 클릭 이동은 커서와 실제 이동이 말한다(ux-writer:
+         툴팁에 "누르면 …"을 다시 넣으면 또 기대를 만든다). */
+      title: `${esc(one.name)}가 ${mx}분째 돌고 있습니다 — 여기 숫자가 곧 `
+        + `진행입니다. 끝나면 이 표시가 사라집니다`,
       act: () => document.querySelector('header [data-tab="terminal"]')?.click()});
   }
   const oc = ocInfo;

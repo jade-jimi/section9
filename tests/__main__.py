@@ -119,6 +119,96 @@ def write_green_stamp(repo=None, stamp=None):
         pass
 
 
+# 공유 상태(실제 repo state/·9909 포트·포트 슬롯 자체)를 만지는 시험 — 병렬
+# 본대에 넣으면 서로(또는 자식들의 포트 슬롯을) 밟는다. 부모가 직렬로 돈다.
+SERIAL = ("test_jobfile.py", "test_runner_patterns.py", "test_tmp_hygiene.py",
+          "test_port_pool.py", "test_install_hooks_path.py",
+          "test_doctor_system.py")
+
+
+def shard(files, n):
+    """파일들을 무게(크기) 내림차순 greedy 로 N 빈에 — 느린 것부터 자리 잡아야
+    꼬리가 짧다 (REQ-20260830-027 2단계). 반환: 빈 리스트들(빈 빈 제외)."""
+    bins = [[0, []] for _ in range(max(1, n))]
+    for f in sorted(files, key=lambda x: -os.path.getsize(
+            os.path.join(HERE, x))):
+        b = min(bins, key=lambda x: x[0])
+        b[0] += os.path.getsize(os.path.join(HERE, f))
+        b[1].append(f)
+    return [b[1] for b in bins if b[1]]
+
+
+def matched_files(pats):
+    """디스커버리 패턴들이 고르는 시험 파일 목록 (파일 단위 샤딩용)."""
+    import fnmatch
+    out = []
+    for fn in sorted(os.listdir(HERE)):
+        if fn.startswith("test_") and fn.endswith(".py") and                 any(fnmatch.fnmatch(fn, p) for p in pats):
+            out.append(fn)
+    return out
+
+
+def run_sharded(pats, jobs, bump=None):
+    """병렬 본대 + 직렬 꼬리 (REQ-20260830-027 2단계).
+
+    자식은 `python3 tests/ <파일…>` + S9_TESTS_NESTED=1 — reap·잡파일·바깥
+    sweep 을 건드리지 않고 tmproot 는 pid 별로 저절로 격리된다. 실패한 자식의
+    원출력은 그대로 재생한다 — 병렬 뒤에 실패가 숨으면 이 구조 전체가 거짓이
+    된다. 반환: (ok, 돈 파일 수)."""
+    import subprocess
+    import tempfile
+    files = matched_files(pats)
+    body = [f for f in files if f not in SERIAL]
+    tail = [f for f in files if f in SERIAL]
+    procs = []
+    env = {**os.environ, "S9_TESTS_NESTED": "1"}
+    for group in shard(body, jobs):
+        out = tempfile.NamedTemporaryFile(mode="w+", suffix=".shard",
+                                          delete=False)
+        pr = subprocess.Popen(
+            [sys.executable, HERE, *group],
+            stdout=out, stderr=subprocess.STDOUT, env=env)
+        procs.append((pr, out, group))
+    ok = True
+    done_files = 0
+    import time as _time
+    pending = list(procs)
+    while pending:
+        _time.sleep(0.5)
+        still = []
+        for pr, out, group in pending:
+            if pr.poll() is None:
+                still.append((pr, out, group))
+                continue
+            done_files += len(group)
+            if bump:
+                bump(done_files)
+            if pr.returncode != 0:
+                ok = False
+                out.flush()
+                try:
+                    sys.stderr.write(open(out.name, encoding="utf-8",
+                                          errors="replace").read())
+                except OSError:
+                    pass
+                print(f"실패한 샤드: {' '.join(group)}", file=sys.stderr)
+        pending = still
+    for pr, out, _g in procs:
+        try:
+            out.close()
+            os.unlink(out.name)
+        except OSError:
+            pass
+    for f in tail:      # 직렬 꼬리 — 부모 프로세스에서, 공유 상태를 독점하고
+        r = subprocess.run([sys.executable, HERE, f], env=env)
+        done_files += 1
+        if bump:
+            bump(done_files)
+        if r.returncode != 0:
+            ok = False
+    return ok, done_files
+
+
 def patterns(argv):
     """인자들을 discovery 패턴으로 바꾼다 (REQ-20260829-006).
 
@@ -188,10 +278,16 @@ def main():
     tmp_root, prev_tmpdir = tmproot.make_run_root()
     ok, empty, leaked = False, [], []
     try:
-        argv = [a for a in sys.argv[1:] if a != "--changed"]
+        raw = sys.argv[1:]
+        jobs = 0
+        if "--jobs" in raw:
+            i = raw.index("--jobs")
+            jobs = int(raw[i + 1]) if i + 1 < len(raw) else 4
+            raw = raw[:i] + raw[i + 2:]
+        argv = [a for a in raw if a != "--changed"]
         full_requested = not argv
         sel = None
-        if "--changed" in sys.argv[1:]:
+        if "--changed" in raw:
             sel = changed_selection()
             if sel == []:
                 print("변경 없음 — 마지막 전체 green 이후 시험에 닿는 파일이 "
@@ -202,6 +298,20 @@ def main():
                 full_requested = False
             # None 이면 전체 폴백 — argv 그대로(비어 있음 = 전체)
         pats = patterns(argv)
+        if jobs > 1 and not nested:
+            files = matched_files(pats)
+            if not files:
+                print(f"no tests matched: {', '.join(pats)}", file=sys.stderr)
+                return 1
+            bump, clear = jobfile.start(len(files),
+                                        args=" ".join(sys.argv[1:4]))
+            try:
+                ok, _n = run_sharded(pats, jobs, bump=bump)
+            finally:
+                clear()
+            if ok and full_requested:
+                write_green_stamp()
+            return 0 if ok else 1
         suite, empty = discover(pats)
         for p in empty:
             print(f"no tests matched: {p}", file=sys.stderr)
