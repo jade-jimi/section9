@@ -20,21 +20,44 @@ import time
 _NOOP = (lambda n: None, lambda: None)
 
 
-def start(total, root=None, name="테스트", hint="tests"):
-    """잡 파일을 쓴다. 반환 (bump(n), clear) — 어떤 실패도 러너를 못 죽인다."""
+def start(total, root=None, name="테스트", hint="tests", args=""):
+    """잡 파일을 쓴다. 반환 (bump(n), clear) — 어떤 실패도 러너를 못 죽인다.
+
+    파일 이름에 pid 가 들어간다 (REQ-20260830-022 반려 재작업): 이름이 하나면
+    동시 실행 둘이 서로 덮어쓰고, 먼저 끝난 쪽의 정리가 다른 쪽 표시까지
+    지운다 — 리드와 무인 작업자는 실제로 동시에 테스트를 돌린다. 죽은 실행이
+    남긴 파일은 읽는 쪽 pid 대조가 무시하고 7일 sweep 이 거둔다."""
     if os.environ.get("S9_TESTS_NESTED") == "1":
         return _NOOP
     root = root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     d = os.path.join(root, "state", "jobs")
-    path = os.path.join(d, "tests.json")
+    path = os.path.join(d, f"tests-{os.getpid()}.json")
     state = {"name": name, "hint": hint, "pid": os.getpid(),
              "started": time.time(),
              "session": (os.environ.get("S9_SESSION") or "")[:8],
+             "args": str(args or "")[:120],
              "total": int(total or 0), "done": 0}
+
+    def sweep():
+        """죽은 실행이 남긴 형제 파일을 거둔다 — clear 는 kill -9 를 못 만나고,
+        읽는 쪽은 무시만 하지 지우지 않는다. 7일이면 어떤 잡도 무신호다."""
+        try:
+            for fn in os.listdir(d):
+                fp = os.path.join(d, fn)
+                if fn.startswith("tests-") and \
+                        time.time() - os.path.getmtime(fp) > 7 * 86400:
+                    os.unlink(fp)
+        except OSError:
+            pass
 
     def write():
         try:
             os.makedirs(d, exist_ok=True)
+            for fn in os.listdir(d):   # 7일 고아 회수 — 워처 없는 환경의 안전망
+                fp = os.path.join(d, fn)
+                if fn.startswith("tests-") and \
+                        time.time() - os.path.getmtime(fp) > 7 * 86400:
+                    os.unlink(fp)
             tmp = path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 f.write(json.dumps(state, ensure_ascii=False))
@@ -61,6 +84,7 @@ def start(total, root=None, name="테스트", hint="tests"):
 
     try:
         write()
+        sweep()
         atexit.register(clear)
     except Exception:
         return _NOOP

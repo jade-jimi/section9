@@ -110,7 +110,8 @@ def main():
             return 1
         # 잡 파일 (REQ-20260830-022): 이 실행이 도는 동안 화면 헤더 칩과 카드가
         # "테스트 N분째 · M건" 을 그린다. 안쪽 실행(S9_TESTS_NESTED)은 안 쓴다.
-        bump, clear = jobfile.start(suite.countTestCases())
+        bump, clear = jobfile.start(suite.countTestCases(),
+                                    args=" ".join(sys.argv[1:4]))
 
         class _Result(unittest.TextTestResult):
             def stopTest(self, test):

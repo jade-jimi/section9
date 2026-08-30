@@ -87,7 +87,7 @@ class TheWriter(Base):
     def test_j1_start_writes_bump_updates_clear_removes(self):
         jf = _jobfile()
         bump, clear = jf.start(100, root=self.root)
-        p = os.path.join(self.jdir, "tests.json")
+        p = os.path.join(self.jdir, f"tests-{os.getpid()}.json")
         self.assertTrue(os.path.exists(p), "시작이 잡 파일을 안 썼다")
         j = json.load(open(p, encoding="utf-8"))
         self.assertEqual(j["pid"], os.getpid())
@@ -98,6 +98,77 @@ class TheWriter(Base):
         self.assertEqual(j["done"], 37, "진행 수가 갱신되지 않았다")
         clear()
         self.assertFalse(os.path.exists(p), "끝났는데 잡 파일이 남았다")
+
+    def test_c1_concurrent_runs_coexist(self):
+        # 반려가 찾은 결함: 이름이 하나면 동시 실행이 서로 덮어쓴다.
+        jf = _jobfile()
+        bump, clear = jf.start(100, root=self.root)
+        self.put_job()          # 다른 실행의 잡 (put_job 은 tests.json 에 쓴다)
+        rows = self.m.jobs_running()
+        self.assertEqual(len(rows), 2,
+                         "동시 실행 둘이 잡 하나로 뭉개졌다")
+        clear()
+
+    def test_c2_clear_removes_only_its_own(self):
+        jf = _jobfile()
+        bump, clear = jf.start(100, root=self.root)
+        other = self.put_job()   # 다른 실행
+        clear()                  # 내 것만 거둔다
+        rows = self.m.jobs_running()
+        self.assertEqual(len(rows), 1,
+                         "한 실행의 정리가 다른 실행의 표시를 지웠다")
+        self.assertEqual(rows[0]["pid"], other["pid"])
+
+    def test_c3_week_old_leftovers_are_swept_on_start(self):
+        # kill -9 는 clear 를 못 만나고 읽는 쪽은 무시만 한다 — pid 파일명이
+        # 된 뒤로 고아가 이름을 바꿔 가며 쌓이므로, 다음 시작이 거둬야 한다.
+        os.makedirs(self.jdir, exist_ok=True)
+        old = os.path.join(self.jdir, "tests-424242.json")
+        with open(old, "w", encoding="utf-8") as f:
+            f.write("{}")
+        week_ago = time.time() - 8 * 86400
+        os.utime(old, (week_ago, week_ago))
+        fresh = os.path.join(self.jdir, "tests.json")
+        self.put_job()                    # 신선한 동시 실행은 남아야 한다
+        jf = _jobfile()
+        bump, clear = jf.start(10, root=self.root)
+        self.assertFalse(os.path.exists(old), "7일 넘은 고아 잡이 안 거둬졌다")
+        self.assertTrue(os.path.exists(fresh), "신선한 형제 잡까지 지웠다")
+        clear()
+
+    def test_c4_args_reach_the_server(self):
+        jf = _jobfile()
+        bump, clear = jf.start(30, root=self.root, args="wake stall")
+        rows = self.m.jobs_running()
+        mine = [r for r in rows if r["pid"] == os.getpid()]
+        self.assertEqual(len(mine), 1)
+        self.assertEqual(mine[0]["args"], "wake stall",
+                         "실행 범위가 서버 응답에 안 실린다")
+        clear()
+
+    def test_c5_writer_sweeps_week_old_orphans(self):
+        # kill -9 로 죽은 실행의 잔재 — atexit 이 못 돈다. 쓰기 쪽 안전망과
+        # 워처 sweep(bin/s9, heartbeat 와 같은 루프) 두 겹이 거둔다.
+        os.makedirs(self.jdir, exist_ok=True)
+        orphan = os.path.join(self.jdir, "tests-424242.json")
+        with open(orphan, "w") as f:
+            f.write("{}")
+        t = time.time() - 8 * 86400
+        os.utime(orphan, (t, t))
+        jf = _jobfile()
+        bump, clear = jf.start(10, root=self.root)
+        self.assertFalse(os.path.exists(orphan),
+                         "7일 넘은 고아 잡 파일이 안 거둬졌다")
+        clear()
+
+    def test_c5b_watcher_sweep_covers_jobs_dir(self):
+        # 문서가 약속한 sweep 이 실재하는가 — 코드 계약 검사 (재검증이 찾은
+        # "주장은 있는데 코드가 없다" 재발 방지).
+        src = open(S9, encoding="utf-8").read()
+        i = src.index("def rework_watch_tick(")
+        j = src.index("\ndef ", i + 10)
+        self.assertIn('"jobs"', src[i:j],
+                      "워처 틱의 7일 sweep 이 state/jobs 를 안 돈다")
 
     def test_j1b_nested_run_writes_nothing(self):
         os.environ["S9_TESTS_NESTED"] = "1"

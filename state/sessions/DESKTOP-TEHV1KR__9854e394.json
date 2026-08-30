@@ -8,9 +8,14 @@
  "entry": "code",
  "ended": "",
  "capture_paused": true,
- "active_reqs": [],
+ "active_reqs": [
+  "REQ-20260830-022-62x6",
+  "REQ-20260830-027-62x6"
+ ],
  "claim_at": {
-  "REQ-20260830-012-62x6": "2026-08-30T16:02:05+09:00"
+  "REQ-20260830-022-62x6": "2026-08-30T16:09:18+09:00",
+  "REQ-20260830-027-62x6": "2026-08-30T16:16:00+09:00",
+  "REQ-20260830-028-62x6": "2026-08-30T16:19:33+09:00"
  },
  "transcript_path": "/home/sjpark1/.claude/projects/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f.jsonl",
  "last_req": "REQ-20260830-013-62x6",
@@ -31,7 +36,10 @@
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/ad9e988eb8557dc91.output",
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/ab8276a5a791871fd.output",
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/ad60150175328a8a7.output",
-  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a0a78bc0d73634f30.output"
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a0a78bc0d73634f30.output",
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a3e43de22d47afbaf.output",
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a99aa0b92b171904a.output",
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a5f4ebbbb29136177.output"
  ],
  "agent_req": {
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/ad1fab5cf2eeb21a5.output": "REQ-20260830-017-62x6",
@@ -48,7 +56,10 @@
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/ad9e988eb8557dc91.output": "REQ-20260830-022-62x6",
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/ab8276a5a791871fd.output": "REQ-20260830-021-62x6",
   "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/ad60150175328a8a7.output": "REQ-20260830-021-62x6",
-  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a0a78bc0d73634f30.output": "REQ-20260830-021-62x6"
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a0a78bc0d73634f30.output": "REQ-20260830-021-62x6",
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a3e43de22d47afbaf.output": "REQ-20260830-022-62x6",
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a99aa0b92b171904a.output": "REQ-20260830-022-62x6",
+  "/tmp/claude-1000/-home-sjpark1-section9/9854e394-1479-4180-9021-a3ed4bdae40f/tasks/a5f4ebbbb29136177.output": "REQ-20260830-027-62x6"
  },
  "pending_qst": ""
 }

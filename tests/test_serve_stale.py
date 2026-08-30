@@ -105,7 +105,7 @@ class ServeStale(unittest.TestCase):
         src = open(S9, encoding="utf-8").read()
         i = src.index("SERVE_CODE_STAMP = running_code_stamp()")
         seg = src[i:i + 2200]
-        bind = seg.index("ThreadingHTTPServer((args.host")
+        bind = seg.index("QuietDisconnectServer((args.host")
         stamp = seg.index("serve-code.json")
         self.assertLess(bind, stamp,
                         "포트를 잡기 전에 지문을 남긴다")
