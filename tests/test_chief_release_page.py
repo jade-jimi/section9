@@ -31,17 +31,21 @@ class ChiefReleasePage(unittest.TestCase):
         self.assertIn("provider PR records", self.release)
 
     def test_staging_is_conditional_and_actionable(self):
-        self.assertIn('row.staging && typeof row.staging === "object"', self.release)
-        self.assertIn("stagingPassed", self.release)
-        self.assertIn('"verify_staging"', self.release)
+        gate = self.source[self.source.index("function chiefReleaseGate"):
+                           self.source.index("function chiefReleaseHTML")]
+        self.assertIn('row && row.staging && typeof row.staging === "object"', gate)
+        self.assertIn("stagingPassed", gate)
+        self.assertIn('"verify_staging"', gate)
         self.assertIn("staging pending", self.release)
         self.assertIn("optional staging proves the exact dev source", self.release)
 
     def test_whole_project_actions_keep_production_human(self):
-        self.assertIn('"merge_dev","Verify + integrate all to dev"', self.release)
-        self.assertIn('"prepare_prod","Create dev → production PR"', self.release)
-        self.assertIn('"verify","Recheck release blockers"', self.release)
-        self.assertIn('"verify","Refresh release evidence"', self.release)
+        gate = self.source[self.source.index("function chiefReleaseGate"):
+                           self.source.index("function chiefReleaseHTML")]
+        self.assertIn('"merge_dev","Verify + integrate all to dev"', gate)
+        self.assertIn('"prepare_prod","Create dev → production PR"', gate)
+        self.assertIn('"verify","Recheck release blockers"', gate)
+        self.assertIn('"verify","Refresh release evidence"', gate)
         self.assertIn("Review dev → production PR", self.release)
         self.assertIn("page visits never start an agent or merge production", self.release)
         self.assertIn("Raun Nohavitza + Jayson Son", self.release)
@@ -52,6 +56,19 @@ class ChiefReleasePage(unittest.TestCase):
     def test_release_page_has_explicit_source_refresh(self):
         self.assertIn("Check Jira + PR sources", self.release)
         self.assertIn("data-chief-sync", self.release)
+
+    def test_compact_preview_and_full_page_share_one_gate_function(self):
+        compact_start = self.source.index("function chiefReleaseGate")
+        page_start = self.source.index("function chiefReleasePageRank")
+        compact = self.source[compact_start:page_start]
+        self.assertIn("const gate = chiefReleaseGate(row)", compact)
+        self.assertIn("const gate = chiefReleaseGate(row)", self.release)
+        gate = self.source[self.source.index("function chiefReleaseGate"):
+                           self.source.index("function chiefReleaseHTML")]
+        choices = gate[gate.index("const runChoices"):]
+        self.assertLess(choices.index("featureOpen.length"), choices.index("acceptanceOpen"))
+        self.assertIn("data-chief-release-engine", compact)
+        self.assertIn("Open Release", compact)
 
 
 if __name__ == "__main__":

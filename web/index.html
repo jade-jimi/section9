@@ -5078,29 +5078,53 @@ function chiefLaneHTML(key, title, rows){
 }
 const chiefReleaseOpenCount = row => row.open_pr_count != null ? row.open_pr_count :
   chiefArr(row.prs).filter(p => chiefNorm(p.state) !== "merged").length;
+function chiefReleaseGate(row){
+  const state = chiefNorm(row && row.status || "unknown");
+  const featureOpen = chiefArr(row && row.prs).filter(pr => chiefNorm(pr.state) !== "merged");
+  const staging = row && row.staging && typeof row.staging === "object" ? row.staging : null;
+  const stagingPassed = staging && ["passed","verified"].includes(chiefNorm(staging.status));
+  const promotion = row && row.promotion || {};
+  const promotionOpen = chiefNorm(promotion.remote_state) === "open";
+  const promotionMerged = chiefNorm(promotion.remote_state) === "merged";
+  const acceptance = row && row.runtime_acceptance || {};
+  const acceptanceOpen = acceptance && Object.keys(acceptance).length && chiefNorm(acceptance.status) !== "passed";
+  const blastStatus = chiefNorm((row && row.pipeline_blast || {}).status);
+  const blastPassed = ["passed","verified","passed_for_deferred_review"].includes(blastStatus);
+  const runChoices = featureOpen.length ? ["merge_dev","Verify + integrate all to dev"] :
+    staging && !stagingPassed ? ["verify_staging",`Verify ${staging.label || "staging"}`] :
+    acceptanceOpen ? ["verify_live","Check live acceptance"] :
+    state === "blocked" ? ["verify","Recheck release blockers"] :
+    promotionOpen && !blastPassed ? ["verify","Refresh release evidence"] :
+    !promotionOpen && !promotionMerged && state === "ready_for_human" ? ["prepare_prod","Create dev → production PR"] : null;
+  return {state,featureOpen,staging,stagingPassed,promotion,promotionOpen,promotionMerged,
+          acceptance,acceptanceOpen,blastPassed,runChoices};
+}
 function chiefReleaseHTML(row){
-  const state = chiefNorm(row.status || "unknown");
-  const open = chiefReleaseOpenCount(row);
+  const gate = chiefReleaseGate(row), {state,featureOpen,staging,stagingPassed,promotion,
+    promotionOpen,acceptanceOpen,runChoices} = gate;
+  const open = chiefReleaseOpenCount(row), projectId = row.canonical_project || row.project_id || "";
+  const registeredProject = chiefArr(chiefData && chiefData.projects).find(project =>
+    chiefNorm(project.id) === chiefNorm(projectId));
+  const projectEngine = chiefEngineValue(registeredProject && registeredProject.engine || "codex");
   const nextActionText = typeof row.next_action === "string" ? row.next_action :
     row.next_action && (row.next_action.summary || row.next_action.title || row.next_action.next);
-  const summary = row.display_summary || nextActionText ||
+  const gateSummary = featureOpen.length ? `${featureOpen.length} feature PR${featureOpen.length === 1 ? "" : "s"} awaiting dev integration: ${featureOpen.map(pr => `#${pr.id}`).join(", ")}` :
+    staging && !stagingPassed ? `${staging.label || "Staging"} is pending at the current dev source.` :
+    acceptanceOpen ? gate.acceptance.title || gate.acceptance.summary : promotionOpen ? `Production-review PR #${promotion.id} is ready for Jade.` : "";
+  const summary = gateSummary || row.display_summary || nextActionText ||
     `${row.target || "dev"} → ${row.promotion_target || "production"} · ${open} open PR${open === 1 ? "" : "s"}`;
   const lastChanged = row.last_changed_at || row.updated || "";
   const lastChecked = row.last_checked_at || row.source_refreshed_at || "";
   const report = row.report_file ? chiefGet(`report?f=${encodeURIComponent(row.report_file)}`) : "";
-  const acceptance = row.runtime_acceptance;
-  let action = "", label = "", href = "";
-  if (acceptance && chiefNorm(acceptance.status) !== "passed") { action = "verify_live"; label = "Check live"; }
-  else if (["building","blocked"].includes(state) && open > 0) { action = "merge_dev"; label = "Check + merge feature PRs to dev"; }
-  else if (state === "ready_for_human" && row.promotion && chiefNorm(row.promotion.remote_state) === "open") { href = row.promotion.url || ""; label = "Review production PR"; }
-  else if (state === "ready_for_human") { action = "prepare_prod"; label = "Prepare production PR"; }
+  const action = runChoices && runChoices[0], label = runChoices && runChoices[1];
   const runKey = action ? `release:${row.id}:${action}` : "", running = runKey && chiefRunActive(chiefRuns[runKey]);
   const run = (runKey ? chiefRuns[runKey] : null) || row.autopilot || null;
   const sessionReport = run && run.run_id && !chiefRunActive(run) ? chiefGet(`session/report?id=${encodeURIComponent(run.run_id)}`) : "";
+  const pathText = chiefArr(row.path).map(step => `${step.label || step.id}: ${String(step.status || "unknown").replaceAll("_"," ")}`).join(" → ");
   return `<article class="chief-release">
     <div><h3>${esc(row.project || row.repo || "Unfiled release")}</h3>
-      <p>${esc(chiefShort(summary,220))}<span class="chief-release-timing">Changed ${esc(chiefMoment(lastChanged))} · checked ${esc(chiefMoment(lastChecked))}</span></p></div>
-    <div class="chief-release-state ${esc(state)}">${esc(chiefStatusText(row.status || "Unknown"))}${report ? `<br><a href="${esc(report)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · release report`)}">Release report</a>` : ""}${sessionReport ? `<br><a href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · agent result`)}">Agent report</a>` : ""}${href ? `<br><a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>` : action ? `<br><button class="chief-text-action" data-chief-release="${esc(row.id)}" data-chief-release-action="${esc(action)}" data-chief-title="${esc(`${row.project || row.repo} · ${label}`)}" aria-busy="${running ? "true" : "false"}" ${running ? "disabled" : ""}>${running ? "Working…" : esc(label)}</button>` : ""}</div>
+      <p>${esc(chiefShort(summary,220))}${pathText ? `<span class="chief-release-timing">${esc(pathText)}</span>` : ""}<span class="chief-release-timing">Changed ${esc(chiefMoment(lastChanged))} · checked ${esc(chiefMoment(lastChecked))}</span></p></div>
+    <div class="chief-release-state ${esc(state)}">${esc(chiefStatusText(row.status || "Unknown"))}${report ? `<br><a href="${esc(report)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · release report`)}">Release report</a>` : ""}${sessionReport ? `<br><a href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · agent result`)}">Agent report</a>` : ""}${action ? `<br><button class="chief-text-action" data-chief-release="${esc(row.id)}" data-chief-release-action="${esc(action)}" data-chief-release-engine="${esc(projectEngine)}" data-chief-title="${esc(`${row.project || row.repo} · ${label}`)}" aria-busy="${running ? "true" : "false"}" ${running ? "disabled" : ""}>${running ? "Working…" : esc(label)}</button>` : promotionOpen && promotion.url ? `<br><a href="${esc(promotion.url)}" target="_blank" rel="noopener">${staging && !stagingPassed ? "Production PR · staging pending" : "Review production PR"}</a>` : ""}<br><button class="chief-text-action" data-chief-nav="release">Open Release</button></div>
   </article>`;
 }
 function chiefReportHTML(row){
@@ -5176,29 +5200,16 @@ function chiefReleasePageRank(row){
   return ({blocked:0,building:1,in_progress:1,ready_for_human:2,review:2,clear:3,released:4,done:4})[chiefNorm(row && row.status)] ?? 3;
 }
 function chiefReleaseProjectCard(row){
-  const state = chiefNorm(row.status || "unknown");
+  const gate = chiefReleaseGate(row), {state,featureOpen,staging,stagingPassed,promotion,
+    promotionOpen,promotionMerged,acceptanceOpen,blastPassed,runChoices} = gate;
   const projectId = row.canonical_project || row.project_id || "";
   const registeredProject = chiefArr(chiefData && chiefData.projects).find(project =>
     chiefNorm(project.id) === chiefNorm(projectId));
-  const projectEngine = chiefEngineValue(registeredProject && registeredProject.engine || "t3");
+  const projectEngine = chiefEngineValue(registeredProject && registeredProject.engine || "codex");
   const engineBusy = chiefProjectEngineBusy === projectId;
-  const featureOpen = chiefArr(row.prs).filter(pr => chiefNorm(pr.state) !== "merged");
   const merged = chiefArr(row.prs).filter(pr => chiefNorm(pr.state) === "merged");
-  const staging = row.staging && typeof row.staging === "object" ? row.staging : null;
-  const stagingPassed = staging && ["passed","verified"].includes(chiefNorm(staging.status));
-  const promotion = row.promotion || {}, promotionOpen = chiefNorm(promotion.remote_state) === "open";
-  const promotionMerged = chiefNorm(promotion.remote_state) === "merged";
-  const acceptance = row.runtime_acceptance || {}, acceptanceOpen = acceptance && Object.keys(acceptance).length && chiefNorm(acceptance.status) !== "passed";
-  const blastStatus = chiefNorm((row.pipeline_blast || {}).status);
-  const blastPassed = ["passed","verified","passed_for_deferred_review"].includes(blastStatus);
   const work = chiefArr(row.included_work);
   const steps = chiefArr(row.path);
-  const runChoices = featureOpen.length ? ["merge_dev","Verify + integrate all to dev"] :
-    staging && !stagingPassed ? ["verify_staging",`Verify ${staging.label || "staging"}`] :
-    acceptanceOpen ? ["verify_live","Check live acceptance"] :
-    state === "blocked" ? ["verify","Recheck release blockers"] :
-    promotionOpen && !blastPassed ? ["verify","Refresh release evidence"] :
-    !promotionOpen && !promotionMerged && state === "ready_for_human" ? ["prepare_prod","Create dev → production PR"] : null;
   const runKey = runChoices ? `release:${row.id}:${runChoices[0]}` : "";
   const run = runKey ? chiefRuns[runKey] : null, running = chiefRunActive(run);
   const report = row.report_file ? chiefGet(`report?f=${encodeURIComponent(row.report_file)}`) : "";
