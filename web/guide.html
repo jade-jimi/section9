@@ -65,11 +65,12 @@ b{font-weight:600}
 /* 상태 점/뱃지 (대시보드와 동일 문법) */
 .cdot{display:inline-block;width:7px;height:7px;margin-right:6px;vertical-align:1px}
 .st{font-family:var(--mono);font-size:11px;letter-spacing:.04em}
-.livedot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:0}
-.ld-on{background:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.18)}
-.ld-spawn{background:#d97706;box-shadow:0 0 0 3px rgba(217,119,6,.18)}
-.ld-sess{background:transparent;border:1.5px solid #16a34a}
-.ld-off{background:var(--faint)}
+/* 점은 **베낀 그림이 아니라 화면이 쓰는 그 규칙**이다 (DOC-20260831-005).
+   여기 `.ld-*` 넉 줄이 색까지 손으로 베껴 두었던 탓에 안내서와 화면이 서로
+   다른 것을 가르쳤다 — 화면이 앰버를 버리는 날에도 이 표는 앰버를 계속
+   가르쳤을 것이고, 실제로 이 표는 카드가 얼굴 여덟을 가진 뒤에도 넷에서
+   멈춰 있었다. `css/actions.css` 를 그대로 불러 같은 class 로 그린다:
+   화면이 얼굴을 고치면 이 표가 따라온다. (검증 자: web/verify-livedot.html) */
 .tddb{font-family:var(--mono);font-size:10px;color:var(--c-inprogress);
   border:1px solid currentColor;padding:0 4px}
 .tddb.full{color:var(--c-done)}
@@ -124,6 +125,10 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
   font-family:var(--mono);font-size:10.5px;color:var(--faint);
   text-transform:uppercase;letter-spacing:.1em;line-height:2}
 </style>
+<!-- 점의 얼굴은 여기 한 곳에서만 정해진다 — 위 주석 참조. 이 파일의 토큰
+     (:root)이 actions.css 가 참조하는 --muted·--c-inprogress·--c-blocked 을
+     이미 다 갖고 있어 그대로 성립한다. -->
+<link rel="stylesheet" href="css/actions.css">
 </head>
 <body>
 
@@ -283,7 +288,7 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
 
 <ol>
   <li><b>프롬프트 → 카드.</b> 터미널에서 일을 시키면 그 즉시 REQ 카드가 <span class="st" style="color:var(--c-open)">open</span> 상태로 만들어집니다. 여러분이 따로 등록할 것은 없습니다.</li>
-  <li><b>착수.</b> AI가 작업을 시작하면 <span class="st" style="color:var(--c-inprogress)">in-progress</span>로 바뀝니다. 카드의 <span class="livedot ld-on"></span> 녹색 점멸은 "지금 실제로 작업이 돌고 있음"이라는 실시간 신호입니다.</li>
+  <li><b>착수.</b> AI가 작업을 시작하면 <span class="st" style="color:var(--c-inprogress)">in-progress</span>로 바뀝니다. 카드의 <span class="livedot on"></span> 녹색 점멸은 "지금 실제로 작업이 돌고 있음"이라는 실시간 신호입니다.</li>
   <li><b>사람 판정.</b> 방향 확인이 필요한 작업은 <span class="st" style="color:var(--c-review)">review</span>로 올라옵니다. 카드의 <b>✓ 승인</b>을 누르면 done, <b>↺ 반려</b>를 누르고 사유를 적으면 다시 작업으로 돌아갑니다.</li>
   <li><b>무인 재작업.</b> 반려하면 약 30초 내에 무인 작업자가 기동해, 여러분이 적은 반려 사유를 반영해 다시 review로 올립니다. 자리를 지키고 있을 필요가 없습니다.</li>
 </ol>
@@ -291,12 +296,16 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
 <h3>카드 위의 실시간 신호 읽기</h3>
 <p>in-progress 카드 왼쪽의 점(dot)은 "문서상 진행 중"이 아니라 <b>지금 이 순간의 실제 동작</b>을 나타냅니다.</p>
 <div class="tblwrap"><table>
-  <tr><th style="width:110px">점</th><th style="width:170px">의미</th><th>해석</th></tr>
-  <tr><td><span class="livedot ld-on"></span> 녹색 점멸</td><td>실작업 중</td><td>이 요청을 잡은 세션이 2분 내에 실제로 움직였습니다. 가장 확실한 신호.</td></tr>
-  <tr><td><span class="livedot ld-spawn"></span> 앰버 점멸</td><td>무인 작업자 기동</td><td>반려 직후 무인 재작업 프로세스가 막 떠서 작업을 넘겨받는 중입니다.</td></tr>
-  <tr><td><span class="livedot ld-sess"></span> 초록 링</td><td>세션만 활동</td><td>담당 세션은 살아 있지만 이 요청을 직접 작업 중이라는 증거는 없습니다(다른 일을 하는 중일 수 있음).</td></tr>
-  <tr><td><span class="livedot ld-off"></span> 회색</td><td>조용함</td><td>진행 중으로 기록돼 있지만 신호가 없습니다. 방치된 것일 수 있으니 눈여겨보세요.</td></tr>
+  <tr><th style="width:120px">점</th><th style="width:180px">의미</th><th>해석</th></tr>
+  <tr><td><span class="livedot on"></span> 녹색 점멸</td><td>일하는 중 · 기록도 나감</td><td>이 요청을 맡은 것이 2분 내에 실제로 움직였고, 문서에도 적히고 있습니다. 가장 확실한 신호.</td></tr>
+  <tr><td><span class="livedot busy"></span> 초록 링 + 심</td><td>일하는 중 · 기록은 아직</td><td>붙어서 돌고는 있는데 문서에 아직 적힌 것이 없습니다. 숨이 한 박자 느린 것이 그 뜻입니다 — 기다리면 위 녹색으로 바뀝니다.</td></tr>
+  <tr><td><span class="livedot sess"></span> 초록 링</td><td>살아는 있으나 아직 안 맡음</td><td>두 가지가 이 얼굴을 씁니다 — 이 요청을 만든 창이 다른 일을 하는 중이거나, 무인 작업이 막 떠서 아직 문서를 집기 전이거나. 둘 다 여러분이 할 일은 같습니다: 잠깐 기다립니다. 어느 쪽인지는 점에 손을 얹으면 나옵니다.</td></tr>
+  <tr><td><span class="livedot dot-stopped mild"></span> 속 빈 사각</td><td>멈춤</td><td>붙어 있는 것도 없고 문서도 한동안 그대로입니다. 카드의 <b>▶ 이어가기</b>로 멈춘 자리에서 이어받게 할 수 있습니다.</td></tr>
+  <tr><td><span class="livedot dot-stopped"></span> 채운 사각</td><td>맡았던 것이 멎음</td><td>이 요청을 맡았던 작업이 도중에 죽었습니다. 까닭이 남아 있으면 점에 손을 얹었을 때 함께 보입니다.</td></tr>
+  <tr><td><span class="livedot dot-held"></span> 줄 그은 사각</td><td>사람이 중단해 둠</td><td>사람이 손으로 중단해 둔 요청입니다 — 사고가 아니라 뜻입니다. <b>▶ 이어가기</b>를 누르기 전에는 저절로 이어지지 않습니다.</td></tr>
+  <tr><td><span class="livedot off"></span> 작은 회색 링</td><td>모름</td><td>진행 중으로 기록돼 있지만 신호가 없습니다. 방치된 것일 수 있으니 눈여겨보세요.</td></tr>
 </table></div>
+<p class="dim">모양이 「무엇이 붙어 있나」, 채움이 「기록이 나가고 있나」를 말합니다 — 색은 둘째 신호라, 색을 못 보는 눈에도 일곱이 그대로 갈립니다.</p>
 
 <h3>TDD 배지와 blocked 표시</h3>
 <ul>
@@ -441,8 +450,8 @@ WSL 사용자는 Windows 터미널에서 WSL 셸에 들어온 뒤 실행합니�
 카드를 만듭니다. 명령형으로("~해줘", "~구현해") 말하면 확실하게 카드가 됩니다.</div></div>
 
 <div class="faq"><div class="q">in-progress인데 녹색 점멸이 안 떠요.</div>
-<div class="a">점은 문서 상태가 아니라 실시간 동작 신호입니다. 초록 링이면 세션은 살아 있으나 다른 일을 하는 중,
-앰버 점멸이면 무인 작업자가 막 기동한 것, 회색이면 최근 2분간 아무 신호가 없는 것입니다.
+<div class="a">점은 문서 상태가 아니라 실시간 동작 신호입니다. 초록 링이면 아직 이 요청을 맡기 전(다른 일을 하는 창이거나, 막 뜬 무인 작업),
+작은 회색 링이면 최근 2분간 아무 신호가 없는 것입니다.
 회색이 오래 가면 그 세션에 말을 걸거나 새 세션에서 이어받으세요 — 자동으로 이어집니다.</div></div>
 
 <div class="faq"><div class="q">blocked는 언제 풀리나요?</div>

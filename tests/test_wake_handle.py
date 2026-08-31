@@ -621,5 +621,72 @@ class TheMarkSharesOneStage(unittest.TestCase):
         self.assertTrue(seen, ".gly 의 상자를 정하는 규칙이 없다")
 
 
+class NoFaceSplitsOnColourAlone(unittest.TestCase):
+    """색만으로 갈리는 얼굴은 없다 — 앰버 폐지의 회귀 (DOC-20260831-005).
+
+    「직접 작업 중」과 「자동 작업 기동 중」은 지름·채움·링·맥박이 **완전히
+    같은 원반**이었고 색만 달랐다 — 여덟 중 색만으로 갈리는 유일한 쌍이었고,
+    그 검증 페이지가 스스로 머리에 "색은 **둘째** 신호"라 적어 둔 채였다
+    (s9-design 7절 직접 위반). 게다가 앰버가 실제로 가르던 것은 「자동 vs
+    사람」이 아니라 「아직 안 집었다 vs 집었다」였다 — 같은 프로세스가 제
+    생애 동안 두 색을 다 지났다.
+
+    그래서 그 갈래는 초록 축의 ○(살아는 있으나 아직 이 요청을 안 맡음)으로
+    흡수했다. 여기 못박는 것은 넷이다: 앰버가 없다 · spawn 이 제 규칙을 갖지
+    않는다(sess 와 한 줄) · 맥박은 두 얼굴뿐이다 · 그러고도 spawn 과 on 은
+    색을 빼고도 갈린다.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        with open(INDEX, encoding="utf-8") as f:
+            cls.src = f.read()
+        cls.css = _css(cls.src)
+        cls.dot = [(s, d) for s, d in _rules(cls.css) if ".livedot" in s]
+
+    def test_the_amber_ink_is_gone(self):
+        """토큰도 리터럴도 남기지 않는다 — 남으면 다음 얼굴이 그것을 집는다."""
+        self.assertNotIn("--dot-auto", self.css,
+                         "앰버 토큰이 살아 있다 — 폐지된 축이다")
+        for sel, dec in self.dot:
+            self.assertNotIn("d97706", dec.lower(),
+                             "%s 에 앰버가 하드코딩돼 있다" % sel)
+
+    def test_the_new_face_has_no_rule_of_its_own(self):
+        """spawn 은 sess 와 **한 규칙**을 쓴다.
+
+        갈래마다 규칙을 따로 두면 다음 사람이 한쪽에만 색을 얹고, 색만으로
+        갈리는 쌍이 그렇게 다시 생긴다. 갈래의 차이는 툴팁이 진다."""
+        own = [s for s, _ in self.dot
+               if ".spawn" in s and "::after" not in s and ".sess" not in s]
+        self.assertEqual([], own,
+                         "spawn 이 제 규칙을 되찾았다: %s" % own)
+        shared = [d for s, d in self.dot if ".sess" in s and ".spawn" in s]
+        self.assertEqual(1, len(shared),
+                         "sess 와 spawn 이 한 규칙에 서지 않는다")
+        self.assertIn("--dot-live", shared[0],
+                      "기동 중 얼굴이 초록 축(--dot-live)을 안 쓴다")
+
+    def test_only_two_faces_breathe(self):
+        """맥박은 「지금 움직였다」는 말이다 — 아직 안 움직인 얼굴은 안 쉰다."""
+        beating = sorted(s for s, d in self.dot
+                         if "::after" in s and "animation:livering" in d)
+        self.assertEqual([".livedot.on::after,.livedot.busy::after"], beating,
+                         "맥박을 쓰는 얼굴이 on·busy 둘이 아니다: %s" % beating)
+
+    def test_the_two_greens_still_differ_without_colour(self):
+        """색을 빼도 「일하는 중 ●」과 「막 떴음 ○」이 갈린다 — 채움이 다르다."""
+        def dec(pred):
+            hit = [d for s, d in self.dot if pred(s)]
+            self.assertTrue(hit, "규칙을 못 찾았다")
+            return hit[0]
+        on = dec(lambda s: s.endswith(".livedot.on"))
+        ring = dec(lambda s: ".sess" in s and ".spawn" in s)
+        self.assertIn("background:currentColor", on)
+        self.assertIn("background:transparent", ring)
+        self.assertIn("border:1.5px", ring,
+                      "속 빈 얼굴의 테가 없으면 색을 뺐을 때 사라진다")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

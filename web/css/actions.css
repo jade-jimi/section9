@@ -24,9 +24,21 @@
      ▪  채운 사각    맡았던 작업이 죽었다
      ⏸  두 막대      사람이 손으로 세워 두었다
 
-   색은 이 어휘의 **둘째** 신호다(잉크만, 면 금지): 초록=사람·손이 도는 중,
-   앰버=자동 작업/주의, 빨강=죽음, 회색=중립. 색을 못 보는 눈에도 모양 일곱이
-   그대로 남는다.
+   색은 이 어휘의 **둘째** 신호다(잉크만, 면 금지): 초록=도는 중, 빨강=죽음,
+   회색=중립. 색을 못 보는 눈에도 모양이 그대로 남는다.
+
+   **앰버는 폐지했다** (DOC-20260831-005 designer 판정). 종전 「자동 작업 기동
+   중」은 지름·채움·링·맥박이 「직접 작업 중」과 **완전히 같은 원반**이었고 색만
+   달랐다 — 여덟 얼굴에서 색만으로 갈리는 유일한 쌍이라, 바로 이 문단이 적어 둔
+   "색은 둘째 신호"를 그 얼굴만 못 지키고 있었다(7절 직접 위반). 게다가 앰버가
+   실제로 가르던 것은 「자동 vs 사람」이 아니라 **「아직 안 집었다 vs 집었다」**
+   였다: 같은 프로세스가 뜬 직후 몇 초는 앰버로, 문서를 집는 순간 초록 ● 로
+   바뀐다 — 색이 약속한 적 없는 것을 툴팁만 주체 이름으로 부르고 있었다.
+   그래서 그 갈래는 초록 축의 ○(살아는 있으나 이 요청을 아직 맡지 않음)으로
+   흡수한다. 「막 떴다」와 「다른 일을 하는 중」은 **사용자가 할 일이 같다 —
+   기다린다.** 갈래는 툴팁이 가른다(◎ 가 서버 문장을 그대로 쓰는 그 수법).
+   눌림 확인(내 손이 닿아 뭔가 떴다)은 색이 아니라 그 행위를 받은 컨트롤이
+   진다 — 단추의 「이어가는 중…」 얼굴이다(3절 「부품의 얼굴도 전부다」).
 
    크기를 6px→7px 로 올렸다: ◎ 는 링 1.5 + 틈 1 + 심 2 를 세워야 성립하는데
    6px 안에서는 셋이 뭉갠다(2배 캡처 실측). 1px 은 모든 얼굴의 대비도 함께
@@ -49,8 +61,8 @@
    (0.2초 간격 14컷). 눈은 중심을 재지 않고 **보이는 덩어리의 가장자리**를 재므로,
    같은 중심에 선 두 마크가 자리가 다른 것으로 읽힌다. 주기까지 서로 다르니
    (1.6s · 2.6s) 두 점이 같은 국면에 놓이는 순간은 거의 없다.
-   덤으로 그 그림자는 초록이 **하드코딩**돼 있어, 앰버여야 할 「자동 작업 기동」
-   점이 초록 후광을 쓰고 있었다.
+   덤으로 그 그림자는 초록이 **하드코딩**돼 있어, 그때 앰버였던 「기동 중」 점이
+   초록 후광을 쓰고 있었다(그 앰버는 이제 없다 — 위 문단).
 
    그래서 좌표계를 셋으로 가른다. 얼굴이 만질 수 있는 것은 셋째뿐이다:
 
@@ -66,7 +78,7 @@
    ③의 잉크를 `color` 로 옮긴 것도 같은 이유다 — 맥박이 `currentColor` 를 쓰면
    색을 얼굴마다 다시 적지 않아도 되고, 앰버 점에 초록 후광이 도는 일이 구조적으로
    불가능해진다. 이 파일이 벨트 칠에서 이미 얻은 교훈("잉크는 한 곳에")이다. */
-.livedot{--dot-live:#16a34a;--dot-auto:#d97706;--dot-size:7px;--beat:0s;
+.livedot{--dot-live:#16a34a;--dot-size:7px;--beat:0s;
   position:relative;box-sizing:border-box;
   display:inline-block;width:var(--dot-size);height:var(--dot-size);
   border-radius:50%;margin-right:6px;
@@ -94,7 +106,7 @@
   transform:translate(-50%,-50%);
   width:var(--dot-size);height:var(--dot-size);border-radius:50%;
   border:1px solid currentColor;opacity:0;pointer-events:none}
-.livedot.on::after,.livedot.busy::after,.livedot.spawn::after{
+.livedot.on::after,.livedot.busy::after{
   animation:livering var(--beat) ease-out infinite}
 @keyframes livering{
   0%{width:var(--dot-size);height:var(--dot-size);opacity:.5}
@@ -127,13 +139,18 @@
    이라 줄의 정렬도 건드리지 않는다. */
 .livedot.off{color:var(--muted);background:transparent;
   border:1.5px solid currentColor;transform:scale(.78)}
-/* 간접 신호: 세션은 활동 중이나 이 REQ의 직접 증거 없음 — 비점멸 hollow (REQ-20260823-080) */
-.livedot.sess{color:var(--dot-live);background:transparent;
+/* 살아는 있으나 이 요청을 아직 맡지 않았다 — ○ 속 빈 초록 링, 맥박 없음.
+   두 갈래가 **한 얼굴**을 쓴다 (DOC-20260831-005):
+     · sess  — 이 요청을 만든 창이 살아 있으나 다른 일을 하는 중
+               (REQ-20260823-080)
+     · spawn — 무인 작업이 막 떴고 아직 문서를 못 집었다 (REQ-20260824-008,
+               종전 앰버 점멸)
+   둘을 한 규칙에 두는 것이 요점이다: 갈래마다 규칙을 따로 쓰면 다음 사람이
+   한쪽에만 색을 얹고, 색만으로 갈리는 쌍이 그렇게 다시 생긴다. 갈래의 차이는
+   툴팁이 진다(카드의 `spawnTell`). 맥박이 없는 것도 뜻이다 — 맥박은 "지금
+   움직였다"는 말인데 이 둘은 아직 이 요청에서 움직인 적이 없다. */
+.livedot.sess,.livedot.spawn{color:var(--dot-live);background:transparent;
   border:1.5px solid currentColor}
-/* 무인 작업자 기동 중(스폰 후 클레임 전) — 앰버 점멸 (REQ-20260824-008).
-   맥박이 `currentColor` 라 이제 **앰버 점에 앰버 링**이 돈다 — 종전 `livepulse`
-   는 초록을 하드코딩해 이 점만 색이 어긋나 있었다 (REQ-20260831-012 에서 잡음). */
-.livedot.spawn{color:var(--dot-auto);background:currentColor;--beat:1.6s}
 /* 정지등 (REQ-20260825-089): 죽은 워커·멈춘 에이전트. 점멸하지 않는 것이
    핵심이다 — 점멸은 "지금 움직인다"는 뜻이고, 이건 그 반대다. 실패는 사각(정지
    신호의 관습), 정지는 같은 사각의 속 빈 형태로 한 단계 낮춘다. */
@@ -168,7 +185,7 @@
    나서도 얼굴 여덟은 그대로 갈린다: 구분을 지고 있는 것이 움직임이 아니라
    모양이기 때문이다. 링은 `opacity:0` 이 제 얼굴이라 애니메이션만 끄면 사라진다. */
 @media (prefers-reduced-motion: reduce){
-  .livedot.on::after,.livedot.busy::after,.livedot.spawn::after{animation:none}
+  .livedot.on::after,.livedot.busy::after{animation:none}
 }
 .card:focus-visible{outline:2px solid var(--text);outline-offset:-2px}
 .col .colempty{padding:14px;color:var(--faint);font-size:11.5px;line-height:1.5}

@@ -1,13 +1,19 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><title>livedot 얼굴 대조표</title>
-<!-- 점의 여덟 얼굴을 한 화면에 세운다 (REQ-20260831-005).
+<!-- 점의 얼굴을 한 화면에 세운다 (REQ-20260831-005 · DOC-20260831-005).
+
+     갈래는 여덟, **얼굴은 일곱**이다 — 「막 떴음」이 앰버를 잃고 「세션만
+     살아 있음」과 같은 초록 링으로 흡수됐다(색만으로 갈리던 유일한 쌍을
+     지웠다). 그래서 이 표는 갈래마다 한 줄로 서고, 그 둘이 **겹쳐 보이는
+     것**이 통과 조건이다.
 
      실데이터로는 이 여덟이 한 화면에 모이는 순간이 없다 — 하나가 서려면
      그 상태의 세션·워커·중단이 실제로 있어야 하고, 캡처를 찍으려는 그 순간에
      여덟이 다 있을 수는 없다. 그래서 **같은 CSS 를 그대로 불러** 마크만
      늘어놓는다: 여기서 보는 것은 화면이 쓰는 그 규칙이지 베낀 그림이 아니다.
      (카드 위에서 진짜로 서는지는 진단 파라미터로 따로 본다 —
-      ?turn=17 · ?hand=3&handquiet=34 · ?stall=45 · ?held=12 · ?hold=idle)
+      ?turn=17 · ?hand=3&handquiet=34 · ?stall=45 · ?held=12 · ?hold=idle ·
+      ?spawn=8[&spawnwhy=wake|rework])
 
      `?theme=paper|carbon|phosphor` — 점의 잉크 넷 중 셋이 토큰(--muted ·
      --c-inprogress · --c-blocked)이라 톤이 바뀌면 함께 움직인다. 톤은
@@ -30,7 +36,7 @@ p.sub{color:var(--muted);font-size:11.5px;margin:0 0 18px}
 .big .livedot{transform:scale(4);transform-origin:left center;margin-right:34px}
 .big .livedot.off{transform:scale(3.12)}
 .big .row{display:flex;align-items:center;height:38px}
-/* 좌표 자 (REQ-20260831-012 · -016) — 여덟 얼굴과 맥박 링이 **한 중심**에
+/* 좌표 자 (REQ-20260831-012 · -016) — 여덟 갈래와 맥박 링이 **한 중심**에
    서는지 눈으로 확인하는 자리. 칸마다 정확히 한가운데를 지나는 실선 두 줄을
    긋고 그 위에 점을 세운다: 마크도 링도 두 줄을 반씩 나눠 물어야 맞다.
    `zoom` 으로 키우는 이유는 배율이 레이아웃째 커져 자와 점이 **같은 배율**로
@@ -49,7 +55,7 @@ p.sub{color:var(--muted);font-size:11.5px;margin:0 0 18px}
 .zoomed .cell .cap{display:none}
 .zoomed{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
 </style></head><body>
-<h1>카드 점(livedot)의 여덟 얼굴</h1>
+<h1>카드 점(livedot)의 여덟 갈래 · 일곱 얼굴</h1>
 <p class="sub">모양이 「무엇이 붙어 있나」, 채움이 「기록이 나가고 있나」. 색은 둘째 신호다.</p>
 <div id="out"></div>
 <script>
@@ -57,7 +63,10 @@ const FACES = [
   ["on",              "일하는 중 · 기록도 나감", "채운 원 + 맥박"],
   ["busy",            "일하는 중 · 기록은 아직", "링 + 심"],
   ["sess",            "세션만 살아 있음",        "초록 링"],
-  ["spawn",           "자동 작업 기동 중",       "채운 원 + 맥박"],
+  /* 종전 「자동 작업 기동 중 · 앰버 채운 원」이었다 (DOC-20260831-005 로 폐지).
+     여기 남겨 두는 이유는 **같은 얼굴인지 눈으로 보기 위해서**다 — 두 갈래가
+     한 규칙을 쓰는지는 규칙을 읽어서가 아니라 두 마크가 겹쳐 보여야 안다. */
+  ["spawn",           "무인 작업이 막 떴음",      "초록 링 (위와 같은 얼굴)"],
   ["dot-stopped mild","멈춤",                   "속 빈 사각"],
   ["dot-stopped",     "맡았던 작업이 죽음",      "채운 사각"],
   ["dot-held",        "사람이 중단해 둠",        "줄 그은 사각"],
@@ -74,7 +83,7 @@ out.innerHTML =
   + `<div class="tone big"><h2>4배 — 모양이 실제로 갈리는지</h2>`
   + FACES.map(([c, n]) => `<div class="row"><span class="livedot ${c}"></span>`
       + `<span class="nm">${n}</span></div>`).join("") + `</div>`
-  + `<div class="tone"><h2>좌표 자 — 여덟 얼굴이 한 중심에 서는가</h2>`
+  + `<div class="tone"><h2>좌표 자 — 얼굴이 한 중심에 서는가</h2>`
   + `<div class="ruler">${FACES.map(([c]) =>
         `<div class="cell"><span class="livedot ${c}"></span>`
         + `<span class="cap">${c.split(" ")[0]}</span></div>`).join("")}</div></div>`

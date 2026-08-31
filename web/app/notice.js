@@ -358,16 +358,30 @@ function renderSvChip(){
      줄의 「조용」(문서에 안 적힘)과 다른 축(작업이 신호를 안 냄)이라 낱말을
      가른다. 숫자가 매분 바뀌는 것은 sig 가 흡수한다. */
   let jobs = (ocInfo && ocInfo.jobs) || [];
-  /* ?job=<분>[&jobquiet=<초>] — 칩을 진짜로 세운다 (?stall 이 낸 선례: 이
-     화면은 긴 잡이 도는 그 몇 분에만 존재해 파라미터 없이는 검증 못 한다). */
+  /* ?job=<분>[&jobquiet=<초>][&jobn=<건수>] — 칩을 진짜로 세운다 (?stall 이 낸
+     선례: 이 화면은 긴 잡이 도는 그 몇 분에만 존재해 파라미터 없이는 검증 못
+     한다). `jobn` 은 **복수형 얼굴**을 세운다 (REQ-20260831-025): 한 건일 때는
+     잡 이름을 그대로 부르고 둘 이상일 때만 세는데, 그 둘째 얼굴은 파라미터가
+     없던 동안 화면에서 한 번도 확인된 적이 없었다. */
   const jm = /[?&]job=(\d+)/.exec(location.search);
-  if (jm) jobs = [{name: "테스트", mins: +jm[1], done: 1204,
-    quiet_sec: +((/[?&]jobquiet=(\d+)/.exec(location.search) || [])[1] || 0)}];
+  if (jm) {
+    const n = Math.max(1, Math.min(9,
+      +((/[?&]jobn=(\d+)/.exec(location.search) || [])[1] || 1)));
+    const quiet = +((/[?&]jobquiet=(\d+)/.exec(location.search) || [])[1] || 0);
+    jobs = Array.from({length: n}, (_, i) => (
+      {name: n > 1 ? "테스트 " + (i + 1) : "테스트", mins: +jm[1] + i,
+       done: 1204, quiet_sec: quiet}));
+  }
   if (jobs.length){
     const mx = Math.max(...jobs.map(j => +j.mins || 0));
     const one = jobs[0];
+    /* 복수형이 「자동 작업 N건」이었다 — **이름 오용**이다 (DOC-20260831-005
+       규칙 7). 여기 세는 것은 이 세션이 띄운 긴 잡(테스트 스위트 등)이지
+       무인 작업이 아닌데, 한 낱말이 다른 개념을 덮고 있었다. 단수는 이미 잡
+       이름을 그대로 부른다(「테스트 4분째」) — 복수도 이름을 짓지 말고 도는
+       사실만 센다. */
     const label = jobs.length > 1
-      ? `자동 작업 ${jobs.length}건 · ${mx}분째`
+      ? `도는 일 ${jobs.length}건 · ${mx}분째`
       : `${one.name} ${mx}분째`
         + (one.done ? ` · ${Number(one.done).toLocaleString("ko-KR")}건` : "")
         + (+one.quiet_sec >= 60 ? ` · ${one.quiet_sec}초 잠잠` : "");

@@ -318,6 +318,10 @@ class StallRendersTheSame(unittest.TestCase):
             _const(self.src, "STOP_ASK_TAIL"),
             _const(self.src, "STOP_KIND"),
             _const(self.src, "SLOW_WIN"), _const(self.src, "DRIFT_TIP"),
+            # 막 뜬 무인 작업의 손 위 글 (REQ-20260831-025) — 점의 사다리에서
+            # cardHTML 이 부르는 조각이라, 목록에 없으면 그 갈래에 닿는 행이
+            # 들어오는 날 render 가 통째로 멎는다(이 파일 위 주석의 그 규율).
+            _const(self.src, "SPAWN_TAIL"), g("spawnTell"),
             g("jobBit"), g("factTail"), g("heldState"),
             # 판정 큐의 한 줄 (REQ-20260831-015) — 카드가 부르는 조각이라
             # 여기 없으면 render 가 통째로 멎는다. 낱말 상수도 원문에서 떠 온다.
@@ -383,15 +387,15 @@ class StallRendersTheSame(unittest.TestCase):
          "title": "멈췄는데 창이 맡고 있다", "user": "u", "stalled_mins": 40,
          "updated": "2026-08-29T16:45:00+09:00",
          "stoppable": {"kind": "session", "session": "abcd1234"}},
-        # 임계 **미만**으로 도는 자동 작업 — 정상이라 줄이 없어야 한다 (규칙 3)
+        # 임계 **미만**으로 도는 무인 작업 — 정상이라 줄이 없어야 한다 (규칙 3)
         {"id": "REQ-K", "type": "request", "status": "in-progress",
-         "title": "막 시작한 자동 작업", "user": "u",
+         "title": "막 시작한 무인 작업", "user": "u",
          "worker": {"pid": 1, "age": 180},
          "jobs": [{"name": "테스트", "mins": 3}],
          "stoppable": {"kind": "worker"}},
         # 임계 **초과** — 「오래 걸림」 줄이 서고 잡 조각이 그 꼬리로 붙는다
         {"id": "REQ-L", "type": "request", "status": "in-progress",
-         "title": "오래 도는 자동 작업", "user": "u",
+         "title": "오래 도는 무인 작업", "user": "u",
          "worker": {"pid": 2, "age": 1500},
          "jobs": [{"name": "테스트", "mins": 20}],
          "stoppable": {"kind": "worker"}},
@@ -594,11 +598,11 @@ class StallRendersTheSame(unittest.TestCase):
         길은 새로 파지 않는다 — 같은 stop 경로의 idle 갈래를 그대로 쓴다."""
         out = self.render(self.ROWS)
         lock = out["REQ-H"]["lock"]
-        self.assertIn("자동 작업 중단해 두기", lock, "문서에 낱말 단추가 없다")
+        self.assertIn("저절로 이어지지 않게 하기", lock, "문서에 낱말 단추가 없다")
         self.assertIn('data-kind="idle"', lock, "idle 갈래로 안 간다")
         self.assertIn("data-stop=", lock, "기존 stop 경로를 안 쓴다")
         # 카드에는 서지 않는다 — 카드의 한 결정은 "지금 이어갈까" 하나다
-        self.assertNotIn("자동 작업 중단해 두기", out["REQ-H"]["card"])
+        self.assertNotIn("저절로 이어지지 않게 하기", out["REQ-H"]["card"])
         # 붙어 있는 카드에는 잠글 것이 없다
         for rid in ("REQ-F", "REQ-L"):
             self.assertEqual("", out[rid]["lock"],
@@ -696,7 +700,7 @@ class StallRendersTheSame(unittest.TestCase):
         (조용한 것)에서도 살아 있어야 한다 — 거기가 가장 말이 없는 카드다."""
         out = self.render(self.ROWS)
         want = {"REQ-F": "맡은 창", "REQ-G": "일손", "REQ-H": "담당하는 것이 없습니다",
-                "REQ-L": "자동 작업이 이 요청을 맡아"}
+                "REQ-L": "무인 작업이 이 요청을 맡아"}
         for rid, w in want.items():
             tell = out[rid]["tell"]
             self.assertIn('class="vh"', tell,
@@ -764,7 +768,7 @@ class StallRendersTheSame(unittest.TestCase):
         self.assertIn("dot-stopped mild", out["REQ-A"]["card"])
         # 문장은 REQ-20260831-005 문구 확정본 — 「도중에 멎었다」는 5(멈춤)·
         # 7(중단해 둠)과 같은 낱말을 안 쓰는 죽음의 제 이름이다
-        self.assertIn('livedot dot-stopped" title="이 요청을 맡았던 자동 작업이 도중에 멎었습니다',
+        self.assertIn('livedot dot-stopped" title="이 요청을 맡았던 무인 작업이 도중에 멎었습니다',
                       out["REQ-C"]["card"])
         self.assertIn("livedot on", out["REQ-E"]["card"])
         for rid in ("REQ-A", "REQ-B", "REQ-C"):

@@ -2189,8 +2189,8 @@ def _auto_cap_block(req_id, cfg, now=None, reason="", prio=None):
     #     세워 둔 자리에는 붙어 있는 손이 없다. 예산(하루·시간)은 그대로 든다.
     if stop_mark(req_id, now=nowt):
         if reason != "wake":
-            return ("사람이 세운 요청입니다 — Board 탭 카드에서 다시 시작해야 "
-                    "자동 작업이 이어집니다")
+            return ("사람이 세운 요청입니다 — Board 탭 카드에서 "
+                    "「이어가기」를 눌러야 무인 작업이 이어받습니다")
         left = 0
     if left > 0:
         return (f"방금 이 요청을 이어가기 시작했습니다 — "
@@ -2392,10 +2392,22 @@ def _restart_cmd(base_cmd, m):
 SPAWN_WIN = 600   # 스폰 마커를 '기동 중'으로 보는 창 (쿨다운과 같은 시간 규모)
 
 
-def _auto_mark_pid(doc_id, proc):
-    """스폰한 워커의 pid를 마커에 기록 (REQ-20260825-086) — 대시보드가 앰버를
-    켤 때 그 워커가 아직 살아 있는지 확인할 유일한 근거다. Popen이 모킹된
-    경우처럼 pid가 정수가 아니면 조용히 건너뛴다."""
+def _auto_mark_pid(doc_id, proc, reason=""):
+    """스폰한 워커의 pid와 **까닭**을 마커에 기록 (REQ-20260825-086 · -20260831-025).
+
+    pid 는 그 워커가 아직 살아 있는지 확인할 유일한 근거다. Popen이 모킹된
+    경우처럼 pid가 정수가 아니면 조용히 건너뛴다.
+
+    `reason` 은 종전에 여기서 **버려지던 사실**이다 (DOC-20260831-005 규칙 6).
+    서버는 이 값으로 이미 둘을 가르고 있었다 — `reason == "wake"`(사람이
+    카드에서 ▶ 를 누른 것)는 워처와 별도 예산을 쓴다(`_auto_cap_block`).
+    그런데 마커가 `{last,count,pid}` 뿐이라 화면까지 나르지 못했고, 그래서
+    제 손으로 누른 사람이 "저절로 떴다"는 결의 문장을 읽었다. 새 통로를 파지
+    않는다 — `catalog_with_live` 가 이미 이 파일을 여니 칸 하나만 늘린다.
+
+    옛 마커에는 이 칸이 없다. 없으면 화면이 중립 문장을 쓴다(짐작해서 주어를
+    세우지 않는다) — 그래서 여기서도 빈 값을 굳이 적지 않는다.
+    """
     try:
         pid = int(getattr(proc, "pid", 0) or 0)
     except (TypeError, ValueError):
@@ -2409,6 +2421,8 @@ def _auto_mark_pid(doc_id, proc):
     except (OSError, ValueError):
         p = {}
     p["pid"] = pid
+    if reason:
+        p["reason"] = reason
     # 다시 뜬 자리에 '세워 둠' 이 남아 있으면 카드가 도는 작업을 세워 둔 것으로
     # 그린다 (REQ-20260829-024 라운드4).
     stop_mark_clear(doc_id)
@@ -2824,7 +2838,7 @@ def worker_stop(doc_id, session="", why="", claims=None, kill=None,
         pid = 0
     if not pid:
         return {"ok": True, "stopped": False, "reason": "", "pid": 0,
-                "message": "이 요청에 진행 중인 자동 작업이 없습니다."}
+                "message": "이 요청에 진행 중인 무인 작업이 없습니다."}
     sent = False
     if alive(pid):
         kill(pid, _sig.SIGTERM)      # 먼저 물러나기를 청한다
@@ -2851,12 +2865,12 @@ def worker_stop(doc_id, session="", why="", claims=None, kill=None,
     _auto_log(f"STOP {doc_id} pid={pid} by={kind}:{session or '?'} "
               f"why={' '.join(str(why).split())[:120]}")
     try:
-        note(doc_id, f"자동 작업을 중단했다 (pid {pid}, {kind} "
+        note(doc_id, f"무인 작업을 중단했다 (pid {pid}, {kind} "
                      f"{session or '?'}) — {why}")
     except Exception:
         pass
     return {"ok": True, "stopped": sent, "reason": "", "pid": pid,
-            "message": "이 요청의 자동 작업을 중단했습니다. "
+            "message": "이 요청의 무인 작업을 중단했습니다. "
                        "중단한 사실과 사유는 문서에 남겼습니다."}
 
 
@@ -6242,7 +6256,8 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
         wp = subprocess.Popen(argv, cwd=cwd, env=env,
                               stdin=subprocess.DEVNULL, stdout=lf, stderr=lf,
                               start_new_session=True)
-        _auto_mark_pid(doc_id, wp)   # 생존 확인 근거 (REQ-20260825-086)
+        # 생존 확인 근거(pid) + 누가 띄웠나(reason) — REQ-20260825-086 · -025
+        _auto_mark_pid(doc_id, wp, reason)
         if not wt_name and scope:
             lease_set_pid(doc_id, getattr(wp, "pid", 0))
         if wt_name:
@@ -6257,11 +6272,11 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
         return True
     except FileNotFoundError:
         _auto_log(f"claude not found — skip {doc_id} {reason}")
-        return block("no-cli", "이 컴퓨터에 claude 명령이 없어 자동 작업을 "
-                               "시작할 수 없습니다")
+        return block("no-cli", "이 컴퓨터에 claude 명령이 없어 "
+                               "이어가지 못했습니다")
     except Exception as e:
         _auto_log(f"ERROR {doc_id} {reason}: {e}")
-        return block("error", f"자동 작업을 시작하지 못했습니다: {e}")
+        return block("error", f"이어가지 못했습니다: {e}")
 
 
 def _safe_title(meta):
@@ -6475,7 +6490,7 @@ def _wake_refusal(cid, row, win, updated, now):
                            f"끝난 뒤에 다시 눌러 주세요."}
     if (row or {}).get("live_kind") == "spawned":
         return {"ok": False, "id": cid, "action": "busy", "mins": None,
-                "message": f"자동 작업이 이미 이 요청을 진행하고 있습니다 "
+                "message": f"이 요청은 이미 진행 중입니다 "
                            f"({_ago_text(row.get('live_age'))} 시작했습니다). "
                            f"어디까지 왔는지는 Stream 탭에서 볼 수 있습니다."}
     # 손길 분기 (REQ-20260830-021 ux-writer 검토): 이 분기가 없으면 카드는
@@ -6611,7 +6626,7 @@ def wake_request(doc_id, actor="", win=None):
     return _wake_audit(
         {"ok": False, "id": cid, "action": out.get("blocked") or "blocked",
          "mins": mins,
-         "message": out.get("why") or "자동 작업을 시작하지 못했습니다."}, actor)
+         "message": out.get("why") or "이어가지 못했습니다."}, actor)
 
 
 def _stop_claim_map(alias=None):
@@ -6753,18 +6768,18 @@ def stop_request(doc_id, actor="", why=""):
     if not res.get("ok"):
         return out(False, "error",
                    res.get("message") or res.get("reason") or
-                   "진행 중인 자동 작업을 중단하지 못했습니다.", cid,
+                   "진행 중인 무인 작업을 중단하지 못했습니다.", cid,
                    kind="worker")
     if res.get("pid"):
         return out(True, "stopped", res.get("message") or
-                   "이 요청의 자동 작업을 중단했습니다.", cid, kind="worker")
+                   "이 요청의 무인 작업을 중단했습니다.", cid, kind="worker")
     # 무인 작업자는 없다 — 진행의 주체가 세션·위임이면 지시를 전달한다
     # (REQ-20260830-035). 실패해도 사람 말로 돌아간다: 눌렀는데 아무 일도 없고
     # 이유도 모르는 것이 제일 나쁘다.
     v = stoppable_verdict(cid)
     who = actor or "사람"
-    stood = ("지시를 받을 자동 작업이 없어 세워 두기만 했습니다 — 다시 맡기기 전까지 "
-             "자동 작업이 이 요청을 되살리지 않습니다.")
+    stood = ("지시를 받을 무인 작업이 없어 세워 두기만 했습니다 — 다시 맡기기 "
+             "전까지 저절로 되살아나지 않습니다.")
     if v["kind"] == "agent":
         # 위임은 리드 세션의 자식이라 서버가 직접 세울 수 없다 — 같은 줄에
         # agent 필드를 실어 보내면 리드가 TaskStop 으로 세운다(중계가 한계).
@@ -6814,7 +6829,7 @@ def stop_request(doc_id, actor="", why=""):
     if v.get("claimed"):
         return out(True, "no-recipient", stood, cid, kind="idle")
     return out(True, "none",
-               "이 요청에 진행 중인 자동 작업이 없습니다 — 되살아나지 않게 "
+               "이 요청에 진행 중인 무인 작업이 없습니다 — 되살아나지 않게 "
                "세워 두었습니다.", cid, kind="idle")
 
 
@@ -6843,9 +6858,9 @@ def stop_all_workers(actor="", why="", ids=None):
     except Exception:
         pass
     if not done and not failed:
-        msg = "진행 중인 자동 작업이 없어 중단할 것이 없었습니다."
+        msg = "진행 중인 무인 작업이 없어 중단할 것이 없었습니다."
     else:
-        msg = f"자동 작업 {len(done)}건을 중단했습니다."
+        msg = f"무인 작업 {len(done)}건을 중단했습니다."
         if failed:
             msg += f" {len(failed)}건은 중단하지 못했습니다: {', '.join(failed)}"
     return {"ok": not failed, "ids": done, "count": len(done),
@@ -9446,7 +9461,7 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
     #
     # 조용한 시간은 그대로 낸다 — 이 함수의 약속이다(감추지 않는다).
     if r.get("live_kind") == "spawned" or r.get("worker"):
-        return dict(v, state="moving", why="자동 작업이 이 요청을 맡아 진행 중입니다")
+        return dict(v, state="moving", why="무인 작업이 이 요청을 맡아 진행 중입니다")
     # 이 요청에 귀속된 긴 잡(테스트 스위트 등)이 돌고 있다 (REQ-20260830-022).
     # 잡은 pid 생존·명령줄 대조를 이미 지난 관측이다 — 문서가 조용해도 붙어
     # 있는 것이고, 깨우기 손잡이는 서지 않는다. quiet_mins 는 그대로 낸다.
@@ -14694,7 +14709,7 @@ def catalog_with_live(stall_win=None):
             r["live_kind"] = "session"             # 간접 — 세션은 활동 중
             r["live_age"] = int(sage)
         else:
-            # 워처가 무인 작업자를 스폰했고 아직 클레임 전 — "기동 중" 표시
+            # 무인 작업이 떴고 아직 클레임 전 — "기동 중" 표시
             # (REQ-20260824-008: 스폰 사실이 안 보여 '동작 안 함'으로 오인되던 문제)
             try:
                 with open(os.path.join(_auto_dir(),
@@ -14702,27 +14717,34 @@ def catalog_with_live(stall_win=None):
                     sp = json.load(f)
                 age = now - sp.get("last", 0)
                 alive = _worker_alive(sp.get("pid")) if sp.get("pid") else None
-                # 앰버 창(SPAWN_WIN)은 '아직 클레임 전'을 재는 시계지 워커의
+                # 기동 창(SPAWN_WIN)은 '아직 클레임 전'을 재는 시계지 워커의
                 # 수명이 아니다 (REQ-20260829-016 패치2). 프로세스가 실제로
                 # 도는 동안은 계속 기동 중으로 본다 — 그러지 않으면 10분을
                 # 넘겨 도는 워커가 '멈춤'으로 그려지고, 그 카드의 깨우기가
                 # **곧 중복 스폰**이다. 실사고 11:04~11:39 의 재스폰 간격이
-                # 정확히 SPAWN_WIN 이었다(쿨다운과 같은 600초라, 앰버가 꺼지는
-                # 바로 그 순간 쿨다운이 풀린다). 한도는 worker_running 과
+                # 정확히 SPAWN_WIN 이었다(쿨다운과 같은 600초라, 기동 표시가
+                # 꺼지는 바로 그 순간 쿨다운이 풀린다). 한도는 worker_running 과
                 # 같은 WORKER_WIN — 멎은 채 프로세스만 남은 워커를 한 시간
                 # 넘게 감추지 않는다.
                 if age < SPAWN_WIN or (alive and age < WORKER_WIN):
                     r["live_age"] = int(age)
-                    # 스폰 사실만으로 앰버를 켜면 즉사한 워커도 창이 닫힐
-                    # 때까지 '기동 중'으로 보인다 — 066 워커는 모델 한도로
-                    # 스폰 직후 죽었는데 10분간 앰버였다 (REQ-20260825-086).
-                    # pid가 없는 구 마커는 기존대로 앰버(하위호환).
+                    # 스폰 사실만으로 기동 표시를 켜면 즉사한 워커도 창이
+                    # 닫힐 때까지 '기동 중'으로 보인다 — 066 워커는 모델
+                    # 한도로 스폰 직후 죽었는데 10분간 그렇게 보였다
+                    # (REQ-20260825-086). pid가 없는 구 마커는 기존대로
+                    # 기동 중(하위호환).
                     if sp.get("pid") and not alive:
                         r["live_kind"] = "spawn_failed"
                         r["live_reason"] = (_worker_last_line(r["id"])
-                                            or "자동 작업이 기록을 남기지 않고 끝났습니다")
+                                            or "무인 작업이 기록을 남기지 않고 끝났습니다")
                     else:
                         r["live_kind"] = "spawned"
+                        # 왜 떴는지(사람이 ▶ 를 눌렀나 · 반려로 저절로 떴나)를
+                        # 그대로 실어 낸다 (DOC-20260831-005 규칙 6). 문장은
+                        # 화면이 짓는다 — 서버는 사실만 나른다. 옛 마커에는
+                        # 이 칸이 없고, 없으면 화면이 중립 문장을 쓴다.
+                        if sp.get("reason"):
+                            r["spawn_reason"] = sp["reason"]
             except (OSError, ValueError):
                 pass
             # 스폰 마커가 없어도 멈춘 주체는 멈췄다고 말한다 (REQ-089).

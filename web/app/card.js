@@ -15,7 +15,13 @@ const STOP_LABEL = "중단하기", STOP_GOING = "중단 중…";
    도는 것을 끊는 쪽은 「중단하기」(지금 멈춘다), 앞으로 못 맡게 하는 쪽은
    「중단해 두기」(앞으로 안 맡게 해 둔다). 한 낱말(중단)의 상만 다르므로
    사용자가 고른 낱말은 지켜지고 뜻은 갈린다. 진행형은 공용 「중단 중…」. */
-const STOP_HOLD_LABEL = "자동 작업 중단해 두기";
+/* 정책 단추만 **낱말이 아니라 결과**로 말한다 (DOC-20260831-005 규칙 2).
+   「자동 작업 중단해 두기」였다. 지금 도는 것에서 「자동」을 걷어내고 나면
+   이 단추의 「자동」만 남는데, 남은 하나가 개체 이름(=지금 도는 것)으로
+   되읽히면 오칭이 이 자리로 옮겨 앉을 뿐이다. 그래서 이름을 부르지 않고
+   **일어나지 않을 일**을 적는다 — 「저절로」는 미래·정책의 부사라 이 단추가
+   끄는 것(사람이 안 시켜도 다시 맡음)을 이름 없이 그대로 나른다. */
+const STOP_HOLD_LABEL = "저절로 이어지지 않게 하기";
 /* 확인 창 셋의 꼬리는 **한 문장**이다 (REQ-20260830-042 ux-writer).
    전에는 「같은 자리에 생기는」·「같은 자리의」로 갈려 있었고, 무엇보다 ▶ 와 ⏸ 가
    함께 서 있던 동안에는 이 문장이 거짓에 가까웠다 — 그 자리에 이미 둘이 있으니
@@ -52,10 +58,10 @@ const DRIFT_LABEL = "끝났는지 확인";
        늘 "나눠 맡은"을 달고 나온다) — 재론 금지 근거가 039 문서에 있다. */
 const STOP_KIND = {
   worker: {
-    who: "자동 작업이 이 요청을 맡아 진행 중입니다",
-    tip: "자동 작업이 돌고 있습니다 — 중단하면 하던 일이 거기서 끝나고 사유가"
+    who: "무인 작업이 이 요청을 맡아 진행 중입니다",
+    tip: "무인 작업이 돌고 있습니다 — 중단하면 하던 일이 거기서 끝나고 사유가"
       + " 문서에 남습니다",
-    ask: {title: "진행 중인 자동 작업을 중단할까요?",
+    ask: {title: "진행 중인 무인 작업을 중단할까요?",
       desc: "지금 하던 일은 문서에 적힌 데까지만 남고, 그 뒤로 진행 중이던 것은"
         + " 사라집니다. 중단한 사실과 사유는 문서에 남습니다. " + STOP_ASK_TAIL,
       ok: STOP_LABEL}},
@@ -83,6 +89,14 @@ const STOP_KIND = {
     who: "지금 이 요청을 담당하는 것이 없습니다 — 맡은 창도, 일손도, 자동 작업도 없습니다",
     // 이 갈래의 단추는 카드를 떠나 문서 화면의 낱말 단추가 됐다(holdLockHTML) —
     // 도는 것을 끊는 행위가 아니라 앞으로에 대한 정책이기 때문이다.
+    /* 단추 이름은 「저절로 이어지지 않게 하기」로 바뀌었지만 이 문장은 그대로
+       둔다 (tech-writer 유지 판정 · REQ-20260830-039 회귀). 둘 다 근거가 있다:
+       ① 「자동」은 여기서 참이다 — 말하는 것이 지금 도는 개체가 아니라
+          **앞으로 저절로 맡는 일**이라 뜻 A 다.
+       ② 「중단해 두면」은 사용자가 반려한 「세워 두면」을 대신해 확정된
+          낱말이고, 그 교체가 지켜지는지는 시험이 이 문장으로 잰다.
+       단추가 결과("저절로 이어지지 않게")를, 손 위의 글이 행위("중단해 두면")를
+       말하는 짝이라 서로를 되풀이하지 않는다. */
     tip: "지금 담당이 없습니다 — 중단해 두면 자동 작업이 다시 맡지 않습니다"},
 };
 /* 손잡이의 **얼굴**은 글리프, **이름**은 그대로 낱말 (REQ-20260830-032 오너 판정).
@@ -458,9 +472,13 @@ function wakeBtnHTML(r, wordy){
      멈춤 갈래의 꼬리 한 줄은 카드에서 사라진 정책(잠그기)의 길을 알려 준다 —
      그 단추는 카드를 열면 나오는 문서의 **맨 위 행동 띠**에 있다(REQ-20260830-046:
      "문서를 열면 있다"고만 말해 놓고 바닥까지 훑게 만든 것이 실사고다). */
+  /* 재개의 동사는 **「이어받다」** 다 (DOC-20260831-005 규칙 3). 「시작합니다」는
+     새로 나는 일처럼 읽히고 「진행합니다」는 주체가 새 주인처럼 읽히는데, 이
+     단추가 하는 일은 **앞선 일이 있고 그것이 내 것이었다** 이다 — 사용자의
+     문장("요청하고, 멈췄고, 다시 시작했을 뿐")이 그대로 이 낱말이다. */
   const tip = held
-    ? "사람이 중단해 둔 요청입니다 — 누르면 자동 작업이 다시 이어서 진행합니다"
-    : "담당 없이 멈춰 있습니다 — 누르면 자동 작업이 이어서 진행합니다."
+    ? "사람이 중단해 둔 요청입니다 — 누르면 무인 작업이 하던 일을 다시 이어받습니다"
+    : "담당 없이 멈춰 있습니다 — 누르면 무인 작업이 멈춘 자리에서 이어받습니다."
       + " 다시 맡지 않게 해 두는 단추는 카드를 열면 맨 위에 있습니다";
   // 속성 이름을 조립하지 않는다(`data-${...}`) — 짓는 자리를 세는 회귀 시험도,
   // 다음 사람의 grep 도 조립된 이름을 못 찾는다.
@@ -482,7 +500,7 @@ function wakeBtnHTML(r, wordy){
    **전송 문법에 있는 것만 글리프, 나머지는 낱말.**
    낱말은 87px 라 글리프처럼 id 줄에 얹으면 식별자를 밀어낸다. 드문 갈래 하나라
    자기 줄(.deedrow.wordy)을 그대로 둔다. */
-const DRIFT_TIP = "고친 것이 있는데 문서가 안 닫혔습니다 — 자동 작업이 다"
+const DRIFT_TIP = "고친 것이 있는데 문서가 안 닫혔습니다 — 무인 작업이 다"
   + " 됐는지 확인해서, 됐으면 마무리하고 아니면 이어갑니다";
 function driftBtnHTML(r){
   const going = wokePending(r.id);
@@ -542,7 +560,8 @@ function holdTellHTML(r){
   const t = holdTell(r);
   return t ? `<span class="vh">${esc(t)}</span>` : "";
 }
-/* 「자동 작업 중단해 두기」 — **문서 화면에만** 서는 낱말 단추 (REQ-20260830-042).
+/* 「저절로 이어지지 않게 하기」 — **문서 화면에만** 서는 낱말 단추
+   (REQ-20260830-042 · 이름은 DOC-20260831-005 로 개정, 근거는 STOP_HOLD_LABEL 곁에).
 
    idle 의 ⏸ 가 카드에서 사라지면서 갈 곳이 필요해진 기능 하나다. 이건 지금
    내리는 행위가 아니라 앞으로에 대한 **정책**이고, 보드 카드의 한 결정은 "이
@@ -628,12 +647,19 @@ function slowRowHTML(r){
   const age = +r.worker.age || 0;
   // 임계 미만은 **정상**이다 — 정상은 줄이 아니라 점과 툴팁이 말한다.
   if (age < SLOW_WIN) return "";
-  return `<div class="rvpt work" title="자동 작업이 이 요청을 맡은 지 `
+  return `<div class="rvpt work" title="무인 작업이 이 요청을 맡은 지 `
     + `${Math.floor(age / 60)}분 됐습니다 — 아직 도는 중이지만, 이만큼 걸리면`
     + ` 대개 막혀 있습니다. 중단하고 다시 맡기는 편이 빠를 수 있습니다">`
     // 캡션이 정상을 서술하면(「진행 중」) 그 줄은 신호가 아니다 — 캡션이 곧
     // 줄의 자격이므로, 자격을 준 사실(임계 초과)을 캡션이 그대로 말한다.
-    + `<span class="rvcap">오래 걸림</span>자동 작업 `
+    //
+    // **주체는 본문에서 내렸다** (DOC-20260831-005 규칙 4). 「오래 걸림 · 자동
+    // 작업 18분째」였는데, ▶ 를 제 손으로 누른 사람에게 그 문장은 "내가
+    // 눌렀는데 자동?"이었다 — 사용자 지적이 선 자리가 여기다. 이름을 바꾸는
+    // 것으로 끝내지 않은 이유: 이 줄의 결정은 「중단하고 다시 맡길까」 하나인데
+    // 주체를 알아도 그 결정이 안 바뀐다. 신원은 점과 툴팁의 몫이라고 이 화면이
+    // 이미 정해 두었는데(REQ-20260830-040) 이 줄만 본문에 신원을 세우고 있었다.
+    + `<span class="rvcap">오래 걸림</span>`
     + `${fmtStall(Math.floor(age / 60))}` + factTail(jobBit(r)) + `</div>`;
 }
 /* 사람이 세워 둔 요청과 그것을 되돌리는 손잡이 (REQ-20260829-024 라운드4).
@@ -654,7 +680,7 @@ function stoppedRowHTML(r){
   // 초를 단위만 바꿔 옮긴다. 손잡이(▶)는 id 줄의 벨트가 진다.
   const mins = fmtStall(Math.floor((+r.stopped.age || 0) / 60))
     .replace(/째$/, " 전");
-  return `<div class="rvpt held" title="이 요청의 자동 작업을 사람이 중단했습니다`
+  return `<div class="rvpt held" title="이 요청의 무인 작업을 사람이 중단했습니다`
     + ` — 「이어가기」를 누르기 전까지는 저절로 이어지지 않습니다">`
     + `<span class="rvcap">중단</span>${mins}`
     + factTail(jobBit(r)) + `</div>`;
@@ -794,6 +820,7 @@ function stallProbe(rows){
   stopProbe(rows);
   driftProbe(rows);
   rvqProbe(rows);
+  spawnProbe(rows);
   const m = /[?&]stall=(\d+)/.exec(location.search);
   if (!m || !Array.isArray(rows)) return rows;
   const mins = Math.max(1, Math.min(9999, +m[1] || 20));
@@ -819,7 +846,41 @@ function stallProbe(rows){
   }
   return rows;
 }
-/* ?work[=<분>][&workhold] — 도는 자동 작업과 ⏸ 를 진짜로 세운다
+/* ?spawn[=<초>][&spawnwhy=wake|rework] — **막 뜬 무인 작업의 점과 그 손 위
+   글**을 진짜로 세운다 (REQ-20260831-025).
+
+   이 얼굴이 서는 조건은 "스폰했는데 아직 문서를 못 집었다"라 실데이터에서는
+   몇 초뿐이고, 그 몇 초에 캡처를 맞출 길이 없다. 그래서 이 갈래는 두 라운드
+   동안 **눈으로 확인된 적이 없었고**, 앰버가 초록 ● 과 같은 화소라는 것도
+   그동안 아무도 못 봤다(DOC-20260831-005 designer 실측). 같은 사고를 두 번
+   겪지 않으려면 세우는 손잡이가 있어야 한다 — ?stall 이 낸 그 선례다.
+
+   `spawnwhy` 를 안 주면 세 갈래(사람·반려·모름)가 한 화면에 번갈아 선다:
+   문장이 실제로 갈리는지는 셋이 나란히 서야 보인다. */
+function spawnProbe(rows){
+  const m = /[?&]spawn(?:=(\d+))?\b/.exec(location.search);
+  if (!m || !Array.isArray(rows)) return rows;
+  const age = Math.max(0, Math.min(9999, +(m[1] || 8)));
+  const why = (/[?&]spawnwhy=([\w-]+)/.exec(location.search) || [])[1] || "";
+  const CYCLE = ["wake", "rework", ""];
+  let n = 0;
+  for (const r of rows){
+    if (r.type !== "request" || r.status !== "in-progress") continue;
+    // 점의 사다리에서 이 갈래까지 내려오려면 위의 문이 전부 닫혀 있어야 한다.
+    r.live = false;
+    r.live_kind = "spawned";
+    r.live_age = age + n;
+    r.spawn_reason = why || CYCLE[n % CYCLE.length];
+    r.stall_state = "moving";
+    r.stall_why = "";
+    r.stalled_mins = null;
+    delete r.stopped;
+    delete r.worker;
+    n++;
+  }
+  return rows;
+}
+/* ?work[=<분>][&workhold] — 도는 무인 작업과 ⏸ 를 진짜로 세운다
    (REQ-20260829-024). 분이 임계(SLOW_WIN, 15분)를 넘으면 「오래 걸림」 줄까지
    서고, 그 아래면 줄 없이 점·툴팁만 남는다 — 두 얼굴을 `?work=20` 과 `?work=3`
    으로 나란히 볼 수 있어야 한다 (REQ-20260830-040 규칙 3).
@@ -866,7 +927,7 @@ function workProbe(rows){
    (REQ-20260829-024 라운드4).
 
    이 줄은 **사람이 방금 중단한 요청이 있어야** 그려진다 — 캡처를 찍으려는 그
-   순간에는 대개 없고, 만들려면 진짜 자동 작업을 하나 죽여야 한다. 진단이
+   순간에는 대개 없고, 만들려면 진짜 무인 작업을 하나 죽여야 한다. 진단이
    없으면 이 화면은 또 "만들었다는데 본 적은 없는" 것이 된다(깨우기가 두 번
    그렇게 올라갔다). 여기서도 그림을 따로 짓지 않는다: 서버가 줬을 값을 얹고
    평소 그리던 길이 그대로 그린다. */
@@ -1023,8 +1084,8 @@ function wsOpen(id){
   if (!s) return;
   // 제목은 무엇에 대한 창인가만 진다 (ux-writer) — 답은 첫 줄(WS_MEANS)이,
   // 상태는 카드의 「진행 중」 줄이 이미 말한다.
-  s9dlg({kind: "alert", cap: "자동 작업", stop: false,
-    title: `${shortId(id)} 의 자동 작업`,
+  s9dlg({kind: "alert", cap: "무인 작업", stop: false,
+    title: `${shortId(id)} 의 무인 작업`,
     descHtml: `<div class="wsrow wsans">${esc(WS_MEANS[s.kind] || "")}.</div>`
       + (s.why ? `<div class="wsrow">${esc(s.why)}.</div>` : "")
       + (s.fix ? `<div class="wsfix">${esc(s.fix)}.</div>` : ""),
@@ -1336,6 +1397,33 @@ function rvClamped(cap, text, key, open){
     + `${open ? RVLESS_LABEL : RVMORE_LABEL}</button>`;
 }
 
+/* 막 뜬 무인 작업의 손 위 글 — **까닭이 갈리면 문장도 갈린다**
+   (DOC-20260831-005 규칙 2·6, designer 실측).
+
+   사실은 서버에 이미 갈려 있었다: `reason == "wake"`(사람이 카드에서 ▶ 를
+   누른 것)는 워처와 **별도 예산**을 쓴다. 그런데 스폰 마커(`state/auto_resume/
+   <REQ>.json`)가 `{last,count,pid}` 뿐이라 그 사실을 버렸고, 화면은 둘을 한
+   문장으로 부를 수밖에 없었다 — 제 손으로 누른 사람이 "자동 작업이 시작됐다"를
+   읽은 자리가 그것이다. 마커에 칸 하나를 늘려 그 사실을 여기까지 나른다.
+
+   「저절로」는 **워처 갈래에만** 선다: 사람이 누른 것에 저절로라 하면 거짓이고,
+   워처가 띄운 것에 까닭을 안 적으면 "내가 안 시킨 일이 돈다"가 된다. 그래서
+   워처 문장만 사건(반려)+까닭(저절로)을 함께 진다.
+   모르는 갈래(옛 마커·CLI 재개)는 중립 문장이다 — 짐작해서 주어를 세우면
+   틀릴 수 있고, 이 화면은 그 자리에서 이미 한 번 덴 적이 있다. */
+const SPAWN_TAIL = " — 이 요청을 이어받기까지 잠시 걸립니다";
+function spawnTell(r){
+  const age = r.live_age;
+  switch (r.spawn_reason) {
+    case "wake":
+      return `「${WAKE_LABEL}」를 눌러 ${age}초 전에 시작했습니다${SPAWN_TAIL}`;
+    case "rework":
+      return `반려되어 저절로 다시 시작됐습니다 (${age}초 전)${SPAWN_TAIL}`;
+    default:
+      return `무인 작업이 ${age}초 전에 시작됐습니다${SPAWN_TAIL}`;
+  }
+}
+
 function cardHTML(r){
   const isReq = r.type === "request";
   // "무엇을 기다리는가" 한 줄 (REQ-20260826-009). blocked 전용이 아니다 —
@@ -1476,7 +1564,7 @@ function cardHTML(r){
      것은 채운 사각, 아니면 속 빈 사각. */
   const liveDot = r.status === "in-progress"
     ? (st && st.face === "dead"
-         ? `<span class="livedot dot-stopped" title="이 요청을 맡았던 자동 작업이 도중에 멎었습니다 — ${esc(st.reason||"까닭은 남아 있지 않습니다")}"></span>`
+         ? `<span class="livedot dot-stopped" title="이 요청을 맡았던 무인 작업이 도중에 멎었습니다 — ${esc(st.reason||"까닭은 남아 있지 않습니다")}"></span>`
        : st
          ? `<span class="livedot dot-stopped mild" title="지금 이 요청을 담당하는 것이 없습니다 — 문서도 ${st.mins}분째 그대로입니다${esc(st.reason ? " — " + st.reason : "")}${r.live ? " — 이 요청을 만든 창은 아직 움직이고 있습니다" : ""}"></span>`
        /* 사람이 중단해 둔 것은 **모름이 아니다** (REQ-20260829-024 라운드4).
@@ -1486,7 +1574,10 @@ function cardHTML(r){
           (REQ-20260828-041 2차 반려가 지운 그 조합). 마크는 이미 있는 것을
           쓴다: 멈춤과 같은 속 빈 사각이되, 까닭은 툴팁이 갈라 말한다. */
        : r.stopped
-         ? `<span class="livedot dot-held" title="이 요청의 자동 작업을 누군가 ${r.stopped && r.stopped.age >= 60 ? Math.floor(r.stopped.age / 60) + "분 전에 " : "방금 "}중단해 두었습니다 — 지금은 아무것도 돌고 있지 않습니다"></span>`
+         /* 「누군가」를 걷었다 (DOC-20260831-005 사전) — 이 화면에서 중단하는
+            것은 사람뿐이라 모호할 이유가 없다. 모르는 주어는 "내가 안 한 일이
+            일어났다"로 읽힌다. */
+         ? `<span class="livedot dot-held" title="이 요청의 무인 작업을 사람이 ${r.stopped && r.stopped.age >= 60 ? Math.floor(r.stopped.age / 60) + "분 전에 " : "방금 "}중단해 두었습니다 — 지금은 아무것도 돌고 있지 않습니다"></span>`
        /* **일하는 중, 기록은 아직** — ◎ (REQ-20260831-005). 초록 점멸보다
           먼저 걸린다: 이 갈래에 해당하는 카드는 대부분 `r.live` 도 참이라,
           아래에 두면 영영 안 그려지고 ● 가 "기록도 나가는 중"이라는 거짓을
@@ -1498,7 +1589,7 @@ function cardHTML(r){
        : r.live_kind === "session"
          ? `<span class="livedot sess" title="이 요청을 만든 창이 ${r.live_age}초 전까지 움직였습니다 — 다만 이 요청을 맡고 있지는 않습니다"></span>`
        : r.live_kind === "spawned"
-         ? `<span class="livedot spawn" title="자동 작업이 ${r.live_age}초 전에 시작됐습니다 — 이 요청을 맡을 때까지 잠시 걸립니다"></span>`
+         ? `<span class="livedot spawn" title="${esc(spawnTell(r))}"></span>`
          : `<span class="livedot off" title="${esc(r.stall_why || "진행 중으로 되어 있는데 도는 기색이 없습니다 — 지금 이 요청을 담당하는 것이 없을 수 있습니다")}"></span>`)
     : "";
   return `<div class="card" ${isReq ? 'draggable="true"' : ""} tabindex="0" role="button" style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">

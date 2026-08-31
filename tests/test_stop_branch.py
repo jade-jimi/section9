@@ -140,7 +140,7 @@ class ThreeWaysToStand(unittest.TestCase):
         r = self.m.stop_request(DOC, actor="nicehugepark")
         self.assertTrue(r.get("ok"), r.get("message"))
         self.assertEqual(r.get("action"), "no-recipient")
-        self.assertIn("지시를 받을 자동 작업이 없어", r.get("message", ""))  # tech-writer: 창은 두 뜻을 진다
+        self.assertIn("지시를 받을 무인 작업이 없어", r.get("message", ""))  # tech-writer: 창은 두 뜻을 진다
         self.assertTrue(self.m.stop_mark(DOC))
         self.assertEqual(self.inbox(sid), [], "죽은 수신함에 지시를 넣었다")
 

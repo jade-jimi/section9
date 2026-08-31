@@ -81,10 +81,19 @@ class TestNewSkin(unittest.TestCase):
             self.assertIn(f':root[data-theme="{t}"]', self.html)
             self.assertIn(f'["{t}","{t}', self.html)
 
+    def _calm_seg(self):
+        """calm 스킨 **블록**에 닻을 내린다 — 주석을 먼저 걷는다.
+
+        벨트 주석(actions.css)이 calm 셀렉터를 근거로 인용하면서, 원문 첫
+        occurrence 가 주석 속으로 옮겨가 s3/s4 가 엉뚱한 구획을 재게 됐다
+        (REQ-20260831-019 mask 처방 주석에서 실측). 닻은 코드에만 내린다."""
+        nocom = re.sub(r"/\*[\s\S]*?\*/", " ", self.html)
+        i = nocom.index('[data-skin="calm"]')
+        return nocom[i:i + 4000]
+
     def test_s3_distinct_axes(self):
         """썸네일 구분 조건: 기본(ledger)과 배경·모양·깊이가 다르다."""
-        i = self.html.index('[data-skin="calm"]')
-        seg = self.html[i:i + 4000]
+        seg = self._calm_seg()
         self.assertIn("border-radius", seg)     # 모양
         self.assertIn("box-shadow", seg)        # 깊이
         self.assertIn("border:0", seg)          # 선 대신 면
@@ -96,11 +105,12 @@ class TestNewSkin(unittest.TestCase):
         self.assertNotIn('["cockpit"', self.html)
 
     def test_s4_tokens_only(self):
-        """스킨은 tone 토큰 위에서 동작 — 색 하드코딩 최소(그림자 제외)."""
-        i = self.html.index('[data-skin="calm"]')
-        seg = self.html[i:i + 4000]
-        hard = [l for l in seg.splitlines()
-                if "#" in l and "rgba(" not in l and "shadow" not in l]
+        """스킨은 tone 토큰 위에서 동작 — 색 하드코딩 최소(그림자 제외).
+
+        mask-image 의 #000 은 색이 아니라 알파 스텐실이라 세지 않는다."""
+        hard = [l for l in self._calm_seg().splitlines()
+                if "#" in l and "rgba(" not in l and "shadow" not in l
+                and "mask-image" not in l]
         self.assertEqual(hard, [], hard)
 
 

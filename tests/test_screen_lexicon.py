@@ -49,6 +49,41 @@ BANNED = {
 # 이 게이트 밖이다(진단은 코드 말이 오히려 정확하다). 파일 단위로 뺀다.
 DIAG_FILES = {"boot.js", "graph.js", "diag.js"}
 
+# ── 「자동 작업」 — **낱말이 아니라 자리가 걸렸다** (DOC-20260831-005) ────────
+#
+# 위 BANNED 와 모양이 다르다. 저 목록은 낱말째 내려온 판정이라 문자열이 있으면
+# 곧 결함인데, 이 낱말은 **참인 자리와 거짓인 자리가 함께 있다**:
+#
+#   · 뜻 A (앞으로) — "사람이 안 시켜도 저절로 다시 맡는 것". 사용자가 실제로
+#     끄고 켜는 그것이라 「자동」이 참이고 값을 한다.
+#   · 뜻 B (지금)  — "지금 이 요청을 맡아 도는 것". 사용자가 **제 손으로 ▶ 를
+#     눌러 띄운 것**까지 같은 이름을 받아 "내가 안 시킨 일이 돈다"로 읽혔다.
+#     사용자 지적("요청하고, 멈췄고, 다시 시작했을 뿐인데 자동인가")이 선 자리.
+#
+# 그래서 낱말을 통째로 막으면 뜻 A 열둘까지 삼키고, 안 막으면 뜻 B 가 다시
+# 자란다. 게이트를 **허용 목록**으로 뒤집는 이유가 그것이다: 뜻 A 로 판정된
+# 문장만 이름을 대고 지나가고, 그 밖의 「자동 작업」은 새로 생기는 즉시 걸린다.
+# 목록에 없는 문장을 지나가게 하려면 이 자리에 근거와 함께 적어야 한다 —
+# 판정을 코드가 아니라 문서에 남기게 하는 것이 이 게이트의 값이다.
+#
+# 판정표 전문: REQ-20260831-024-62x6 tech-writer 노트(유지 12 · 옮김 20).
+KEPT_AUTO = {
+    # 정책 단추가 끄는 것이 정확히 '저절로 다시 맡음'이다. 단추 자신의 이름은
+    # 「저절로 이어지지 않게 하기」로 개정됐고(DOC-20260831-005), 아래 둘은 그
+    # 정책을 서술하는 문장이라 「자동」이 참이다.
+    "자동 작업은 이 요청을 다시 맡지 않습니다",
+    "중단해 두면 자동 작업이 다시 맡지 않습니다",
+    # 대비 열거라 셋째 항이 이름을 가져야 한다(창·일손·자동 작업).
+    "맡은 창도, 일손도, 자동 작업도 없습니다",
+    # 우선순위 창: 앞으로 맡는 순서에 대한 서술.
+    "자동 작업도 이 순서를 따릅니다",
+    # 세션 목록·재기동 창의 「자동 작업 진행 중」·「진행 중인 자동 작업 N건」은
+    # 리드 판정(REQ-20260831-025)으로 「무인 작업」에 흡수됐다 — 대비 항(사람
+    # 창)의 취지는 「무인」이 자리 축으로 그대로 지고, 개체 이름이 하나가 된다.
+    # bin/s9 의 「자동 작업이 이 요청을 되살리지 않습니다」도 같은 판정으로
+    # 「저절로 되살아나지 않습니다」(서술)로 갔다.
+}
+
 
 def _strings(src):
     """주석을 걷고 **따옴표 안**만 남긴다 — 화면에 나가는 것은 그것뿐이다.
@@ -75,19 +110,26 @@ def _html_text(src):
     return re.sub(r"<[^>]*>", " ", src) + "\n" + keep
 
 
+def _surfaces():
+    """표시 이름 → 사람이 읽는 글자만. **훑는 눈은 한 벌이다** — 게이트가
+    둘로 늘 때 읽는 자리까지 복사하면 한 벌만 고쳐진다."""
+    out = {}
+    for p in sorted(glob.glob(os.path.join(WEB, "app", "*.js"))):
+        name = os.path.basename(p)
+        if name in DIAG_FILES:
+            continue
+        with open(p, encoding="utf-8") as f:
+            out["app/" + name] = _strings(f.read())
+    for p in sorted(glob.glob(os.path.join(WEB, "*.html"))):
+        with open(p, encoding="utf-8") as f:
+            out[os.path.basename(p)] = _html_text(f.read())
+    return out
+
+
 class ScreenLexicon(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.surfaces = {}          # 표시 이름 → 사람이 읽는 글자만
-        for p in sorted(glob.glob(os.path.join(WEB, "app", "*.js"))):
-            name = os.path.basename(p)
-            if name in DIAG_FILES:
-                continue
-            with open(p, encoding="utf-8") as f:
-                cls.surfaces["app/" + name] = _strings(f.read())
-        for p in sorted(glob.glob(os.path.join(WEB, "*.html"))):
-            with open(p, encoding="utf-8") as f:
-                cls.surfaces[os.path.basename(p)] = _html_text(f.read())
+        cls.surfaces = _surfaces()
 
     def test_the_sweep_actually_read_the_screen(self):
         """게이트가 빈 문자열을 훑고 초록이 되는 일이 없게 — 먼저 눈을 확인한다.
@@ -142,6 +184,81 @@ class ScreenLexicon(unittest.TestCase):
                      "이 버튼이 다시 생깁니다", "선행 작업"):
             self.assertIn(word, joined,
                           "채택어 「%s」가 화면 어디에도 없다" % word)
+
+
+class TheAutoNameOnlyStandsWhereItIsTrue(unittest.TestCase):
+    """「자동 작업」은 **뜻 A 로 판정된 자리에만** 선다 (DOC-20260831-005).
+
+    위 게이트가 낱말째 막는 것과 달리, 여기는 허용 목록으로 뒤집혀 있다 —
+    까닭은 KEPT_AUTO 곁에 적었다. 화면을 읽는 자리는 `_surfaces()` 한 곳으로
+    같이 쓴다: 훑는 눈이 두 벌이면 한 벌만 고쳐진다.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.surfaces = _surfaces()
+
+    def test_the_name_never_stands_for_what_is_running_now(self):
+        """지금 도는 것을 「자동 작업」이라 부르는 자리가 0이다."""
+        hits = []
+        for name, text in self.surfaces.items():
+            rest = text
+            for ok in KEPT_AUTO:
+                rest = rest.replace(ok, " ")
+            if "자동 작업" in rest:
+                for line in rest.splitlines():
+                    if "자동 작업" in line:
+                        hits.append("%s: %s" % (name, line.strip()[:80]))
+        self.assertEqual(
+            [], hits,
+            "지금 도는 것을 「자동 작업」이라 부르는 자리가 남았다 — 지금 도는 "
+            "것은 「무인 작업」이고 「자동·저절로」는 미래·정책 서술에만 쓴다 "
+            "(DOC-20260831-005). 뜻 A 로 참인 새 문장이라면 근거와 함께 "
+            "KEPT_AUTO 에 올려라:\n  " + "\n  ".join(hits))
+
+    def test_the_kept_twelve_are_still_standing(self):
+        """유지 판정 자리가 **화면에 살아 있다** — 허용 목록에서 뺀 것만으로는
+        지워지지 않았다는 증거가 못 된다(위 유지어 시험이 세운 그 규율)."""
+        joined = "\n".join(self.surfaces.values())
+        for kept in KEPT_AUTO:
+            self.assertIn(kept.strip(), joined,
+                          "유지 판정 문장 「%s」가 화면에서 사라졌다 — 걷어낼 "
+                          "자리가 아니었다" % kept.strip())
+
+    def test_the_new_words_actually_stand(self):
+        """신설어가 실제로 서 있다 — 지우기만 하고 안 채우면 문장이 사라진다."""
+        joined = "\n".join(self.surfaces.values())
+        for word in ("무인 작업", "이어받", "도는 일 ",
+                     "저절로 이어지지 않게 하기"):
+            self.assertIn(word, joined,
+                          "채택어 「%s」가 화면 어디에도 없다" % word.strip())
+
+    def test_the_long_running_line_has_no_subject(self):
+        """카드 사실 줄은 **무주어**다 — 「오래 걸림 · 18분째」.
+
+        주체를 알아도 이 줄의 결정(「중단하고 다시 맡길까」)이 안 바뀌고,
+        신원은 점과 툴팁의 몫이라고 이 화면이 이미 정해 뒀다(REQ-20260830-040).
+        이름만 「무인 작업」으로 갈아 끼우고 자리를 그대로 두면 규범 위반이
+        그대로 남는다 — 그래서 캡션 바로 뒤에 주체 낱말이 오는지 못박는다."""
+        card = self.surfaces["app/card.js"]
+        self.assertIn(">오래 걸림</span>", card, "「오래 걸림」 캡션이 사라졌다")
+        for bad in (">오래 걸림</span>자동 작업", ">오래 걸림</span>무인 작업"):
+            self.assertNotIn(bad, card,
+                             "사실 줄 본문이 주체를 다시 세웠다 (%s) — 신원은 "
+                             "점과 툴팁의 몫이다" % bad)
+
+    def test_the_stop_hold_button_says_what_will_not_happen(self):
+        """정책 단추는 개체 이름을 부르지 않는다 — 결과를 적는다."""
+        card = self.surfaces["app/card.js"]
+        self.assertIn("저절로 이어지지 않게 하기", card)
+        self.assertNotIn("자동 작업 중단해 두기", card,
+                         "옛 단추 이름이 되살아났다 (DOC-20260831-005 로 개정)")
+
+    def test_nobody_stops_things_here_except_people(self):
+        """「누군가」(중단 주어)는 폐기 — 이 화면에서 중단하는 것은 사람뿐이다."""
+        for name, text in self.surfaces.items():
+            self.assertNotIn("누군가", text,
+                             "%s 에 모르는 주어가 남았다 — 「사람이」로" % name)
 
 
 if __name__ == "__main__":

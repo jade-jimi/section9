@@ -152,7 +152,7 @@ async function sessionRestart(sid, req, T, cap){
     // (REQ-20260830-008).
     const go = await s9dlg({kind: "confirm", cap: cap || "다시 시작",
       stop: false, safe: true,
-      title: `진행 중인 자동 작업 ${wk.length}건을 중단하고 ${what} 바꿉니다`,
+      title: `진행 중인 무인 작업 ${wk.length}건을 중단하고 ${what} 바꿉니다`,
       desc: "이 재시작은 이 창만 바꿉니다 — 중단하지 않으면 그 작업들은 옛"
         + " 설정 그대로 계속 진행됩니다. 중단하면 각 문서에 중단한 사실과 사유가"
         + " 남고, 나중에 그 카드의 「이어가기」로 다시 맡길 수 있습니다.",
