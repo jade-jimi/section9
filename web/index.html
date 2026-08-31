@@ -2825,6 +2825,11 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
 .chief-accordion-item p{margin:5px 0 0;color:var(--muted);font-size:11px;line-height:1.45}
 .chief-accordion-item footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px}
 .chief-accordion-item footer span{color:var(--faint);font:9.5px/1.3 var(--mono)}
+.chief-row-priority{display:inline-block;margin-left:7px;padding-left:7px;border-left:1px solid var(--hairline);
+  color:var(--muted);font-style:normal;font-weight:700;letter-spacing:.02em}
+.chief-row-priority.p0,.chief-row-priority.p1{color:var(--c-blocked)}
+.chief-row-priority.p2{color:var(--c-inprogress)}
+.chief-row-priority.p3,.chief-row-priority.p4,.chief-row-priority.p5{color:var(--faint)}
 .chief-row-actions{display:flex;align-items:center;gap:7px;flex:none}
 .chief-row-details{border:0;border-bottom:1px solid var(--border);background:none;color:var(--muted);
   padding:3px 1px;font-size:10px;font-weight:650;cursor:pointer}
@@ -4818,19 +4823,46 @@ function chiefStatusText(status){
     hold:"On hold",blocked:"Blocked",done:"Done",complete:"Done",closed:"Done"};
   return names[s] || String(status || "Ready").replace(/_/g, " ");
 }
+function chiefPriorityRank(row){
+  const value = chiefNorm(row && (row.priority || row.sev));
+  if (["critical","highest","urgent","p0","sev0"].includes(value)) return 0;
+  if (["high","p1","sev1"].includes(value)) return 1;
+  if (["med","medium","normal","p2","sev2"].includes(value)) return 2;
+  if (["low","p3","sev3"].includes(value)) return 3;
+  if (["lowest","trivial","p4","sev4"].includes(value)) return 4;
+  return 5;
+}
+function chiefPriorityLabel(row){
+  const value = chiefNorm(row && (row.priority || row.sev));
+  const labels = {critical:"Critical",highest:"Highest",urgent:"Urgent",p0:"Urgent",sev0:"Urgent",
+    high:"High",p1:"High",sev1:"High",med:"Medium",medium:"Medium",normal:"Medium",p2:"Medium",sev2:"Medium",
+    low:"Low",p3:"Low",sev3:"Low",lowest:"Lowest",trivial:"Lowest",p4:"Lowest",sev4:"Lowest"};
+  return labels[value] || "Priority not set";
+}
+function chiefChangedTime(row){
+  const value = String(row && (row.report_updated || row.updated || row.opened) || "").trim();
+  const kst = value.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?) KST$/);
+  const parsed = Date.parse(kst ? `${kst[1]}T${kst[2]}+09:00` : value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+function chiefNeedsPriorityCompare(a,b){
+  return chiefPriorityRank(a) - chiefPriorityRank(b) || chiefChangedTime(b) - chiefChangedTime(a) ||
+    String(a && (a.jira || a.id) || "").localeCompare(String(b && (b.jira || b.id) || ""));
+}
 function chiefWorkCard(row, lane){
   const project = row.project_title || row.project || "Needs filing";
   const context = row.next || row.outcome || row.goal || row.why || row.summary || "No next note has been recorded.";
   const ref = row.jira || row.work_order || row.id || "Work";
   const run = chiefRuns[row.id], running = chiefRunActive(run);
   const act = running ? "Working…" : lane === "needs" ? "Verify & resolve" : lane === "progress" ? "Continue" : lane === "done" ? "Evidence" : "Start work";
+  const priority = lane === "needs" ? `<em class="chief-row-priority p${chiefPriorityRank(row)}">${esc(chiefPriorityLabel(row))}</em>` : "";
   const sessionReport = run && run.run_id && !running ? chiefGet(`session/report?id=${encodeURIComponent(run.run_id)}`) : "";
   const blocked = chiefNorm(row.status).startsWith("blocked");
   return `<article class="chief-work">
     <div class="chief-work-meta"><span>${esc(project)}</span><span class="${blocked ? "blocked" : ""}">${esc(chiefStatusText(row.status))}</span></div>
     <h4>${esc(row.title || ref)}</h4>
     <p>${esc(chiefShort(context))}</p>
-    <div class="chief-work-foot"><span>${esc(ref)}${row.assignee ? ` · ${esc(row.assignee)}` : ""}</span>
+    <div class="chief-work-foot"><span>${esc(ref)}${row.assignee ? ` · ${esc(row.assignee)}` : ""}${priority}</span>
       <div class="chief-work-actions">${sessionReport ? `<a href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.title || ref} · agent result`)}">Agent report</a>` : ""}
       <button class="chief-text-action" data-chief-action="${esc(lane)}" data-chief-work="${esc(row.id || "")}" data-chief-title="${esc(row.title || ref)}" aria-busy="${running ? "true" : "false"}" ${running ? "disabled" : ""}>${act}</button></div></div>
   </article>`;
@@ -4886,7 +4918,8 @@ function chiefAccordionRows(rows,lane){
     const ref = row.jira || row.work_order || row.id || "Work";
     const run = chiefRuns[row.id], running = chiefRunActive(run);
     const act = running ? "Working…" : lane === "needs" ? "Verify & resolve" : lane === "progress" ? "Continue" : "Evidence";
-    return `<article class="chief-accordion-item"><h3>${esc(row.title || ref)}</h3><p>${esc(chiefShort(row.next || row.outcome || row.goal || row.why || "No movement note recorded."))}</p><footer><span>${esc(ref)}${row.project ? ` · ${esc(row.project)}` : ""}</span><div class="chief-row-actions"><button class="chief-row-details" data-chief-open-details="${esc(row.id || "")}" aria-label="Open saved details for ${esc(row.title || ref)}">Details</button><button class="chief-text-action" data-chief-action="${esc(lane)}" data-chief-work="${esc(row.id || "")}" data-chief-title="${esc(row.title || ref)}" ${running ? "disabled" : ""}>${act}</button></div></footer></article>`;
+    const priority = lane === "needs" ? `<em class="chief-row-priority p${chiefPriorityRank(row)}">${esc(chiefPriorityLabel(row))}</em>` : "";
+    return `<article class="chief-accordion-item"><h3>${esc(row.title || ref)}</h3><p>${esc(chiefShort(row.next || row.outcome || row.goal || row.why || "No movement note recorded."))}</p><footer><span>${esc(ref)}${row.project ? ` · ${esc(row.project)}` : ""}${priority}</span><div class="chief-row-actions"><button class="chief-row-details" data-chief-open-details="${esc(row.id || "")}" aria-label="Open saved details for ${esc(row.title || ref)}">Details</button><button class="chief-text-action" data-chief-action="${esc(lane)}" data-chief-work="${esc(row.id || "")}" data-chief-title="${esc(row.title || ref)}" ${running ? "disabled" : ""}>${act}</button></div></footer></article>`;
   }).join("");
   return `<div class="chief-accordion-list" id="${listId}">${items}</div>${hidden ? `<button class="chief-lane-more" data-chief-lane-toggle="${esc(lane)}" aria-expanded="${expanded}" aria-controls="${listId}">${expanded ? "Show less" : `Show remaining ${hidden}`}</button>` : ""}`;
 }
@@ -4908,6 +4941,7 @@ function renderChief(){
   const rows = chiefArr(chiefData.portfolio).filter(chiefInProject);
   const lanes = {needs:[],progress:[],ready:[],done:[]};
   rows.forEach(r => lanes[chiefLane(r)].push(r));
+  lanes.needs.sort(chiefNeedsPriorityCompare);
   const doneIds = new Set(lanes.done.map(r => r.id).filter(Boolean));
   if (!chiefProject) chiefArr(chiefData.done).forEach(r => { if (!doneIds.has(r.id)) lanes.done.push({...r,status:"done",project_title:"Recent outcome"}); });
   const allProjects = chiefArr(chiefData.projects);
