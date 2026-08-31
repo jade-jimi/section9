@@ -43,6 +43,12 @@ class ChiefMeetingsPage(unittest.TestCase):
         self.assertIn("Refresh calendar · Claude", self.meetings)
         self.assertIn("T3 Code", self.meetings)
 
+    def test_automatic_prep_state_is_visible_per_event(self):
+        self.assertIn("Auto prep scheduled", self.meetings)
+        self.assertIn("Preparing automatically", self.meetings)
+        self.assertIn("Prep needs attention", self.meetings)
+        self.assertIn("Automatic briefings ${automation.lead_minutes || 60}m before", self.meetings)
+
     def test_external_sources_are_read_only(self):
         self.assertIn("Do not modify calendar, Jira, repositories, cloud, Confluence or Teams", self.meetings)
         self.assertIn("Do not mutate the calendar, Jira, cloud, Confluence or Teams", self.meetings)

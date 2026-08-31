@@ -35,3 +35,11 @@ release state, and observation time instead of copying mutable status without pr
 - Meeting preparation sessions may read Jira, releases, work orders, decisions, prior reports and
   session results. Calendar/Jira/repository/cloud/Confluence/Teams writes remain forbidden unless
   Jade separately authorizes them.
+- Automatic preparation: `chief-meeting-prep.timer` checks every 10 minutes. At 60 minutes before
+  a non-cancelled event it starts exactly one T3 Codex (`gpt-5.6-terra`, medium) session; an explicit
+  terminal Codex failure permits one Claude fallback. Event-instance state is stored at
+  `/home/jade/chief/calendar/automation-state.json`, and the required history JSON is the completion
+  receipt. Active sessions and completed receipts suppress duplicates.
+- Calendar freshness is maintained by a bounded T3 Claude refresh when the snapshot is 12 hours
+  old, or 2 hours old within three hours of a meeting. Near a meeting, preparation waits for that
+  refresh so a cancellation/time change is not prepared from stale data.
