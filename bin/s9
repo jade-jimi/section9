@@ -10557,6 +10557,14 @@ def cmd_serve(args):
             elif parsed.path == "/api/chief/work":
                 code, ctype, data = chief_call("/api/work")
                 self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/work/detail":
+                target = chief_query_path("/api/work/detail", qs, ("work_id",))
+                code, ctype, data = chief_call(target)
+                self._send(code, ctype, data)
+            elif parsed.path == "/api/chief/work/deep-details":
+                target = chief_query_path("/api/work/deep-details", qs, ("work_id",))
+                code, ctype, data = chief_call(target)
+                self._send(code, ctype, data)
             elif parsed.path == "/api/chief/now":
                 code, ctype, data = chief_call("/api/now")
                 self._send(code, ctype, data)
@@ -10954,6 +10962,7 @@ def cmd_serve(args):
                     "/api/chief/project-session/message": "/api/project-session/message",
                     "/api/chief/work/create": "/api/work/create",
                     "/api/chief/work/attention": "/api/work/attention",
+                    "/api/chief/work/deep-details/start": "/api/work/deep-details/start",
                     "/api/chief/work/complete": "/api/work/done",
                     "/api/chief/work/investigate": "/api/work/investigate",
                     "/api/chief/order": "/api/order",

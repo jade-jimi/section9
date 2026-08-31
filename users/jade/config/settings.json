@@ -1,4 +1,6 @@
 {
  "agent_cli": "t3-codex",
- "pref_home_credentials": "For Bitbucket/Jira release work, use the authorized credential source in Jade home (currently /home/jade/.bitbucket_creds). Never copy secret values into repositories, work orders, reports, logs, chat, or remote hosts; reference only the path and capability. Production merges remain Jade-only."
+ "pref_home_credentials": "For Bitbucket/Jira release work, use the authorized credential source in Jade home (currently /home/jade/.bitbucket_creds). Never copy secret values into repositories, work orders, reports, logs, chat, or remote hosts; reference only the path and capability. Production merges remain Jade-only.",
+ "pref_deep_details_model": "Deep details default to cheaper models: Codex gpt-5.6-terra medium; Claude claude-sonnet-5 medium. Use claude-fable-5 only for explicit escalation on contradictory evidence or high-risk decisions. Always save question/repo/branch/provider/model/evidence time/result/report path.",
+ "pref_deep_details_provider": "Default Deep details provider is Codex (gpt-5.6-terra medium). Claude Sonnet 5 medium is an optional fallback; never auto-start either provider merely by opening ticket details."
 }
