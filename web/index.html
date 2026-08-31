@@ -2970,6 +2970,14 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
 .chief-release-fact h4{margin:0 0 6px;color:var(--faint);font:750 9px/1.2 var(--mono);
   text-transform:uppercase;letter-spacing:.08em}
 .chief-release-fact p{margin:0;font-size:11px;line-height:1.5;color:var(--muted)}
+.chief-release-project-engine{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:10px 12px;
+  border:1px solid var(--hairline);background:var(--bg)}
+.chief-release-project-engine>span{margin-right:5px;color:var(--faint);font:750 9px/1 var(--mono);
+  letter-spacing:.08em;text-transform:uppercase}
+.chief-release-project-engine button{border:1px solid transparent;background:none;color:var(--muted);
+  padding:5px 7px;font-size:10px;font-weight:700;cursor:pointer}
+.chief-release-project-engine button[aria-pressed="true"]{border-color:var(--border);background:var(--panel);color:var(--text)}
+.chief-release-project-engine button:disabled{opacity:.5;cursor:progress}
 .chief-release-actions{display:flex;gap:8px;flex-wrap:wrap}
 .chief-release-actions button,.chief-release-actions a{border:1px solid var(--text);background:var(--text);color:var(--bg);
   min-height:37px;padding:8px 12px;font-size:11px;font-weight:750;text-decoration:none;cursor:pointer}
@@ -3239,6 +3247,7 @@ let chiefArtifacts = null, chiefArtifactsLoading = false, chiefArtifactsError = 
 let chiefArtifactQuery = "", chiefArtifactKind = "all";
 const chiefArtifactExpanded = new Set();
 let chiefArtifactSearchTimer = null;
+let chiefProjectEngineBusy = "";
 let chiefDetailState = {open:false,work_id:"",loading:false,starting:false,error:"",runs:[],
   provider:"codex",deepenOpen:false,context:null};
 let chiefDetailReturn = null, chiefDetailOverflow = "", chiefDetailPoll = null;
@@ -4495,6 +4504,7 @@ function chiefWrite(name){
     chatMessage:["api/chief/chat/message","/chief-chat/message"],
     projectSessionStart:["api/chief/project-session/start","/project-session/start"],
     projectSessionMessage:["api/chief/project-session/message","/project-session/message"],
+    projectEngine:["api/chief/project/engine","/project/engine"],
   };
   const pair = routes[name];
   return root === null ? pair[0] : root + pair[1];
@@ -4684,6 +4694,23 @@ async function chiefSetAttention(workId,action){
   }catch(e){
     chiefAttentionState = {work_id:workId,busy:"",error:e.message || String(e)}; renderChief();
     requestAnimationFrame(() => document.querySelector(`[data-chief-attention="${action}"]`)?.focus());
+  }
+}
+async function chiefSetProjectEngine(project,engine){
+  project = String(project || ""); engine = chiefEngineValue(engine);
+  if (!project || chiefProjectEngineBusy) return;
+  chiefProjectEngineBusy = project; renderChiefReleasePage();
+  try{
+    await chiefPost("projectEngine",{project,engine});
+    const row = chiefArr(chiefData && chiefData.projects).find(item => chiefNorm(item.id) === chiefNorm(project));
+    if (row) row.engine = engine;
+    chiefNotice = `${row && row.title || project} now defaults to ${CHIEF_ENGINES[engine].label}.`;
+    await refreshChief(true);
+  }catch(e){
+    chiefNotice = `Project provider was not changed: ${e.message || e}`;
+  }finally{
+    chiefProjectEngineBusy = "";
+    if (tab === "chief" && chiefDaily === "release") renderChiefReleasePage();
   }
 }
 const chiefDetailText = value => {
@@ -4981,7 +5008,7 @@ function chiefLane(row){
   const s = chiefNorm(row && row.status);
   if (s.startsWith("done") || s.startsWith("complete") || s === "closed") return "done";
   if (s.startsWith("in_progress")) return "progress";
-  if (s.startsWith("review") || s.startsWith("blocked")) return "needs";
+  if (s.startsWith("review") || s.startsWith("blocked")) return row && row.needs_human ? "needs" : "progress";
   return "ready";
 }
 function chiefProjectKey(row){ return chiefNorm(row && (row.project || row.project_id || "unfiled")); }
@@ -5151,6 +5178,11 @@ function chiefReleasePageRank(row){
 }
 function chiefReleaseProjectCard(row){
   const state = chiefNorm(row.status || "unknown");
+  const projectId = row.canonical_project || row.project_id || "";
+  const registeredProject = chiefArr(chiefData && chiefData.projects).find(project =>
+    chiefNorm(project.id) === chiefNorm(projectId));
+  const projectEngine = chiefEngineValue(registeredProject && registeredProject.engine || "t3");
+  const engineBusy = chiefProjectEngineBusy === projectId;
   const featureOpen = chiefArr(row.prs).filter(pr => chiefNorm(pr.state) !== "merged");
   const merged = chiefArr(row.prs).filter(pr => chiefNorm(pr.state) === "merged");
   const staging = row.staging && typeof row.staging === "object" ? row.staging : null;
@@ -5176,9 +5208,10 @@ function chiefReleaseProjectCard(row){
   const path = steps.length ? `<div class="chief-release-path" style="--release-steps:${steps.length}">${steps.map(step => `<div class="chief-release-step ${esc(chiefNorm(step.status))}"><b>${step.url ? `<a href="${esc(step.url)}" target="_blank" rel="noopener">${esc(step.label || step.id)}</a>` : esc(step.label || step.id)}</b><span>${esc(chiefStatusText(step.status))}</span></div>`).join("")}</div>` : "";
   const workRows = work.length ? work.map(item => `<article class="chief-release-work-row ${item.dev_complete ? "ready" : "pending"}"><b>${esc(item.title || item.jira || item.id)}</b><p>${esc(chiefShort(item.next || (item.dev_complete ? "Verified feature work is integrated to dev." : "Acceptance or integration evidence is still open."),220))}</p><small>${esc(item.jira || item.id || "work")} · ${item.checked != null || item.total != null ? `${esc(item.checked ?? "?")}/${esc(item.total ?? "?")} checks · ` : ""}${esc((item.stage || "recorded").replaceAll("_"," "))}${item.prs && item.prs.length ? ` · PR ${item.prs.map(pr => `#${pr.id}`).join(", ")}` : ""}</small></article>`).join("") : `<div class="chief-detail-empty">No Jira-linked work is recorded for this batch; use the PR list below as provider evidence.</div>`;
   const prRows = chiefArr(row.prs).map(pr => `<article class="chief-release-work-row ${chiefNorm(pr.state) === "merged" ? "ready" : "pending"}"><b>PR #${esc(pr.id)} — ${esc(pr.title || "Feature change")}</b><p>${esc(pr.result || pr.summary || "Provider state recorded.")}</p><small>${esc(pr.source || "source")} → ${esc(pr.target || row.target || "dev")} · ${esc(pr.state || "unknown")}</small></article>`).join("");
-  const actions = `<div class="chief-release-actions">${runChoices ? `<button data-chief-release="${esc(row.id)}" data-chief-release-action="${esc(runChoices[0])}" data-chief-title="${esc(`${row.project} · ${runChoices[1]}`)}" ${running ? "disabled" : ""}>${running ? "Working…" : esc(runChoices[1])}</button>` : ""}${promotionOpen && promotion.url ? `<a class="secondary" href="${esc(promotion.url)}" target="_blank" rel="noopener">${staging && !stagingPassed ? "Open production PR · staging pending" : "Review dev → production PR"}</a>` : ""}${report ? `<a class="secondary" href="${esc(report)}" data-chief-report-open data-chief-report-title="${esc(`${row.project} · release report`)}">Open release report</a>` : ""}${sessionReport ? `<a class="secondary" href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.project} · release agent report`)}">Open agent report</a>` : ""}</div>`;
+  const enginePicker = `<div class="chief-release-project-engine"><span>Project default</span>${Object.entries(CHIEF_ENGINES).map(([value,meta]) => `<button type="button" data-chief-project-engine="${esc(projectId)}" data-chief-project-engine-value="${value}" aria-pressed="${projectEngine === value}" ${engineBusy ? "disabled" : ""}>${esc(meta.label)}</button>`).join("")}</div>`;
+  const actions = `<div class="chief-release-actions">${runChoices ? `<button data-chief-release="${esc(row.id)}" data-chief-release-action="${esc(runChoices[0])}" data-chief-release-engine="${esc(projectEngine)}" data-chief-title="${esc(`${row.project} · ${runChoices[1]}`)}" ${running ? "disabled" : ""}>${running ? "Working…" : esc(runChoices[1])}</button>` : ""}${promotionOpen && promotion.url ? `<a class="secondary" href="${esc(promotion.url)}" target="_blank" rel="noopener">${staging && !stagingPassed ? "Open production PR · staging pending" : "Review dev → production PR"}</a>` : ""}${report ? `<a class="secondary" href="${esc(report)}" data-chief-report-open data-chief-report-title="${esc(`${row.project} · release report`)}">Open release report</a>` : ""}${sessionReport ? `<a class="secondary" href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.project} · release agent report`)}">Open agent report</a>` : ""}</div>`;
   const complete = promotionMerged && state === "released" && !acceptanceOpen;
-  return `<details class="chief-release-project" ${["blocked","building","ready_for_human"].includes(state) ? "open" : ""}><summary><div><h2>${esc(row.project || row.repo || "Unfiled release")}</h2><p>${esc(chiefShort(row.display_summary || row.next_action || `${merged.length} merged feature PRs · ${featureOpen.length} open`,250))}</p></div><span class="state ${esc(state)}">${esc(complete ? "All merges complete" : chiefStatusText(row.status))}</span></summary><div class="chief-release-project-body">${path}<div class="chief-release-grid"><section class="chief-release-section"><h3>Included work</h3><div class="chief-release-work-list">${workRows}</div><details><summary>${merged.length + featureOpen.length} provider PR records</summary><div class="chief-release-work-list">${prRows || `<div class="chief-detail-empty">No provider PR records.</div>`}</div></details></section><aside class="chief-release-side"><div class="chief-release-fact"><h4>Whole-project gate</h4><p>${featureOpen.length ? `${featureOpen.length} feature PR${featureOpen.length === 1 ? "" : "s"} still need dev integration.` : staging && !stagingPassed ? `${staging.label || "Staging"} must be verified at the exact dev source.` : promotionOpen ? "One production-review PR is ready for Jade's manual decision." : complete ? "Production merge is recorded; there is nothing to do in this release." : "The next release action is recorded below."}</p></div><div class="chief-release-fact"><h4>Reviewers</h4><p>${esc(reviewers)}</p></div><div class="chief-release-fact"><h4>Pipeline blast / recovery</h4><p>${esc(chiefShort((row.pipeline_blast || {}).stale_reason || (row.pipeline_blast || {}).failure_reason || (row.pipeline_blast || {}).classification || (row.pipeline_blast || {}).status || "Not yet verified at the current promotion source.",260))}</p></div>${actions}</aside></div></div></details>`;
+  return `<details class="chief-release-project" ${["blocked","building","ready_for_human"].includes(state) ? "open" : ""}><summary><div><h2>${esc(row.project || row.repo || "Unfiled release")}</h2><p>${esc(chiefShort(row.display_summary || row.next_action || `${merged.length} merged feature PRs · ${featureOpen.length} open`,250))}</p></div><span class="state ${esc(state)}">${esc(complete ? "All merges complete" : chiefStatusText(row.status))}</span></summary><div class="chief-release-project-body">${path}<div class="chief-release-grid"><section class="chief-release-section"><h3>Included work</h3><div class="chief-release-work-list">${workRows}</div><details><summary>${merged.length + featureOpen.length} provider PR records</summary><div class="chief-release-work-list">${prRows || `<div class="chief-detail-empty">No provider PR records.</div>`}</div></details></section><aside class="chief-release-side">${enginePicker}<div class="chief-release-fact"><h4>Whole-project gate</h4><p>${featureOpen.length ? `${featureOpen.length} feature PR${featureOpen.length === 1 ? "" : "s"} still need dev integration.` : staging && !stagingPassed ? `${staging.label || "Staging"} must be verified at the exact dev source.` : promotionOpen ? "One production-review PR is ready for Jade's manual decision." : complete ? "Production merge is recorded; there is nothing to do in this release." : "The next release action is recorded below."}</p></div><div class="chief-release-fact"><h4>Reviewers</h4><p>${esc(reviewers)}</p></div><div class="chief-release-fact"><h4>Pipeline blast / recovery</h4><p>${esc(chiefShort((row.pipeline_blast || {}).stale_reason || (row.pipeline_blast || {}).failure_reason || (row.pipeline_blast || {}).classification || (row.pipeline_blast || {}).status || "Not yet verified at the current promotion source.",260))}</p></div>${actions}</aside></div></div></details>`;
 }
 function renderChiefReleasePage(){
   const view = $("#view"); $("#count").textContent = "";
@@ -10273,6 +10306,12 @@ document.addEventListener("click", async e => {
   }
   const boardStart = e.target.closest("[data-board-start]");
   if (boardStart){ e.stopPropagation(); await boardStartWork(boardStart.dataset.boardStart || ""); return; }
+  const projectEngine = e.target.closest("[data-chief-project-engine]");
+  if (projectEngine){
+    await chiefSetProjectEngine(projectEngine.dataset.chiefProjectEngine || "",
+      projectEngine.dataset.chiefProjectEngineValue || "t3");
+    return;
+  }
   const engineChoice = e.target.closest("[data-chief-engine]");
   if (engineChoice){
     chiefEngine = chiefEngineValue(engineChoice.dataset.chiefEngine);
@@ -10406,7 +10445,8 @@ document.addEventListener("click", async e => {
   }
   const chiefRelease = e.target.closest("[data-chief-release]");
   if (chiefRelease){ chiefStartRelease(chiefRelease.dataset.chiefRelease || "",
-    chiefRelease.dataset.chiefReleaseAction || "merge_dev",chiefRelease.dataset.chiefTitle || "release work"); return; }
+    chiefRelease.dataset.chiefReleaseAction || "merge_dev",chiefRelease.dataset.chiefTitle || "release work",
+    chiefRelease.dataset.chiefReleaseEngine || chiefEngine); return; }
   // 본문 안에서 탭으로 건너뛰는 링크 — 헤더 탭 버튼의 active 표시를 빼앗지 않도록
   // data-tab 이 아니라 data-goto 로 둔다(그 핸들러는 클릭된 요소를 active로 만든다).
   // data-goto 는 두 뜻으로 쓰인다: 탭 이름("graph") 과 문서 본문의 상태 전이
