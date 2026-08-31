@@ -2827,6 +2827,8 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
 .chief-accordion-mark{width:42px;height:42px;border:1px solid var(--border);border-radius:50%;display:flex;
   align-items:center;justify-content:center;font:700 13px/1 Georgia,serif;color:var(--c-done)}
 .chief-accordion.needs .chief-accordion-mark{color:var(--c-inprogress);border-color:#e2b86c}
+.chief-accordion.ready .chief-accordion-mark{color:var(--c-open);
+  border-color:color-mix(in srgb,var(--c-open) 48%,var(--border))}
 .chief-accordion>summary b{font-size:17px;letter-spacing:-.02em}
 .chief-accordion>summary span:not(.chief-accordion-mark){color:var(--muted);font:10px/1 var(--mono);margin-left:4px}
 .chief-accordion-body{display:grid;gap:0;padding:0 0 16px 56px;max-height:none;overflow:visible}
@@ -3308,8 +3310,8 @@ let chiefSessions = null, chiefSessionsLoading = false, chiefSessionsError = "";
 let chiefSelectedSession = "", chiefThread = null, chiefThreadLoading = false, chiefSending = false;
 let boardStartState = {};
 let chiefAttentionState = {work_id:"",busy:"",error:""};
-let chiefLaneExpanded = {needs:false,progress:false,done:false};
-let chiefLaneOpen = {needs:null,progress:null,done:null};
+let chiefLaneExpanded = {needs:false,ready:false,progress:false,done:false};
+let chiefLaneOpen = {needs:null,ready:null,progress:null,done:null};
 let chiefArtifacts = null, chiefArtifactsLoading = false, chiefArtifactsError = "";
 let chiefArtifactQuery = "", chiefArtifactKind = "all";
 const chiefArtifactExpanded = new Set();
@@ -4970,6 +4972,10 @@ async function chiefCreateWork(project,startSession=false){
     }
     chiefProject = project;
     chiefNotice = `${made.jira} and ${made.request_id} created for ${projectTitle}.`;
+    if (!startSession){
+      chiefLaneOpen.ready = true;
+      chiefLaneExpanded.ready = false;
+    }
     await refreshChief(true);
     if (startSession){
       const engine = chiefEngineValue(chiefEngine);
@@ -5134,6 +5140,12 @@ function chiefNeedsPriorityCompare(a,b){
   return chiefPriorityRank(a) - chiefPriorityRank(b) || chiefChangedTime(b) - chiefChangedTime(a) ||
     String(a && (a.jira || a.id) || "").localeCompare(String(b && (b.jira || b.id) || ""));
 }
+function chiefProgressCompare(a,b){
+  const aActive = chiefRunActive(a && a.session_run);
+  const bActive = chiefRunActive(b && b.session_run);
+  return Number(bActive) - Number(aActive) || chiefChangedTime(b) - chiefChangedTime(a) ||
+    String(a && (a.jira || a.id) || "").localeCompare(String(b && (b.jira || b.id) || ""));
+}
 function chiefWorkCard(row, lane){
   const project = row.project_title || row.project || "Needs filing";
   const context = row.next || row.outcome || row.goal || row.why || row.summary || "No next note has been recorded.";
@@ -5226,7 +5238,7 @@ function chiefAccordionRows(rows,lane){
   const items = shown.map(row => {
     const ref = row.jira || row.work_order || row.id || "Work";
     const run = chiefRuns[row.id], running = chiefRunActive(run);
-    const act = running ? "Working…" : lane === "needs" ? "Verify & resolve" : lane === "progress" ? "Continue" : "Evidence";
+    const act = running ? "Working…" : lane === "needs" ? "Verify & resolve" : lane === "progress" ? "Continue" : lane === "ready" ? "Start work" : "Evidence";
     const priority = lane === "needs" ? `<em class="chief-row-priority p${chiefPriorityRank(row)}">${esc(chiefPriorityLabel(row))}</em>` : "";
     return `<article class="chief-accordion-item"><h3>${esc(row.title || ref)}</h3><p>${esc(chiefShort(row.next || row.outcome || row.goal || row.why || "No movement note recorded."))}</p><footer><span>${esc(ref)}${row.project ? ` · ${esc(row.project)}` : ""}${priority}</span><div class="chief-row-actions"><button class="chief-row-details" data-chief-open-details="${esc(row.id || "")}" aria-label="Open saved details for ${esc(row.title || ref)}">Details</button><button class="chief-text-action" data-chief-action="${esc(lane)}" data-chief-work="${esc(row.id || "")}" data-chief-title="${esc(row.title || ref)}" ${running ? "disabled" : ""}>${act}</button></div></footer></article>`;
   }).join("");
@@ -5434,6 +5446,9 @@ function renderChief(){
   const lanes = {needs:[],progress:[],ready:[],done:[]};
   rows.forEach(r => { if (!r.release_owned) lanes[chiefLane(r)].push(r); });
   lanes.needs.sort(chiefNeedsPriorityCompare);
+  lanes.progress.sort(chiefProgressCompare);
+  lanes.ready.sort((a,b) => chiefChangedTime(b) - chiefChangedTime(a) ||
+    String(a && (a.jira || a.id) || "").localeCompare(String(b && (b.jira || b.id) || "")));
   const doneIds = new Set(lanes.done.map(r => r.id).filter(Boolean));
   if (!chiefProject) chiefArr(chiefData.done).forEach(r => { if (!doneIds.has(r.id)) lanes.done.push({...r,status:"done",project_title:"Recent outcome"}); });
   const allProjects = chiefArr(chiefData.projects);
@@ -5534,9 +5549,12 @@ function renderChief(){
   const releaseNeedsDev = releases.some(r => ["building","blocked"].includes(chiefNorm(r.status)) && chiefReleaseOpenCount(r) > 0);
   const reportsCompact = reports.length ? reports.slice(0,4).map(chiefReportHTML).join("") : `<div class="chief-daily-empty"><div><b>No report attached.</b>Create the first meeting report for this project.</div></div>`;
   const needsOpen = chiefLaneOpen.needs == null ? false : chiefLaneOpen.needs;
+  const readyOpen = chiefLaneOpen.ready == null ? jiraLanes.ready.length > 0 : chiefLaneOpen.ready;
   const progressOpen = chiefLaneOpen.progress == null ? !releaseNeedsDev : chiefLaneOpen.progress;
   const doneOpen = chiefLaneOpen.done == null ? false : chiefLaneOpen.done;
   view.innerHTML = `<div class="chief-shell">${scope}<div class="chief-home"><section class="chief-left"><section class="chief-return"><p class="chief-date">${esc(dateLabel)}</p><h1>${greeting},<br>Jade</h1><p class="chief-context-summary">Your context has been rebuilt from saved work, Jira, project records, sessions, PRs and releases. ${lanes.needs.length} need you; ${lanes.progress.length} are moving.</p>${freshnessMarkup}</section><section class="chief-block"><p class="chief-block-cap">Your next move</p>${nextMarkup}</section><section class="chief-block"><p class="chief-block-cap">What changed since your last visit</p>${changed}</section><section class="chief-block"><p class="chief-block-cap">Context trail</p>${trail}</section></section><aside class="chief-right">${chiefEnginePickerHTML()}<details class="chief-accordion needs" data-chief-lane-details="needs" ${needsOpen ? "open" : ""}><summary><span class="chief-accordion-mark">!</span><b>Needs you</b><span>${jiraLanes.needs.length}</span></summary><div class="chief-accordion-body"><div class="chief-compact-actions"><button data-chief-add-work data-chief-project="${esc(chiefProject)}" title="${selectedProject ? "Add work to this project" : "Choose a project, then add Jira-backed work"}">Add work</button></div>${chiefAccordionRows(jiraLanes.needs,"needs")}</div></details><details class="chief-accordion working" data-chief-lane-details="progress" ${progressOpen ? "open" : ""}><summary><span class="chief-accordion-mark">W</span><b>Working</b><span>${jiraLanes.progress.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.progress,"progress")}</div></details><details class="chief-accordion done" data-chief-lane-details="done" ${doneOpen ? "open" : ""}><summary><span class="chief-accordion-mark">D</span><b>Recent done</b><span>${jiraLanes.done.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.done,"done")}</div></details><details class="chief-compact chief-release-preview" ${releaseNeedsDev ? "open" : ""}><summary><b>Release</b><span>${releases.length} records${releaseNeedsDev ? " · dev action ready" : ""}</span></summary><div class="chief-compact-body"><div class="chief-compact-actions"><button data-chief-nav="release">Open all ${releases.length} in Release →</button></div><div class="chief-release-scroll">${releaseCompact}</div></div></details><details class="chief-compact"><summary><b>Reports</b><span>${reports.length} durable</span></summary><div class="chief-compact-body"><div class="chief-compact-actions"><button data-chief-create-report data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Create meeting report</button></div>${reportsCompact}</div></details><details id="chief-sessions-disclosure" class="chief-compact" ${chiefSelectedSession ? "open" : ""}><summary><b>Sessions</b><span>${chiefArr(chiefSessions).length} conversations</span></summary><div class="chief-compact-body">${chiefSessionsHTML()}</div></details><details class="chief-compact"><summary><b>Documents</b><span>${documents.length} sources</span></summary><div class="chief-compact-body">${documentsMarkup}</div></details></aside></div><button class="chief-talk-float" data-chief-talk>Talk to Chief</button></div>`;
+  const workingLane = view.querySelector('[data-chief-lane-details="progress"]');
+  if (workingLane) workingLane.insertAdjacentHTML("beforebegin", `<details class="chief-accordion ready" data-chief-lane-details="ready" ${readyOpen ? "open" : ""}><summary><span class="chief-accordion-mark">R</span><b>Ready</b><span>${jiraLanes.ready.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.ready,"ready")}</div></details>`);
 }
 async function refreshChief(rerender=false){
   if (chiefLoading) return;
