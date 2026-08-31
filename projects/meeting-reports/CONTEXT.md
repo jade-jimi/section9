@@ -40,9 +40,10 @@ release state, and observation time instead of copying mutable status without pr
   terminal Codex failure permits one Claude fallback. Event-instance state is stored at
   `/home/jade/chief/calendar/automation-state.json`, and the required history JSON is the completion
   receipt. Active sessions and completed receipts suppress duplicates.
-- Calendar freshness is maintained by a bounded T3 Claude refresh when the snapshot is 12 hours
-  old, or 2 hours old within three hours of a meeting. Near a meeting, preparation waits for that
-  refresh so a cancellation/time change is not prepared from stale data.
+- Calendar freshness is maintained by at most one bounded T3 Claude refresh per 24 hours. The
+  ten-minute timer does not query M365; it reads the saved snapshot only so it can dispatch at the
+  60-minute boundary. Jade can use the explicit **Refresh calendar · Claude** action for an
+  exceptional same-day schedule change.
 - Ready notification: only after both `<event-key>.json` and its non-empty browser report exist,
   the watcher sends one personal ntfy message through `/home/jade/chief/bin/chief-notify` with the
   meeting title/time and `#chief/meetings` link. `notified_at` in automation state deduplicates it;
