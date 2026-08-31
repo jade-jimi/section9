@@ -218,6 +218,13 @@
   font-size:10px;color:var(--calm-quiet);letter-spacing:.01em}
 /* 집는 손잡이는 경과 시각이 선 칸을 빌려 쓴다 — calm 은 그 칸이 아래쪽이다 */
 [data-skin="calm"] .card .pickdoc{right:var(--card-px);bottom:var(--card-pb);top:auto}
+/* 시각이 아래 모서리라 예약도 마지막 줄 몫이다 (REQ-20260831-021-62x6):
+   위 모서리용 첫머리 스트럿은 여기선 일을 못 한다 — 내려간 식별자가
+   시각의 줄로 들어간다. 끝자리 스페이서가 마지막 줄의 오른쪽을 비운다:
+   식별자와 한 줄에 못 서면 스페이서만 아랫줄로 내려가 그 줄이 시각의
+   줄이 된다. base 의 ch 예약(padding)은 위 모서리 문법이라 끈다. */
+[data-skin="calm"] .card .id{padding-right:0}
+[data-skin="calm"] .card .id::after{content:"";flex:0 0 auto;width:calc(11ch + 8px);height:var(--card-edge)}
 
 /* 담당자 = 이니셜 링(면이 아니라 윤곽) + 이름. base의 "@" 접두는 링이 대신한다 */
 [data-skin="calm"] .card .badge{display:inline-flex;align-items:center;gap:6px;

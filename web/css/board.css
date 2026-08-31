@@ -130,9 +130,22 @@
    (glass @1000px 실측). 식별자는 카드를 가르는 이름이라 반으로 접히면
    옆 카드와 구별이 안 된다. 낱말은 아랫줄로 내려갈지언정 이름을 자르거나
    시각을 덮지 않는다. */
+/* 그 약속이 점 없는 카드에서 깨졌었다 (REQ-20260831-021). flex 줄바꿈은 줄의
+   **첫 항목**을 못 내린다 — 점(livedot)이 있는 카드는 식별자가 둘째 항목이라
+   얌전히 아랫줄로 내려가는데, 점이 없으면 식별자가 첫 항목이 되어 예약 안으로
+   그냥 밀고 들어간다(cork compact @1000px 실측 -1.19px). 폭 0 스트럿을 줄
+   첫머리에 세워 식별자를 늘 '둘째 이후'로 만든다 — 높이만 줄 상자를 따라가
+   (--card-edge), 내려간 식별자가 시각 **아래** 줄에 서게 한다.
+   예약폭도 상수 px 을 걷었다: 62px 는 경과시각의 실폭(⏱ 공백 "999d 23h")보다
+   작아질 수 있고 스킨의 글자 크기도 못 따라간다. 그 내용 모델이 11자라
+   11ch 로 묶는다 — ch 는 이 줄의 글꼴을 읽으므로 calm 이 11px 로 키우면
+   예약도 함께 큰다. +8px 는 ⏱ 가 ch 밖(이모지 글꼴)이라 두는 여유다.
+   soft 는 시각을 제 줄로 내려 예약 자체를 0 으로 덮는다 — 그 덮어쓰기는
+   padding-right 그대로라 이 변경과 무관하게 산다. */
 .card .id{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.02em;
   line-height:var(--card-edge);
-  display:flex;flex-wrap:wrap;align-items:center;padding-right:62px}
+  display:flex;flex-wrap:wrap;align-items:center;padding-right:calc(11ch + 8px)}
+.card .id::before{content:"";height:var(--card-edge)}
 .card .id .idn{white-space:nowrap}
 /* 우선순위 표기 (REQ-20260827-029 재작업 — REQ-20260826-005의 계약은 유지).
    지켜야 하는 것: 기본값 50도 반드시 그린다. 값이 기본과 다를 때만 찍었더니
@@ -189,8 +202,10 @@
 .hovercard code{font-family:var(--mono);font-size:11px}
 /* 미답 질문 안내 등 메타 행의 곁말 */
 .prio-note{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:7px}
-.card .t{margin:3px 0 6px;font-weight:600;line-height:1.45;font-size:13.5px;letter-spacing:-.01em;
-  padding-right:56px}
+/* 제목 줄은 예약이 필요 없다 (REQ-20260831-021): 시각·손잡이가 서는 모서리는
+   id 줄(늘 제목 위에 있다)의 첫 줄이고, 제목은 그 아래에서 시작한다. 남아
+   있던 56px 는 제목만 일찍 접던 죽은 예약이었다. */
+.card .t{margin:3px 0 6px;font-weight:600;line-height:1.45;font-size:13.5px;letter-spacing:-.01em}
 .card .m{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);
   font-family:var(--mono);align-items:baseline}
 .elapsed{position:absolute;right:var(--card-px);top:var(--card-pt);
