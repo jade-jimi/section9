@@ -2446,6 +2446,7 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
 .chief-release-state.building,.chief-release-state.in_progress{color:var(--c-inprogress)}
 .chief-release-state.blocked{color:var(--c-blocked)}
 .chief-release-state.released,.chief-release-state.done{color:var(--c-done)}
+.chief-release-timing{display:block;margin-top:4px;color:var(--faint);font:9px/1.35 var(--mono)}
 .chief-report a{grid-column:2;grid-row:1/3;color:var(--text);font-size:10.5px;text-underline-offset:3px}
 .chief-report .chief-report-pending{grid-column:2;grid-row:1/3;color:var(--faint);font:9.5px/1.3 var(--mono)}
 
@@ -2598,7 +2599,21 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   letter-spacing:.13em;text-transform:uppercase}
 .chief-return h1{margin:0;font:700 clamp(48px,5vw,68px)/.98 Georgia,"Times New Roman",serif;
   letter-spacing:-.055em;color:var(--text)}
-.chief-return>p:last-child{max-width:530px;margin:24px 0 0;color:var(--muted);font-size:15px;line-height:1.55}
+.chief-context-summary{max-width:530px;margin:24px 0 0;color:var(--muted);font-size:15px;line-height:1.55}
+.chief-freshness{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-top:22px;padding-top:14px;
+  border-top:1px solid var(--hairline)}
+.chief-freshness dl{display:flex;gap:18px;margin:0;flex:1;min-width:270px}
+.chief-freshness dl>div{min-width:0}
+.chief-freshness dt{color:var(--faint);font:700 9px/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.chief-freshness dd{margin:5px 0 0;color:var(--text);font-size:11.5px;line-height:1.35;overflow-wrap:anywhere}
+.chief-freshness button{border:0;border-bottom:1px solid var(--border);background:none;color:var(--muted);
+  padding:4px 0;font-size:10.5px;font-weight:650;cursor:pointer}
+.chief-freshness button:hover{color:var(--text);border-color:var(--text)}
+.chief-freshness button:disabled{color:var(--faint);cursor:progress}
+.chief-source-health{margin:9px 0 0;color:var(--muted);font-size:10.5px;line-height:1.45}
+.chief-source-health b{color:var(--c-inprogress);font-weight:650}
+.chief-source-health .unreachable{color:var(--c-blocked)}
+.chief-freshness-note{margin:8px 0 0;color:var(--muted);font-size:10.5px;line-height:1.45}
 .chief-scope{position:absolute;right:0;top:0;z-index:34;display:flex;justify-content:flex-end;margin:0}
 .chief-scope-toggle{border:0;border-bottom:1px solid var(--border);background:none;color:var(--text);
   padding:6px 0;font-size:11.5px;font-weight:650;cursor:pointer}
@@ -2619,10 +2634,20 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   align-items:center;justify-content:center;color:var(--c-done);font:700 18px/1 Georgia,serif}
 .chief-next-editorial h2{margin:0;font-size:22px;line-height:1.28;letter-spacing:-.025em}
 .chief-next-editorial p{margin:12px 0 0;color:var(--c-done);font-size:13px;line-height:1.55}
+.chief-next-editorial .chief-hero-reason{margin-top:8px;color:var(--muted);font-size:10.5px;line-height:1.5}
+.chief-hero-reason b{margin-right:7px;color:var(--faint);font:700 9px/1.2 var(--mono);
+  letter-spacing:.06em;text-transform:uppercase}
 .chief-next-editorial .chief-work-actions{grid-column:2;justify-content:flex-start;margin-top:16px}
 .chief-next-editorial .chief-text-action{min-width:190px;min-height:42px;border-color:var(--text);
   background:var(--text);color:var(--bg);font-size:13px}
 .chief-next-editorial .chief-text-action:disabled{background:none;color:var(--faint);border-color:var(--border)}
+.chief-attention-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chief-attention-actions button{border:0;border-bottom:1px solid var(--border);background:none;color:var(--muted);
+  padding:4px 1px;font-size:10.5px;font-weight:650;cursor:pointer}
+.chief-attention-actions button:hover{color:var(--text);border-color:var(--text)}
+.chief-attention-actions button:disabled{color:var(--faint);cursor:progress}
+.chief-attention-state{color:var(--muted);font:9.5px/1.4 var(--mono)}
+.chief-attention-error{margin:8px 0 0;color:var(--c-blocked);font:10px/1.45 var(--mono)}
 .chief-changed{display:grid;gap:14px}
 .chief-change{display:grid;grid-template-columns:78px minmax(0,1fr);gap:14px;align-items:baseline}
 .chief-change b{color:var(--muted);font:700 9.5px/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase}
@@ -2711,6 +2736,8 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   body[data-view="chief"] main{padding:0 18px 76px}
   .chief-return{padding:18px 0 30px}
   .chief-return h1{font-size:46px}
+  .chief-freshness{align-items:flex-start;flex-direction:column;gap:10px}
+  .chief-freshness dl{min-width:0;width:100%;justify-content:space-between}
   .chief-block{padding:30px 0}
   .chief-trail{grid-template-columns:1fr}
   .chief-accordion-body{padding-left:0}
@@ -2924,6 +2951,7 @@ let chiefDaily = "brief", advancedOpen = false, chiefScopeOpen = false;
 let chiefSessions = null, chiefSessionsLoading = false, chiefSessionsError = "";
 let chiefSelectedSession = "", chiefThread = null, chiefThreadLoading = false, chiefSending = false;
 let boardStartState = {};
+let chiefAttentionState = {work_id:"",busy:"",error:""};
 const CHIEF_ENGINES = {
   t3:{label:"T3 Code",note:"Project T3 default"},
   codex:{label:"Codex",note:"Codex provider inside T3"},
@@ -4166,6 +4194,7 @@ function chiefWrite(name){
   const routes = {
     sync:["api/chief/sync","/sync"],
     createWork:["api/chief/work/create","/work/create"],
+    attention:["api/chief/work/attention","/work/attention"],
     session:["api/chief/session/start","/work-session/start"],
     release:["api/chief/release/ensure","/release/autopilot/ensure"],
     complete:["api/chief/work/complete","/work/done"],
@@ -4255,6 +4284,25 @@ async function chiefManualSync(){
   try{ await chiefPost("sync",{}); chiefNotice = "Chief sources synchronized."; }
   catch(e){ chiefNotice = `Sync failed; existing data was preserved: ${e.message || e}`; }
   finally{ chiefLoading = false; await refreshChief(true); }
+}
+const chiefMoment = value => value ? String(value) : "Not recorded";
+async function chiefSetAttention(workId,action){
+  if (!workId || chiefAttentionState.busy) return;
+  chiefAttentionState = {work_id:workId,busy:action,error:""}; renderChief();
+  try{
+    const payload = {work_id:workId,action};
+    if (action === "snooze") payload.hours = 24;
+    await chiefPost("attention",payload);
+    chiefNotice = action === "snooze" ? "Next move snoozed for 24 hours; the work remains open." :
+      "Next move acknowledged; the work remains open until its real outcome is complete.";
+    chiefAttentionState = {work_id:"",busy:"",error:""};
+    await refreshChief(true);
+    requestAnimationFrame(() => (document.querySelector("[data-chief-attention]:not([disabled])") ||
+      document.querySelector(".chief-next-editorial [data-chief-action]"))?.focus());
+  }catch(e){
+    chiefAttentionState = {work_id:workId,busy:"",error:e.message || String(e)}; renderChief();
+    requestAnimationFrame(() => document.querySelector(`[data-chief-attention="${action}"]`)?.focus());
+  }
 }
 async function chiefCreateWork(project,startSession=false){
   const registered = chiefArr(chiefData && chiefData.projects).find(p => chiefNorm(p.id) === chiefNorm(project));
@@ -4438,14 +4486,22 @@ function chiefLaneHTML(key, title, rows){
       `<div class="chief-empty">Nothing here${chiefProject ? " for this project" : ""}.</div>`}</div>
   </section>`;
 }
+const chiefReleaseOpenCount = row => row.open_pr_count != null ? row.open_pr_count :
+  chiefArr(row.prs).filter(p => chiefNorm(p.state) !== "merged").length;
 function chiefReleaseHTML(row){
   const state = chiefNorm(row.status || "unknown");
-  const open = row.open_pr_count != null ? row.open_pr_count : chiefArr(row.prs).filter(p => chiefNorm(p.state) !== "merged").length;
+  const open = chiefReleaseOpenCount(row);
+  const nextActionText = typeof row.next_action === "string" ? row.next_action :
+    row.next_action && (row.next_action.summary || row.next_action.title || row.next_action.next);
+  const summary = row.display_summary || nextActionText ||
+    `${row.target || "dev"} → ${row.promotion_target || "production"} · ${open} open PR${open === 1 ? "" : "s"}`;
+  const lastChanged = row.last_changed_at || row.updated || "";
+  const lastChecked = row.last_checked_at || row.source_refreshed_at || "";
   const report = row.report_file ? chiefGet(`report?f=${encodeURIComponent(row.report_file)}`) : "";
   const acceptance = row.runtime_acceptance;
   let action = "", label = "", href = "";
   if (acceptance && chiefNorm(acceptance.status) !== "passed") { action = "verify_live"; label = "Check live"; }
-  else if (["building","blocked"].includes(state)) { action = "merge_dev"; label = "Check + merge feature PRs to dev"; }
+  else if (["building","blocked"].includes(state) && open > 0) { action = "merge_dev"; label = "Check + merge feature PRs to dev"; }
   else if (state === "ready_for_human" && row.promotion && chiefNorm(row.promotion.remote_state) === "open") { href = row.promotion.url || ""; label = "Review production PR"; }
   else if (state === "ready_for_human") { action = "prepare_prod"; label = "Prepare production PR"; }
   const runKey = action ? `release:${row.id}:${action}` : "", running = runKey && chiefRunActive(chiefRuns[runKey]);
@@ -4453,7 +4509,7 @@ function chiefReleaseHTML(row){
   const sessionReport = run && run.run_id && !chiefRunActive(run) ? chiefGet(`session/report?id=${encodeURIComponent(run.run_id)}`) : "";
   return `<article class="chief-release">
     <div><h3>${esc(row.project || row.repo || "Unfiled release")}</h3>
-      <p>${esc(row.target || "dev")} → ${esc(row.promotion_target || "production")} · ${open} open PR${open === 1 ? "" : "s"}</p></div>
+      <p>${esc(chiefShort(summary,220))}<span class="chief-release-timing">Changed ${esc(chiefMoment(lastChanged))} · checked ${esc(chiefMoment(lastChecked))}</span></p></div>
     <div class="chief-release-state ${esc(state)}">${esc(chiefStatusText(row.status || "Unknown"))}${report ? `<br><a href="${esc(report)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · release report`)}">Release report</a>` : ""}${sessionReport ? `<br><a href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.project || row.repo} · agent result`)}">Agent report</a>` : ""}${href ? `<br><a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>` : action ? `<br><button class="chief-text-action" data-chief-release="${esc(row.id)}" data-chief-release-action="${esc(action)}" data-chief-title="${esc(`${row.project || row.repo} · ${label}`)}" aria-busy="${running ? "true" : "false"}" ${running ? "disabled" : ""}>${running ? "Working…" : esc(label)}</button>` : ""}</div>
   </article>`;
 }
@@ -4505,9 +4561,15 @@ function renderChief(){
   } : lanes;
   const total = rows.length;
   const flow = chiefData.flow || {};
+  const freshness = flow.freshness || {};
+  const freshnessSources = chiefArr(freshness.sources);
+  const sourceIssues = freshnessSources.filter(s => s.stale ||
+    ["unreachable","failed","error","offline","unknown"].includes(chiefNorm(s.status)));
+  const freshnessMarkup = `<div class="chief-freshness"><dl><div><dt>Last changed</dt><dd>${esc(chiefMoment(freshness.changed_at))}</dd></div><div><dt>Last checked</dt><dd>${esc(chiefMoment(freshness.checked_at))}</dd></div></dl><button data-chief-sync ${chiefLoading ? "disabled" : ""}>${chiefLoading ? "Checking…" : "Check sources"}</button></div><p class="chief-source-health">${freshnessSources.length ? sourceIssues.length ? `<b>Supporting sources:</b> ${sourceIssues.slice(0,4).map(s => `<span class="${["unreachable","failed","error","offline"].includes(chiefNorm(s.status)) ? "unreachable" : ""}">${esc(s.name || "unnamed")} ${esc(s.stale ? "stale" : s.status || "unknown")}</span>`).join(" · ")}` : "Supporting sources checked; none report stale or unreachable." : "Supporting source freshness is not recorded yet."}</p>${chiefNotice ? `<p class="chief-freshness-note">${esc(chiefNotice)}</p>` : ""}`;
   const flowNext = flow.next_move || null;
   const useFlow = !chiefProject;
-  const next = (flowNext && rows.find(r => r.id === flowNext.id)) || (useFlow ? flowNext : null) || lanes.needs[0] || lanes.progress[0] || lanes.ready[0];
+  const flowMatch = flowNext && rows.find(r => r.id === flowNext.id);
+  const next = (flowMatch && useFlow ? {...flowMatch,...flowNext} : flowMatch) || (useFlow ? flowNext : null) || lanes.needs[0] || lanes.progress[0] || lanes.ready[0];
   if (chiefSessions === null && !chiefSessionsLoading) setTimeout(chiefRefreshSessions,0);
   const nextProject = next && (next.project || next.project_id);
   const nextSession = chiefArr(chiefSessions).find(s => {
@@ -4520,9 +4582,17 @@ function renderChief(){
   const scopeTitle = selectedProject ? selectedProject.title : "All projects";
   const scope = `<div class="chief-scope"><button class="chief-scope-toggle" data-chief-scope-toggle aria-expanded="${chiefScopeOpen}"><span>Scope</span>${esc(scopeTitle)}</button><div class="chief-scope-drawer" id="chief-scope-drawer" ${chiefScopeOpen ? "" : "hidden"}>${scopeRows.map(p => `<button data-chief-project="${esc(p.id || "")}" aria-pressed="${chiefNorm(chiefProject) === chiefNorm(p.id || "")}"><b>${esc(p.title || p.id)}</b><small>${p.items || 0} work${p.needs ? ` · ${p.needs} need you` : ""}</small></button>`).join("")}</div></div>`;
   const nextLane = next ? chiefLane(next) : "ready";
+  const nextSemantics = useFlow && flowNext ? flowNext : next;
   const nextRun = next && chiefRuns[next.id], nextRunning = chiefRunActive(nextRun);
   const nextAction = nextRunning ? "Working…" : nextLane === "needs" ? "Review" : nextLane === "progress" ? "Continue work" : "Start work";
-  const nextMarkup = next ? `<div class="chief-next-editorial"><div class="chief-next-mark">1</div><div><h2>${esc(next.title)}</h2><p>${esc(chiefShort(next.next || next.goal || next.why || "Open the durable work record for the current boundary.",260))}</p><div class="chief-work-actions"><button class="chief-text-action" data-chief-action="${esc(nextLane)}" data-chief-work="${esc(next.id || "")}" data-chief-title="${esc(next.title || "Next work")}" ${nextRunning ? "disabled" : ""}>${nextAction}</button>${next.report_file ? `<a href="${esc(chiefGet(`report?f=${encodeURIComponent(next.report_file)}`))}" data-chief-report-open data-chief-report-title="${esc(next.title)}">Open report</a>` : ""}</div></div></div>` : `<div class="chief-next-editorial"><div class="chief-next-mark">0</div><div><h2>No immediate work needs your call.</h2><p>Select a project scope or add Jira-backed work when a new outcome appears.</p></div></div>`;
+  const attention = nextSemantics && nextSemantics.attention || {}, snoozedUntil = attention.snoozed_until || "";
+  const snoozed = Boolean(attention.active && snoozedUntil), acknowledged = Boolean(attention.acknowledged_at);
+  const attentionBusy = chiefAttentionState.work_id === (next && next.id) ? chiefAttentionState.busy : "";
+  const attentionError = chiefAttentionState.work_id === (next && next.id) ? chiefAttentionState.error : "";
+  const attentionState = (snoozed ? `Snoozed until ${snoozedUntil}` : acknowledged ? `Acknowledged ${attention.acknowledged_at}` : "This only controls attention; it does not complete or close the work.") +
+    (nextSemantics && nextSemantics.meaningful_changed_at ? ` · changed ${nextSemantics.meaningful_changed_at}` : "");
+  const attentionMarkup = next ? `<div class="chief-attention-actions"><button data-chief-attention="acknowledge" data-chief-attention-id="${esc(next.id || "")}" aria-label="Acknowledge this next move without marking it done" ${attentionBusy || acknowledged ? "disabled" : ""}>${attentionBusy === "acknowledge" ? "Acknowledging…" : acknowledged ? "Acknowledged" : "Acknowledge"}</button><button data-chief-attention="snooze" data-chief-attention-id="${esc(next.id || "")}" aria-label="Snooze this next move for 24 hours without marking it done" ${attentionBusy || snoozed ? "disabled" : ""}>${attentionBusy === "snooze" ? "Snoozing…" : snoozed ? "Snoozed 24h" : "Snooze 24h"}</button><span class="chief-attention-state">${esc(attentionState)}</span></div>${attentionError ? `<p class="chief-attention-error" role="alert">Attention was not updated: ${esc(attentionError)}</p>` : ""}` : "";
+  const nextMarkup = next ? `<div class="chief-next-editorial"><div class="chief-next-mark">1</div><div><h2>${esc(next.title)}</h2><p>${esc(chiefShort(nextSemantics.next || nextSemantics.goal || nextSemantics.why || "Open the durable work record for the current boundary.",260))}</p>${nextSemantics.hero_reason ? `<p class="chief-hero-reason"><b>Why this surfaced</b>${esc(chiefShort(nextSemantics.hero_reason,220))}</p>` : ""}<div class="chief-work-actions"><button class="chief-text-action" data-chief-action="${esc(nextLane)}" data-chief-work="${esc(next.id || "")}" data-chief-title="${esc(next.title || "Next work")}" ${nextRunning ? "disabled" : ""}>${nextAction}</button>${next.report_file ? `<a href="${esc(chiefGet(`report?f=${encodeURIComponent(next.report_file)}`))}" data-chief-report-open data-chief-report-title="${esc(next.title)}">Open report</a>` : ""}</div>${attentionMarkup}</div></div>` : `<div class="chief-next-editorial"><div class="chief-next-mark">0</div><div><h2>No immediate work needs your call.</h2><p>Select a project scope or add Jira-backed work when a new outcome appears.</p></div></div>`;
   const flowChanges = useFlow ? chiefArr(flow.changes) : [
     next && {kind:"work",title:next.title,summary:next.next || next.outcome || next.goal,at:next.updated},
     nextSession && {kind:"session",title:nextSession.name,summary:nextSession.preview || nextSession.status,at:nextSession.last},
@@ -4564,10 +4634,19 @@ function renderChief(){
     if (agentRun) addDoc({kind:"report",title:"Latest agent/session report",ref:agentRun.run_id,href:chiefGet(`session/report?id=${encodeURIComponent(agentRun.run_id)}`)});
   }
   const documentsMarkup = `<div class="chief-doc-list">${documents.length ? documents.map(d => `<article class="chief-doc"><b>${esc(d.title)}</b><small>${esc(d.ref || d.id || "Recorded source")}</small>${d.kind === "native" ? `<button data-chief-native-doc="${esc(d.id)}" data-chief-native-title="${esc(d.title)}">Open</button>` : d.href ? `<a href="${esc(d.href)}" data-chief-report-open data-chief-report-title="${esc(d.title)}">Open</a>` : `<button class="unavailable" data-chief-document-ref="${esc(d.ref || "")}" data-chief-document-title="${esc(d.title)}">Source path</button>`}</article>`).join("") : `<div class="chief-daily-empty"><div><b>No durable documents were returned.</b>The source trail remains visible above.</div></div>`}</div>`;
-  const releaseCompact = releases.length ? releases.slice(0,3).map(chiefReleaseHTML).join("") : `<div class="chief-daily-empty"><div><b>No release in scope.</b>Select another project or wait for the first PR.</div></div>`;
-  const releaseNeedsDev = releases.some(r => ["building","blocked"].includes(chiefNorm(r.status)));
+  const releasePriority = row => {
+    const state = chiefNorm(row.status), open = chiefReleaseOpenCount(row);
+    if (["building","blocked"].includes(state) && open > 0) return 0;
+    if (row.runtime_acceptance && chiefNorm(row.runtime_acceptance.status) !== "passed") return 1;
+    if (state === "ready_for_human") return 2;
+    return 3;
+  };
+  const compactReleases = releases.map((row,index) => ({row,index})).sort((a,b) =>
+    releasePriority(a.row) - releasePriority(b.row) || a.index - b.index).map(x => x.row);
+  const releaseCompact = compactReleases.length ? compactReleases.slice(0,3).map(chiefReleaseHTML).join("") : `<div class="chief-daily-empty"><div><b>No release in scope.</b>Select another project or wait for the first PR.</div></div>`;
+  const releaseNeedsDev = releases.some(r => ["building","blocked"].includes(chiefNorm(r.status)) && chiefReleaseOpenCount(r) > 0);
   const reportsCompact = reports.length ? reports.slice(0,4).map(chiefReportHTML).join("") : `<div class="chief-daily-empty"><div><b>No report attached.</b>Create the first meeting report for this project.</div></div>`;
-  view.innerHTML = `<div class="chief-shell">${scope}<div class="chief-home"><section class="chief-left"><section class="chief-return"><p class="chief-date">${esc(dateLabel)}</p><h1>${greeting},<br>Jade</h1><p>Your context has been rebuilt from saved work, Jira, project records, sessions, PRs and releases. ${lanes.needs.length} need you; ${lanes.progress.length} are moving.</p></section><section class="chief-block"><p class="chief-block-cap">Your next move</p>${nextMarkup}</section><section class="chief-block"><p class="chief-block-cap">What changed since your last visit</p>${changed}</section><section class="chief-block"><p class="chief-block-cap">Context trail</p>${trail}</section></section><aside class="chief-right">${chiefEnginePickerHTML()}<details class="chief-accordion needs"><summary><span class="chief-accordion-mark">!</span><b>Needs you</b><span>${jiraLanes.needs.length}</span></summary><div class="chief-accordion-body"><div class="chief-compact-actions"><button data-chief-add-work data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Add work</button></div>${chiefAccordionRows(jiraLanes.needs,"needs")}</div></details><details class="chief-accordion working" ${releaseNeedsDev ? "" : "open"}><summary><span class="chief-accordion-mark">W</span><b>Working</b><span>${jiraLanes.progress.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.progress,"progress")}</div></details><details class="chief-accordion done"><summary><span class="chief-accordion-mark">D</span><b>Recent done</b><span>${jiraLanes.done.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.done,"done")}</div></details><details class="chief-compact" ${releaseNeedsDev ? "open" : ""}><summary><b>Release</b><span>${releases.length} records${releaseNeedsDev ? " · dev action ready" : ""}</span></summary><div class="chief-compact-body">${releaseCompact}</div></details><details class="chief-compact"><summary><b>Reports</b><span>${reports.length} durable</span></summary><div class="chief-compact-body"><div class="chief-compact-actions"><button data-chief-create-report data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Create meeting report</button></div>${reportsCompact}</div></details><details id="chief-sessions-disclosure" class="chief-compact" ${chiefSelectedSession ? "open" : ""}><summary><b>Sessions</b><span>${chiefArr(chiefSessions).length} conversations</span></summary><div class="chief-compact-body">${chiefSessionsHTML()}</div></details><details class="chief-compact"><summary><b>Documents</b><span>${documents.length} sources</span></summary><div class="chief-compact-body">${documentsMarkup}</div></details></aside></div><button class="chief-talk-float" data-chief-talk>Talk to Chief</button></div>`;
+  view.innerHTML = `<div class="chief-shell">${scope}<div class="chief-home"><section class="chief-left"><section class="chief-return"><p class="chief-date">${esc(dateLabel)}</p><h1>${greeting},<br>Jade</h1><p class="chief-context-summary">Your context has been rebuilt from saved work, Jira, project records, sessions, PRs and releases. ${lanes.needs.length} need you; ${lanes.progress.length} are moving.</p>${freshnessMarkup}</section><section class="chief-block"><p class="chief-block-cap">Your next move</p>${nextMarkup}</section><section class="chief-block"><p class="chief-block-cap">What changed since your last visit</p>${changed}</section><section class="chief-block"><p class="chief-block-cap">Context trail</p>${trail}</section></section><aside class="chief-right">${chiefEnginePickerHTML()}<details class="chief-accordion needs"><summary><span class="chief-accordion-mark">!</span><b>Needs you</b><span>${jiraLanes.needs.length}</span></summary><div class="chief-accordion-body"><div class="chief-compact-actions"><button data-chief-add-work data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Add work</button></div>${chiefAccordionRows(jiraLanes.needs,"needs")}</div></details><details class="chief-accordion working" ${releaseNeedsDev ? "" : "open"}><summary><span class="chief-accordion-mark">W</span><b>Working</b><span>${jiraLanes.progress.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.progress,"progress")}</div></details><details class="chief-accordion done"><summary><span class="chief-accordion-mark">D</span><b>Recent done</b><span>${jiraLanes.done.length}</span></summary><div class="chief-accordion-body">${chiefAccordionRows(jiraLanes.done,"done")}</div></details><details class="chief-compact" ${releaseNeedsDev ? "open" : ""}><summary><b>Release</b><span>${releases.length} records${releaseNeedsDev ? " · dev action ready" : ""}</span></summary><div class="chief-compact-body">${releaseCompact}</div></details><details class="chief-compact"><summary><b>Reports</b><span>${reports.length} durable</span></summary><div class="chief-compact-body"><div class="chief-compact-actions"><button data-chief-create-report data-chief-project="${esc(chiefProject)}" ${selectedProject ? "" : "disabled title=\"Select one project first\""}>Create meeting report</button></div>${reportsCompact}</div></details><details id="chief-sessions-disclosure" class="chief-compact" ${chiefSelectedSession ? "open" : ""}><summary><b>Sessions</b><span>${chiefArr(chiefSessions).length} conversations</span></summary><div class="chief-compact-body">${chiefSessionsHTML()}</div></details><details class="chief-compact"><summary><b>Documents</b><span>${documents.length} sources</span></summary><div class="chief-compact-body">${documentsMarkup}</div></details></aside></div><button class="chief-talk-float" data-chief-talk>Talk to Chief</button></div>`;
 }
 async function refreshChief(rerender=false){
   if (chiefLoading) return;
@@ -9543,6 +9622,11 @@ document.addEventListener("click", async e => {
   if (chiefRefresh){ refreshChief(true); return; }
   const chiefSync = e.target.closest("[data-chief-sync]");
   if (chiefSync){ chiefManualSync(); return; }
+  const attentionAction = e.target.closest("[data-chief-attention]");
+  if (attentionAction){
+    await chiefSetAttention(attentionAction.dataset.chiefAttentionId || "",attentionAction.dataset.chiefAttention || "acknowledge");
+    return;
+  }
   const scopeToggle = e.target.closest("[data-chief-scope-toggle]");
   if (scopeToggle){ chiefScopeOpen = !chiefScopeOpen; renderChief(); return; }
   const relationMap = e.target.closest("[data-chief-relation-map]");

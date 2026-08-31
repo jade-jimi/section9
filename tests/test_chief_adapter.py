@@ -67,7 +67,7 @@ class FakeChief(http.server.BaseHTTPRequestHandler):
         size = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(size) or b"{}")
         self.calls.append(("POST", self.path, body))
-        if self.path in {"/api/sync", "/api/work-session/start", "/api/work/create", "/api/work/done",
+        if self.path in {"/api/sync", "/api/work-session/start", "/api/work/create", "/api/work/attention", "/api/work/done",
                          "/api/work/investigate", "/api/project-session/start", "/api/project-session/message", "/api/chief-chat/session",
                          "/api/chief-chat/message", "/api/order",
                          "/api/release/autopilot/ensure"}:
@@ -166,6 +166,14 @@ class TestChiefAdapter(unittest.TestCase):
         result = json.loads(raw)
         self.assertEqual(code, 200)
         self.assertEqual(result["path"], "/api/work/create")
+        self.assertEqual(result["received"], payload)
+
+    def test_brief_attention_is_a_named_non_status_route(self):
+        payload = {"work_id": "REQ-1", "action": "snooze", "hours": 24}
+        code, _ctype, raw = self.call("/api/chief/work/attention", payload)
+        result = json.loads(raw)
+        self.assertEqual(code, 200)
+        self.assertEqual(result["path"], "/api/work/attention")
         self.assertEqual(result["received"], payload)
 
     def test_project_chat_and_orders_are_named_routes(self):
