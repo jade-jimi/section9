@@ -66,3 +66,8 @@ release state, and observation time instead of copying mutable status without pr
   and is read/report-only. It never transitions Jira, merges PRs, deploys, publishes Confluence or
   sends Teams messages. Visuals are evidence-driven: cite real metrics/units/time windows for plots;
   otherwise use an honest architecture/flow diagram, timeline or source table. Never fabricate chart data.
+- Meeting attachment is explicit-only: saved meeting-history `projects` and `jira` values may join
+  completed presentations with the same exact project/Jira. Calendar subject similarity never creates
+  a relation. The 60-minute preparation session reuses current decks or generates missing EE-master
+  PPTX+HTML artifacts before writing meeting history; its `presentations` array records all attached
+  IDs and paths, and the ready ntfy message reports the attached deck count.
