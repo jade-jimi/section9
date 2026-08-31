@@ -551,7 +551,7 @@ function prjMembersHTML(p, c){
   /* 좁은 판에서는 표가 **제 안에서** 구른다 — 일곱 칸(날짜 상자 둘 포함)이
      들어갈 폭이 없을 때 머리글이 두 줄로 접히면 표가 흔들려 보이고, 쪽 전체를
      가로로 굴리면 옆의 다른 절까지 따라 움직인다. */
-  return `<div class="pmemwrap"><table class="pmem"><caption>`
+  return `<div class="pmemwrap"><table class="pmem${c.canManage ? " manage" : ""}"><caption>`
     + esc(exp ? PRJ_TEXT.memCapMix(mem.length, act, exp) : PRJ_TEXT.memCap(mem.length))
     + `</caption><thead><tr>`
     + cols.map(h => `<th scope="col">${esc(h)}</th>`).join("")

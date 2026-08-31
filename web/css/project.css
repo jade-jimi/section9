@@ -91,6 +91,10 @@ select.pjc{padding-right:4px}
 .pjmem{margin-top:22px}
 .pmemwrap{overflow-x:auto}
 .pmem{border-collapse:collapse;width:100%;min-width:520px;font-size:12px}
+/* 관리 얼굴은 칸마다 고르기·단추가 서서 자연폭이 더 크다 — min-width 가
+   자연폭에 못 미치면 pmemwrap 의 가로 구름이 서기 전에 칸이 구겨진다
+   (QA 실측 D1: 1000px 에서 「− 나가기」가 37×56px 세로 낙하). */
+.pmem.manage{min-width:680px}
 .pmem caption{text-align:left;font-family:var(--mono);font-size:10px;
   letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;
   padding:0 0 6px}
