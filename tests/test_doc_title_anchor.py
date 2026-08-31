@@ -137,28 +137,24 @@ class DocTitleAnchor(unittest.TestCase):
 
     # ---------- ⑤ 지금 보는 문서 ----------
 
-    def test_the_open_document_is_pinned_and_marked_with_ink(self):
-        """맨 위에 못 박고, 색면·세로 띠가 아니라 잉크로 표시한다."""
+    def test_the_open_document_is_marked_in_place(self):
+        """**제자리에 두고**, 색면·세로 띠가 아니라 잉크로 표시한다.
+
+        전에는 맨 위에 못 박았다(REQ-20260828-009 → -20260829-012). 그 뽑아
+        올리기가 문서를 번갈아 고를 때마다 목록을 흔들었고(CDP 실측: A→B 로
+        옮길 때마다 두 무리 사이의 줄이 전부 한 칸씩 밀린다), 사용자가 걷어내라고
+        판정했다 (REQ-20260831-007). **표시가 잉크라는 결정은 그대로다** —
+        바뀐 것은 자리뿐이다.
+        """
         rd = self._fn("renderDocs")
-        self.assertIn("const pin = selectedDoc", rd, "지금 보는 문서를 못 박지 않는다")
-        self.assertIn("catFind(selectedDoc)", rd,
-                      "조건 밖 문서를 열어 두면 목록에서 사라진다")
-        # 못 박은 줄은 그룹보다 **먼저** 세워진다. 글자 그대로의 한 줄로 묶지
-        # 않는다 — REQ-20260829-012 가 그 앞에 머리글 한 줄을 세웠다("이 줄이
-        # 목록의 1번으로 읽힌다"는 반려). 결정은 그대로고 모양만 자랐다.
-        m = re.search(r"if \(pin\) list \+= (.+?);\n", rd, re.S)
-        self.assertIsNotNone(m, "못 박은 줄이 맨 위가 아니다")
-        self.assertIn("rowHTML(pin)", m.group(1), "못 박은 자리에 그 줄이 없다")
-        self.assertLess(rd.index("if (pin) list +="),
-                        rd.index("for (const [g, grp] of Object.entries(groups))"),
-                        "못 박은 줄이 그룹보다 아래에 선다")
-        self.assertIn("if (pin && r.id === pin.id) return;", rd,
-                      "같은 문서가 두 줄로 보인다")
+        self.assertNotIn("const pin = selectedDoc", rd, "고른 문서를 아직 뽑아낸다")
+        self.assertNotIn("rowHTML(pin)", rd, "뽑은 줄을 아직 맨 위에 세운다")
         # 줄을 짓는 자리는 하나 — 두 벌이면 한 벌만 고쳐진다
         self.assertEqual(rd.count('class="row${on ? " sel" : ""}"'), 1,
                          "목록 행을 두 곳에서 짓는다")
-        # 표시는 잉크로. 색면도 세로 띠도 아니다.
-        sel = self._rule(r"\.doclist \.row\.sel")
+        # 표시는 잉크로. 색면도 세로 띠도 아니다. 쉼 얼굴에만 면이 없다 —
+        # `:not(:hover)` 를 빼면 이 규칙이 이웃과 같아야 할 hover 틴트까지 삼킨다.
+        sel = self._rule(r"\.doclist \.row\.sel:not\(:hover\)")
         self.assertIn("background:none", sel, "선택 표시가 색면이다")
         self.assertNotIn("inset", sel, "선택 표시가 세로 띠다")
         self.assertRegex(self.src, r"\.doclist \.row\.sel \.id::before\{[^}]*content:\"●\"",

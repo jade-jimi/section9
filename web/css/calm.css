@@ -379,8 +379,12 @@
 [data-skin="calm"] .doclist .row:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
 /* 색면을 걷는다 (REQ-20260828-009) — 선택 표시는 잉크(●·굵기)가 한다.
    terminal 의 인버스와 glass 의 반투명 틴트는 그 스킨이 선언한 재질이라 그대로
-   두지만, calm 의 이 워시는 재질이 아니라 그냥 강조 면이었다. */
-[data-skin="calm"] .doclist .row.sel{box-shadow:none;background:none}
+   두지만, calm 의 이 워시는 재질이 아니라 그냥 강조 면이었다.
+   걷는 것은 **쉼 얼굴의 면**뿐이다 (REQ-20260831-007): `:not(:hover)` 없이 쓰면
+   바로 위 줄의 hover 틴트까지 삼켜, 고른 줄만 손이 얹혀도 대꾸가 없는 죽은 줄이
+   된다 — 고른 줄이 목록 안에 제자리로 들어온 뒤로는 이웃과 같은 얼굴이어야 한다. */
+[data-skin="calm"] .doclist .row.sel{box-shadow:none}
+[data-skin="calm"] .doclist .row.sel:not(:hover){background:none}
 [data-skin="calm"] .viewer .empty{display:flex;align-items:center;justify-content:center;
   min-height:220px}
 /* Terminal 탭은 자기가 스크롤 컨테이너가 아니다 — 안의 .ccout 이 대신 구른다.

@@ -1,7 +1,9 @@
 /* docs.js — Docs 목록과 문서 뷰어 — 집힌 문서·본문 로드·backlinks */
 "use strict";
-const PIN_HEAD_LABEL = "지금 보는 문서";
 const PIN_OFF_LABEL = "닫기";
+/* 무리마다 "여기까지는 폈다" — 커지기만 하고, 조건이 바뀌면 한꺼번에 지워진다
+   (REQ-20260831-007). 목록이 도로 짧아지며 흔들리는 것을 막는 유일한 기억이다. */
+let docReach = {}, docReachKey = "";
 /* 고른 문서를 놓는다 (REQ-20260829-012).
 
    주소에서도 뺀다 — 새로고침에 되살아나면 아무것도 안 푼 것이다. 오른쪽 판도
@@ -45,20 +47,30 @@ async function renderDocs(rows){
   const okey = [q, $("#q-body").checked, $("#f-user").value, $("#f-project").value,
     $("#f-tag").value, curType0(), mineActive()].join("|");
   const ordered = stableOrder(rows, okey, refreeze);
-  /* 지금 보는 문서는 **맨 위에 못 박는다** (REQ-20260828-009). 사용자가 낸 안이
-     그것이다: "좌측 문서 목록에서 현재 보고 있는 문서를 고정하거나 강제를 해도
-     되는데". 캡처에서 열려 있던 문서는 목록에 보이는 다섯 줄 중 하나도 아니었다 —
-     묻혀 있으면 표시를 해 둔들 못 찾는다.
+  /* 지금 보는 문서는 **제자리에 둔다** (REQ-20260831-007).
 
-     그룹 **밖** 맨 위에 세운다. 조건에 걸러져 목록에 없는 문서를 열어 두었을 때도
-     같은 자리에 같은 모습으로 서야 하는데, 그런 문서를 그룹 안에 끼워 넣으면
-     "이것도 조건에 맞는다"는 거짓말이 된다. 자리가 하나면 규칙도 하나다. */
-  const pin = selectedDoc
-    ? (ordered.find(r => r.id === selectedDoc) || catFind(selectedDoc)) : null;
-  ordered.forEach(r => {
-    if (pin && r.id === pin.id) return;
-    (groups[r.type] || (groups[r.type]=[])).push(r);
-  });
+     사용자: "현재 보고 있는 문서를 최상단 row 로 하나 뽑기보다는 그냥 목록들
+     사이에서 살짝 강조만 되면 좋겠다. 좌측 문서 목록들을 번갈아가면서
+     선택하다보면 문서 목록이 자꾸 바뀐다."
+
+     둘은 같은 하나다. 못 박기(REQ-20260828-009 → -20260829-012)는 고른 줄을
+     제 무리에서 **빼내** 맨 위에 세웠으므로, A→B 로 옮길 때마다 A 가 제자리로
+     돌아가고 B 가 빠져나가 그 사이의 줄이 전부 한 칸씩 밀렸다. 실측(CDP)으로
+     확인한 재정렬은 이것 하나뿐이다 — 순서 얼림(stableOrder)은 15초 폴링
+     35초 관찰에도 흔들리지 않았다.
+
+     못 박기가 풀려던 문제("묻혀 있으면 못 찾는다")는 자리를 옮겨서가 아니라
+     **보이게 해서** 푼다: 한도 밖이면 거기까지 펴고(docReach), 사람이 방금
+     고른 것이면 그 줄로 스크롤한다. 목록의 순서는 건드리지 않는다.
+
+     조건에 걸러져 목록에 없는 문서는 줄을 세우지 않는다 — 없는 자리에 세우면
+     "이것도 조건에 맞는다"는 거짓말이 되고, 그 거짓말을 피하려고 그룹 밖에
+     세운 것이 바로 지금 걷어내는 그 줄이다. 오른쪽 판이 그 문서를 그린다. */
+  ordered.forEach(r => (groups[r.type] || (groups[r.type]=[])).push(r));
+  /* 한 번 편 만큼은 **줄지 않는다**. 한도 밖 문서를 열어 무리를 폈다가 다음
+     선택에서 도로 짧아지면, 뽑아 올리기를 걷어내고도 목록이 다시 흔들린다.
+     조건이 바뀌거나 판을 새로 세울 때만 초기화한다(얼음과 같은 시점). */
+  if (refreeze || docReachKey !== okey){ docReach = {}; docReachKey = okey; }
   // 타입 진입점 (REQ-20260825-084): Board에서 knowledge/session 컬럼을 걷어낸 대신,
   // Docs 목록 맨 위에 타입별 건수를 붙박이로 노출하고 한 번 눌러 그 타입만 본다.
   // 카운트는 타입 조건을 뺀 현재 필터 기준 — 다른 타입을 보는 중에도 남은 건수가 보인다.
@@ -96,8 +108,8 @@ async function renderDocs(rows){
     return `<button class="tb${curType===t?" on":""}" data-typef="${t}"
       title="${tip}" aria-label="${tip}">${t}${num}</button>`;
   }).join("");
-  /* 목록 행은 한 곳에서 짓는다 — 못 박은 줄과 그룹 안의 줄이 **같은 재료**여야
-     한다 (REQ-20260828-009). 두 벌로 만들면 한 벌만 고쳐진다. */
+  /* 목록 행은 한 곳에서 짓는다 — 줄이 어떤 상태든 **같은 재료**여야 한다
+     (REQ-20260828-009). 두 벌로 만들면 한 벌만 고쳐진다. */
   const rowHTML = r => {
       // 첨부에서 온 줄이면 어느 파일인지 밝힌다 (REQ-20260827-005) — 파일
       // 이름 없이 줄 번호만 보이면 문서 본문의 그 줄로 읽힌다.
@@ -110,6 +122,15 @@ async function renderDocs(rows){
         ? (isAnswered(r) === false ? "var(--t-question)" : "var(--faint)")
         : SCOLOR[r.status];
       const on = r.id === selectedDoc;
+      /* 푸는 손잡이는 **푸는 대상 위에** 산다 (REQ-20260829-012 의 원칙 그대로).
+         못 박은 줄이 사라졌으니 그 자리도 따라 옮긴다 — 머리글이 아니라 고른
+         줄 자신의 번호 칸 끝이다. 오른쪽 문서 판에는 두지 않는다: 거기서 「닫기」는
+         승인·반려 옆에 서서 "요청을 닫는다(완료)"로 읽힌다. 줄 안에 단추를
+         넣는 것은 이 목록이 이미 쓰는 어휘다(고르는 중의 .tick).
+         행 클릭보다 먼저 잡히는 것은 events.js 가 순서로 보장한다. */
+      const off = on ? ` <button type="button" class="seloff" data-seloff`
+        + ` title="이 문서를 놓는다 — 목록만 남고 오른쪽은 빈 화면이 된다"`
+        + ` aria-label="${esc(shortId(r.id))} 닫기">${PIN_OFF_LABEL}</button>` : "";
       // 행 전체가 하나의 컨트롤이다 (REQ-20260827-013) — 보드 카드와 같은 어휘
       // (role=button). 제목만 링크로 떼면 같은 줄에 목적지가 둘로 보인다.
       // tabindex 는 항상 -1 로 나가고 roveSync 가 딱 하나만 0 으로 올린다.
@@ -117,20 +138,20 @@ async function renderDocs(rows){
         role="button" tabindex="-1" data-rove-item${on ? ' aria-current="true"' : ""}
         style="--sc:${sc}">
         <span class="st">${esc(statusLabel(r))}</span>
-        <div class="id">${esc(shortId(r.id))}${prioHTML(r)}</div><div>${esc(r.title)}</div>${snips}</div>`;
+        <div class="id">${esc(shortId(r.id))}${prioHTML(r)}${off}</div><div>${esc(r.title)}</div>${snips}</div>`;
   };
   let list = `<div class="typebar">${bar}</div>`;
-  /* 못 박은 줄은 **머리글을 앞세운다** (REQ-20260829-012) — 그래야 목록의
-     1번이 아니라 "오른쪽에 열려 있는 것"으로 읽힌다. 푸는 손잡이도 여기 산다. */
-  if (pin) list += `<div class="grp pinhead">${PIN_HEAD_LABEL}`
-    + `<button type="button" class="pinoff" data-pinoff`
-    + ` title="이 문서를 놓는다 — 목록만 남고 오른쪽은 빈 화면이 된다">${PIN_OFF_LABEL}</button></div>`
-    + rowHTML(pin);
   for (const [g, grp] of Object.entries(groups)){
     if (!grp.length) continue;
     const open = expanded.has("grp:"+g) || !!matchMap;
     // session은 직접 열어보는 일이 드물다 — 목록에서 자리는 지키되 기본 노출은 짧게.
-    const shown = open ? grp : grp.slice(0, g === "session" ? GRP_LIMIT_SESSION : GRP_LIMIT);
+    const lim = g === "session" ? GRP_LIMIT_SESSION : GRP_LIMIT;
+    /* 열려 있는 문서가 한도 밖이면 **거기까지 편다** — 자리를 옮기지 않고 보이게
+       하는 유일한 길이다(REQ-20260831-007). 편 만큼은 줄지 않는다: docReach 는
+       커지기만 하고, 조건이 바뀔 때 한꺼번에 지워진다. */
+    const si = selectedDoc ? grp.findIndex(r => r.id === selectedDoc) : -1;
+    if (si >= 0) docReach[g] = Math.max(docReach[g] || 0, si + 1);
+    const shown = open ? grp : grp.slice(0, Math.max(lim, docReach[g] || 0));
     // 건수는 타입바가 소유 — 그룹 헤더는 구획 표시만 한다(같은 숫자 중복 금지).
     // 타입을 골라 보는 중이면 그룹이 하나뿐 — 바로 위 타입바가 같은 단어를
     // 이미 밝혀 놓고 있으므로 헤더를 겹쳐 쓰지 않는다.
@@ -156,6 +177,18 @@ async function renderDocs(rows){
       role="group" aria-label="문서 목록 — 방향키로 이동, Enter 로 열기">${list}</div>
     <div class="viewer" id="viewer"><p class="empty">← 문서를 선택하세요</p></div></div>`;
   roveSync();
+  /* 고른 줄을 **보이게** 한다 (REQ-20260831-007). 자리를 위로 옮기는 대신 눈을
+     그 자리로 옮긴다 — 다른 탭의 카드·본문 링크·주소로 들어와 그 줄이 목록
+     아래쪽에 있을 때가 그렇다. 목록에서 직접 누른 경우엔 이미 보이므로
+     `block:"nearest"` 가 아무 일도 하지 않는다.
+
+     사람이 방금 고른 때(fresh)와 판을 새로 세운 때(refreeze)에만 움직인다 —
+     15초 배경 갱신마다 스크롤하면 읽으려고 내려 둔 목록을 판이 도로 끌어올린다. */
+  if (selectedDoc && (fresh || refreeze)){
+    const selEl = document.querySelector(
+      `#view .doclist .row[data-doc="${cssq(selectedDoc)}"]`);
+    if (selEl) selEl.scrollIntoView({block: "nearest"});
+  }
   // 그룹 헤더가 붙을 위치 = 타입바의 실제 높이. 좁은 목록에서 타입바가 두 줄로
   // 접히면 30px 고정값은 헤더를 타입바 아래에 숨긴다.
   const tbEl = $("#view .typebar"), dlEl = $("#view .doclist");

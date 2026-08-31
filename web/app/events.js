@@ -175,10 +175,11 @@ document.addEventListener("click", e => {
      언젠가 한쪽만 고쳐진다. */
   const wa = evEl(e.target)?.closest("[data-wsat]");
   if (wa){ e.stopPropagation(); wsOpen(wa.dataset.wsat); return; }
-  /* 못 박은 줄을 놓는 손잡이 — 문서를 여는 길보다 **먼저** 잡는다
-     (REQ-20260829-012). 이 손잡이는 못 박은 줄의 머리글 안에 있어 [data-doc]
-     행 밖이지만, 손잡이가 행보다 앞에 서는 규칙은 이 화면 전체에 하나다. */
-  const po = evEl(e.target)?.closest("[data-pinoff]");
+  /* 열려 있는 문서를 놓는 손잡이 — 문서를 여는 길보다 **먼저** 잡는다
+     (REQ-20260829-012 → -20260831-007). 이제 이 손잡이는 고른 줄 **안**에 서므로
+     먼저 잡히지 않으면 놓으려던 누름이 그 문서를 다시 여는 누름이 된다.
+     카드 안의 손잡이는 카드가 아니라는 이 화면의 규칙 그대로다. */
+  const po = evEl(e.target)?.closest("[data-seloff]");
   if (po){ e.stopPropagation(); docDeselect(); return; }
   // 문서 집기 손잡이는 카드(문서 열기)보다 **먼저** 잡는다 (REQ-20260827-064)
   const pk = evEl(e.target)?.closest("[data-pick]");
