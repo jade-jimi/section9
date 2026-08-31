@@ -5467,7 +5467,7 @@ function renderChief(){
   const dateLabel = new Intl.DateTimeFormat("en-US",{weekday:"long",month:"short",day:"numeric"}).format(new Date()).toUpperCase();
   const scopeRows = [{id:"",title:"All projects",items:chiefArr(chiefData.portfolio).length},...allProjects];
   const scopeTitle = selectedProject ? selectedProject.title : "All projects";
-  const scope = `<div class="chief-scope"><button class="chief-scope-toggle" data-chief-scope-toggle aria-expanded="${chiefScopeOpen}"><span>Scope</span>${esc(scopeTitle)}</button><div class="chief-scope-drawer" id="chief-scope-drawer" ${chiefScopeOpen ? "" : "hidden"}>${scopeRows.map(p => `<button data-chief-project="${esc(p.id || "")}" aria-pressed="${chiefNorm(chiefProject) === chiefNorm(p.id || "")}"><b>${esc(p.title || p.id)}</b><small>${p.items || 0} work${p.needs ? ` · ${p.needs} need you` : ""}</small></button>`).join("")}</div></div>`;
+  const scope = `<div class="chief-scope"><button class="chief-scope-toggle" data-chief-scope-toggle aria-expanded="${chiefScopeOpen}"><span>Scope</span>${esc(scopeTitle)}</button><div class="chief-scope-drawer" id="chief-scope-drawer" ${chiefScopeOpen ? "" : "hidden"}>${scopeRows.map(p => `<button data-chief-scope-project="${esc(p.id || "")}" aria-pressed="${chiefNorm(chiefProject) === chiefNorm(p.id || "")}"><b>${esc(p.title || p.id)}</b><small>${p.items || 0} work${p.needs ? ` · ${p.needs} need you` : ""}</small></button>`).join("")}</div></div>`;
   const nextLane = next ? chiefLane(next) : "ready";
   const nextSemantics = useFlow && flowNext ? flowNext : next;
   const nextRun = next && chiefRuns[next.id], nextRunning = chiefRunActive(nextRun);
@@ -10577,9 +10577,9 @@ document.addEventListener("click", async e => {
     document.querySelectorAll("[data-tab]").forEach(b => b.classList.toggle("active",b.dataset.tab === "graph"));
     pushRoute(); render(); return;
   }
-  const chiefProj = e.target.closest("[data-chief-project]");
+  const chiefProj = e.target.closest("[data-chief-scope-project]");
   if (chiefProj){
-    chiefProject = chiefProj.dataset.chiefProject || "";
+    chiefProject = chiefProj.dataset.chiefScopeProject || "";
     chiefScopeOpen = false;
     if (chiefDaily === "sessions"){ chiefSelectedSession = ""; chiefThread = null; }
     renderChief(); return;

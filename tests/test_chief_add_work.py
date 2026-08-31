@@ -33,6 +33,13 @@ class ChiefAddWork(unittest.TestCase):
         self.assertNotIn("disabled", marker)
         self.assertIn("Choose a project, then add Jira-backed work", marker)
 
+    def test_scope_handler_does_not_intercept_action_project_context(self):
+        self.assertIn('data-chief-scope-project="${esc(p.id || "")}"', self.brief)
+        handler = self.source[self.source.index('const chiefProj = e.target.closest'):
+                              self.source.index('const chiefJump =', self.source.index('const chiefProj = e.target.closest'))]
+        self.assertIn('[data-chief-scope-project]', handler)
+        self.assertNotIn('[data-chief-project]', handler)
+
     def test_creation_remains_jira_backed_before_session(self):
         self.assertIn('chiefPost("createWork",{project,title,goal})', self.creation)
         self.assertIn("if (!made.jira || !made.request_id)", self.creation)
