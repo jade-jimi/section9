@@ -16,6 +16,9 @@ class ChiefMeetingsPage(unittest.TestCase):
         start = cls.source.index("function chiefMeetingDatePart")
         end = cls.source.index("function chiefReleasePageRank", start)
         cls.meetings = cls.source[start:end]
+        css_start = cls.source.index(".chief-meetings-page{")
+        css_end = cls.source.index("@media(max-width:900px)", css_start)
+        cls.meeting_css = cls.source[css_start:css_end]
 
     def test_meetings_is_first_class_chief_page(self):
         self.assertIn('data-chief-nav="meetings">Meetings', self.source)
@@ -52,8 +55,47 @@ class ChiefMeetingsPage(unittest.TestCase):
         self.assertIn("Local prep check every ${automation.poll_minutes || 10}m", self.meetings)
 
     def test_external_sources_are_read_only(self):
-        self.assertIn("Do not modify calendar, Jira, repositories, cloud, Confluence or Teams", self.meetings)
+        self.assertIn("Do not modify calendar, Jira, repositories", self.meetings)
+        self.assertIn("or Teams", self.meetings)
         self.assertIn("Do not mutate the calendar, Jira, cloud, Confluence or Teams", self.meetings)
+
+    def test_expanded_meeting_shows_only_explicit_related_completed_outcomes(self):
+        self.assertIn("related_presentations", self.meetings)
+        self.assertIn("Related completed outcomes", self.meetings)
+        self.assertIn("Problem", self.meetings)
+        self.assertIn("Solution", self.meetings)
+        self.assertIn("chiefShort(row.problem", self.meetings)
+        self.assertIn("chiefShort(row.solution", self.meetings)
+
+    def test_related_outcome_actions_use_existing_presentation_routes_and_engine(self):
+        self.assertIn("chiefPresentationLinks(row,\"Read source\")", self.meetings)
+        self.assertIn("Download PowerPoint", self.source)
+        self.assertIn("Read presentation", self.source)
+        self.assertIn("Read source", self.meetings)
+        self.assertIn('data-chief-presentation-action="generate"', self.meetings)
+        self.assertIn("data-chief-presentation-engine", self.meetings)
+        self.assertIn("Create PPT + HTML with", self.meetings)
+
+    def test_no_explicit_outcomes_is_honest_and_low_noise(self):
+        self.assertIn("No completed outcomes are explicitly linked to this meeting yet.", self.meetings)
+        self.assertIn("chief-meeting-outcomes-empty", self.meetings)
+
+    def test_meeting_prep_generates_only_explicitly_related_outcome_decks(self):
+        self.assertIn("Record the meeting's explicit projects and Jira keys first", self.meetings)
+        self.assertIn("never infer from the meeting title", self.meetings)
+        self.assertIn("real cited plots when numeric evidence exists", self.meetings)
+        self.assertIn("presentations (id/title/project/jira/pptx_path", self.meetings)
+
+    def test_outcome_visual_language_uses_lines_type_depth_and_mobile_reflow(self):
+        outcome_css = self.meeting_css[
+            self.meeting_css.index(".chief-meeting-outcomes{"):
+            self.meeting_css.index(".chief-meeting-side{", self.meeting_css.index(".chief-meeting-outcomes{"))
+        ]
+        self.assertIn("border-top", outcome_css)
+        self.assertIn("box-shadow", outcome_css)
+        self.assertNotIn("border-left", outcome_css)
+        self.assertNotIn("background:var(", outcome_css)
+        self.assertIn(".chief-meeting-outcome{grid-template-columns:1fr", self.source)
 
 
 if __name__ == "__main__":
