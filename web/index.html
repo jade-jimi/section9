@@ -2939,6 +2939,10 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   padding:14px 20px 17px}
 .chief-presentation-links,.chief-presentation-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .chief-presentation-links a{color:var(--text);font-size:10.5px;font-weight:650;text-underline-offset:3px}
+.chief-presentation-links .chief-presentation-primary-link{color:var(--c-done);font-weight:800}
+.chief-presentation-links .chief-presentation-primary-link::before{content:"PPTX";display:inline-block;
+  margin-right:6px;border:1px solid currentColor;padding:1px 4px;font:800 8px/1.25 var(--mono);
+  letter-spacing:.06em;text-decoration:none}
 .chief-presentation-actions button{border:1px solid var(--text);background:var(--text);color:var(--bg);
   min-height:36px;padding:7px 12px;font-size:11px;font-weight:750;cursor:pointer}
 .chief-presentation-actions button:disabled{opacity:.48;cursor:progress}
@@ -3397,7 +3401,7 @@ let chiefArtifacts = null, chiefArtifactsLoading = false, chiefArtifactsError = 
 let chiefArtifactQuery = "", chiefArtifactKind = "all";
 const chiefArtifactExpanded = new Set();
 let chiefArtifactSearchTimer = null;
-let chiefPresentationProject = "", chiefPresentationState = "ready";
+let chiefPresentationProject = "", chiefPresentationState = "all";
 let chiefPresentationBusy = "", chiefPresentationNotice = "";
 let chiefProjectEngineBusy = "";
 let chiefDetailState = {open:false,work_id:"",loading:false,starting:false,error:"",runs:[],
@@ -5338,22 +5342,31 @@ function chiefPresentationWhen(row){
   if (!instant) return row && row.completed_at || "Completion time not recorded";
   return new Intl.DateTimeFormat("en-US",{year:"numeric",month:"short",day:"numeric"}).format(new Date(instant));
 }
-function chiefPresentationReady(row){
+function chiefPresentationDeclaredReady(row){
   const state = chiefNorm(row && row.presentation_status).replaceAll("_"," ").replaceAll("-"," ");
-  const declaredReady = ["ready","presentation ready","generated","current","published","complete","completed"].includes(state);
-  return declaredReady && Boolean(row && row.problem && row.solution && row.result && row.remaining && (row.report_file || row.source_path));
+  return ["ready","presentation ready","generated","current","published","complete","completed"].includes(state);
+}
+function chiefPresentationReady(row){
+  return chiefPresentationDeclaredReady(row) && Boolean(row && row.problem && row.solution && row.result && row.remaining &&
+    (row.pptx_path || row.pptx_file) && row.report_file);
 }
 function chiefPresentationMissing(row){
   const missing = [];
   if (!row.problem) missing.push("problem");
   if (!row.solution) missing.push("solution performed");
   if (!row.result) missing.push("result / evidence");
-  if (!row.report_file && !row.source_path) missing.push("readable artifact");
+  if (!row.remaining) missing.push("remaining boundary");
+  if (!row.pptx_path && !row.pptx_file) missing.push("EE-master PowerPoint");
+  if (!row.report_file) missing.push("HTML companion");
   if (!missing.length && !chiefPresentationReady(row)) missing.push("presentation-ready confirmation");
   return missing;
 }
 function chiefPresentationLinks(row){
   const links = [];
+  const pptxPath = row.pptx_path || row.pptx_file;
+  if (pptxPath){
+    links.push(`<a class="chief-presentation-primary-link" href="${esc(chiefGet(`artifact?path=${encodeURIComponent(pptxPath)}`))}" download>Download PowerPoint</a>`);
+  }
   if (row.report_file){
     links.push(`<a href="${esc(chiefGet(`report?f=${encodeURIComponent(row.report_file)}`))}" data-chief-report-open data-chief-report-title="${esc(`${row.title || "Completed work"} · presentation`)}">Read presentation</a>`);
   }
@@ -5374,8 +5387,8 @@ function chiefPresentationCard(row){
     ["Remaining boundary",row.remaining,"No remaining boundary was recorded; this does not prove that none remains."],
   ].map(([label,value,fallback]) => `<li><h4>${label}</h4><p class="${value ? "" : "unrecorded"}">${esc(value || fallback)}</p></li>`).join("");
   const links = chiefPresentationLinks(row);
-  const action = row.report_file ? "Refresh presentation" : ready ? "Create presentation page" : "Generate presentation";
-  return `<article class="chief-presentation-card ${ready ? "presentation-ready" : "needs-brief"}"><header class="chief-presentation-card-head"><span class="chief-presentation-seal" aria-hidden="true">${ready ? "R" : "…"}</span><div><h3>${esc(row.title || row.jira || "Completed work")}</h3><p class="chief-presentation-meta"><span>${esc(row.jira || row.id || "work reference not recorded")}</span><span>Completed ${esc(chiefPresentationWhen(row))}</span>${row.status ? `<span>${esc(String(row.status).replaceAll("_"," "))}</span>` : ""}</p></div><span class="chief-presentation-readiness">${ready ? "Presentation ready" : `Needs brief · ${esc(missing.join(", "))}`}</span></header><ol class="chief-presentation-story">${story}</ol><footer class="chief-presentation-card-foot"><div class="chief-presentation-links">${links || `<span class="chief-report-pending">No readable report attached</span>`}</div><div class="chief-presentation-actions"><button type="button" data-chief-presentation-action="${ready ? "refresh" : "generate"}" data-chief-presentation-id="${esc(id)}" data-chief-presentation-project="${esc(project)}" data-chief-presentation-engine="${esc(chiefEngine)}" ${busy ? "disabled" : ""}>${busy ? "Opening session…" : `${action} with ${esc(CHIEF_ENGINES[chiefEngine].label)}`}</button></div></footer></article>`;
+  const action = row.pptx_path || row.pptx_file || row.report_file ? "Refresh PPT + HTML" : "Create PPT + HTML";
+  return `<article class="chief-presentation-card ${ready ? "presentation-ready" : "needs-brief"}"><header class="chief-presentation-card-head"><span class="chief-presentation-seal" aria-hidden="true">${ready ? "PPT" : "…"}</span><div><h3>${esc(row.title || row.jira || "Completed work")}</h3><p class="chief-presentation-meta"><span>${esc(row.jira || row.id || "work reference not recorded")}</span><span>Completed ${esc(chiefPresentationWhen(row))}</span>${row.status ? `<span>${esc(String(row.status).replaceAll("_"," "))}</span>` : ""}</p></div><span class="chief-presentation-readiness">${ready ? "PPT + HTML ready" : `Needs brief · ${esc(missing.join(", "))}`}</span></header><ol class="chief-presentation-story">${story}</ol><footer class="chief-presentation-card-foot"><div class="chief-presentation-links">${links || `<span class="chief-report-pending">No presentation files attached</span>`}</div><div class="chief-presentation-actions"><button type="button" data-chief-presentation-action="${ready ? "refresh" : "generate"}" data-chief-presentation-id="${esc(id)}" data-chief-presentation-project="${esc(project)}" data-chief-presentation-engine="${esc(chiefEngine)}" ${busy ? "disabled" : ""}>${busy ? "Opening session…" : `${action} with ${esc(CHIEF_ENGINES[chiefEngine].label)}`}</button></div></footer></article>`;
 }
 async function chiefGeneratePresentation(id,project,engine=chiefEngine){
   const row = chiefArr(chiefData && chiefData.presentations).find(item => String(item.id || item.jira || item.source_path || item.report_file || item.title || "presentation") === String(id));
@@ -5388,10 +5401,11 @@ async function chiefGeneratePresentation(id,project,engine=chiefEngine){
     const key = String(row.id || row.jira || id || "work").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,100) || "work";
     const sourceFile = `/home/jade/section9-chief/projects/meeting-reports/assets/PRESENTATION-${key}.md`;
     const reportFile = `/home/jade/chief/reports/PRESENTATION-${key}.html`;
+    const pptxFile = `/home/jade/chief/reports/PRESENTATION-${key}.pptx`;
     const metadataFile = `/home/jade/chief/presentations/${key}.json`;
     const session = await chiefPost("projectSessionStart",{project:"meeting-reports",title:`Presentation — ${row.jira || row.title || id}`,engine,fresh:true});
     const evidence = JSON.stringify({id:row.id || "",title:row.title || "",project:row.project || "",jira:row.jira || "",completed_at:row.completed_at || "",problem:row.problem || "",solution:row.solution || "",result:row.result || "",remaining:row.remaining || "",report_file:row.report_file || "",source_path:row.source_path || "",presentation_status:row.presentation_status || ""},null,2);
-    const order = `Create or refresh a browser-readable presentation brief for this completed work.\n\nRecorded presentation facts:\n${evidence}\n\nRead the durable source and any attached report before writing. Build the speaking sequence exactly as: Problem → Solution performed → Result/evidence → Remaining boundary, followed by concise talking points and a source table. Use only verified facts, attach measurements to source and observation time, and say Not recorded instead of inferring. Preserve the remaining boundary even when the work is complete.\n\nWrite the durable Markdown source to ${sourceFile}. Write the standalone browser HTML to ${reportFile}. Atomically write ${metadataFile} with: id, title, project, project_title, jira, prepared_at, problem, solution, result, remaining, source_file (the Markdown path), and report_file (the HTML basename PRESENTATION-${key}.html). Register both artifacts with Chief under project meeting-reports. Validate the HTML and JSON before finishing.\n\nThis is read/report-only: do not change Jira, releases, repositories, PRs, cloud resources, Confluence, or Teams. If Jade later requests a PowerPoint, build it separately from /home/jade/EE the.thmx using its actual slide master and layouts.`;
+    const order = `Create or refresh a visual PowerPoint presentation plus its browser-readable HTML companion for this completed work.\n\nRecorded presentation facts:\n${evidence}\n\nRead the durable source, attached reports, and relevant registered plots/images before writing. The primary output is PowerPoint. Build it from /home/jade/EE the.thmx and use that package's actual slide master, slide layouts, Open Sans fonts, supplied artwork and exact colors—not an Office default master with only theme colors injected. Verify the final PPTX slide relationships point to the EE layouts/master.\n\nUse this speaking sequence: (1) title and problem, (2) problem evidence, (3) solution performed with architecture/process flow graphic, (4) result/evidence visual, (5) remaining boundary and recovery/follow-up, (6) source appendix. Include evidence-backed visuals appropriate to the work: before/after plots for real numeric comparisons, timelines for incidents/rollouts, architecture or data-flow diagrams for structural changes, and source tables when numbers are unavailable. Reuse relevant source plots, screenshots and registered artifacts. Every plot must state metric, units, time window, source and observation time. Never fabricate data or add decorative charts; when quantitative evidence is absent, use an honest diagram/table labelled with what is and is not measured. Add concise speaker notes and source citations.\n\nWrite Markdown source to ${sourceFile}. Write the primary deck to ${pptxFile}. Write the standalone HTML companion to ${reportFile}. Atomically write ${metadataFile} with: id, title, project, project_title, jira, prepared_at, problem, solution, result, remaining, source_file (Markdown path), report_file (HTML basename PRESENTATION-${key}.html), pptx_file (basename PRESENTATION-${key}.pptx), and pptx_path (${pptxFile}). Register all three artifacts with Chief under project meeting-reports. Validate HTML/JSON and inspect the PPTX OOXML relationships to prove the EE master/layouts before finishing. If a real EE-master deck cannot be produced, do not fake or rename another format—record the exact blocker.\n\nThis is read/report-only: do not change Jira, releases, repositories, PRs, cloud resources, Confluence, or Teams.`;
     if (!session.thread_id) throw new Error("project session did not return a thread id");
     await chiefPost("projectSessionMessage",{thread_id:session.thread_id,text:order});
     chiefPresentationNotice = `${row.title || row.jira || "Presentation"} was assigned to ${CHIEF_ENGINES[engine].label}. Its HTML and source will attach here when the session publishes them.`;
@@ -5405,6 +5419,7 @@ async function chiefGeneratePresentation(id,project,engine=chiefEngine){
 function renderChiefPresentations(){
   const view = $("#view"); $("#count").textContent = "";
   const all = chiefArr(chiefData && chiefData.presentations).slice().sort((a,b) =>
+    Number(chiefPresentationDeclaredReady(b)) - Number(chiefPresentationDeclaredReady(a)) ||
     chiefPresentationInstant(b) - chiefPresentationInstant(a) || String(a.title || "").localeCompare(String(b.title || "")));
   const projectRows = new Map();
   all.forEach(row => {
@@ -5423,9 +5438,9 @@ function renderChiefPresentations(){
     groups.get(id).items.push(row);
   });
   const projectOptions = [...projectRows.values()].map(group => `<option value="${esc(group.id)}" ${chiefPresentationProject === group.id ? "selected" : ""}>${esc(group.title)} · ${group.items.length}</option>`).join("");
-  const stateButtons = [["all","All"],["ready","Ready"],["needs","Needs brief"]].map(([value,label]) => `<button type="button" data-chief-presentation-state="${value}" aria-pressed="${chiefPresentationState === value}">${label}</button>`).join("");
+  const stateButtons = [["all","All"],["ready","Deck ready"],["needs","Needs output"]].map(([value,label]) => `<button type="button" data-chief-presentation-state="${value}" aria-pressed="${chiefPresentationState === value}">${label}</button>`).join("");
   const content = groups.size ? `<div class="chief-presentation-groups">${[...groups.values()].map(group => `<section class="chief-presentation-group"><header class="chief-presentation-group-head"><h2>${esc(group.title)}</h2><p>${group.items.length} completed item${group.items.length === 1 ? "" : "s"} · newest first</p></header><div class="chief-presentation-list">${group.items.map(chiefPresentationCard).join("")}</div></section>`).join("")}</div>` : `<div class="chief-presentation-empty"><b>${all.length ? "No completed work matches this view." : "No presentation candidates are connected yet."}</b>${all.length ? "Choose another project or readiness filter." : "Completed work will appear when Chief records its problem, performed solution, result evidence, and remaining boundary."}</div>`;
-  view.innerHTML = `<div class="chief-presentations-page"><section class="chief-presentations-hero"><div><p class="eyebrow">Completed work</p><h1>What changed,<br>ready to present.</h1><p class="summary">Each finished item keeps the speaking sequence intact: the problem, the solution performed, the result and its evidence, then the boundary that still remains.</p></div><div class="chief-presentation-tally" aria-label="Presentation readiness"><div><strong>${readyCount}</strong><span>Presentation ready</span></div><div><strong>${all.length - readyCount}</strong><span>Need a brief</span></div></div></section><section class="chief-presentation-tools"><div class="chief-presentation-filters"><select class="chief-presentation-filter" data-chief-presentation-project aria-label="Filter presentations by project"><option value="">All projects · ${all.length}</option>${projectOptions}</select><div class="chief-presentation-state-filters" role="group" aria-label="Filter by presentation readiness">${stateButtons}</div></div>${chiefEnginePickerHTML()}</section>${chiefPresentationNotice ? `<p class="chief-presentation-notice" role="status">${esc(chiefPresentationNotice)}</p>` : ""}<p class="chief-source-health">${visible.length} visible of ${all.length} completed work items · a ready label requires all four narrative fields and a readable artifact</p>${content}</div>`;
+  view.innerHTML = `<div class="chief-presentations-page"><section class="chief-presentations-hero"><div><p class="eyebrow">PowerPoint-first completed work</p><h1>What changed,<br>ready to present.</h1><p class="summary">Each finished item becomes a PowerPoint built from the supplied EE master, with evidence-backed plots or honest diagrams, plus an HTML reading companion. The speaking sequence stays intact: problem, solution performed, result and evidence, then the boundary that remains.</p></div><div class="chief-presentation-tally" aria-label="Presentation readiness"><div><strong>${readyCount}</strong><span>EE-master PPT decks ready</span></div><div><strong>${all.length - readyCount}</strong><span>Need PPT + HTML</span></div></div></section><section class="chief-presentation-tools"><div class="chief-presentation-filters"><select class="chief-presentation-filter" data-chief-presentation-project aria-label="Filter presentations by project"><option value="">All projects · ${all.length}</option>${projectOptions}</select><div class="chief-presentation-state-filters" role="group" aria-label="Filter by presentation readiness">${stateButtons}</div></div>${chiefEnginePickerHTML()}</section>${chiefPresentationNotice ? `<p class="chief-presentation-notice" role="status">${esc(chiefPresentationNotice)}</p>` : ""}<p class="chief-source-health">${visible.length} visible of ${all.length} completed work items · ready means four story fields, an EE-master PowerPoint, and its HTML companion · numeric plots only use cited data</p>${content}</div>`;
 }
 function chiefArtifactSize(bytes){
   const value = Number(bytes || 0);

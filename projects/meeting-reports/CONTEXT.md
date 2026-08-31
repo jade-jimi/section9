@@ -56,9 +56,13 @@ release state, and observation time instead of copying mutable status without pr
   Result/evidence, Remaining boundary, and a readable source/report before it is labelled
   **Presentation ready**. Everything else remains **Needs brief**.
 - Generated Markdown: `assets/PRESENTATION-<work-key>.md`.
-- Generated browser HTML: `/home/jade/chief/reports/PRESENTATION-<work-key>.html`.
+- Primary PowerPoint: `/home/jade/chief/reports/PRESENTATION-<work-key>.pptx`, built from
+  `/home/jade/EE the.thmx` with its actual slide master/layout relationships, Open Sans, supplied
+  artwork and exact colors.
+- Browser companion: `/home/jade/chief/reports/PRESENTATION-<work-key>.html`.
 - Discovery metadata: `/home/jade/chief/presentations/<work-key>.json` with exact problem,
-  solution, result, remaining boundary, source and report references.
+  solution, result, remaining boundary, source, HTML and PPTX references.
 - Generation runs in the local `meeting-reports` T3 project with Jade's selected Codex/Claude model
   and is read/report-only. It never transitions Jira, merges PRs, deploys, publishes Confluence or
-  sends Teams messages. PowerPoint is a later explicit action and must use `/home/jade/EE the.thmx`.
+  sends Teams messages. Visuals are evidence-driven: cite real metrics/units/time windows for plots;
+  otherwise use an honest architecture/flow diagram, timeline or source table. Never fabricate chart data.

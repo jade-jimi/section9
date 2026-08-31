@@ -32,7 +32,8 @@ class ChiefPresentationsPage(unittest.TestCase):
         self.assertIn("const groups = new Map()", self.presentations)
         self.assertIn("newest first", self.presentations)
         self.assertIn("data-chief-presentation-project", self.presentations)
-        self.assertIn('chiefPresentationState = "ready"', self.source)
+        self.assertIn('chiefPresentationState = "all"', self.source)
+        self.assertIn("chiefPresentationDeclaredReady(b)", self.presentations)
         self.assertIn("+09:00", self.presentations)
 
     def test_story_keeps_the_speaking_sequence_and_honest_boundary(self):
@@ -42,18 +43,31 @@ class ChiefPresentationsPage(unittest.TestCase):
         self.assertIn("this does not prove that none remains", self.presentations)
         self.assertIn("esc(value || fallback)", self.presentations)
 
-    def test_ready_requires_complete_narrative_and_readable_artifact(self):
+    def test_ready_requires_complete_narrative_primary_ppt_and_html_companion(self):
         ready = self.presentations[
             self.presentations.index("function chiefPresentationReady"):
             self.presentations.index("function chiefPresentationMissing")
         ]
-        self.assertIn("declaredReady", ready)
+        self.assertIn("chiefPresentationDeclaredReady(row)", ready)
         self.assertIn("row.problem && row.solution && row.result && row.remaining", ready)
-        self.assertIn("row.report_file || row.source_path", ready)
-        self.assertIn("Presentation ready", self.presentations)
+        self.assertIn("row.pptx_path || row.pptx_file", ready)
+        self.assertIn("row.report_file", ready)
+        self.assertIn("PPT + HTML ready", self.presentations)
         self.assertIn("Needs brief", self.presentations)
 
-    def test_reports_open_in_reader_and_generation_keeps_selected_engine(self):
+    def test_powerpoint_download_is_primary_while_html_and_source_remain_readable(self):
+        links = self.presentations[
+            self.presentations.index("function chiefPresentationLinks"):
+            self.presentations.index("function chiefPresentationCard")
+        ]
+        self.assertIn("row.pptx_path || row.pptx_file", links)
+        self.assertIn("artifact?path=", links)
+        self.assertIn("Download PowerPoint", links)
+        self.assertIn("download", links)
+        self.assertIn("Read presentation", links)
+        self.assertIn("Read source report", links)
+
+    def test_generation_uses_ppt_and_html_labels_and_keeps_selected_engine(self):
         self.assertIn("data-chief-report-open", self.presentations)
         self.assertIn("report?f=", self.presentations)
         self.assertIn("document?path=", self.presentations)
@@ -62,12 +76,27 @@ class ChiefPresentationsPage(unittest.TestCase):
         self.assertIn('chiefPost("projectSessionStart"', self.presentations)
         self.assertIn('chiefPost("projectSessionMessage"', self.presentations)
         self.assertIn("/home/jade/EE the.thmx", self.presentations)
+        self.assertIn("actual slide master, slide layouts, Open Sans fonts", self.presentations)
+        self.assertIn("before/after plots for real numeric comparisons", self.presentations)
+        self.assertIn("Never fabricate data", self.presentations)
+        self.assertIn("PRESENTATION-${key}.pptx", self.presentations)
+        self.assertIn("pptx_path", self.presentations)
         self.assertIn('project:"meeting-reports"', self.presentations)
         self.assertIn("/home/jade/section9-chief/projects/meeting-reports/assets/PRESENTATION-", self.presentations)
         self.assertIn("/home/jade/chief/reports/PRESENTATION-", self.presentations)
         self.assertIn("/home/jade/chief/presentations/${key}.json", self.presentations)
         self.assertIn("This is read/report-only", self.presentations)
-        self.assertIn('ready ? "Create presentation page"', self.presentations)
+        self.assertIn('"Refresh PPT + HTML" : "Create PPT + HTML"', self.presentations)
+
+    def test_page_copy_promises_ee_master_and_only_evidence_backed_visuals(self):
+        self.assertIn("PowerPoint-first completed work", self.presentations)
+        self.assertIn("supplied EE master", self.presentations)
+        self.assertIn("evidence-backed plots", self.presentations)
+        self.assertIn("honest diagrams", self.presentations)
+        self.assertIn("EE-master PPT decks ready", self.presentations)
+        self.assertIn("numeric plots only use cited data", self.presentations)
+        self.assertIn('"Deck ready"', self.presentations)
+        self.assertIn('"Needs output"', self.presentations)
 
     def test_visual_language_uses_marks_lines_depth_and_mobile_reflow(self):
         self.assertIn("chief-presentation-seal", self.presentation_css)
