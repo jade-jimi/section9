@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>livedot 얼굴 대조표</title>
+<!-- 점의 여덟 얼굴을 한 화면에 세운다 (REQ-20260831-005).
+
+     실데이터로는 이 여덟이 한 화면에 모이는 순간이 없다 — 하나가 서려면
+     그 상태의 세션·워커·중단이 실제로 있어야 하고, 캡처를 찍으려는 그 순간에
+     여덟이 다 있을 수는 없다. 그래서 **같은 CSS 를 그대로 불러** 마크만
+     늘어놓는다: 여기서 보는 것은 화면이 쓰는 그 규칙이지 베낀 그림이 아니다.
+     (카드 위에서 진짜로 서는지는 진단 파라미터로 따로 본다 —
+      ?turn=17 · ?hand=3&handquiet=34 · ?stall=45 · ?held=12 · ?hold=idle)
+
+     `?theme=paper|carbon|phosphor` — 점의 잉크 넷 중 셋이 토큰(--muted ·
+     --c-inprogress · --c-blocked)이라 톤이 바뀌면 함께 움직인다. 톤은
+     `:root` 에만 걸리므로 문서 뿌리에 세운다(블록마다 걸면 안 먹는다). -->
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/actions.css">
+<style>
+body{margin:0;padding:20px;background:var(--bg);color:var(--text);
+  font:13px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+h1{font-size:15px;margin:0 0 4px}
+p.sub{color:var(--muted);font-size:11.5px;margin:0 0 18px}
+.tone{border:1px solid var(--border);background:var(--panel);padding:12px 14px;
+  margin-bottom:14px}
+.tone>h2{font-family:var(--mono);font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);margin:0 0 10px;font-weight:700}
+.faces{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 14px}
+.face{display:flex;align-items:flex-start}
+.face .nm{font-size:11.5px;line-height:1.45}
+.face .wd{display:block;font-family:var(--mono);font-size:10px;color:var(--faint)}
+.big .livedot{transform:scale(4);transform-origin:left center;margin-right:34px}
+.big .livedot.off{transform:scale(3.12)}
+.big .row{display:flex;align-items:center;height:38px}
+/* 좌표 자 (REQ-20260831-012 · -016) — 여덟 얼굴과 맥박 링이 **한 중심**에
+   서는지 눈으로 확인하는 자리. 칸마다 정확히 한가운데를 지나는 실선 두 줄을
+   긋고 그 위에 점을 세운다: 마크도 링도 두 줄을 반씩 나눠 물어야 맞다.
+   `zoom` 으로 키우는 이유는 배율이 레이아웃째 커져 자와 점이 **같은 배율**로
+   자라기 때문이다(transform 은 자를 안 키운다). */
+.ruler{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.cell{position:relative;height:34px;display:flex;align-items:center;
+  justify-content:center;border:1px solid var(--hairline)}
+.cell::before,.cell::after{content:"";position:absolute;background:var(--c-blocked);
+  opacity:.55}
+.cell::before{left:0;right:0;top:50%;height:1px;margin-top:-.5px}
+.cell::after{top:0;bottom:0;left:50%;width:1px;margin-left:-.5px}
+.cell .livedot{margin-right:0}
+.cell .cap{position:absolute;left:3px;bottom:1px;font-family:var(--mono);
+  font-size:8px;color:var(--faint);letter-spacing:.04em}
+.zoomed .cell{zoom:6;height:26px}
+.zoomed .cell .cap{display:none}
+.zoomed{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+</style></head><body>
+<h1>카드 점(livedot)의 여덟 얼굴</h1>
+<p class="sub">모양이 「무엇이 붙어 있나」, 채움이 「기록이 나가고 있나」. 색은 둘째 신호다.</p>
+<div id="out"></div>
+<script>
+const FACES = [
+  ["on",              "일하는 중 · 기록도 나감", "채운 원 + 맥박"],
+  ["busy",            "일하는 중 · 기록은 아직", "링 + 심"],
+  ["sess",            "세션만 살아 있음",        "초록 링"],
+  ["spawn",           "자동 작업 기동 중",       "채운 원 + 맥박"],
+  ["dot-stopped mild","멈춤",                   "속 빈 사각"],
+  ["dot-stopped",     "맡았던 작업이 죽음",      "채운 사각"],
+  ["dot-held",        "사람이 중단해 둠",        "줄 그은 사각"],
+  ["off",             "모름",                   "작은 회색 링"],
+];
+const tone = new URLSearchParams(location.search).get("theme") || "";
+if (tone) document.documentElement.setAttribute("data-theme", tone);
+const out = document.getElementById("out");
+const face = ([c, n, s]) => `<div class="face"><span class="livedot ${c}"></span>`
+  + `<span class="nm">${n}<span class="wd">${s}</span></span></div>`;
+out.innerHTML =
+  `<div class="tone"><h2>${tone || "system"} — 실제 크기(7px)</h2>`
+  + `<div class="faces">${FACES.map(face).join("")}</div></div>`
+  + `<div class="tone big"><h2>4배 — 모양이 실제로 갈리는지</h2>`
+  + FACES.map(([c, n]) => `<div class="row"><span class="livedot ${c}"></span>`
+      + `<span class="nm">${n}</span></div>`).join("") + `</div>`
+  + `<div class="tone"><h2>좌표 자 — 여덟 얼굴이 한 중심에 서는가</h2>`
+  + `<div class="ruler">${FACES.map(([c]) =>
+        `<div class="cell"><span class="livedot ${c}"></span>`
+        + `<span class="cap">${c.split(" ")[0]}</span></div>`).join("")}</div></div>`
+  + `<div class="tone"><h2>좌표 자 6배 — 맥박 링도 같은 중심인가</h2>`
+  + `<div class="ruler zoomed">${FACES.map(([c]) =>
+        `<div class="cell"><span class="livedot ${c}"></span></div>`).join("")}</div></div>`;
+</script>
+</body></html>

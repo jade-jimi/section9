@@ -250,25 +250,33 @@
     setTimeout(() => clearInterval(t), 12000);
     return;
   }
-  /* ?dlg=wakewait|wakespawn — 깨우기의 답이 어떤 얼굴로 서는지 (REQ-20260829-030).
-     `waiting` 은 서버가 새로 더한 답이고 **고장이 아니라 차례**라, 붉은 실패
-     창으로 서면 안 된다. 이 화면은 손이 있어야 열리는 데다 `waiting` 은 남이
-     같은 파일을 잡고 있을 때만 나오므로, 겨냥해서 만나기가 사실상 불가능하다.
-     그래서 **서버가 줬을 답**만 고정해 두고 창을 짓는 함수(wakeDlg)는 사람이
-     누를 때와 똑같은 것을 부른다 — stallProbe 가 낸 선례와 같은 자리다. */
-  if (m[1] === "wakewait" || m[1] === "wakespawn"){
+  /* ?dlg=wakewait|wakespawn|wakespawnws — 깨우기의 답이 어떤 얼굴로 서는지
+     (REQ-20260829-030). `waiting` 은 서버가 새로 더한 답이고 **고장이 아니라
+     차례**라, 붉은 실패 창으로 서면 안 된다. 이 화면은 손이 있어야 열리는
+     데다 `waiting` 은 남이 같은 파일을 잡고 있을 때만 나오므로, 겨냥해서
+     만나기가 사실상 불가능하다. 그래서 **서버가 줬을 답**만 고정해 둔다.
+
+     부르는 것은 창 짓는 함수(wakeDlg)가 아니라 **답을 받는 자리(wakeAnswer)**다
+     (REQ-20260830-049) — 창이 설지 말지의 판정을 진단이 건너뛰면, 진단으로
+     캡처해 고친 것이 사람이 보는 화면이 아니게 된다. `wakespawn`(main 갈래)은
+     그래서 **아무 창도 세우지 않는 것이 정답**이고, 창이 서는 성공은
+     `wakespawnws`(워크트리 갈래) 하나다. stallProbe 가 낸 선례와 같은 자리. */
+  if (m[1] === "wakewait" || m[1] === "wakespawn" || m[1] === "wakespawnws"){
+    // 서버 실문장(bin/s9 WAKE_SPAWNED_KO · WS_MEANS_KO.worktree)의 사본 —
+    // 어긋나면 진단으로 캡처해 고친 창이 사람이 보는 창이 아니게 된다.
+    // test_dialog_voice V3b 가 셋을 묶는다 (REQ-20260830-048/-049).
     const fx = m[1] === "wakewait"
       ? {ok: false, action: "waiting",
          message: "REQ-20260829-028-62x6 가 bin/s9 를 고치는 중입니다 — 차례를 "
                 + "기다립니다. 앞 작업이 끝나면 30초 안에 저절로 시작하니 "
                 + "그대로 두셔도 됩니다."}
+      : m[1] === "wakespawnws"
+      ? {ok: true, action: "spawned",
+         message: "멈춰 있던 작업이 다시 이어집니다.",
+         note: "고친 내용은 작업이 끝난 뒤에 이 화면에 보입니다."}
       : {ok: true, action: "spawned",
-         // 서버 실문장(bin/s9 WAKE_SPAWNED_KO + WS_MEANS_KO.main)의 사본 —
-         // 어긋나면 진단으로 캡처해 고친 창이 사람이 보는 창이 아니게 된다.
-         // test_dialog_voice V5 가 둘을 묶는다 (REQ-20260830-048).
-         message: "멈춰 있던 작업이 다시 이어집니다. "
-                + "고친 내용은 이 화면에 바로 보입니다."};
-    setTimeout(() => wakeDlg("REQ-20260829-030-62x6", fx), 900);
+         message: "멈춰 있던 작업이 다시 이어집니다."};
+    setTimeout(() => wakeAnswer("REQ-20260829-030-62x6", fx), 900);
     return;
   }
   /* ?dlg=stopask — 세우기의 **묻는 창**을 진짜로 연다 (REQ-20260830-007).

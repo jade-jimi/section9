@@ -97,11 +97,56 @@ const STOP_KIND = {
 
    **전송 문법에 있는 두 행위만** 글리프다(▶ 이어가기 · ⏸ 중단하기). 셋째
    손잡이 「끝났는지 확인」은 낱말로 남는다 — 아래 stallHTML 에 근거를 적었다. */
-const GLYPH_PLAY = '<svg class="gly" viewBox="0 0 12 12" aria-hidden="true"'
-  + ' focusable="false"><path d="M3.2 1.4 L10.2 6 L3.2 10.6 Z" fill="currentColor"/></svg>';
-const GLYPH_PAUSE = '<svg class="gly" viewBox="0 0 12 12" aria-hidden="true"'
-  + ' focusable="false"><rect x="2.9" y="1.5" width="2.5" height="9" fill="currentColor"/>'
-  + '<rect x="6.6" y="1.5" width="2.5" height="9" fill="currentColor"/></svg>';
+/* **그림은 원 안에 산다** (REQ-20260831-006).
+
+   사용자: "pause 버튼의 글리프가 원 안에서 균형이 안 맞고 치우쳐 있다."
+
+   자를 대 보니 치우침은 0 이었다(2배가 아니라 14배로 찍어 화소로 실측:
+   가로 +0.00 · 세로 +0.00). 어긋난 것은 위치가 아니라 **여백**이다. 손이
+   얹히면 그림은 13px 원 안에 담기는데, 옛 ⏸ 의 잉크는 5.71 × 8.29px 이라
+   원과의 틈이 좌우 3.64 · 상하 2.36 · **모서리 1.47** 로 갈렸다 — 눈은 원
+   안에서 축 방향 여백이 아니라 **테의 굵기**를 보므로, 위아래가 좁고 좌우가
+   넓은 이 그림은 세로로 눌린 것으로, 즉 "안 맞는" 것으로 읽힌다.
+
+   그래서 그림을 원에 맞춘다. ⏸ 는 낮추고 벌려(세로 9→7.2, 가로 6.2→6.6),
+   ▶ 는 줄이고 오른쪽으로 민다(삼각형의 무게중심은 밑변 쪽에 있어, 상자를
+   가운데 두면 왼쪽으로 치우쳐 보인다 — 재생 단추가 늘 쓰는 그 보정이다).
+   실측 결과 두 그림 모두 모서리 틈이 2.0~2.6px 로 올라와 축 방향 틈(3.1~3.5)과
+   같은 눈금에 든다. 과녁(27px)도 원(13px)도 1px 안 건드렸다 — 고친 것은
+   그 안에 든 그림뿐이다. */
+/* **그림의 눈금과 화면의 눈금을 같은 눈금으로** (REQ-20260831-006 반려).
+
+   사용자: "pause 버튼은 마우스를 올려보면 여전히 상하좌우 대칭이 아니다."
+
+   1차는 소수점으로 맞췄다(2.7 · 7.2 · 0.79…). 그 값들이 옳았는지 실포인터를
+   얹고 16배로 다시 쟀더니, 원은 13.000 × 13.000 이고 잉크는 그 안에 0.000 으로
+   가운데 있었다 — 그런데 **틈은 좌우 3.438 · 상하 3.188 로 갈렸고, 테는 방향에
+   따라 2.062 에서 6.500 까지** 오르내렸다. 눈이 읽는 것은 그 테다.
+
+   더 나쁜 것은 1배 화소에서 드러났다. `viewBox` 는 12칸인데 `.gly` 는 11px 이라
+   **한 칸이 0.9167px** 다 — 그림의 어떤 좌표도 화소 격자에 앉지 않는다. 두 막대
+   사이 1칸(0.92px)은 실화면에서 밝기 9분의 1로 앉아 **사실상 사라졌고**(정수
+   격자에 맞춘 1배 캡처로 확인), ⏸ 는 두 막대가 아니라 실금 하나 든 덩어리로
+   읽힌다. 소수를 더 다듬어도 이건 안 낫는다 — 눈금 자체가 어긋나 있어서다.
+
+   그래서 **한 칸을 한 화소로 만든다**: `viewBox="0 0 11 11"` 이면 11px 그림에서
+   1칸 = 1px 이고, 정수 좌표는 그대로 화소 경계에 앉는다(점의 좌표계를 하나로
+   세운 것과 같은 처방 — 국소 보정이 아니라 눈금을 고친다).
+
+   그 눈금 위에서 잉크를 **7 × 7 정사각**으로 둔다. 11칸 그림에서 2..9 이고,
+   13px 원 안에서는 3..10 이라 **상하좌우 틈이 모두 3px** 로 같아진다 — 축
+   방향이든 모서리든 테가 한 값이다. ⏸ 는 막대 3 · 틈 1 (옛 2.57 : 0.92 의 비율을
+   그대로 격자에 앉힌 값)이라 그 1px 이 이제 온전히 켜진다.
+
+   ▶ 만 **한 칸 오른쪽**이다(3..10). 삼각형은 상자가 아니라 무게중심으로 가운데를
+   잡아야 하는데(밑변 쪽에 쏠려 있다), 1칸 밀면 무게중심이 (3+3+10)/3 = 5.33 로
+   상자 한가운데 5.5 에 0.17 까지 붙는다. 1차의 +0.79px 과 뜻은 같고 값만 정수다 —
+   밑변의 세로 획이 화소 경계에 앉아 흐려지지 않는다. */
+const GLYPH_PLAY = '<svg class="gly" viewBox="0 0 11 11" aria-hidden="true"'
+  + ' focusable="false"><path d="M3 2 L10 5.5 L3 9 Z" fill="currentColor"/></svg>';
+const GLYPH_PAUSE = '<svg class="gly" viewBox="0 0 11 11" aria-hidden="true"'
+  + ' focusable="false"><rect x="2" y="2" width="3" height="7" fill="currentColor"/>'
+  + '<rect x="6" y="2" width="3" height="7" fill="currentColor"/></svg>';
 /* 눌린 뒤의 얼굴을 한 붓이 칠한다 — 글리프 단추와 낱말 단추 둘 다.
 
    **이름은 요소가 들고 다닌다**(`data-name`). 칠하는 쪽이 상수를 골라 쓰면
@@ -110,9 +155,20 @@ const GLYPH_PAUSE = '<svg class="gly" viewBox="0 0 12 12" aria-hidden="true"'
    그리는 자리와 되돌리는 자리가 갈라지면 늘 이렇게 된다.
 
    `textContent` 로 글리프 단추를 칠하면 `<svg>` 가 통째로 지워진다 — 글리프
-   단추는 이름을 **글자가 아니라 aria-label 로** 갈아 끼운다. */
+   단추는 이름을 **글자가 아니라 aria-label 로** 갈아 끼운다.
+
+   **잠금은 `disabled` 가 아니다** (REQ-20260831-009). `disabled` 를 걸면
+   브라우저가 그 요소에서 포커스를 걷어 body 로 보낸다 — 키보드로 ▶ 에 닿아
+   Enter 를 친 손이 그 순간 자기 자리를 잃는다(CDP 실측: activeAfter=BODY).
+   게다가 disabled 요소의 이름 변경은 대개 낭독기에 통지되지 않아, 「이어가는
+   중…」이라고 갈아 끼운 이름이 아무에게도 안 들린다. 연타를 막는 것은 원래
+   `wokePending`/`stopPending` 이지 이 속성이 아니므로(누르는 자리 두 곳이 그
+   관문을 먼저 지난다), 잠금은 **보이되 닿는** `aria-disabled` 로 말한다. */
+// 그린 얼굴과 칠하는 얼굴이 같은 말을 하도록, 잠금 표시는 여기 한 곳에서 온다.
+const DEED_BUSY = ' aria-disabled="true"';
 function faceDeed(b, going, goingLabel){
-  b.disabled = going;
+  if (going) b.setAttribute("aria-disabled", "true");
+  else b.removeAttribute("aria-disabled");
   b.classList.toggle("busy", going);
   const name = going ? goingLabel : (b.dataset.name || "");
   // 얹은 손에게 하는 말: 평소엔 무슨 일이 일어나는지(data-tip), 도는 중엔 그 사실.
@@ -258,7 +314,7 @@ function stopBtnHTML(r, wordy){
   const going = stopPending(r.id);
   const tip = (STOP_KIND[kind] || {}).tip || STOP_KIND.idle.tip;
   return `<button type="button" class="deed stop ${wordy ? "wgly" : "ico"}${going ? " busy" : ""}"`
-    + ` data-stop="${esc(r.id)}" data-kind="${esc(kind)}"${going ? " disabled" : ""}`
+    + ` data-stop="${esc(r.id)}" data-kind="${esc(kind)}"${going ? DEED_BUSY : ""}`
     + ` data-name="${STOP_LABEL}" data-tip="${esc(tip)}"`
     + ` aria-label="${going ? STOP_GOING : STOP_LABEL}"`
     + ` title="${going ? STOP_GOING : esc(tip)}">${GLYPH_PAUSE}`
@@ -323,7 +379,7 @@ function wakeBtnHTML(r, wordy){
   // 다음 사람의 grep 도 조립된 이름을 못 찾는다.
   const at = held ? `data-restart="${esc(r.id)}"` : `data-wake="${esc(r.id)}"`;
   return `<button type="button" class="deed wake ${wordy ? "wgly" : "ico"}${going ? " busy" : ""}"`
-    + ` ${at}${going ? " disabled" : ""}`
+    + ` ${at}${going ? DEED_BUSY : ""}`
     + ` data-name="${WAKE_LABEL}" data-tip="${esc(tip)}"`
     // 글리프 단추는 이름을 글자가 아니라 여기로 실어 낸다 — 낭독기에도, 손에도.
     + ` aria-label="${going ? WAKE_GOING : WAKE_LABEL}"`
@@ -344,7 +400,7 @@ const DRIFT_TIP = "고친 것이 있는데 문서가 안 닫혔습니다 — 자
 function driftBtnHTML(r){
   const going = wokePending(r.id);
   return `<div class="acts wakerow"><button type="button" class="deed wake`
-    + `${going ? " busy" : ""}" data-wake="${esc(r.id)}"${going ? " disabled" : ""}`
+    + `${going ? " busy" : ""}" data-wake="${esc(r.id)}"${going ? DEED_BUSY : ""}`
     + ` data-name="${DRIFT_LABEL}" data-tip="${esc(DRIFT_TIP)}"`
     + ` title="${going ? WAKE_GOING : esc(DRIFT_TIP)}">`
     + `${going ? WAKE_GOING : DRIFT_LABEL}</button></div>`;
@@ -425,7 +481,7 @@ function holdLockHTML(r){
      행동 띠(.dacts) 안에서 정책 잉크(.pol, 한 급 낮음)로 선다. 자기 줄로 서면
      행동들이 흩어지고, 그 흩어짐이 "안 보인다"의 나머지 절반이었다. */
   return `<button type="button" class="deed stop pol${going ? " busy" : ""}"`
-    + ` data-stop="${esc(r.id)}" data-kind="idle"${going ? " disabled" : ""}`
+    + ` data-stop="${esc(r.id)}" data-kind="idle"${going ? DEED_BUSY : ""}`
     + ` data-name="${STOP_HOLD_LABEL}"`
     + ` data-tip="${esc(tip)}" title="${going ? STOP_GOING : esc(tip)}">`
     + `${going ? STOP_GOING : STOP_HOLD_LABEL}</button>`;
@@ -585,12 +641,43 @@ function stopProbe(rows){
   }
   return rows;
 }
+/* ?turn[=<조용한 분>] — 「일하는 중, 기록은 아직」의 긴 턴 갈래를 세운다
+   (REQ-20260831-005).
+
+   이 얼굴은 **한 세션이 도구만 부르며 20분을 보내는 동안**에만 실데이터에
+   나타난다 — 캡처를 찍으려는 바로 그 순간에 그런 세션이 있으라는 요구는
+   깨우기가 두 번 "본 적 없이" 올라간 그 요구와 같다. 붙어 있는 갈래(위임된
+   작업자·손길)는 이미 `?hand=` 가 세우므로 여기서는 긴 턴만 만든다.
+
+   그림을 따로 짓지 않는다: 서버가 줬을 값(live + quiet_mins, stalled_mins
+   없음)을 행에 얹고 평소 그리던 길(cardHTML → busyState)이 그대로 그린다. */
+function turnProbe(rows){
+  const m = /[?&]turn(?:=(\d+))?\b/.exec(location.search);
+  if (!m || !Array.isArray(rows)) return rows;
+  const mins = Math.max(0, Math.min(9999, +(m[1] || 17)));
+  let n = 0;
+  for (const r of rows){
+    if (r.type !== "request" || r.status !== "in-progress") continue;
+    // 서버 규칙 그대로: 움직이는 것으로 판정한 행에는 멈춤을 안 싣는다.
+    r.live = true;
+    r.live_kind = "direct";
+    r.live_age = 12 + n;
+    r.stall_state = "moving";
+    r.stall_why = "";
+    r.quiet_mins = mins + 6 * n;
+    r.stalled_mins = null;
+    delete r.stopped;
+    n++;
+  }
+  return rows;
+}
 function stallProbe(rows){
   // 한 카드의 두 손잡이는 부르는 자리를 하나로 둔다 — 진단이 늘어날 때마다
   // 파이프라인에 줄이 붙으면, 어느 진단이 어느 화면을 세우는지 흩어진다.
   workProbe(rows);
   heldProbe(rows);
   handProbe(rows);
+  turnProbe(rows);
   stopProbe(rows);
   driftProbe(rows);
   const m = /[?&]stall=(\d+)/.exec(location.search);
@@ -912,6 +999,37 @@ function paintWake(id){
   document.querySelectorAll(`[data-wake="${q}"],[data-restart="${q}"]`)
     .forEach(b => faceDeed(b, going, WAKE_GOING));
 }
+/* 한 문서의 **벨트 손잡이**를 가리키는 자리 하나 (REQ-20260831-009). 벨트에는
+   상태에 따라 ▶(`data-wake`)·⏸(`data-stop`)·↻(`data-restart`) 중 하나만 서므로
+   (REQ-20260830-042 배타 노출), 셋을 한 셀렉터로 묻는 것이 곧 "그 카드의
+   손잡이"를 묻는 것이다. */
+function deedHandle(id){
+  const q = CSS.escape(id);
+  return document.querySelector(
+    `[data-wake="${q}"],[data-stop="${q}"],[data-restart="${q}"]`);
+}
+/* **누른 손은 그 자리에 남는다** (REQ-20260831-009).
+
+   답이 오면 카드를 다시 그리는데, 그리기는 손잡이 개체를 새것으로 갈아 끼운다
+   — 키보드로 ▶ 에 닿아 Enter 를 친 손은 그 순간 자기가 서 있던 자리가 사라져
+   보드 맨 앞으로 되돌아간다. `aria-disabled` 로 눌린 뒤의 포커스는 지켰지만
+   (faceDeed), 재그리기는 그것만으로 건널 수 없다.
+
+   규칙 셋. ① **내 자리였을 때만** 되돌린다 — 그 사이 사람이 다른 데로 갔으면
+   빼앗지 않는다. ② 그 자리가 살아남았으면 아무 일도 하지 않는다. ③ **창이 서
+   있으면 손은 창의 것이다** — 창을 열어 놓고 뒤의 카드로 포커스를 끌어오면
+   사람이 읽던 자리가 사라진다(창이 닫힐 때 s9dlg 가 제 손으로 돌려보낸다). */
+async function keepDeedFocus(id, fn){
+  const held = document.activeElement;
+  const q = CSS.escape(id);
+  const mine = !!(held && held.closest && held.closest(
+    `[data-wake="${q}"],[data-stop="${q}"],[data-restart="${q}"]`));
+  await fn();
+  if (!mine || held.isConnected) return;
+  if (!(document.querySelector(".dlgbox") || {hidden: true}).hidden) return;
+  const b = deedHandle(id);
+  if (b) b.focus();
+}
 /* 멈춘 요청 하나를 사람이 눌러 다시 굴린다 (REQ-20260828-041).
 
    **화면은 이유를 짓지 않는다.** 서버가 준 `message` 를 그대로 옮긴다 —
@@ -955,16 +1073,39 @@ async function wakeDoc(id){
     return;
   }
   if (!d.ok){ wokeAt.delete(id); paintWake(id); }
-  wakeDlg(id, d);
-  if (d.ok) refreshCatalog(true);
+  // 창은 wakeAnswer 가 세울지 말지 가른다. 창이 서면 손은 창의 것이라
+  // keepDeedFocus 가 물러서고, 안 서면 재그리기를 건너 손잡이로 돌아온다.
+  wakeAnswer(id, d);
+  if (d.ok) await keepDeedFocus(id, () => refreshCatalog(true));
 }
-/* 깨우기의 답을 창으로 옮기는 자리는 **하나다** (REQ-20260829-030). 진단
-   (`?dlg=wakewait`·`?dlg=wakespawn`)도 이 함수를 부른다 — 창을 따로 지으면 보고
-   고친 것이 사람이 보는 창이 아니게 된다.
+/* 답이 **창으로 설지를 가르는 자리**도 하나다 (REQ-20260830-049). 진단
+   (`?dlg=wakewait`·`?dlg=wakespawn`·`?dlg=wakespawnws`)도 여기를 지난다 —
+   창 짓는 함수만 부르고 이 판정을 건너뛰면, 진단으로 캡처해 고친 것이 사람이
+   보는 화면이 아니게 된다(같은 병이 문안에서 한 번 났다, REQ-20260830-048).
 
-   **화면이 읽는 것은 `ok` 와 `message` 둘뿐이다.** 서버에 `action` 값이 하나
-   늘어도(028 이 더한 `waiting`) 여기는 그대로다 — 값마다 문구를 갈라 쓰기
+   **성공에 덧붙일 예외 사실이 없으면 창은 서지 않는다.** 이어가기는 비파괴·
+   자동·되돌림 가능(⏸)이라, 누른 손 아래에서 ▶ 가 ⏸ 로 서는 것이 이미 답이다
+   — 그 위에 판을 하나 더 세우면 원인과 결과가 공간적으로 끊기고, 창이 자기가
+   가리키는 그 카드를 가린다(designer 실측). 이 화면에서 창은 「물음 아니면
+   거절」의 신호로 학습돼 있어, 아무 문제도 없는데 문제의 옷을 입고 나타난다.
+   카드 사실 줄의 규율(REQ-20260830-040 「예외만 말한다」)을 창에 그대로 옮긴 것.
+
+   **갈래는 화면이 다시 판정하지 않는다.** 워크스페이스가 무엇인지 여기서 캐면
+   그리기와 답이 두 벌이 되므로, 읽는 것은 서버가 할 말을 가졌는가(`note`)
+   하나다 — 말은 여전히 서버 한 곳에서 온다(bin/s9 `_wake_note`). */
+function wakeAnswer(id, d){
+  if (d.ok && !d.note) return null;
+  return wakeDlg(id, d);
+}
+/* 깨우기의 답을 창으로 옮기는 자리는 **하나다** (REQ-20260829-030). 창을 따로
+   지으면 보고 고친 것이 사람이 보는 창이 아니게 된다.
+
+   **화면이 읽는 것은 `ok`·`message`·`note` 셋뿐이다.** 서버에 `action` 값이
+   하나 늘어도(028 이 더한 `waiting`) 여기는 그대로다 — 값마다 문구를 갈라 쓰기
    시작하면 같은 말이 서버와 화면 두 벌이 되고, 그때부터 한 벌만 고쳐진다.
+   `message`(한 절, 결과 그 자체)와 `note`(예외 사실 한 줄)는 급이 다른 말이라
+   슬롯도 둘이다 — 한 창의 강조는 하나이므로, 화면이 한 문자열을 마침표로
+   쪼개는 것은 금지다(문장 안 쉼표에서 깨진다, REQ-20260830-049).
 
    `ok=false` 는 **오류가 아니라 설명이다**. `waiting`(누가 무엇을 잡고 있어
    차례를 기다린다)·`busy`·`capped`·`moving` 이 전부 정상적인 답이라 창머리
@@ -975,7 +1116,7 @@ function wakeDlg(id, d){
      맞춰 봐야 한다 — 누른 낱말이 그대로 돌아와야 답으로 읽힌다. */
   return s9dlg({kind: "alert", cap: d.ok ? WAKE_LABEL : "이어가지 않음",
     stop: false,
-    doc: shortId(id), title: d.message, ok: "닫기"});
+    doc: shortId(id), title: d.message, desc: d.note || "", ok: "닫기"});
 }
 /* 눌린 순간 화면이 먼저 답한다 — 깨우기와 같은 규칙이다. */
 function paintStop(id){
@@ -1094,6 +1235,52 @@ function cardHTML(r){
      stallState 한 곳만 지난다 (REQ-20260828-041 2차: 카드가 자기 몫의 조건을
      따로 가지면 문서 화면과 갈라진다 — 실제로 갈라져 있었다). */
   const st = stallState(r);
+  /* **일하는 중인데 아직 남긴 기록이 없다** (REQ-20260831-005).
+
+     사용자: "지금 열심히 동작중인데 카드에는 멈춤으로 나온다. 워커 입장에서는
+     많이 억울할 상황이네."
+
+     이 화면이 아는 얼굴은 둘뿐이었다: 기록이 나가는 중(초록 채운 점)이거나,
+     진전이 없는 것(정지 사각). 그 사이에 실제로 가장 흔한 얼굴이 빠져 있다 —
+     **붙어서 돌고는 있는데 아직 문서에 안 적힌 것.** 리드가 한 턴 안에서 20분
+     동안 도구만 부르는 동안이 그렇고, 위임된 작업자가 붙어 일하는 동안이
+     그렇다. 그 얼굴이 없으니 화면은 있는 얼굴 중 가까운 것으로 떨어졌고, 그게
+     「멈춤」이었다. 마크 하나가 없어서 일하는 손을 멎었다고 그린 것이다.
+
+     **판정은 여기서 짓지 않는다** — 서버가 실어 준 한 벌(stall_verdict)을 읽어
+     얼굴만 고른다. 화면이 자기 시계를 대기 시작하면 CLI(`s9 stalled`)와 다른
+     말을 하게 된다 (REQ-20260828-036). 두 문이다:
+
+       ① `stall_state === "attached"` — 서버가 "무언가 이 요청에 붙어 있다"고
+          판정한 자리 전부다(위임된 작업자 · 지명 등록된 손 · 도는 긴 잡 ·
+          다른 곳에서 온 손길 · 긴 턴을 도는 세션). 이 자리들은 정의상
+          `stalled_mins` 를 안 싣는데 점의 사다리에 갈 곳이 없어 **`.off`(모름)**
+          으로 떨어지고 있었다 — 붙어 있는 줄 알면서 모른다고 그리던 자리다.
+       ② 서버는 "움직인다"(live)고 하는데 문서만 오래 조용한 것. 잣대는 새로
+          짓지 않고 「오래 걸림」이 이미 쓰는 SLOW_WIN 을 그대로 쓴다(서버
+          STALLED_WIN 과 같은 수, tests/test_stall_pair.py 가 대조). 그 미만은
+          정상이라 ● 그대로다.
+
+     **문장은 하나다.** 서버가 판정과 함께 사람이 읽는 한 문장(`stall_why`)을
+     실어 주고 CLI 도 그것을 쓴다 — 화면이 자기 문장을 지어 덧붙이면 같은 사실이
+     툴팁 안에서 두 번 말해진다(서버 문장이 이미 「문서에는 N분째 새 기록이
+     없습니다」로 끝난다). 있으면 그대로 쓰고, 없을 때만 화면이 채운다.
+
+     **술어를 따로 세우지 않은 이유**: 이 판정을 먹는 자리는 점 하나뿐이다.
+     이 파일이 술어를 함수로 올리는 것은 부르는 자리가 둘 이상일 때다
+     (stallState 는 점·줄·손잡이·열 머리 수·정렬 다섯이 먹는다) — 그래야
+     갈라질 자리가 없어진다. 자리가 하나인 판정을 함수로 올리면 갈라짐은 안
+     막으면서 이름만 늘어난다. 둘째 자리(문서 화면 따위)가 생기는 날 함수로
+     올리고, 그때 tests/test_stall_pair.py 의 render() 조각 목록에 그 이름을
+     함께 얹어라 — 그 목록이 화면 조각을 이어 붙이는 자리다. */
+  const bzq = r.quiet_mins == null ? null : +r.quiet_mins;
+  const bz = (isReq && r.status === "in-progress" && !st && !r.stopped
+              && (r.stall_state === "attached"
+                  || (r.live && bzq != null && bzq >= SLOW_WIN / 60)))
+    ? {quiet: bzq,
+       tell: r.stall_why || ("지금 이 요청을 맡아 일하고 있습니다"
+         + (bzq == null ? "" : ` — 문서에는 ${bzq}분째 새 기록이 없습니다`))}
+    : null;
   // 펼쳐 둔 확인 요청/대기 사유는 다시 그려도 살아남는다 (REQ-20260829-009 반려) —
   // 이 화면이 이미 쓰는 기억(expanded)에 얹는다. 15초 폴링이 접지 않는다.
   const rvOpen = expanded.has("rv:" + r.id);
@@ -1180,7 +1367,13 @@ function cardHTML(r){
           (REQ-20260828-041 2차 반려가 지운 그 조합). 마크는 이미 있는 것을
           쓴다: 멈춤과 같은 속 빈 사각이되, 까닭은 툴팁이 갈라 말한다. */
        : r.stopped
-         ? `<span class="livedot dot-stopped mild" title="사람이 이 요청의 자동 작업을 중단했습니다 — 카드의 「${WAKE_LABEL}」를 누르면 다시 이어집니다"></span>`
+         ? `<span class="livedot dot-held" title="사람이 이 요청의 자동 작업을 중단했습니다 — 카드의 「${WAKE_LABEL}」를 누르면 다시 이어집니다"></span>`
+       /* **일하는 중, 기록은 아직** — ◎ (REQ-20260831-005). 초록 점멸보다
+          먼저 걸린다: 이 갈래에 해당하는 카드는 대부분 `r.live` 도 참이라,
+          아래에 두면 영영 안 그려지고 ● 가 "기록도 나가는 중"이라는 거짓을
+          계속 말한다. 멈춤·중단보다는 뒤다 — 멎은 것이 도는 것을 이긴다. */
+       : bz
+         ? `<span class="livedot busy" title="${esc(bz.tell)}"></span>`
        : r.live
          ? `<span class="livedot on" title="지금 이 요청을 맡아 일하고 있습니다 — ${r.live_age}초 전에 움직였습니다"></span>`
        : r.live_kind === "session"

@@ -513,5 +513,74 @@ class ThePressedHandKeepsItsPlace(unittest.TestCase):
                       "창이 서 있는지 보지 않고 포커스를 가져간다")
 
 
+class TheMarkSharesOneStage(unittest.TestCase):
+    """점의 좌표계는 층이다 — 무대·맥박·마크 (REQ-20260831-012/006/016).
+
+    세 지적(마크 종류별 좌표 차이 · ⏸ 호버 비대칭 · 파동 중심 이탈)의 뿌리는
+    전부 층이 안 갈린 것이었다: 얼굴이 무대를 건드리거나, 맥박이 box-shadow 로
+    마크 뒤에서 배어 나오거나, 글리프 눈금이 화소와 안 맞았다. 계약은 셋이다.
+      ① 무대(.livedot 상자·정렬)는 얼굴이 못 건드린다.
+      ② 맥박은 무대와 동심인 ::after 링이다 — box-shadow 금지.
+      ③ 글리프는 viewBox 한 칸 = .gly 한 화소(11↔11px), 좌표는 정수다.
+    상세 근거: DOC-20260831-003 「작은 마크의 좌표 함정 셋」.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        with open(INDEX, encoding="utf-8") as f:
+            cls.src = f.read()
+        cls.rules = _rules(_css(cls.src))
+        cls.dot = [(s, d) for s, d in cls.rules if ".livedot" in s]
+
+    def test_no_face_touches_the_stage(self):
+        """얼굴 규칙은 잉크·채움만 — 상자·자리·정렬은 무대의 것이다."""
+        for sel, dec in self.dot:
+            if "::after" in sel or not re.search(r"\.livedot\.", sel):
+                continue  # 무대 자신과 맥박은 제 몫이다
+            for prop in ("width:", "height:", "position:", "display:",
+                         "margin", "top:", "left:", "transform-origin:"):
+                self.assertNotIn(prop, dec,
+                                 "얼굴이 무대를 건드린다 (%s ← %s) — 종류마다 "
+                                 "좌표가 갈리던 그 길이다" % (sel, prop))
+
+    def test_the_pulse_is_a_concentric_ring(self):
+        """맥박은 box-shadow 가 아니라 중심을 못박은 링이다."""
+        for sel, dec in self.dot:
+            self.assertNotIn("box-shadow", dec,
+                             "맥박이 그림자다 (%s) — 속 빈 마크에서 색면으로 "
+                             "배어 나오고 하드코딩 색이 얼굴과 어긋난다" % sel)
+        ring = [d for s, d in self.dot if s.endswith(".livedot::after")]
+        self.assertEqual(len(ring), 1, "맥박 링이 한 벌이 아니다")
+        self.assertIn("top:50%", ring[0])
+        self.assertIn("left:50%", ring[0])
+        self.assertIn("transform:translate(-50%,-50%)", ring[0],
+                      "50%+translate 가 아니면 상자가 부모보다 커지는 순간 "
+                      "margin:auto 가 가운데를 포기한다 (CSS 2.1 §10.3.7, "
+                      "REQ-20260831-016 실측 +3.2px)")
+        self.assertIn("@keyframes livering", self.src)
+        # 이름이 주석(경위 기록)에 남는 것은 허용 — 살아 있는 정의·호출만 막는다
+        self.assertNotIn("@keyframes livepulse", self.src,
+                         "옛 그림자 맥박이 되살아났다")
+        self.assertNotRegex(self.src, r"animation:\s*livepulse",
+                            "옛 그림자 맥박을 다시 부른다")
+
+    def test_the_glyph_grid_is_the_pixel_grid(self):
+        """viewBox 한 칸 = 한 화소 — 어긋나면 획이 반 화소에 걸려 번진다."""
+        for name in ("GLYPH_PLAY", "GLYPH_PAUSE"):
+            m = re.search(r"const %s = ([\s\S]*?;)" % name, self.src)
+            self.assertIsNotNone(m, name)
+            self.assertIn('viewBox="0 0 11 11"', m.group(1),
+                          "%s 의 눈금이 .gly(11px)와 1:1 이 아니다" % name)
+        pause = re.search(r"const GLYPH_PAUSE = ([\s\S]*?;)", self.src).group(1)
+        for n in re.findall(r'(?<=[\s"])(?:x|y|width|height)="([^"]+)"', pause):
+            self.assertRegex(n, r"^\d+$",
+                             "⏸ 좌표 %s 가 정수가 아니다 — 화소 격자에서 "
+                             "내린다" % n)
+        for sel, dec in self.rules:
+            if sel.endswith(" .gly"):
+                self.assertIn("width:11px", dec, sel)
+                self.assertIn("height:11px", dec, sel)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

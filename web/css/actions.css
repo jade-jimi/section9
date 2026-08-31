@@ -3,25 +3,173 @@
 .tdd{font-family:var(--mono);font-size:10px;color:var(--c-inprogress);border:1px solid currentColor;
   padding:0 4px;border-radius:2px}
 .tdd.full{color:var(--c-done)}
-.livedot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:middle}
-.livedot.on{background:#16a34a;box-shadow:0 0 0 0 rgba(22,163,74,.6);animation:livepulse 1.6s infinite}
+/* ---- 점의 어휘 (REQ-20260831-005 designer 개정) --------------------------
+
+   사용자: "지금 열심히 동작중인데 카드에는 멈춤으로 나온다. 워커 입장에서는
+   많이 억울할 상황이네."
+
+   억울함의 뿌리는 판정이었지만(서버), 그 판정이 화면에서 **정지 마크 한 벌**로
+   내려앉은 것이 눈에 보인 절반이다. 점이 두 축을 한 마크에 실었기 때문이다 —
+   ① 무엇이 붙어 있나(붙음 축) ② 문서에 기록이 나가고 있나(기록 축). 둘이
+   어긋나는 순간(붙어서 도는데 아직 안 적었다)이 정확히 이번 사고이고, 그때
+   화면은 「멈춤」 하나만 알고 있었다.
+
+   그래서 어휘를 모양으로 다시 세운다. **모양이 붙음 축, 채움이 기록 축**이다:
+
+     ●  채운 원      도는 것이 붙어 있고 기록도 나가는 중
+     ◎  링 + 심      도는 것이 붙어 있으나 기록은 아직 (심=속은 차 있다)
+     ○  링          이 요청이라는 증거 없이 세션만 살아 있음
+     ○  점선 링      모름 — 조용해서 무엇이 도는지 알 수 없다
+     ▫  속 빈 사각   멈춤 — 아무도 안 붙었고 진전도 없다
+     ▪  채운 사각    맡았던 작업이 죽었다
+     ⏸  두 막대      사람이 손으로 세워 두었다
+
+   색은 이 어휘의 **둘째** 신호다(잉크만, 면 금지): 초록=사람·손이 도는 중,
+   앰버=자동 작업/주의, 빨강=죽음, 회색=중립. 색을 못 보는 눈에도 모양 일곱이
+   그대로 남는다.
+
+   크기를 6px→7px 로 올렸다: ◎ 는 링 1.5 + 틈 1 + 심 2 를 세워야 성립하는데
+   6px 안에서는 셋이 뭉갠다(2배 캡처 실측). 1px 은 모든 얼굴의 대비도 함께
+   올린다 — 27px 벨트가 줄 높이를 정하므로 카드 리듬은 그대로다. */
+/* ---- 여덟 얼굴이 함께 쓰는 **한 좌표계** (REQ-20260831-012) --------------
+
+   사용자: "점멸등의 좌표가 종류에 따라 다른 경우가 있다. 국소부위 조치가
+   아니라 전체 디자인 요소를 감안해서 반영하도록 해라."
+
+   자를 먼저 댔다. **상자는 이미 하나였다** — 여덟 얼굴 × 스킨 열 벌에서 점
+   상자의 중심은 서로 0.000px 로 같고(실측), 그 중심은 식별자 대문자 띠의
+   한가운데(11px 상자 안 +5.500 = 대문자 7.0px 의 정중앙)에 정확히 선다.
+   자리를 옮길 것은 없었다.
+
+   갈려 있던 것은 **맥박**이다. `livepulse` 는 `box-shadow` 를 5px 까지 퍼뜨리는데,
+   그림자는 요소 **뒤에** 칠해진다:
+     · ● 처럼 속이 찬 얼굴에서는 점 뒤로만 번져 가는 테로 보이고,
+     · ◎ 처럼 속이 빈 얼굴에서는 뚫린 가운데로 **비쳐 올라와 옅은 색면**이 된다.
+   그래서 한 줄에 선 ● 과 ◎ 의 보이는 지름이 실측 7.0px 과 16.0px 로 갈렸다
+   (0.2초 간격 14컷). 눈은 중심을 재지 않고 **보이는 덩어리의 가장자리**를 재므로,
+   같은 중심에 선 두 마크가 자리가 다른 것으로 읽힌다. 주기까지 서로 다르니
+   (1.6s · 2.6s) 두 점이 같은 국면에 놓이는 순간은 거의 없다.
+   덤으로 그 그림자는 초록이 **하드코딩**돼 있어, 앰버여야 할 「자동 작업 기동」
+   점이 초록 후광을 쓰고 있었다.
+
+   그래서 좌표계를 셋으로 가른다. 얼굴이 만질 수 있는 것은 셋째뿐이다:
+
+     ① 무대(.livedot)   상자 7px · 중심 · 정렬. **어느 얼굴도 못 건드린다.**
+     ② 맥박(::after)    무대와 동심인 1px 링 하나. 얼굴과 무관하게 같은 그림.
+     ③ 마크             얼굴이 정하는 것 — 잉크(color)와 그 안의 그림뿐.
+
+   ②가 링인 것은 이 문서가 이미 내린 결정이다(Graph 탭: "상태 신호는 글로우·펄스
+   채우기 금지 — 링 스트로크만", 레이더 핑). 카드의 점만 그 결정을 안 따르고
+   있었다. 링은 속이 빈 얼굴이든 찬 얼굴이든 같은 그림이라, 얼굴이 달라도
+   보이는 덩어리가 달라지지 않는다.
+
+   ③의 잉크를 `color` 로 옮긴 것도 같은 이유다 — 맥박이 `currentColor` 를 쓰면
+   색을 얼굴마다 다시 적지 않아도 되고, 앰버 점에 초록 후광이 도는 일이 구조적으로
+   불가능해진다. 이 파일이 벨트 칠에서 이미 얻은 교훈("잉크는 한 곳에")이다. */
+.livedot{--dot-live:#16a34a;--dot-auto:#d97706;--dot-size:7px;--beat:0s;
+  position:relative;box-sizing:border-box;
+  display:inline-block;width:var(--dot-size);height:var(--dot-size);
+  border-radius:50%;margin-right:6px;
+  /* 줄이 무엇으로 정렬하든 중심은 가운데다 — 스킨이 `.card .id` 의
+     `align-items` 를 바꿔도 점은 안 따라간다. 크기를 줄이는 얼굴(.off)도
+     중심에서 줄어든다. */
+  flex:0 0 auto;align-self:center;transform-origin:50% 50%;
+  vertical-align:middle}
+/* 맥박 = 무대와 **동심**인 링 하나 (REQ-20260831-016).
+
+   사용자: "녹색점멸들의 녹색점과 파동원의 중심이 맞지 않다."
+
+   처음엔 `inset:0;margin:auto` 로 가운데에 붙박았다. 상자가 무대보다 **작을**
+   때는 그게 가운데 맞춤이지만, 링은 자라면서 무대보다 커진다 — 그 순간 CSS 는
+   가운데 맞춤을 포기한다: 남는 자리가 음수가 되면 `margin-left` 를 0 으로 두고
+   나머지를 오른쪽에 몰아준다(CSS 2.1 §10.3.7). 그래서 링은 왼끝이 점의 왼끝에
+   붙은 채 오른쪽으로만 부풀었다 — 실측 **오른쪽으로 +3.2px**(12배 캡처).
+
+   `top/left:50%` 에 `translate(-50%,-50%)` 를 쓰면 되돌리는 양이 **제 상자의
+   절반**이라, 상자가 얼마로 자라든 중심이 그대로 남는다. 키우는 것은 폭·높이라
+   1px 선은 끝까지 1px 이다(transform:scale 로 키우면 선까지 두 배가 된다).
+   지름은 무대의 두 배까지만 — 세 배면 링이 식별자 첫 글자를 파고든다
+   (점 오른끝에서 글자까지 6px, 두 배면 3.5px 이 남는다). */
+.livedot::after{content:"";position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  width:var(--dot-size);height:var(--dot-size);border-radius:50%;
+  border:1px solid currentColor;opacity:0;pointer-events:none}
+.livedot.on::after,.livedot.busy::after,.livedot.spawn::after{
+  animation:livering var(--beat) ease-out infinite}
+@keyframes livering{
+  0%{width:var(--dot-size);height:var(--dot-size);opacity:.5}
+  70%{width:calc(var(--dot-size) * 2);height:calc(var(--dot-size) * 2);opacity:0}
+  100%{width:calc(var(--dot-size) * 2);height:calc(var(--dot-size) * 2);opacity:0}
+}
+.livedot.on{color:var(--dot-live);background:currentColor;--beat:1.6s}
+/* 「일하는 중, 기록은 아직」 — ◎ (REQ-20260831-005).
+
+   **새 색을 들이지 않는다.** 이건 초록(도는 중)의 한 얼굴이지 다른 상태가
+   아니다 — 앰버로 그리면 "주의하라"가 되고, 그러면 억울함을 색만 바꿔 되풀이
+   하는 셈이다. 다른 것은 채움뿐이다: 겉(문서)은 비었고 속(작업)은 차 있다.
+   맥박은 남기되 한 호흡 늦춘다(1.6s→2.6s) — 도는 것은 맞지만 지금 나가는
+   것이 없다는 뜻이 숨의 속도로도 읽힌다. 정지 캡처에서 ● 와 갈리는 것은
+   애니메이션이 아니라 모양이다(캡처로 검증되지 않는 차이는 없는 차이다). */
+.livedot.busy{color:var(--dot-live);--beat:2.6s;
+  background:radial-gradient(circle at 50% 50%,currentColor 0 1px,transparent 1.2px);
+  border:1.5px solid currentColor}
 /* 꺼진 점 = **속 빈 링** (REQ-20260828-036). 채운 --faint 점은 라이트·다크
    양쪽에서 대비 2.98:1 로 큰 텍스트 기준(3:1)에 미달이었고, 라이트에서는
    초록보다 오히려 밝았다 — 흑백으로 보면 "일하는 중"이 "버려짐"보다 어두웠다.
    상태를 밝기 순서로 읽는 눈에는 화면이 거꾸로 말하고 있었던 셈이다.
    링은 --muted(종이톤 6:1대)로 그리고, 채움을 비워 "안이 비었다"를 모양으로도
-   말한다 — 색을 못 보는 눈에도 남는 차이다. */
-.livedot.off{background:transparent;border:1.5px solid var(--muted)}
+   말한다 — 색을 못 보는 눈에도 남는 차이다.
+   **한 급 작게 그린다** (REQ-20260831-005): 「세션만 활발」(.sess)과 이 「모름」이
+   둘 다 속 빈 링이라, 초록·회색이라는 **색 하나**가 유일한 차이였다 — 색맹
+   눈에는 같은 마크다. 점선으로도 갈라 봤는데 4배로 키우니 회전하는 스피너로
+   읽혔다: 「돌고 있다」는 정반대 뜻이라 그 길은 접었다. 대신 크기를 줄인다 —
+   신호가 약한 것을 약하게 그리는 것이라 뜻과 그림이 같은 방향이고, transform
+   이라 줄의 정렬도 건드리지 않는다. */
+.livedot.off{color:var(--muted);background:transparent;
+  border:1.5px solid currentColor;transform:scale(.78)}
 /* 간접 신호: 세션은 활동 중이나 이 REQ의 직접 증거 없음 — 비점멸 hollow (REQ-20260823-080) */
-.livedot.sess{background:transparent;border:1.5px solid #16a34a}
-/* 무인 작업자 기동 중(스폰 후 클레임 전) — 앰버 점멸 (REQ-20260824-008) */
-.livedot.spawn{background:#d97706;box-shadow:0 0 0 0 rgba(217,119,6,.6);animation:livepulse 1.6s infinite}
+.livedot.sess{color:var(--dot-live);background:transparent;
+  border:1.5px solid currentColor}
+/* 무인 작업자 기동 중(스폰 후 클레임 전) — 앰버 점멸 (REQ-20260824-008).
+   맥박이 `currentColor` 라 이제 **앰버 점에 앰버 링**이 돈다 — 종전 `livepulse`
+   는 초록을 하드코딩해 이 점만 색이 어긋나 있었다 (REQ-20260831-012 에서 잡음). */
+.livedot.spawn{color:var(--dot-auto);background:currentColor;--beat:1.6s}
 /* 정지등 (REQ-20260825-089): 죽은 워커·멈춘 에이전트. 점멸하지 않는 것이
    핵심이다 — 점멸은 "지금 움직인다"는 뜻이고, 이건 그 반대다. 실패는 사각(정지
    신호의 관습), 정지는 같은 사각의 속 빈 형태로 한 단계 낮춘다. */
-.livedot.dot-stopped{border-radius:1px;background:var(--c-blocked);animation:none}
-.livedot.dot-stopped.mild{background:transparent;border:1.5px solid var(--c-inprogress)}
-@keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.5)}70%{box-shadow:0 0 0 5px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
+.livedot.dot-stopped{color:var(--c-blocked);border-radius:1px;background:currentColor}
+.livedot.dot-stopped.mild{color:var(--c-inprogress);background:transparent;
+  border:1.5px solid currentColor}
+/* 사람이 세워 둔 것 — **줄 그은 사각** (REQ-20260831-005).
+
+   바로 아래 `.rvpt.held` 주석이 "구분은 색보다 강한 것이 이미 한다: 캡션 낱말 ·
+   버튼 낱말 · **점 모양**" 이라고 적어 두었는데, 정작 점은 멈춤과 **같은 마크**
+   (속 빈 앰버 사각)였다 — 화면이 스스로 한 약속을 안 지키고 있었다.
+   저절로 멎은 것(사고)과 사람이 손으로 세운 것(뜻)은 같은 그림일 수 없다.
+
+   사각(멎음)의 식구로 남기고 **채움의 정도**로 가른다. 밝기 순서가 곧 근거의
+   세기다: 속 빔(진전이 없어 멎은 것으로 본다) → 줄 하나(사람이 그어 세웠다) →
+   꽉 참(맡았던 것이 죽었다). 잉크는 --muted — 사람이 알고 한 일에 경보색을
+   쓰지 않는다(앰버는 "봐야 한다"는 뜻이고, 이건 이미 본 것이다).
+
+   **재생기 글리프(⏸)를 점에 쓰지 않는다.** 두 막대로 그려 봤더니 같은 id 줄
+   오른쪽 끝의 벨트 단추가 ⏸(중단하기)로 서는 조합에서 한 줄에 ⏸ 가 둘이 됐다 —
+   하나는 "이미 세워져 있다", 다른 하나는 "지금 세워라". REQ-20260830-042 가
+   카드에서 걷어낸 바로 그 모순이라, 점은 그 문법에 들어가지 않는다.
+
+   `background` 단축을 먼저 쓰고 clip 을 뒤에 둔다 — 순서를 바꾸면 단축이
+   clip 을 border-box 로 되돌려 줄이 테두리까지 덮는다 (REQ-20260830-043 이
+   벨트 칠에서 덴 그 함정). */
+.livedot.dot-held{color:var(--muted);border-radius:1px;
+  background:linear-gradient(currentColor 0 0) no-repeat center/100% 1.5px;
+  background-clip:content-box;border:1.5px solid currentColor}
+/* 점멸은 대기 상태의 반복이라 이 문서가 허락한 자리지만, 반복을 끄기로 한
+   눈에는 꺼야 한다 (REQ-20260831-005 — 종전에 이 자리가 비어 있었다). 끄고
+   나서도 얼굴 여덟은 그대로 갈린다: 구분을 지고 있는 것이 움직임이 아니라
+   모양이기 때문이다. 링은 `opacity:0` 이 제 얼굴이라 애니메이션만 끄면 사라진다. */
+@media (prefers-reduced-motion: reduce){
+  .livedot.on::after,.livedot.busy::after,.livedot.spawn::after{animation:none}
+}
 .card:focus-visible{outline:2px solid var(--text);outline-offset:-2px}
 .col .colempty{padding:14px;color:var(--faint);font-size:11.5px;line-height:1.5}
 /* 판정 블록 (REQ-20260825-071): 색면·띠 없이 "무엇을 판정하는가"를 드러낸다 —
@@ -102,6 +250,25 @@
    씩의 시각 여백을 갖는다. 거기에 margin 8px 을 더하면 식별자와의 **보이는**
    틈이 22px 이 되어(2배 캡처로 실측) 줄의 다른 간격(8px)과 어긋나고, 손잡이가
    줄에 얹힌 것이 아니라 떠 있는 것으로 읽힌다. 여백은 단추가 이미 갖고 있다. */
+/* **과녁은 27px, 자리는 한 줄** (REQ-20260831-006).
+
+   사용자: "'이어 말하기'와 경과시간의 위치가 다른 상태 카드들과 달리 문서번호와
+   세로 정렬이 안 맞고 어긋나 있다."
+
+   맞다. 그리고 원인은 정렬 규칙이 아니라 **줄 높이**였다. 실측(ledger, 카드
+   기준 px): 손잡이 없는 카드는 id 줄 11px · 식별자 11~22 · 경과시각 10~24 로
+   가운데가 0.5px 안에 든다. 손잡이가 선 카드는 27px 과녁이 줄을 통째로 27px 로
+   밀어 올려 식별자가 19~30 으로 내려앉는데, 경과시각과 「이어 말하기」는 카드
+   모서리에 절대 위치라 그대로 10~24 에 남는다 — **7.5px 어긋남**. 좌표계가
+   둘(줄의 흐름 · 카드의 모서리)인데 한쪽만 자란 것이다.
+
+   그래서 과녁은 그대로 두고 **자리만** 한 줄로 되돌린다: 벨트의 상자를 그 줄의
+   글자 크기(`1em`)로 묶으면 줄 높이는 손잡이 없는 카드와 같아지고, 27px 단추는
+   `align-items:center` 로 위아래에 8.5px 씩 고르게 넘친다(카드의 안여백 쪽으로).
+   과녁은 1px 도 안 줄었다 — REQ-20260830-043 이 세운 그 원칙("칠은 과녁이
+   아니다")을 자리에 한 번 더 적용한 것이다: **칠도 자리도 과녁이 아니다.**
+   `1em` 인 이유는 밀도·스킨마다 id 줄의 글자 크기가 다르기 때문이다(ledger 10 ·
+   calm 11 · compact 9) — 고정 px 를 적으면 한 축이 바뀔 때마다 다시 어긋난다. */
 .acts.deedbelt{display:inline-flex;align-items:center;gap:2px;flex:0 0 auto;
   /* 눈이 재는 것은 상자가 아니라 잉크 사이의 흰 자리다. 상자를 0 으로 붙여도
      보이는 틈이 남는다 — 과녁 27px 안의 그림이 11px 이라 상자 안에 이미 흰
@@ -117,6 +284,10 @@
      결과 실측(css px, 2배 캡처): ledger·terminal·glass 는 쉼 8.5 / hover 5.0,
      calm 은 10.5 / 7.0 (calm 은 id 줄이 flex `gap:2px` 이라 한 눈금 더 넓다). */
   margin:0 0 0 -2px}
+/* 자리를 줄에 묶는 것은 **카드의 id 줄에서만**이다. 문서 머리의 행동 띠(.dacts)
+   에서는 같은 벨트가 낱말을 입은 단추(.wgly)를 담아 제 높이가 필요하다 — 거기까지
+   1em 으로 묶으면 낱말 단추가 띠 밖으로 삐져나온다. */
+.card .id .acts.deedbelt{height:1em}
 /* 줄 안에 서는 손잡이는 **테두리와 면을 벗는다** — 한 줄 안에서 네모난 알약이
    글자 옆에 서면 그 줄이 두 덩어리로 읽힌다. 평소엔 잉크만, 손이 얹히면 그때
    원이 돈다(카드가 이미 쓰는 그 반전, 네모 대신 원).
@@ -193,11 +364,17 @@
 /* 정책 단추(잠금)는 잉크 한 급 낮음 — 행위와 정책의 위계다. 색면 없음. */
 .dacts .deed.pol{color:var(--muted);border-color:var(--hairline)}
 /* 도는 중에는 눌리지 않는다. 색면·붉은 실패로 그리지 않고, 잉크를 한 급 낮춰
-   "지금은 내 차례가 아니다"만 말한다. */
-.acts button.wake[disabled]{cursor:default;color:var(--muted);
+   "지금은 내 차례가 아니다"만 말한다.
+
+   잠금의 표시는 `disabled` 가 아니라 `aria-disabled` 다 (REQ-20260831-009) —
+   `disabled` 는 눌린 손잡이에서 포커스를 걷어 키보드 손을 body 로 떨어뜨린다.
+   과녁은 그대로 두고 손맛만 물러선다. */
+.acts button.wake[aria-disabled="true"],
+.dacts button.wake[aria-disabled="true"]{cursor:default;color:var(--muted);
   border-color:var(--hairline);background:var(--panel)}
-.acts button.wake[disabled]:hover{background:var(--panel);color:var(--muted);
-  border-color:var(--hairline)}
+.acts button.wake[aria-disabled="true"]:hover,
+.dacts button.wake[aria-disabled="true"]:hover{background:var(--panel);
+  color:var(--muted);border-color:var(--hairline)}
 /* 「오래 걸림」 한 줄 (REQ-20260829-024, 자격은 -040 규칙 3) — 멈춤 줄의
    반대편이다. 여기서도 **새 컴포넌트를 만들지 않는다**: 같은 한 줄 문법(.rvpt)을
    그대로 입어야 열 몇 벌의 스킨이 따라온다. 캡션 잉크는 멈춤 줄과 같은
@@ -221,11 +398,16 @@
    구분은 색보다 강한 것이 이미 한다: 캡션 낱말 · 버튼 낱말 · 점 모양. */
 .rvpt.held{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rvpt.held .rvcap{color:var(--c-inprogress)}
-/* 세우는 중에는 눌리지 않는다 — 깨우기와 같은 규칙, 같은 잉크. */
-.acts button.stop[disabled]{cursor:default;color:var(--muted);
+/* 세우는 중에는 눌리지 않는다 — 깨우기와 같은 규칙, 같은 잉크, 같은 잠금 표시.
+   문서 머리의 행동 띠(.dacts)에 선 「중단해 두기」도 같은 얼굴이다: 종전엔
+   `disabled` 가 브라우저 기본 흐림을 대신 주고 있어서 규칙이 없어도 눌린 티가
+   났는데, 잠금을 `aria-disabled` 로 옮기며 그 기본이 사라졌다 — 여기서 명시한다. */
+.acts button.stop[aria-disabled="true"],
+.dacts button.stop[aria-disabled="true"]{cursor:default;color:var(--muted);
   border-color:var(--hairline);background:var(--panel)}
-.acts button.stop[disabled]:hover{background:var(--panel);color:var(--muted);
-  border-color:var(--hairline)}
+.acts button.stop[aria-disabled="true"]:hover,
+.dacts button.stop[aria-disabled="true"]:hover{background:var(--panel);
+  color:var(--muted);border-color:var(--hairline)}
 /* 키보드로 닿은 자리가 보여야 손이 간다 — 카드(.card:focus-visible)와 같은 잉크 링 */
 .card .acts button:focus-visible,.viewer .acts button:focus-visible{
   outline:2px solid var(--text);outline-offset:1px}
