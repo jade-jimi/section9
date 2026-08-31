@@ -47,6 +47,7 @@ class ChiefMeetingsPage(unittest.TestCase):
         self.assertIn("Auto prep scheduled", self.meetings)
         self.assertIn("Preparing automatically", self.meetings)
         self.assertIn("Prep needs attention", self.meetings)
+        self.assertIn("Brief ready · ping sent", self.meetings)
         self.assertIn("Automatic briefings ${automation.lead_minutes || 60}m before", self.meetings)
 
     def test_external_sources_are_read_only(self):

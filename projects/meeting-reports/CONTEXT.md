@@ -43,3 +43,7 @@ release state, and observation time instead of copying mutable status without pr
 - Calendar freshness is maintained by a bounded T3 Claude refresh when the snapshot is 12 hours
   old, or 2 hours old within three hours of a meeting. Near a meeting, preparation waits for that
   refresh so a cancellation/time change is not prepared from stale data.
+- Ready notification: only after both `<event-key>.json` and its non-empty browser report exist,
+  the watcher sends one personal ntfy message through `/home/jade/chief/bin/chief-notify` with the
+  meeting title/time and `#chief/meetings` link. `notified_at` in automation state deduplicates it;
+  a failed ntfy send remains unacknowledged and retries on a later timer tick. Teams is never used.
