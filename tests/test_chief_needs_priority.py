@@ -15,7 +15,7 @@ class ChiefNeedsPriority(unittest.TestCase):
             cls.source = handle.read()
 
     def test_needs_lane_is_sorted_before_render(self):
-        lane_build = self.source.index("rows.forEach(r => lanes[chiefLane(r)].push(r));")
+        lane_build = self.source.index("rows.forEach(r => { if (!r.release_owned) lanes[chiefLane(r)].push(r); });")
         sort = self.source.index("lanes.needs.sort(chiefNeedsPriorityCompare);", lane_build)
         render = self.source.index("const jiraLanes", sort)
         self.assertLess(lane_build, sort)

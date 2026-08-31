@@ -2923,12 +2923,66 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   border-bottom:1px solid var(--border);color:var(--muted)}
 .chief-artifact-empty b{display:block;margin-bottom:7px;color:var(--text);font-size:17px}
 
+/* Whole-project release control. */
+.chief-release-page{max-width:1100px;margin:0 auto;padding:22px 0 72px}
+.chief-release-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:28px;
+  padding:34px 0 31px;border-bottom:1px solid var(--border)}
+.chief-release-hero .eyebrow{margin:0 0 9px;color:var(--c-done);font-size:10px;font-weight:750;
+  letter-spacing:.14em;text-transform:uppercase}
+.chief-release-hero h1{margin:0;font:700 clamp(38px,4.4vw,58px)/1.02 Georgia,"Times New Roman",serif;
+  letter-spacing:-.05em;text-wrap:balance}
+.chief-release-hero .summary{max-width:650px;margin:17px 0 0;color:var(--muted);font-size:14px;line-height:1.58}
+.chief-release-page-list{display:grid;gap:18px;padding-top:27px}
+.chief-release-project{border:1px solid var(--border);background:var(--panel);
+  box-shadow:0 9px 28px color-mix(in srgb,var(--text) 5%,transparent)}
+.chief-release-project>summary{list-style:none;display:grid;grid-template-columns:minmax(0,1fr) auto;
+  gap:10px 20px;padding:18px 20px;cursor:pointer}
+.chief-release-project>summary::-webkit-details-marker{display:none}
+.chief-release-project>summary h2{margin:0;font-size:19px;line-height:1.28;letter-spacing:-.025em}
+.chief-release-project>summary p{margin:5px 0 0;color:var(--muted);font-size:11.5px;line-height:1.45}
+.chief-release-project>summary .state{align-self:center;color:var(--muted);font:750 10px/1.3 var(--mono);
+  text-transform:uppercase;letter-spacing:.06em}
+.chief-release-project>summary .state.building,.chief-release-project>summary .state.in_progress{color:var(--c-inprogress)}
+.chief-release-project>summary .state.blocked{color:var(--c-blocked)}
+.chief-release-project>summary .state.ready_for_human{color:var(--c-review)}
+.chief-release-project>summary .state.released,.chief-release-project>summary .state.clear{color:var(--c-done)}
+.chief-release-project-body{padding:0 20px 20px;border-top:1px solid var(--hairline)}
+.chief-release-path{display:grid;grid-template-columns:repeat(var(--release-steps,3),minmax(0,1fr));gap:8px;
+  padding:17px 0}
+.chief-release-step{min-width:0;padding:10px 11px;border:1px solid var(--hairline);background:var(--bg)}
+.chief-release-step b{display:block;font-size:11.5px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chief-release-step span{display:block;margin-top:4px;color:var(--faint);font:9px/1.3 var(--mono);text-transform:uppercase}
+.chief-release-step.passed,.chief-release-step.verified{border-color:color-mix(in srgb,var(--c-done) 45%,var(--hairline))}
+.chief-release-step.ready{border-color:color-mix(in srgb,var(--c-review) 45%,var(--hairline))}
+.chief-release-step.working,.chief-release-step.pending{border-color:color-mix(in srgb,var(--c-inprogress) 45%,var(--hairline))}
+.chief-release-step.blocked,.chief-release-step.failed{border-color:color-mix(in srgb,var(--c-blocked) 50%,var(--hairline))}
+.chief-release-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr);gap:20px}
+.chief-release-section h3{margin:0 0 9px;color:var(--c-done);font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+.chief-release-work-list{border-top:1px solid var(--hairline)}
+.chief-release-work-row{padding:10px 0;border-bottom:1px solid var(--hairline)}
+.chief-release-work-row b{display:block;font-size:12px;line-height:1.4}
+.chief-release-work-row p{margin:4px 0 0;color:var(--muted);font-size:10.5px;line-height:1.45}
+.chief-release-work-row small{display:block;margin-top:5px;color:var(--faint);font:9px/1.35 var(--mono)}
+.chief-release-work-row.ready b{color:var(--c-done)}
+.chief-release-work-row.pending b{color:var(--c-inprogress)}
+.chief-release-side{display:grid;align-content:start;gap:12px}
+.chief-release-fact{padding:12px 13px;border:1px solid var(--hairline);background:var(--bg)}
+.chief-release-fact h4{margin:0 0 6px;color:var(--faint);font:750 9px/1.2 var(--mono);
+  text-transform:uppercase;letter-spacing:.08em}
+.chief-release-fact p{margin:0;font-size:11px;line-height:1.5;color:var(--muted)}
+.chief-release-actions{display:flex;gap:8px;flex-wrap:wrap}
+.chief-release-actions button,.chief-release-actions a{border:1px solid var(--text);background:var(--text);color:var(--bg);
+  min-height:37px;padding:8px 12px;font-size:11px;font-weight:750;text-decoration:none;cursor:pointer}
+.chief-release-actions .secondary{background:none;color:var(--text);border-color:var(--border)}
+.chief-release-actions button:disabled{opacity:.48;cursor:progress}
+
 @media(max-width:900px){
   body[data-view="chief"] main{padding:10px 28px 70px}
   .chief-home{grid-template-columns:1fr;gap:14px}
   .chief-return{padding-top:16px}
   .chief-right{padding-top:0;border-top:1px solid var(--border)}
   .chief-artifact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .chief-release-grid{grid-template-columns:1fr}
 }
 @media(max-width:600px){
   body[data-view="chief"] .hrow1{padding:18px 18px}
@@ -2952,6 +3006,11 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   .chief-artifact-tools{align-items:stretch;flex-direction:column}
   .chief-artifact-search{max-width:none;width:100%}
   .chief-artifact-grid{grid-template-columns:1fr}
+  .chief-release-page{padding:0 0 54px}
+  .chief-release-hero{align-items:flex-start;flex-direction:column;padding:22px 0}
+  .chief-release-path{grid-template-columns:1fr}
+  .chief-release-actions{align-items:stretch;flex-direction:column}
+  .chief-release-actions button,.chief-release-actions a{width:100%;text-align:center}
 }
 </style>
 </head>
@@ -2961,6 +3020,7 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
     <button class="brand" data-chief-home><span class="dot"></span>Element Energy</button>
     <nav class="chief-primary-nav" aria-label="Chief pages">
       <button data-chief-nav="brief">Brief</button>
+      <button data-chief-nav="release">Release</button>
       <button data-chief-nav="artifacts">Artifacts</button>
     </nav>
     <div class="advanced-nav">
@@ -5086,12 +5146,54 @@ function renderChiefArtifacts(){
   }).join("")}</div>` : `<div class="chief-artifact-empty"><b>${chiefArtifactsError ? "Artifact registry unavailable" : "No published artifacts match"}</b>${esc(chiefArtifactsError || (chiefArtifactQuery || kind !== "all" ? "Clear the search or kind filter." : "Chief and project sessions will publish useful reports and images here."))}</div>`;
   view.innerHTML = `<div class="chief-artifacts-page"><section class="chief-artifacts-hero"><div><p>Artifact library</p><h1>Reports and images,<br>ready to open.</h1><p class="summary">Useful session outputs are explicitly published here and grouped by project. Request files, status JSON, logs, and ordinary modified files stay out.</p></div><button class="chief-artifacts-refresh" data-chief-artifact-refresh ${chiefArtifactsLoading ? "disabled" : ""}>${chiefArtifactsLoading ? "Refreshing…" : "Refresh registry"}</button></section><section class="chief-artifact-tools"><input class="chief-artifact-search" data-chief-artifact-search type="search" value="${esc(chiefArtifactQuery)}" placeholder="Search title, summary, run or path"><div class="chief-artifact-kinds" role="group" aria-label="Artifact kind">${kindButtons}</div></section><p class="chief-source-health">${total} visible of ${chiefArtifacts && chiefArtifacts.total || 0} published artifacts${chiefArtifacts && chiefArtifacts.generated_at ? ` · checked ${esc(chiefArtifacts.generated_at)}` : ""}</p>${content}</div>`;
 }
+function chiefReleasePageRank(row){
+  return ({blocked:0,building:1,in_progress:1,ready_for_human:2,review:2,clear:3,released:4,done:4})[chiefNorm(row && row.status)] ?? 3;
+}
+function chiefReleaseProjectCard(row){
+  const state = chiefNorm(row.status || "unknown");
+  const featureOpen = chiefArr(row.prs).filter(pr => chiefNorm(pr.state) !== "merged");
+  const merged = chiefArr(row.prs).filter(pr => chiefNorm(pr.state) === "merged");
+  const staging = row.staging && typeof row.staging === "object" ? row.staging : null;
+  const stagingPassed = staging && ["passed","verified"].includes(chiefNorm(staging.status));
+  const promotion = row.promotion || {}, promotionOpen = chiefNorm(promotion.remote_state) === "open";
+  const promotionMerged = chiefNorm(promotion.remote_state) === "merged";
+  const acceptance = row.runtime_acceptance || {}, acceptanceOpen = acceptance && Object.keys(acceptance).length && chiefNorm(acceptance.status) !== "passed";
+  const blastStatus = chiefNorm((row.pipeline_blast || {}).status);
+  const blastPassed = ["passed","verified","passed_for_deferred_review"].includes(blastStatus);
+  const work = chiefArr(row.included_work);
+  const steps = chiefArr(row.path);
+  const runChoices = featureOpen.length ? ["merge_dev","Verify + integrate all to dev"] :
+    staging && !stagingPassed ? ["verify_staging",`Verify ${staging.label || "staging"}`] :
+    acceptanceOpen ? ["verify_live","Check live acceptance"] :
+    state === "blocked" ? ["verify","Recheck release blockers"] :
+    promotionOpen && !blastPassed ? ["verify","Refresh release evidence"] :
+    !promotionOpen && !promotionMerged && state === "ready_for_human" ? ["prepare_prod","Create dev → production PR"] : null;
+  const runKey = runChoices ? `release:${row.id}:${runChoices[0]}` : "";
+  const run = runKey ? chiefRuns[runKey] : null, running = chiefRunActive(run);
+  const report = row.report_file ? chiefGet(`report?f=${encodeURIComponent(row.report_file)}`) : "";
+  const sessionReport = run && run.run_id && !running ? chiefGet(`session/report?id=${encodeURIComponent(run.run_id)}`) : "";
+  const reviewers = chiefArr(row.reviewers).map(r => r.display_name || r.name).filter(Boolean).join(" + ") || "Raun Nohavitza + Jayson Son";
+  const path = steps.length ? `<div class="chief-release-path" style="--release-steps:${steps.length}">${steps.map(step => `<div class="chief-release-step ${esc(chiefNorm(step.status))}"><b>${step.url ? `<a href="${esc(step.url)}" target="_blank" rel="noopener">${esc(step.label || step.id)}</a>` : esc(step.label || step.id)}</b><span>${esc(chiefStatusText(step.status))}</span></div>`).join("")}</div>` : "";
+  const workRows = work.length ? work.map(item => `<article class="chief-release-work-row ${item.dev_complete ? "ready" : "pending"}"><b>${esc(item.title || item.jira || item.id)}</b><p>${esc(chiefShort(item.next || (item.dev_complete ? "Verified feature work is integrated to dev." : "Acceptance or integration evidence is still open."),220))}</p><small>${esc(item.jira || item.id || "work")} · ${item.checked != null || item.total != null ? `${esc(item.checked ?? "?")}/${esc(item.total ?? "?")} checks · ` : ""}${esc((item.stage || "recorded").replaceAll("_"," "))}${item.prs && item.prs.length ? ` · PR ${item.prs.map(pr => `#${pr.id}`).join(", ")}` : ""}</small></article>`).join("") : `<div class="chief-detail-empty">No Jira-linked work is recorded for this batch; use the PR list below as provider evidence.</div>`;
+  const prRows = chiefArr(row.prs).map(pr => `<article class="chief-release-work-row ${chiefNorm(pr.state) === "merged" ? "ready" : "pending"}"><b>PR #${esc(pr.id)} — ${esc(pr.title || "Feature change")}</b><p>${esc(pr.result || pr.summary || "Provider state recorded.")}</p><small>${esc(pr.source || "source")} → ${esc(pr.target || row.target || "dev")} · ${esc(pr.state || "unknown")}</small></article>`).join("");
+  const actions = `<div class="chief-release-actions">${runChoices ? `<button data-chief-release="${esc(row.id)}" data-chief-release-action="${esc(runChoices[0])}" data-chief-title="${esc(`${row.project} · ${runChoices[1]}`)}" ${running ? "disabled" : ""}>${running ? "Working…" : esc(runChoices[1])}</button>` : ""}${promotionOpen && promotion.url ? `<a class="secondary" href="${esc(promotion.url)}" target="_blank" rel="noopener">${staging && !stagingPassed ? "Open production PR · staging pending" : "Review dev → production PR"}</a>` : ""}${report ? `<a class="secondary" href="${esc(report)}" data-chief-report-open data-chief-report-title="${esc(`${row.project} · release report`)}">Open release report</a>` : ""}${sessionReport ? `<a class="secondary" href="${esc(sessionReport)}" data-chief-report-open data-chief-report-title="${esc(`${row.project} · release agent report`)}">Open agent report</a>` : ""}</div>`;
+  const complete = promotionMerged && state === "released" && !acceptanceOpen;
+  return `<details class="chief-release-project" ${["blocked","building","ready_for_human"].includes(state) ? "open" : ""}><summary><div><h2>${esc(row.project || row.repo || "Unfiled release")}</h2><p>${esc(chiefShort(row.display_summary || row.next_action || `${merged.length} merged feature PRs · ${featureOpen.length} open`,250))}</p></div><span class="state ${esc(state)}">${esc(complete ? "All merges complete" : chiefStatusText(row.status))}</span></summary><div class="chief-release-project-body">${path}<div class="chief-release-grid"><section class="chief-release-section"><h3>Included work</h3><div class="chief-release-work-list">${workRows}</div><details><summary>${merged.length + featureOpen.length} provider PR records</summary><div class="chief-release-work-list">${prRows || `<div class="chief-detail-empty">No provider PR records.</div>`}</div></details></section><aside class="chief-release-side"><div class="chief-release-fact"><h4>Whole-project gate</h4><p>${featureOpen.length ? `${featureOpen.length} feature PR${featureOpen.length === 1 ? "" : "s"} still need dev integration.` : staging && !stagingPassed ? `${staging.label || "Staging"} must be verified at the exact dev source.` : promotionOpen ? "One production-review PR is ready for Jade's manual decision." : complete ? "Production merge is recorded; there is nothing to do in this release." : "The next release action is recorded below."}</p></div><div class="chief-release-fact"><h4>Reviewers</h4><p>${esc(reviewers)}</p></div><div class="chief-release-fact"><h4>Pipeline blast / recovery</h4><p>${esc(chiefShort((row.pipeline_blast || {}).stale_reason || (row.pipeline_blast || {}).failure_reason || (row.pipeline_blast || {}).classification || (row.pipeline_blast || {}).status || "Not yet verified at the current promotion source.",260))}</p></div>${actions}</aside></div></div></details>`;
+}
+function renderChiefReleasePage(){
+  const view = $("#view"); $("#count").textContent = "";
+  const releases = chiefArr(chiefData && chiefData.releases).slice().sort((a,b) =>
+    chiefReleasePageRank(a) - chiefReleasePageRank(b) || String(a.project || "").localeCompare(String(b.project || "")));
+  const body = releases.length ? `<div class="chief-release-page-list">${releases.map(chiefReleaseProjectCard).join("")}</div>` : `<div class="chief-artifact-empty"><b>No release records are connected.</b>Connect a project PR source before starting a release batch.</div>`;
+  view.innerHTML = `<div class="chief-release-page"><section class="chief-release-hero"><div><p class="eyebrow">Release control</p><h1>Move each project<br>as one release.</h1><p class="summary">Feature work integrates to dev, optional staging proves the exact dev source when the project really has one, and one production-review PR remains your final gate.</p></div><div>${chiefEnginePickerHTML()}<button class="chief-artifacts-refresh" data-chief-sync ${chiefLoading ? "disabled" : ""}>${chiefLoading ? "Checking…" : "Check Jira + PR sources"}</button></div></section><p class="chief-source-health">${releases.length} project release records · page visits never start an agent or merge production</p>${body}</div>`;
+}
 function chiefTrailStep(label,value,href){
   const text = value ? esc(chiefShort(value,170)) : "Not recorded yet";
   return `<li class="chief-trail-step"><b>${esc(label)}</b>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${text}</a>` : `<span class="${value ? "" : "unknown"}">${text}</span>`}</li>`;
 }
 function renderChief(){
   if (chiefDaily === "artifacts"){ renderChiefArtifacts(); return; }
+  if (chiefDaily === "release"){ renderChiefReleasePage(); return; }
   const view = $("#view");
   $("#count").textContent = "";
   if (chiefLoading && !chiefData){
@@ -5104,7 +5206,7 @@ function renderChief(){
   }
   const rows = chiefArr(chiefData.portfolio).filter(chiefInProject);
   const lanes = {needs:[],progress:[],ready:[],done:[]};
-  rows.forEach(r => lanes[chiefLane(r)].push(r));
+  rows.forEach(r => { if (!r.release_owned) lanes[chiefLane(r)].push(r); });
   lanes.needs.sort(chiefNeedsPriorityCompare);
   const doneIds = new Set(lanes.done.map(r => r.id).filter(Boolean));
   if (!chiefProject) chiefArr(chiefData.done).forEach(r => { if (!doneIds.has(r.id)) lanes.done.push({...r,status:"done",project_title:"Recent outcome"}); });
