@@ -1,4 +1,4 @@
-"""Chief session launchers share one explicit three-engine selector (REQ-20260829-006-wfow)."""
+"""Chief sessions always use T3 Code and expose only Codex/Claude model choice."""
 
 import os
 import re
@@ -20,12 +20,13 @@ class ChiefSessionBrainSelector(unittest.TestCase):
 
     def test_selector_defines_exact_backend_values(self):
         block = self.source[self.source.index("const CHIEF_ENGINES"):self.source.index("const chiefEngineValue")]
-        for value in ("t3", "codex", "claude"):
+        for value in ("codex", "claude"):
             self.assertRegex(block, rf"\b{value}\s*:")
-        self.assertNotRegex(block, r"\b(?:chief|auto|default)\s*:")
+        self.assertNotRegex(block, r"\b(?:t3|chief|auto|default)\s*:")
+        self.assertIn("Open in T3 Code", block)
 
-    def test_t3_is_safe_default_and_selection_persists(self):
-        self.assertIn('return "t3"', self.source)
+    def test_codex_is_safe_default_and_selection_persists(self):
+        self.assertIn('return "codex"', self.source)
         self.assertIn('localStorage.getItem("chief-session-engine")', self.source)
         self.assertIn('localStorage.setItem("chief-session-engine",chiefEngine)', self.source)
 
@@ -33,7 +34,7 @@ class ChiefSessionBrainSelector(unittest.TestCase):
         self.assertIn('chiefPost("session",{work_id:id,engine,order})', self.control)
         self.assertIn('{release_id:id,engine,explicit_start:true}', self.control)
         self.assertIn('{release_id:id,action,engine}', self.control)
-        self.assertNotRegex(self.control, re.compile(r'engine\s*:\s*["\'](?:t3|codex|claude)["\']'))
+        self.assertNotRegex(self.control, re.compile(r'engine\s*:\s*["\'](?:codex|claude)["\']'))
 
     def test_picker_is_single_select_and_keyboard_native(self):
         picker = self.source[self.source.index("function chiefEnginePickerHTML"):
