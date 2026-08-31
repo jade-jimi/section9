@@ -142,11 +142,40 @@ const STOP_KIND = {
    잡아야 하는데(밑변 쪽에 쏠려 있다), 1칸 밀면 무게중심이 (3+3+10)/3 = 5.33 로
    상자 한가운데 5.5 에 0.17 까지 붙는다. 1차의 +0.79px 과 뜻은 같고 값만 정수다 —
    밑변의 세로 획이 화소 경계에 앉아 흐려지지 않는다. */
-const GLYPH_PLAY = '<svg class="gly" viewBox="0 0 11 11" aria-hidden="true"'
-  + ' focusable="false"><path d="M3 2 L10 5.5 L3 9 Z" fill="currentColor"/></svg>';
-const GLYPH_PAUSE = '<svg class="gly" viewBox="0 0 11 11" aria-hidden="true"'
-  + ' focusable="false"><rect x="2" y="2" width="3" height="7" fill="currentColor"/>'
-  + '<rect x="6" y="2" width="3" height="7" fill="currentColor"/></svg>';
+/* **그림 상자와 원을 한 상자로** (REQ-20260831-019 — 사용자 실화면 재현).
+
+   사용자: "pause hover 이미지를 보면 여전히 상하좌우 대칭이 아니다."
+   그리고: "디자인, ui 화면은 반드시 브라우저를 통해 직접 보라고 했을텐데."
+
+   앞선 검증(REQ-20260831-006)은 배율 1 에서만 쟀고 거기선 편차가 0.000 이었다.
+   사용자 화면은 Windows 표시 배율(125%)이다. 그 배율로 브라우저를 띄워
+   (에뮬레이션이 아니라 `--force-device-scale-factor`) 실포인터를 얹고 16배로
+   화소를 뜨니 어긋남이 그대로 나왔고, 사용자가 올린 캡처를 화소로 재도 같은
+   모습이었다 — 원 17×16 화소, 그림이 원 중심에서 **0.63화소 왼쪽**.
+
+   뿌리는 좌표가 아니라 **반올림**이다(상세와 처방은 actions.css 의 벨트 관문
+   주석에 있다 — 원의 모양을 배경 사각이 아니라 mask 가 정하게 했다).
+
+   그림 쪽에서 할 몫은 **상자를 하나로 만드는 것**이다. 종전 그림 상자는 11px
+   이라 13px 원 안에 1px 씩 들여 놓인 **다른 상자**였고, 그 1px 은 1.25 배에서
+   1.25 화소가 되어 반화소에 걸렸다. 이제 그림 상자를 원과 같은 13px 로 키우고
+   눈금도 13 칸으로 옮긴다 — SVG 뷰포트가 원이 서는 바로 그 사각이라 둘이 같이
+   간다. 눈금 규칙(한 칸 = 한 화소)은 그대로고, 잉크도 그대로 7×7(3..10)이다:
+   바뀐 것은 그림이 들고 다니던 **빈 테두리 1px** 를 걷어낸 것뿐이라 보이는
+   그림은 같다. ▶ 만 한 칸 오른쪽(4..11)인 것도 그대로 — 삼각형은 상자가 아니라
+   무게중심으로 가운데를 잡는다.
+
+   실측(거울 대칭 잔차 — 그림을 접었을 때 남는 차이, 0 이 완전 대칭 · ledger):
+     배율 1     좌우 0.001 → 0.000 · 상하 0.001 → 0.000
+     배율 1.25  좌우 0.087 → 0.022 · 상하 0.060 → 0.014
+     배율 1.5   좌우 0.027 → 0.028 · 상하 0.026 → 0.020
+   남은 1.5 의 몫은 그림 자체의 반화소다(7px 잉크 × 1.5 = 10.5화소라 어느 쪽에
+   걸리는지가 카드의 화면 위치로 정해진다) — 감추지 않고 적어 둔다. */
+const GLYPH_PLAY = '<svg class="gly" viewBox="0 0 13 13" aria-hidden="true"'
+  + ' focusable="false"><path d="M4 3 L11 6.5 L4 10 Z" fill="currentColor"/></svg>';
+const GLYPH_PAUSE = '<svg class="gly" viewBox="0 0 13 13" aria-hidden="true"'
+  + ' focusable="false"><rect x="3" y="3" width="3" height="7" fill="currentColor"/>'
+  + '<rect x="7" y="3" width="3" height="7" fill="currentColor"/></svg>';
 /* 눌린 뒤의 얼굴을 한 붓이 칠한다 — 글리프 단추와 낱말 단추 둘 다.
 
    **이름은 요소가 들고 다닌다**(`data-name`). 칠하는 쪽이 상수를 골라 쓰면

@@ -6,7 +6,9 @@
 [data-density="compact"] .stats .stat b{font-size:12.5px}
 [data-density="compact"] .col{flex-basis:198px;min-width:176px;width:auto}
 [data-density="compact"] .col h2{padding:7px 10px}
-[data-density="compact"] .card{padding:5px 10px}
+/* 안여백은 자(--card-*)로 말한다 — 모서리에 선 경과 시각·집는 손잡이가 함께
+   따라온다 (REQ-20260831-010). 글자를 9px 로 줄였으니 모서리 줄높이도 그만큼. */
+[data-density="compact"] .card{--card-pt:5px;--card-px:10px;--card-edge:11px}
 [data-density="compact"] .card .id{font-size:9px}
 [data-density="compact"] .card .t{font-size:12px;font-weight:500;margin:1px 0 2px;line-height:1.3}
 [data-density="compact"] .card .m{font-size:9.5px;gap:6px}

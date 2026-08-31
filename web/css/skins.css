@@ -83,11 +83,10 @@
 [data-skin="soft"] .card .elapsed{position:static;display:block;text-align:right;
   margin-top:7px;line-height:1.4}
 /* 집는 손잡이는 경과 시각이 선 칸을 빌려 쓴다 — soft 는 그 칸이 아래쪽이다.
-   (카드 안쪽 여백 11px 14px 에 맞춰 같은 줄에 정확히 겹친다.) */
-[data-skin="soft"] .card .pickdoc{top:auto;bottom:11px;right:14px}
-/* 밀도가 여백을 줄이면 그 칸도 따라 줄어든다 (compact 카드 여백 5px 10px) */
+   아래 모서리도 카드의 자를 읽는다 (REQ-20260831-010): 여백이 밀도를 따라
+   줄면 좌표가 함께 온다 — 밀도마다 수를 한 벌 더 적어 두지 않는다. */
+[data-skin="soft"] .card .pickdoc{top:auto;bottom:var(--card-pb);right:var(--card-px)}
 [data-skin="soft"][data-density="compact"] .card .elapsed{margin-top:4px}
-[data-skin="soft"][data-density="compact"] .card .pickdoc{bottom:5px;right:10px}
 
 /* 사이드바 셸: 신원·사용량 줄이 nowrap이라 232px 밖으로 밀려 잘리고 가로
    스크롤바가 생겼다 — 좌측 정렬 + 줄바꿈으로 폭 안에 앉힌다. */
@@ -438,7 +437,7 @@
 [data-skin="grid"] .audit th{background:var(--text);color:var(--bg);border-bottom:0}
 [data-skin="grid"] .audit .cap{border-bottom-color:var(--hairline)}
 /* 지브라 + 조밀 행 */
-[data-skin="grid"] .card{padding:7px 12px}
+[data-skin="grid"] .card{--card-pt:7px;--card-px:12px}
 [data-skin="grid"] .card .t{font-size:12.5px;margin:2px 0 4px;padding-right:52px}
 [data-skin="grid"] .card:nth-child(even),
 [data-skin="grid"] .audit tbody tr:nth-child(even) td,
@@ -462,7 +461,7 @@
 [data-skin="grid"][data-density="compact"] main{padding:0}
 [data-skin="grid"][data-density="compact"] .col{flex:1 1 0;width:auto;min-width:176px}
 [data-skin="grid"][data-density="compact"] .col h2{padding:6px 12px}
-[data-skin="grid"][data-density="compact"] .card{padding:4px 12px}
+[data-skin="grid"][data-density="compact"] .card{--card-pt:4px;--card-px:12px;--card-edge:11px}
 [data-skin="grid"][data-density="compact"] .card .t{font-size:12px;margin:1px 0 2px}
 [data-skin="grid"][data-density="compact"] .doclist .row{padding:4px 12px}
 [data-skin="grid"][data-density="compact"] .viewer{--vpad:18px;padding:0 var(--vpad) 14px}
@@ -522,7 +521,7 @@
 [data-skin="slate"] .board{background:transparent;border:0;gap:10px}
 [data-skin="slate"] .col,[data-skin="slate"] .col:last-child{background:var(--panel);
   border:1px solid var(--sl-line);border-radius:8px;box-shadow:var(--sl-shadow)}
-[data-skin="slate"] .card{padding:9px 13px}
+[data-skin="slate"] .card{--card-pt:9px;--card-px:13px}
 [data-skin="slate"] .card .t{font-size:13px}
 [data-skin="slate"] .card:hover{background:var(--sl-tint)}
 /* 선택·활성 = 블루 코딩 */
@@ -553,7 +552,7 @@
    11px 아래로 글자를 밀면 글자가 곡선에 닿아 보이기 때문이다(각진 ledger 의
    10px 를 그대로 쓸 수 없는 이유). 줄이는 몫은 세로가 가져간다. */
 [data-skin="slate"][data-density="compact"] body{font-size:12px}
-[data-skin="slate"][data-density="compact"] .card{padding:6px 11px}
+[data-skin="slate"][data-density="compact"] .card{--card-pt:6px;--card-px:11px;--card-edge:11px}
 [data-skin="slate"][data-density="compact"] .card .t{font-size:12px}
 
 /* ============ skin: cork — 컬러 캔버스 보드 웰 ============
@@ -595,7 +594,7 @@
 [data-skin="cork"] .col h2{border-bottom:0;padding:9px 10px 5px}
 [data-skin="cork"] .cards{gap:7px;padding:2px 4px}
 [data-skin="cork"] .card{background:var(--panel);border-bottom:0;border-radius:8px;
-  box-shadow:var(--ck-shadow);padding:9px 12px;
+  box-shadow:var(--ck-shadow);--card-pt:9px;--card-px:12px;
   transition:transform .12s ease, box-shadow .12s ease}
 [data-skin="cork"] .card:hover{background:var(--panel);transform:translateY(-2px);
   box-shadow:var(--ck-lift)}
@@ -617,7 +616,7 @@
    두고 안쪽 여백만 줄인다(slate 와 같은 이유로 좌우는 10px 에서 멈춘다).
    컬럼 제목은 웰의 어깨에 얹혀 있어 아래 여백이 카드와의 간격을 겸한다 —
    위아래를 함께 줄여야 제목이 첫 카드에 붙지 않는다. */
-[data-skin="cork"][data-density="compact"] .card{padding:6px 10px}
+[data-skin="cork"][data-density="compact"] .card{--card-pt:6px;--card-px:10px;--card-edge:11px}
 [data-skin="cork"][data-density="compact"] .col h2{padding:6px 10px 4px}
 [data-skin="cork"] .md code{border-radius:4px}
 [data-skin="cork"] .term{border-radius:10px;margin:8px}

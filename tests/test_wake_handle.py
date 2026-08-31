@@ -311,17 +311,39 @@ class ThePaintIsNotTheTarget(unittest.TestCase):
         self.assertIn("min-height:27px", hit[0])
 
     def test_the_paint_is_clipped_into_the_target(self):
-        """칠은 과녁이 아니라 그 안의 원에 든다."""
-        gate = [d for s, d in self.belt if "background-clip" in d]
-        self.assertEqual(len(gate), 1,
-                         "칠하는 자리를 정하는 관문이 하나가 아니다 — "
+        """칠은 과녁이 아니라 그 안의 원에 든다 — 그 원을 **mask 가** 정한다.
+
+        원을 배경 사각으로 그리면 브라우저가 그것을 화소 격자에 맞춰 앉히는데
+        (스냅), 그 안의 그림은 SVG 라 안 맞춘다 — 비정수 배율(Windows 125%)에서
+        둘이 반화소씩 다른 쪽으로 반올림돼 사용자가 본 비대칭이 됐다
+        (REQ-20260831-019). mask 는 요소의 제 좌표계에서 잘라 내므로 그림과 같은
+        자리에 서고, 대칭이 배율에 기대지 않는다. 관문은 여전히 **하나**다."""
+        shaper = [d for s, d in self.belt
+                  if "mask-image" in d and "none" not in d]
+        self.assertEqual(len(shaper), 1,
+                         "원의 모양을 정하는 관문이 하나가 아니다 — "
                          "스킨마다 사본이 생기면 한쪽만 고쳐진다")
-        self.assertIn("background-clip:content-box", gate[0])
-        self.assertRegex(gate[0], r"padding:\d+px",
-                         "안여백이 없으면 클립해도 원이 과녁 그대로다")
-        self.assertIn("border-radius:999px", gate[0],
-                      "라운드를 못박지 않으면 cobalt·slate 의 각진 값이 "
-                      "클립된 칠을 모난 알약으로 만든다")
+        self.assertRegex(shaper[0], r"mask-image:radial-gradient\(circle",
+                         "원을 radial-gradient mask 로 정하지 않는다")
+        self.assertIn("-webkit-mask-image:radial-gradient(circle", shaper[0],
+                      "webkit 접두가 없으면 옛 엔진에서 원이 사라진다")
+        self.assertRegex(shaper[0], r"padding:\d+px",
+                         "안여백이 없으면 그림이 과녁 한가운데에 안 선다")
+        self.assertIn("border-radius:999px", shaper[0],
+                      "mask 를 모르는 브라우저의 안전선이자, cobalt·slate 의 "
+                      "각진 라운드가 원을 모난 알약으로 만드는 것을 막는 못이다")
+
+    def test_the_keyboard_ring_survives_the_mask(self):
+        """mask 는 링까지 지운다 — 초점 얼굴에서는 반드시 꺼야 한다.
+
+        실측(Tab 으로 짚어 2배 캡처): mask 를 켠 채로는 원 둘레의 링이 통째로
+        사라졌다. 키보드로 어디 있는지 안 보이는 것은 반화소보다 큰 결함이다."""
+        off = [d for s, d in self.belt
+               if "focus-visible" in s and "mask-image:none" in d]
+        self.assertTrue(off, "초점 얼굴이 mask 를 끄지 않는다 — 링이 잘린다")
+        self.assertIn("background-clip:content-box", off[0],
+                      "mask 를 끄면 원을 그릴 것이 없다 — 그 얼굴에서는 "
+                      "테두리 라운드가 원을 맡아야 한다")
 
     def test_no_shorthand_undoes_the_clip(self):
         """`background:` 단축은 background-clip 을 border-box 로 되돌린다.
@@ -565,21 +587,38 @@ class TheMarkSharesOneStage(unittest.TestCase):
                             "옛 그림자 맥박을 다시 부른다")
 
     def test_the_glyph_grid_is_the_pixel_grid(self):
-        """viewBox 한 칸 = 한 화소 — 어긋나면 획이 반 화소에 걸려 번진다."""
+        """viewBox 한 칸 = 한 화소 — 어긋나면 획이 반 화소에 걸려 번진다.
+
+        칸 수를 상수로 못박지 않는다 (REQ-20260831-019): 지켜야 하는 것은 **11**
+        이 아니라 `viewBox 칸 수 == .gly 화소 수` 라는 관계다. 상수로 적어 두면
+        그림 상자를 원에 맞추는 것 같은 정당한 개정마다 시험이 뜻 없이 걸린다 —
+        관계로 적으면 어느 값으로 옮겨도 눈금은 지켜진다."""
+        boxes = {}
         for name in ("GLYPH_PLAY", "GLYPH_PAUSE"):
             m = re.search(r"const %s = ([\s\S]*?;)" % name, self.src)
             self.assertIsNotNone(m, name)
-            self.assertIn('viewBox="0 0 11 11"', m.group(1),
-                          "%s 의 눈금이 .gly(11px)와 1:1 이 아니다" % name)
+            v = re.search(r'viewBox="0 0 (\d+) (\d+)"', m.group(1))
+            self.assertIsNotNone(v, "%s 에 정수 viewBox 가 없다" % name)
+            self.assertEqual(v.group(1), v.group(2),
+                             "%s 의 눈금이 정사각이 아니다" % name)
+            boxes[name] = int(v.group(1))
+        self.assertEqual(len(set(boxes.values())), 1,
+                         "▶ 와 ⏸ 가 서로 다른 눈금을 쓴다: %s" % boxes)
+        n = next(iter(boxes.values()))
         pause = re.search(r"const GLYPH_PAUSE = ([\s\S]*?;)", self.src).group(1)
-        for n in re.findall(r'(?<=[\s"])(?:x|y|width|height)="([^"]+)"', pause):
-            self.assertRegex(n, r"^\d+$",
+        for v in re.findall(r'(?<=[\s"])(?:x|y|width|height)="([^"]+)"', pause):
+            self.assertRegex(v, r"^\d+$",
                              "⏸ 좌표 %s 가 정수가 아니다 — 화소 격자에서 "
-                             "내린다" % n)
+                             "내린다" % v)
+        seen = 0
         for sel, dec in self.rules:
             if sel.endswith(" .gly"):
-                self.assertIn("width:11px", dec, sel)
-                self.assertIn("height:11px", dec, sel)
+                seen += 1
+                self.assertIn("width:%dpx" % n, dec,
+                              "%s 의 상자가 viewBox %d칸과 1:1 이 아니다"
+                              % (sel, n))
+                self.assertIn("height:%dpx" % n, dec, sel)
+        self.assertTrue(seen, ".gly 의 상자를 정하는 규칙이 없다")
 
 
 if __name__ == "__main__":

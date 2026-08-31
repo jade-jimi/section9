@@ -61,8 +61,10 @@
 [data-skin="calm"] .col .n{color:var(--faint);font-weight:500}
 [data-skin="calm"] .cards{display:flex;flex-direction:column;gap:10px}
 [data-skin="calm"] .card{background:var(--panel);border:0;border-radius:var(--calm-r);
-  box-shadow:var(--calm-shadow);padding:16px 18px;transition:box-shadow .16s ease,transform .16s ease}
-/* hover 실값도 재설계 블록이 단일 소유 — 여기서는 선언하지 않는다 */
+  box-shadow:var(--calm-shadow);transition:box-shadow .16s ease,transform .16s ease}
+/* hover 실값도 재설계 블록이 단일 소유 — 여기서는 선언하지 않는다.
+   안여백도 마찬가지다: 아래 재설계 블록의 `--card-*` 가 그 값을 쥔다
+   (REQ-20260831-010 — 여기 남아 있던 `padding:16px 18px` 는 죽은 사본이었다). */
 [data-skin="calm"] .card .t{font-size:15px;font-weight:650;line-height:1.4;margin:6px 0 10px}
 [data-skin="calm"] .card .id{font-size:11px;letter-spacing:.01em}
 [data-skin="calm"] .card .m{font-size:11.5px;gap:8px}
@@ -173,7 +175,8 @@
 [data-skin="calm"] .cards{gap:11px}
 
 /* ---- 카드: 흰 종이. 색은 hover 테두리에만, 면은 끝까지 무채 ---- */
-[data-skin="calm"] .card{display:flex;flex-direction:column;padding:14px 16px 13px;
+[data-skin="calm"] .card{display:flex;flex-direction:column;
+  --card-pt:14px;--card-pb:13px;--card-px:16px;
   border-radius:var(--calm-r);border:1px solid color-mix(in srgb,var(--text) 8%,transparent);
   box-shadow:var(--calm-shadow);overflow:hidden;
   transition:box-shadow .18s cubic-bezier(.22,1,.36,1),
@@ -207,10 +210,14 @@
    실측해 정한 것이라 한 곳(actions.css)에만 있어야 하고, 사본이 있으면 다음에
    그 자리를 다시 재는 사람이 한쪽만 고친다. */
 [data-skin="calm"] .acts.deedbelt{margin-top:0;margin-bottom:0;gap:2px}
-[data-skin="calm"] .card .elapsed{position:absolute;right:16px;bottom:12px;top:auto;
+/* calm 은 식별자 줄이 카드의 **마지막** 줄이라, 시각도 아래 모서리에 선다.
+   위 모서리와 같은 규칙이다 (REQ-20260831-010): 좌표는 안여백을 그대로 읽는다 —
+   `bottom:12px` 처럼 손으로 적어 두면 안여백 13px 과 1px 어긋난 채로 굳는다. */
+[data-skin="calm"] .card .elapsed{position:absolute;right:var(--card-px);
+  bottom:var(--card-pb);top:auto;
   font-size:10px;color:var(--calm-quiet);letter-spacing:.01em}
 /* 집는 손잡이는 경과 시각이 선 칸을 빌려 쓴다 — calm 은 그 칸이 아래쪽이다 */
-[data-skin="calm"] .card .pickdoc{right:16px;bottom:12px;top:auto}
+[data-skin="calm"] .card .pickdoc{right:var(--card-px);bottom:var(--card-pb);top:auto}
 
 /* 담당자 = 이니셜 링(면이 아니라 윤곽) + 이름. base의 "@" 접두는 링이 대신한다 */
 [data-skin="calm"] .card .badge{display:inline-flex;align-items:center;gap:6px;
@@ -460,7 +467,8 @@
 [data-skin="calm"][data-density="compact"] .col h2{font-size:11.5px;padding:0 5px 7px}
 [data-skin="calm"][data-density="compact"] .col h2 .n{font-size:15px}
 [data-skin="calm"][data-density="compact"] .cards{gap:6px}
-[data-skin="calm"][data-density="compact"] .card{padding:7px 10px 6px}
+[data-skin="calm"][data-density="compact"] .card{--card-pt:7px;--card-pb:6px;--card-px:10px;
+  --card-edge:11px}
 [data-skin="calm"][data-density="compact"] .card .t{font-size:12.5px;line-height:1.25}
 [data-skin="calm"][data-density="compact"] .card .m{margin-top:4px;font-size:9.5px;
   gap:6px;row-gap:2px;line-height:1.35}
@@ -472,12 +480,11 @@
 [data-skin="calm"][data-density="compact"] .card .badge,
 [data-skin="calm"][data-density="compact"] .card .prio{font-size:9.5px;padding:0 5px}
 [data-skin="calm"][data-density="compact"] .card .prio{padding:0}
-[data-skin="calm"][data-density="compact"] .card .id{margin-top:5px;font-size:9px;
-  line-height:1.3}
+[data-skin="calm"][data-density="compact"] .card .id{margin-top:5px;font-size:9px}
 /* 경과 시각·집는 손잡이는 카드 아래 모서리에 절대 배치된다 — 여백이 줄면
-   그 자리도 함께 따라와야 글자가 모서리 밖으로 뜬다. */
-[data-skin="calm"][data-density="compact"] .card .elapsed{right:11px;bottom:6px;font-size:9px}
-[data-skin="calm"][data-density="compact"] .card .pickdoc{right:11px;bottom:6px}
+   그 자리도 함께 따라온다. 이제 자리는 위 `--card-*` 가 말하므로 여기 남는 것은
+   글자 크기뿐이다 (REQ-20260831-010: 좌표를 두 곳에 적으면 한쪽만 고쳐진다). */
+[data-skin="calm"][data-density="compact"] .card .elapsed{font-size:9px}
 [data-skin="calm"][data-density="compact"] .rvpt{margin-top:5px;font-size:10px;
   line-height:1.45}
 /* 캡션은 **줄이지 않는다.** calm 에서 이 글자는 이미 9.5px `--faint` 인데, 그
