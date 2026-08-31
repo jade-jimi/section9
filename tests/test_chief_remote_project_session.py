@@ -22,7 +22,7 @@ class ChiefRemoteProjectSession(unittest.TestCase):
                                self.sessions.index('</button>', self.sessions.index('class="chief-new-session"'))]
         self.assertNotIn("!chiefProject || remoteHost", button)
         self.assertIn('!chiefProject ?', button)
-        self.assertIn("bound through SSH to ${remoteHost}", button)
+        self.assertIn("in ${remoteHost}'s own T3 service", button)
         self.assertIn("session${remoteHost ? ` · ${esc(remoteHost)}`", button)
 
 
