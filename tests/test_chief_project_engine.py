@@ -19,10 +19,11 @@ class ChiefProjectEngine(unittest.TestCase):
 
     def test_release_card_shows_all_project_provider_choices(self):
         self.assertIn("chief-release-project-engine", self.card)
-        self.assertIn("Project default", self.card)
+        self.assertIn(">Model</span>", self.card)
         self.assertIn("Object.entries(CHIEF_ENGINES)", self.card)
         self.assertIn("data-chief-project-engine", self.card)
         self.assertIn("aria-pressed", self.card)
+        self.assertNotIn(">T3 Code</button>", self.card)
 
     def test_selection_uses_named_persistence_route(self):
         self.assertIn('projectEngine:["api/chief/project/engine","/project/engine"]',
