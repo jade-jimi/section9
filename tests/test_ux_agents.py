@@ -8,6 +8,7 @@ designer·ux-writer·frontend-developer는 s9-design 스킬을 필수 로드하�
 실행: python3 tests/ ux_agents
 """
 import os
+import re
 import unittest
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
@@ -121,8 +122,14 @@ class TestSkinAudit(unittest.TestCase):
     # A2. 판정 캡션(.rvcap)은 faint가 아니라 상태 잉크 — 전 스킨에서 읽혀야
     #     한다("확인 요청"/"대기 사유"가 무엇을 판정하는지 알려주는 라벨).
     def test_a2_judge_caption_is_status_ink(self):
-        i = self.html.index(".rvcap{")
-        seg = self.html[i:i + 260]
+        # 찾는 것은 **베이스**의 캡션 규칙이다 — 줄머리에 홀로 선 `.rvcap{`.
+        # 첫 substring 으로 집으면 나중에 얹힌 자리별 규칙
+        # (`.gate>.rvpt .rvcap{…}` 처럼 조상 셀렉터를 단 것)이 앞 파일에 있을 때
+        # 그것을 잡아, 잉크와 무관한 조판 규칙을 놓고 잉크를 따진다
+        # (REQ-20260831-015 에서 실제로 그렇게 붉었다).
+        m = re.search(r"\n\.rvcap\{", self.html)
+        self.assertIsNotNone(m, "베이스의 .rvcap 규칙이 없다")
+        seg = self.html[m.start() + 1:m.start() + 261]
         self.assertIn("var(--c-review)", seg)
         self.assertNotIn("var(--faint)", seg)
         self.assertIn('.card[data-status="blocked"] .rvcap{color:var(--c-blocked)}',

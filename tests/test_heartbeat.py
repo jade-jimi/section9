@@ -152,7 +152,9 @@ class TheVerdict(Base):
         self.assertIsNone(v["mins"], "stalled_mins 가 생겼다 — 손잡이가 선다")
         self.assertGreaterEqual(v["quiet_mins"], 59,
                                 "조용한 시간을 감췄다 — REQ-034 의 반대편 병")
-        self.assertIn("만지는 중", v["why"])
+        # 낱말 통일 (REQ-20260831-005 tech-writer): 만지다/손대다 두 이름 →
+        # 「손대다」 하나. 손길 문장은 다른 창이 언제 손댔는지를 말한다.
+        self.assertIn("손댔습니다", v["why"])
 
     def test_h2b_a_dead_sessions_touch_does_not_attach(self):
         # REQ-034 재발 방지선: 깨운 워커가 클레임만 하고 죽으면 그 도장은

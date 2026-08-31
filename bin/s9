@@ -9453,7 +9453,7 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
     if r.get("jobs"):
         _j = r["jobs"][0]
         return dict(v, state="attached",
-                    why=f"{_j.get('name', '작업')} {_j.get('mins', 0)}분째 "
+                    why=f"「{_j.get('name', '작업')}」이 {_j.get('mins', 0)}분째 "
                         f"진행 중입니다 — 끝나면 저절로 이어집니다")
     # 점이 '멈췄다/죽었다'고 그린 행은 잣대를 좁힌다 — 점과 손잡이가 같은
     # 시계를 봐야 '멈췄다고 적혔는데 못 누르는 카드'가 사라진다.
@@ -9478,10 +9478,11 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
     # 판정을 두 벌 만들지 않는다 — 워처가 쓰는 그 함수를 그대로 쓴다.
     c = delegated_running(r["id"], now=now)
     if c:
-        act = str(c.get("actor") or "")
-        who = act.split(":")[1] if act.startswith("sub:") and ":" in act[4:] \
-            else (act or "위임된 작업자")
-        return dict(v, state="attached", why=f"{who} 가 이 요청을 맡고 있습니다")
+        # 역할 슬러그(designer 등 영문 식별자)는 화면의 낱말이 아니다 — 카드가
+        # 이미 쓰는 「나눠 맡은 일손」으로 (REQ-20260831-005 tech-writer 판정)
+        return dict(v, state="attached",
+                    why="이 요청을 나눠 맡은 일손이 일하고 있습니다 — 문서에는 "
+                        f"{v['quiet_mins']}분째 새 기록이 없습니다")
     # 지명 등록된 위임 손 (REQ-20260830-044). `s9 claim <REQ> --agent-transcript`
     # 가 남긴 agent_req 지명은 unassigned 에서 빠지는 순간 판정 어디에도 안
     # 실렸다 — 규약이 시키는 등록 경로(훅 없는 하네스·리드 수동 등록)가 판정에서
@@ -9495,8 +9496,9 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
     ah = assigned.get(canon_id(r["id"]))
     if ah:
         return dict(v, state="attached",
-                    why="위임된 작업자가 이 요청을 맡아 진행 중입니다 — "
-                        f"{int(ah.get('age') or 0)}초 전까지 움직였습니다")
+                    why="이 요청을 나눠 맡은 일손이 "
+                        f"{int(ah.get('age') or 0)}초 전까지 움직였습니다 — "
+                        f"문서에는 {v['quiet_mins']}분째 새 기록이 없습니다")
     if age is not None and age < win:
         # 방금 착수한 것 — 아직 멈춘 게 아니다
         return dict(v, state="moving", why="방금 움직였습니다")
@@ -9516,13 +9518,16 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
     # claim_dead 가 이미 맡는다 — 클레임 후 30분간 문서에 아무 일도 없으면
     # 클레임이 풀려 direct 가 저절로 꺼진다.
     if r.get("live_kind") == "direct":
+        # 주어를 세우지 않는다 (REQ-20260831-005 문구 확정, 4인 검토):
+        # 이 자리가 창인지 자동 작업인지 서버가 안 가려 주므로 주어를 세우면
+        # 틀릴 수 있고, 「세션」은 화면 사전(REQ-20260830-039)이 걷어낸 낱말이다.
         return dict(v, state="attached",
-                    why="맡은 세션이 지금 일하는 중입니다 — 문서에는 "
+                    why="지금 이 요청을 맡아 일하고 있습니다 — 문서에는 "
                         f"{v['quiet_mins']}분째 새 기록이 없습니다")
     w = _wait_info(r["id"], now=now)
     if w:
         return dict(v, state="waiting", wait=w,
-                    why=f"차례를 기다리는 중입니다 — {w['why']}")
+                    why=f"차례를 기다리고 있습니다 — {w['why']}")
     if hands:
         # 어느 문서인지 모르는 손이 붙어 있다. 이 요청일 수도 있다 — 그러니
         # '멈춤' 이라 단정하지 않고 겹쳐 띄우지도 않는다. 넓게 잡히는 것은
@@ -9530,7 +9535,7 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
         # 손**(2026-08-29 20:34)이고, 거짓 미상의 대가는 2분간의 유예다.
         return dict(v, state="unknown",
                     why=f"어느 요청의 것인지 모르는 작업 {len(hands)}건이 "
-                        f"아직 돌고 있습니다")
+                        f"돌고 있습니다 — 이 요청의 것일 수도 있습니다")
     # 손길 (REQ-20260830-019): 문서는 조용한데 이 문서를 고치는 s9 명령이 방금
     # 지나갔다 — 누군가 붙어 있다. **attached 까지만이다** (계약 C2): moving 으로
     # 올리면 s9 호출 한 번이 진전으로 둔갑하고(REQ-034 의 병), 스폰 게이트·
@@ -9548,8 +9553,8 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
             # ux-writer 검토: 그 글자로 사람이 할 수 있는 일이 없다).
             # hand_mins 는 카드의 손길 줄이 먹는다 (designer 검토 ③).
             return dict(v, state="attached", hand_mins=int(hb // 60),
-                        why=f"다른 곳에서 이 요청을 만지는 중입니다 — "
-                            f"{int(hb // 60)}분 전까지 움직였고, 문서에는 "
+                        why=f"다른 창이 {int(hb // 60)}분 전에 이 요청을 "
+                            f"손댔습니다 — 문서에는 "
                             f"{v['quiet_mins']}분째 새 기록이 없습니다")
     return dict(v, state="stalled", mins=v["quiet_mins"],
                 why=f"{v['quiet_mins']}분째 진전 없음")

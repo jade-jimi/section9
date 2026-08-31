@@ -279,6 +279,17 @@
    클램프도 calm 의 언어(블록 전체 3줄 + 호버 전개)에 맡기고 베이스의 2줄
    클램프를 푼다 — -webkit-box 안에 -webkit-box 를 겹치지 않기 위해서다. */
 [data-skin="calm"] .judge .rvpt.what .rvcap{color:var(--muted)}
+/* 판정 큐 두 줄도 같은 이유로 명시 복원한다 (REQ-20260831-015). 위의
+   `.judge .rvcap` 이 판정 블록 안의 캡션을 통째로 --c-review 로 칠하는데,
+   이 두 줄은 판정 자체가 아니라 **판정 앞의 경고**라 상태색을 나눠 쓰면
+   「확인 요청」과 같은 소리로 읽힌다. 특이도가 동급이면 나중이 이기므로
+   (skins 공통 함정) 여기서 한 번 더 적어야 베이스의 잉크가 산다.
+   calm 은 `.rvpt` 의 margin 을 0 으로 눕히므로 아래 줄과 붙는다 — `.what` 이
+   돌려받는 그 간격을 이 줄도 돌려받는다. */
+[data-skin="calm"] .judge .rvpt.ahead .rvcap,
+[data-skin="calm"] .judge .rvpt.churn .rvcap{color:var(--c-inprogress)}
+[data-skin="calm"] .judge .rvpt.ahead,
+[data-skin="calm"] .judge .rvpt.churn{margin-bottom:10px}
 /* calm 은 .rvpt 의 margin 을 0 으로 눕히므로 배경 줄과 확인 요청이 한 덩어리
    문장 벽으로 붙는다 — 두 갈래로 읽히게 간격을 돌려준다. */
 [data-skin="calm"] .judge .rvpt.what{margin-bottom:10px}

@@ -465,11 +465,18 @@ async function loadDoc(id, bg){
       // 배경 한 줄: 판단 요구보다 "무엇에 대한 건인가"가 먼저다. 요약이 없는
       // 문서에서는 빈 줄조차 남기지 않는다 (DOC-20260826-015).
       const what = m.summary ? `<div class="gate-w"><span class="gate-wk">무엇을</span>${esc(m.summary)}</div>` : "";
+      /* 판정 큐의 한 줄은 **여기에도** 선다 (REQ-20260831-015). 카드에만 있으면
+         같은 요청이 두 자리에서 다른 말을 한다 — 판정 단추가 세 번 반려된 그
+         결함(REQ-20260828-007)과 같은 모양이고, 요약이 두 자리에 함께 놓인
+         이유(REQ-20260826-023)와도 같다. **술어는 한 곳**이라 갈라질 데가 없다:
+         카드와 이 자리가 `judgeQueueHTML` 하나를 먹는다. 자리는 확인 포인트
+         위 — 경고를 판정 뒤에 읽게 하지 않는다. */
+      const gq = judgeQueueHTML(stallDoc);
       gate = `<div class="gate">
       <div class="gate-k"><span class="cdot" style="background:${SCOLOR[m.status]}"></span>
         ${m.status === "review" ? (nth > 1 ? `확인 요청 ${nth}차 — 사용자 판단 필요` : "확인 요청 — 사용자 판단 필요") : "blocked — 대기 사유"}
         <span class="path">${esc(cur.ts.slice(0, 16).replace("T", " "))} · ${esc(cur.by)}</span></div>
-      ${what}<div class="gate-b">${gateNote(cur.note)}</div>${hist}</div>`;
+      ${gq}${what}<div class="gate-b">${gateNote(cur.note)}</div>${hist}</div>`;
     }
   }
   /* 아티클은 **읽으려고 여는 문서**다 (REQ-20260827-073). 요청 문서와 같은 틀에

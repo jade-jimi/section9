@@ -161,6 +161,13 @@
   margin:0 0 8px;padding-bottom:8px;border-bottom:1px solid var(--hairline)}
 .gate-wk{font-family:var(--mono);font-size:10px;text-transform:uppercase;
   letter-spacing:.09em;color:var(--muted);margin-right:8px}
+/* 판정 큐 한 줄이 이 판 안에 설 때 (REQ-20260831-015). 조각은 카드와 **같은
+   것**(judgeQueueHTML)이고, 이 자리에서 입는 옷만 gate 의 것이다: 1030px 문서엔
+   폭 다툼이 없으니 한 줄 잘림을 풀고, 캡션은 옆 `.gate-wk` 처럼 눕는다.
+   잉크는 그대로 둔다 — 카드와 문서가 같은 색으로 같은 말을 해야 한다. */
+.gate>.rvpt{font-size:12px;line-height:1.5;margin:0 0 8px;
+  white-space:normal;overflow:visible;text-overflow:clip}
+.gate>.rvpt .rvcap{display:inline;margin:0 8px 0 0;letter-spacing:.09em}
 .gate-b{font-size:12.5px;line-height:1.55}
 /* 확인 포인트 갈래 (gateNote). 원문은 손대지 않고 번호 앞에서만 끊는다 —
    8px 은 갈래 사이 간격(≈27px 베이스라인)이 갈래 안 줄간(≈19px)과 확실히

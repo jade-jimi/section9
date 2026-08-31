@@ -299,6 +299,64 @@ function factTail(...bits){
   const t = bits.filter(Boolean)[0];
   return t ? ` · ${t}` : "";
 }
+/* 판정 큐의 한 줄 (REQ-20260831-015, DOC-20260831-002 규칙 2).
+
+   사용자가 겪은 일: 선행이 아직 판정 전인데 연관 후행이 먼저 구현·판정됐고,
+   선행이 반려되자 후행이 딸려 무너질 뻔했다. 결정문이 고른 답은 **잠금이
+   아니라 순서와 경고**다 — 잠글 키(판정 의존 간선)가 저장 구조에 없고, 잠그면
+   끝난 작업이 in-progress 에 갇혀 스톨·워처·클레임이 오판한다.
+
+   그래서 화면이 지는 몫은 둘이다. 열은 `review_order` 로 세워 **묶음이 붙어
+   서고 선행이 위에** 오게 하고(reviewKey), 카드는 그 사실을 한 줄로 말한다.
+
+   **사다리인 이유** — 둘 다 관계 축이다(s9-design 「카드 사실 줄」: 축마다 한 줄,
+   카드 최대 두 줄). 낡음이 먼저 판정을 이긴다: 순서는 정렬이 이미 눈으로
+   말한다(선행이 바로 위에 서 있다) — 이 줄이 없어도 잃는 것이 적다. 낡음은
+   정렬이 말할 수 없는 것이고, 「지금 판정해도 되는가」라는 더 앞선 물음이다.
+   진 조각은 이긴 줄의 꼬리로 붙어 사라지지 않는다(factTail).
+
+   **가리키는 것은 이름이다.** id 만 세우면 무슨 건인지 떠오르지 않은 채
+   "먼저 보라"는 말만 남는다 — 판정 카드가 요약을 얻은 이유와 같다
+   (REQ-20260826-023). 카탈로그에 없는 대상만 짧은 id 로 떨어진다.
+
+   **잠그지 않는다.** 경고-only 다: 승인·반려 버튼은 그대로 눌린다(A안 기각). */
+/* 낱말은 ux-writer 확정본이다 (REQ-20260831-015 --label ux-writer 노트).
+   「판정 짝」(리드 초안)은 국어에 없는 그 자리 합성어이자 실제로는 N건이라
+   기각됐고, 「선행 판정」은 `선행` 을 선행 대기(진짜 막힘)와 나눠 써서 경고-only
+   줄이 잠금으로 읽히게 만든다. 「낡음」은 사실이 아니다 — 낡은 것이 아니라
+   지금 바뀌는 중이다. 캡션은 이 화면의 문법 그대로 **이 카드의 사실을 말하는
+   명사구**이고, 상대 문서는 본문이 가리킨다. */
+const JQ_AHEAD = "판정 순서";
+const JQ_CHURN = "바뀌는 중";
+function judgeQueueHTML(r){
+  if (!r || r.type !== "request" || r.status !== "review") return "";
+  const look = id => { const d = catFind(id); return d && d.title ? d.title : shortId(id); };
+  const prior = r.review_prior || [], churn = r.review_stale || [];
+  if (!prior.length && !churn.length) return "";
+  const more = n => n > 1 ? `<span class="depmore"> 외 ${n - 1}건</span>` : "";
+  const named = ids => esc(ids.map(i => shortId(i) + " " + look(i)).join(" · "));
+  // 「먼저」 세 글자는 뺄 수 없다 — 없으면 본문의 제목이 앞 것인지 뒤 것인지가
+  // 안 정해진다 (ux-writer).
+  const aheadTip = `먼저 판정하는 편이 좋은 요청입니다 — ${named(prior)}`
+    + ` (순서 안내일 뿐이라 지금 이 요청부터 판정해도 막히지 않습니다)`;
+  if (churn.length)
+    return `<div class="rvpt churn" title="이 요청과 이어진 작업이 아직 진행 중입니다`
+      + ` — ${named(churn)}. 지금 판정한 내용이 곧 달라질 수 있습니다`
+      + `${prior.length ? `. ${aheadTip}` : ""}">`
+      + `<span class="rvcap">${JQ_CHURN}</span>${esc(look(churn[0]))}${more(churn.length)}`
+      + factTail(prior.length ? `먼저 ${esc(shortId(prior[0]))}` : "") + `</div>`;
+  return `<div class="rvpt ahead" title="${aheadTip}">`
+    + `<span class="rvcap">${JQ_AHEAD}</span>먼저 ${esc(look(prior[0]))}${more(prior.length)}</div>`;
+}
+/* 판정 큐의 정렬 키 (REQ-20260831-015). 서버가 실은 값을 그대로 쓰되, 없는
+   행은 **서버가 단독 묶음에 지어 주는 그 꼴**로 떨어진다 — `<created>|<id>|000`.
+   같은 자로 재야 섞여 있어도 열이 뒤집히지 않는다: 필드가 없다고 빈 문자열을
+   주면 옛 행이 통째로 맨 위로 뛰고, 없다고 정렬을 통째로 포기하면 새 행의
+   묶음이 흩어진다. 화면은 이 키를 짓기만 하지 판정하지 않는다 — 묶음이
+   무엇인지는 서버(review_family) 한 곳이 안다. */
+function reviewKey(r){
+  return r.review_order || `${r.created || ""}|${r.id}|000`;
+}
 /* ⏸ 한 개의 HTML. **카드에 ⏸ 는 하나뿐**이고, 그 자리는 이제 사실 줄이 아니라
    id 줄이다 (규칙 4) — 자리 규칙은 deedBeltHTML 주석에 있다.
 
@@ -599,6 +657,32 @@ function driftProbe(rows){
       r.commit_drift = true;
   return rows;
 }
+/* ?rvq — 판정 큐의 다섯 얼굴을 **진짜로** 세운다 (REQ-20260831-015).
+
+   같은 이유다. 이 두 줄은 서버가 `review_prior`·`review_stale` 을 실어야
+   그려지는데, 그러려면 연관된 요청 여럿이 하필 그 순간 함께 판정 대기이거나
+   그중 하나가 돌고 있어야 한다. 실제로 이 요청을 만드는 사이에 살아 있던
+   실사례(042 의 「바뀌는 중」)가 캡처를 찍기 전에 사라졌다 — 043 이 다른
+   상태로 옮겨 갔기 때문이다. 진단이 없으면 이 줄도 "만들었다는데 본 적은
+   없는" 것이 된다(깨우기가 두 번 그렇게 올라갔다).
+
+   여기서도 그림을 따로 짓지 않는다: 서버가 줬을 값을 얹고 평소 그리던 길
+   (cardHTML → judgeQueueHTML)이 그대로 그린다. 얼굴은 자리 순서로 돌린다 —
+   선두(줄 없음) · 순서만 · 바뀌는 중만 · 둘 다(사다리와 꼬리) · 여러 건
+   (「외 N건」). 다섯이 한 화면에 서야 사다리가 맞게 도는지 눈으로 본다. */
+function rvqProbe(rows){
+  if (!/[?&]rvq\b/.test(location.search) || !Array.isArray(rows)) return rows;
+  const rv = rows.filter(r => r.type === "request" && r.status === "review");
+  const ip = rows.filter(r => r.type === "request" && r.status === "in-progress");
+  rv.forEach((r, n) => {
+    const face = n % 5;
+    if (face === 1 || face === 3) r.review_prior = rv.slice(0, 1).map(x => x.id);
+    if (face === 4) r.review_prior = rv.slice(0, 3).map(x => x.id);
+    if ((face === 2 || face === 3) && ip.length)
+      r.review_stale = ip.slice(0, face === 3 ? 2 : 1).map(x => x.id);
+  });
+  return rows;
+}
 function handProbe(rows){
   const m = /[?&]hand=(\d+)/.exec(location.search);
   if (!m || !Array.isArray(rows)) return rows;
@@ -680,6 +764,7 @@ function stallProbe(rows){
   turnProbe(rows);
   stopProbe(rows);
   driftProbe(rows);
+  rvqProbe(rows);
   const m = /[?&]stall=(\d+)/.exec(location.search);
   if (!m || !Array.isArray(rows)) return rows;
   const mins = Math.max(1, Math.min(9999, +m[1] || 20));
@@ -1292,8 +1377,13 @@ function cardHTML(r){
   // 판정 카드: 배경 → 판단 요구 → 행동 (DOC-20260826-015). 요약 한 줄이 없으면
   // 제목만으로 무슨 건인지 떠오르지 않은 채 결론부터 읽게 된다 — 그래서 확인
   // 포인트 "위에" 요약을 놓는다. 이 블록(판정 카드)에만 붙인다.
+  /* 판정 큐 줄은 **관계 축의 사다리 아래**다 (REQ-20260831-015). 선행 대기가
+     서 있으면 이 줄은 안 선다: blocked_by 는 진짜 막힘이고 이쪽은 경고-only 라,
+     둘을 나란히 세우면 카드가 한 축에 두 줄을 쓰면서 무게 순서까지 흐린다
+     (s9-design 「카드 사실 줄」: 축마다 한 줄). */
+  const queue = bl.length ? "" : judgeQueueHTML(r);
   const acts = isReq && r.status === "review"
-    ? `<div class="judge">${r.summary ? `<div class="rvpt what"><span class="rvcap">무엇을</span><span class="wtx">${esc(r.summary)}</span></div>` : ""}${r.review_point ? rvClamped("확인 요청", r.review_point, r.id, rvOpen) : ""}<div class="acts"><button class="deed" data-approve="${esc(r.id)}" title="승인하면 done 상태가 됩니다">${rvLabel("done")}</button><button class="deed" data-reject="${esc(r.id)}" title="반려하면 in-progress 상태로 돌아갑니다">${rvLabel("in-progress")}</button></div></div>`
+    ? `<div class="judge">${queue}${r.summary ? `<div class="rvpt what"><span class="rvcap">무엇을</span><span class="wtx">${esc(r.summary)}</span></div>` : ""}${r.review_point ? rvClamped("확인 요청", r.review_point, r.id, rvOpen) : ""}<div class="acts"><button class="deed" data-approve="${esc(r.id)}" title="승인하면 done 상태가 됩니다">${rvLabel("done")}</button><button class="deed" data-reject="${esc(r.id)}" title="반려하면 in-progress 상태로 돌아갑니다">${rvLabel("in-progress")}</button></div></div>`
     // 선행이 잡히면 구조화된 대기 줄이 이긴다 — 같은 사실을 두 줄로 말하지 않는다.
     // 관계가 없는 과거 문서만 note 본문의 대기 사유로 폴백 (DOC-20260826-001 규칙 7).
     : isReq && r.status === "blocked" && r.block_reason && !bl.length
@@ -1357,9 +1447,9 @@ function cardHTML(r){
      것은 채운 사각, 아니면 속 빈 사각. */
   const liveDot = r.status === "in-progress"
     ? (st && st.face === "dead"
-         ? `<span class="livedot dot-stopped" title="이 요청을 맡았던 작업이 멈췄습니다 — ${esc(st.reason||"프로세스 종료")}"></span>`
+         ? `<span class="livedot dot-stopped" title="이 요청을 맡았던 자동 작업이 도중에 멎었습니다 — ${esc(st.reason||"까닭은 남아 있지 않습니다")}"></span>`
        : st
-         ? `<span class="livedot dot-stopped mild" title="이 요청은 ${st.mins}분째 진전이 없습니다${esc(st.reason ? " — " + st.reason : "")}${r.live ? " — 맡은 쪽은 움직이고 있지만 지금은 다른 일을 하고 있습니다" : ""}"></span>`
+         ? `<span class="livedot dot-stopped mild" title="지금 이 요청을 담당하는 것이 없습니다 — 문서도 ${st.mins}분째 그대로입니다${esc(st.reason ? " — " + st.reason : "")}${r.live ? " — 이 요청을 만든 창은 아직 움직이고 있습니다" : ""}"></span>`
        /* 사람이 중단해 둔 것은 **모름이 아니다** (REQ-20260829-024 라운드4).
           이 갈래가 없으면 사다리 끝의 `.off`(속 빈 회색 원 = "in-progress 인데
           스트림이 조용함, 모름")로 떨어져, 카드가 왜 조용한지 알면서도 모른다고
@@ -1367,7 +1457,7 @@ function cardHTML(r){
           (REQ-20260828-041 2차 반려가 지운 그 조합). 마크는 이미 있는 것을
           쓴다: 멈춤과 같은 속 빈 사각이되, 까닭은 툴팁이 갈라 말한다. */
        : r.stopped
-         ? `<span class="livedot dot-held" title="사람이 이 요청의 자동 작업을 중단했습니다 — 카드의 「${WAKE_LABEL}」를 누르면 다시 이어집니다"></span>`
+         ? `<span class="livedot dot-held" title="이 요청의 자동 작업을 누군가 ${r.stopped && r.stopped.age >= 60 ? Math.floor(r.stopped.age / 60) + "분 전에 " : "방금 "}중단해 두었습니다 — 지금은 아무것도 돌고 있지 않습니다"></span>`
        /* **일하는 중, 기록은 아직** — ◎ (REQ-20260831-005). 초록 점멸보다
           먼저 걸린다: 이 갈래에 해당하는 카드는 대부분 `r.live` 도 참이라,
           아래에 두면 영영 안 그려지고 ● 가 "기록도 나가는 중"이라는 거짓을
@@ -1377,10 +1467,10 @@ function cardHTML(r){
        : r.live
          ? `<span class="livedot on" title="지금 이 요청을 맡아 일하고 있습니다 — ${r.live_age}초 전에 움직였습니다"></span>`
        : r.live_kind === "session"
-         ? `<span class="livedot sess" title="이 요청을 맡은 쪽은 ${r.live_age}초 전까지 움직였습니다 — 다만 이 요청을 손대고 있다는 신호는 없습니다"></span>`
+         ? `<span class="livedot sess" title="이 요청을 만든 창이 ${r.live_age}초 전까지 움직였습니다 — 다만 이 요청을 맡고 있지는 않습니다"></span>`
        : r.live_kind === "spawned"
-         ? `<span class="livedot spawn" title="자동 작업이 막 시작됐습니다 (${r.live_age}초 전) — 이 요청을 맡기까지 잠시 걸립니다"></span>`
-         : `<span class="livedot off" title="상태는 in-progress 인데 하는 일이 잠잠합니다 — 실제로는 돌고 있지 않을 수 있습니다"></span>`)
+         ? `<span class="livedot spawn" title="자동 작업이 ${r.live_age}초 전에 시작됐습니다 — 이 요청을 맡을 때까지 잠시 걸립니다"></span>`
+         : `<span class="livedot off" title="${esc(r.stall_why || "진행 중으로 되어 있는데 도는 기색이 없습니다 — 지금 이 요청을 담당하는 것이 없을 수 있습니다")}"></span>`)
     : "";
   return `<div class="card" ${isReq ? 'draggable="true"' : ""} tabindex="0" role="button" style="--sc:${SCOLOR[r.status]||"var(--muted)"}" data-doc="${esc(r.id)}" data-status="${esc(r.status)}">
     <button type="button" class="pickdoc" data-pick="${esc(r.id)}"
@@ -1645,7 +1735,7 @@ function colHTML(key, label, color, grp){
   const stalls = key === "in-progress"
     ? live.filter(r => stallState(r)).length : 0;
   // 컬럼은 이제 전부 request 상태다 (REQ-20260825-084로 etc 컬럼 제거) — 드롭 대상 표시 상시
-  return `<div class="col" style="--sc:${color}" data-colstatus="${key}"><h2><span class="cdot"></span>${label}<span class="n">${live.length}</span>${stalls ? `<span class="stn" title="이 열의 ${live.length}건 중 ${stalls}건은 문서가 오래 안 움직였다">멈춤 ${stalls}</span>` : ""}</h2>
+  return `<div class="col" style="--sc:${color}" data-colstatus="${key}"><h2><span class="cdot"></span>${label}<span class="n">${live.length}</span>${stalls ? `<span class="stn" title="이 열의 ${live.length}건 중 ${stalls}건은 문서에 오래 새 기록이 없습니다">멈춤 ${stalls}</span>` : ""}</h2>
     <div class="cards">${body}
     ${hidden>0 ? `<button class="more" data-expand="col:${key}">${hidden}개 더 보기</button>`
       : (open && live.length>limit ? `<button class="more" data-expand="col:${key}">접기</button>` : "")}
@@ -1716,6 +1806,17 @@ function renderBoard(rows){
         const x = stallState(a), y = stallState(b);
         return (y ? y.mins : -1) - (x ? x.mins : -1);
       });
+    /* review 열은 **판정 큐**다 (REQ-20260831-015, DOC-20260831-002 규칙 2).
+       이 열이 답하는 질문은 "무엇부터 판정할 것인가"이고, 그 답은 우선순위도
+       최근 갱신도 아니다 — **먼저 지은 것이 먼저다.** 연관된 것들이 흩어져
+       서면 사용자가 후행을 먼저 판정하고, 뒤이어 선행을 반려하는 순간 방금
+       내린 판정이 무효가 된다(이 요청을 낳은 그 사고다).
+       키 하나로 둘을 동시에 얻는다: `review_order` 로 오름차순 정렬하면 같은
+       묶음이 붙어 서고 그 안에서 선행이 위에 온다 — 화면이 묶음을 다시 계산할
+       일이 없다(서버 review_family 한 곳이 안다). in-progress 열이 기본 정렬을
+       통째로 대체하는 것과 같은 규칙이다: 열마다 자기 질문이 있다. */
+    if (st === "review")
+      grp = [...grp].sort((a, b) => reviewKey(a).localeCompare(reviewKey(b)));
     // 주요 컬럼은 비어도 자리를 지킨다 — 드롭 대상이자 상태 안내 자리(ux-craft)
     // 필터가 사라졌으니 "걸러서 빈 것"과 "원래 빈 것"을 가를 일도 없다
     // (REQ-20260827-070 2차) — 주요 네 열은 비어도 자리를 지킨다.

@@ -319,6 +319,10 @@ class StallRendersTheSame(unittest.TestCase):
             _const(self.src, "STOP_KIND"),
             _const(self.src, "SLOW_WIN"), _const(self.src, "DRIFT_TIP"),
             g("jobBit"), g("factTail"), g("heldState"),
+            # 판정 큐의 한 줄 (REQ-20260831-015) — 카드가 부르는 조각이라
+            # 여기 없으면 render 가 통째로 멎는다. 낱말 상수도 원문에서 떠 온다.
+            _const(self.src, "JQ_AHEAD"), _const(self.src, "JQ_CHURN"),
+            g("judgeQueueHTML"),
             g("slowRowHTML"), g("stoppedRowHTML"),
             g("stopBtnHTML"), g("holdTell"), g("holdTellHTML"),
             g("wakeBtnHTML"), g("driftBtnHTML"),
@@ -758,7 +762,9 @@ class StallRendersTheSame(unittest.TestCase):
         test_a_stalled_card_always_offers_something_to_press 가 이어받았다.)"""
         out = self.render(self.ROWS)
         self.assertIn("dot-stopped mild", out["REQ-A"]["card"])
-        self.assertIn('livedot dot-stopped" title="이 요청을 맡았던 작업이 멈췄습니다',
+        # 문장은 REQ-20260831-005 문구 확정본 — 「도중에 멎었다」는 5(멈춤)·
+        # 7(중단해 둠)과 같은 낱말을 안 쓰는 죽음의 제 이름이다
+        self.assertIn('livedot dot-stopped" title="이 요청을 맡았던 자동 작업이 도중에 멎었습니다',
                       out["REQ-C"]["card"])
         self.assertIn("livedot on", out["REQ-E"]["card"])
         for rid in ("REQ-A", "REQ-B", "REQ-C"):
