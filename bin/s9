@@ -10524,6 +10524,13 @@ def cmd_serve(args):
                         self._send(200, "text/html; charset=utf-8", f.read())
                 except OSError:
                     self._send(404, "text/plain", b"web/index.html not found")
+            elif parsed.path == "/favicon.png":
+                fp = os.path.join(ROOT, "web", "favicon.png")
+                try:
+                    with open(fp, "rb") as f:
+                        self._send(200, "image/png", f.read())
+                except OSError:
+                    self._send(404, "text/plain", b"favicon not found")
             elif re.fullmatch(r"/[\w.-]+\.html", parsed.path or ""):
                 # web/ 아래 정적 html (테스트/보조 페이지) — same-origin 검증용
                 fp = os.path.join(ROOT, "web", os.path.basename(parsed.path))
