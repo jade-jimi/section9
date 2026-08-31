@@ -45,12 +45,22 @@ class ChiefDetailDrawer(unittest.TestCase):
         self.assertIn("loadChiefSelectedDetail()", open_fn)
 
     def test_all_detail_groups_and_not_recorded_are_rendered(self):
-        for label in ("Project", "Jira", "Jira status", "Work status", "Assignee",
-                      "Source", "Updated", "Owner", "Goal", "Outcome", "What changed",
+        for label in ("Decision brief", "Record", "Technical anchor", "Jira status",
+                      "Assignee", "Source", "Updated", "Owner", "Goal", "What changed",
                       "Why now", "Impact", "Next checkpoint", "Checklist", "Evidence",
                       "Release", "Relations trail", "Documents", "Freshness"):
             self.assertIn(label, self.drawer)
         self.assertIn('"Not recorded"', self.source)
+
+    def test_editorial_hierarchy_and_compact_empty_states(self):
+        for class_name in ("chief-detail-head-meta", "chief-detail-decision",
+                           "chief-detail-decision-card", "chief-detail-section-head",
+                           "chief-detail-empty"):
+            self.assertIn(class_name, self.source)
+        self.assertIn("No release record is linked to this work.", self.drawer)
+        self.assertIn("No repository, branch, or commit is recorded", self.drawer)
+        self.assertIn("font-size:15px", self.source)
+        self.assertIn("font-size:12.8px", self.source)
 
     def test_deepen_is_explicit_and_uses_fixed_contract(self):
         self.assertIn("data-chief-deepen-form", self.drawer)
@@ -66,7 +76,7 @@ class ChiefDetailDrawer(unittest.TestCase):
         self.assertIn('chiefPost("deepDetailsStart",{work_id:chiefDetailState.work_id,provider:chiefDetailState.provider})', self.drawer)
 
     def test_no_implementation_or_completion_implication(self):
-        self.assertIn("does not implement, merge, deploy, complete, or close", self.drawer)
+        self.assertIn("Nothing is implemented or merged.", self.drawer)
         start = self.drawer[self.drawer.index("async function startChiefDeepDetails"):]
         self.assertNotIn('chiefPost("complete"', start)
         self.assertNotIn('status:"done"', start)

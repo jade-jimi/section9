@@ -2477,41 +2477,84 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
 .chief-detail-layer{position:fixed;inset:0;z-index:118;display:block}
 .chief-detail-layer[hidden]{display:none}
 .chief-detail-shade{position:absolute;inset:0;width:100%;height:100%;border:0;background:color-mix(in srgb,#0d3526 24%,transparent)}
-.chief-detail-panel{position:absolute;inset:0 0 0 auto;width:min(760px,94vw);display:grid;
+.chief-detail-panel{position:absolute;inset:0 0 0 auto;width:min(820px,96vw);display:grid;
   grid-template-rows:auto minmax(0,1fr);background:var(--bg);color:var(--text);
   box-shadow:-28px 0 72px color-mix(in srgb,#0d3526 22%,transparent)}
 .chief-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
-  padding:19px 22px 16px;border-bottom:1px solid var(--border);background:var(--bg)}
-.chief-detail-head p{margin:0 0 5px;color:var(--c-done);font:700 9.5px/1 var(--mono);
-  letter-spacing:.12em;text-transform:uppercase}
-.chief-detail-head h2{margin:0;font:700 24px/1.18 Georgia,serif;letter-spacing:-.025em}
+  padding:25px 30px 21px;border-bottom:1px solid var(--border);background:var(--bg)}
+.chief-detail-head>div{min-width:0;max-width:680px}
+.chief-detail-head p{margin:0 0 8px;color:var(--c-done);font:700 9.5px/1 var(--mono);
+  letter-spacing:.16em;text-transform:uppercase}
+.chief-detail-head h2{margin:0;font:700 29px/1.13 Georgia,serif;letter-spacing:-.032em;text-wrap:balance}
+.chief-detail-head-meta{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;margin-top:13px;
+  color:var(--muted);font:10.5px/1.35 var(--mono)}
+.chief-detail-head-meta span{display:inline-flex;align-items:center;gap:5px}
+.chief-detail-head-meta span+span::before{content:"·";color:var(--faint);margin-right:6px}
 .chief-detail-head button{border:1px solid var(--border);background:none;color:var(--text);
-  padding:6px 10px;font-size:11px;font-weight:650;cursor:pointer}
+  padding:7px 11px;font-size:11px;font-weight:650;cursor:pointer;flex:0 0 auto}
 .chief-detail-head button:hover{border-color:var(--text)}
-.chief-detail-body{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:22px}
-.chief-detail-intro{margin:0 0 18px;color:var(--muted);font-size:12px;line-height:1.55}
-.chief-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 22px;
-  border-top:1px solid var(--border)}
-.chief-detail-field{padding:11px 0;border-bottom:1px solid var(--hairline)}
-.chief-detail-field dt{color:var(--faint);font:700 9px/1.2 var(--mono);letter-spacing:.07em;text-transform:uppercase}
-.chief-detail-field dd{margin:5px 0 0;color:var(--text);font-size:11.5px;line-height:1.48;overflow-wrap:anywhere}
+.chief-detail-body{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:27px 30px 38px}
+.chief-detail-intro{max-width:690px;margin:0 0 21px;color:var(--muted);font-size:13px;line-height:1.62}
+.chief-detail-section{padding:27px 0 0;margin-top:27px;border-top:1px solid var(--border)}
+.chief-detail-section:first-of-type{margin-top:0}
+.chief-detail-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:13px}
+.chief-detail-section-head h3,.chief-detail-section>h3{margin:0;color:var(--c-done);font:750 10px/1.2 inherit;
+  letter-spacing:.14em;text-transform:uppercase}
+.chief-detail-section-head p{margin:0;color:var(--faint);font:10px/1.35 var(--mono)}
+.chief-detail-decision{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.chief-detail-decision-card{min-width:0;padding:16px 17px;border:1px solid var(--hairline);
+  background:color-mix(in srgb,var(--panel) 72%,var(--bg));box-shadow:0 6px 18px color-mix(in srgb,var(--text) 3%,transparent)}
+.chief-detail-decision-card.primary{grid-column:1/-1;padding:18px 19px;border-color:var(--border);background:var(--panel)}
+.chief-detail-decision-card h4{margin:0 0 8px;color:var(--faint);font:750 9px/1.2 var(--mono);
+  letter-spacing:.1em;text-transform:uppercase}
+.chief-detail-decision-card p{margin:0;color:var(--text);font-size:13.5px;line-height:1.62;overflow-wrap:anywhere}
+.chief-detail-decision-card.primary p{font-size:15px;line-height:1.58;font-weight:560}
+.chief-detail-decision-card p.not-recorded{color:var(--faint);font-weight:400}
+.chief-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px;
+  border-top:1px solid var(--hairline)}
+.chief-detail-grid.compact{grid-template-columns:repeat(3,minmax(0,1fr))}
+.chief-detail-field{min-width:0;padding:13px 0;border-bottom:1px solid var(--hairline)}
+.chief-detail-field dt{color:var(--faint);font:700 9px/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.chief-detail-field dd{margin:6px 0 0;color:var(--text);font-size:12.8px;line-height:1.55;overflow-wrap:anywhere}
 .chief-detail-field dd.not-recorded{color:var(--faint)}
-.chief-detail-section{padding:22px 0 0}
-.chief-detail-section>h3{margin:0 0 10px;color:var(--c-done);font-size:10px;
-  letter-spacing:.11em;text-transform:uppercase}
 .chief-detail-evidence{margin:0;padding:0;list-style:none;border-top:1px solid var(--hairline)}
-.chief-detail-evidence li{padding:9px 0;border-bottom:1px solid var(--hairline);font-size:11.5px;line-height:1.5}
+.chief-detail-evidence li{padding:11px 0;border-bottom:1px solid var(--hairline);font-size:12.8px;line-height:1.58}
+.chief-detail-evidence li b{font-weight:750}
+.chief-detail-empty{margin:0;padding:14px 0;border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline);
+  color:var(--faint);font-size:12.5px;line-height:1.55}
 .chief-detail-links{display:flex;gap:8px;flex-wrap:wrap}
 .chief-detail-links a,.chief-detail-links button{border:0;border-bottom:1px solid var(--border);
-  background:none;color:var(--text);padding:4px 1px;font-size:10.5px;font-weight:650;text-decoration:none;cursor:pointer}
+  background:none;color:var(--text);padding:6px 1px;font-size:11.5px;font-weight:700;text-decoration:none;cursor:pointer}
 .chief-detail-links a:hover,.chief-detail-links button:hover{border-color:var(--text)}
-.chief-detail-deepen{margin-top:24px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
-.chief-detail-deepen>summary{list-style:none;padding:15px 0;cursor:pointer;font-size:13px;font-weight:700}
+.chief-detail-links>.chief-detail-empty{flex:1}
+.chief-detail-action{padding:19px;border:1px solid var(--border);background:var(--panel);
+  box-shadow:0 8px 24px color-mix(in srgb,var(--text) 4%,transparent)}
+.chief-detail-action h4{margin:0;font-size:16px;line-height:1.35;letter-spacing:-.015em}
+.chief-detail-action>p{max-width:660px;margin:7px 0 0;color:var(--muted);font-size:12.8px;line-height:1.58}
+.chief-detail-action-engine{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:16px}
+.chief-detail-action-engine>span{margin-right:4px;color:var(--faint);font:700 9px/1 var(--mono);
+  letter-spacing:.08em;text-transform:uppercase}
+.chief-detail-action-engine button{border:1px solid var(--hairline);background:var(--bg);color:var(--muted);
+  padding:6px 9px;font-size:10.5px;font-weight:700;cursor:pointer}
+.chief-detail-action-engine button[aria-pressed="true"]{border-color:var(--text);color:var(--text)}
+.chief-detail-action-buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:13px}
+.chief-detail-action-buttons button,.chief-detail-action-buttons a{min-height:38px;border:1px solid var(--text);
+  background:var(--text);color:var(--bg);padding:8px 13px;font-size:11.5px;font-weight:750;
+  text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.chief-detail-action-buttons .secondary{background:none;color:var(--text);border-color:var(--border)}
+.chief-detail-action-buttons button:disabled{opacity:.48;cursor:progress}
+.chief-detail-run-state{margin-top:14px;padding-top:12px;border-top:1px solid var(--hairline);
+  color:var(--muted);font-size:11.5px;line-height:1.52}
+.chief-detail-run-state b{color:var(--text)}
+.chief-detail-run-state.close-ready{color:var(--c-done)}
+.chief-detail-run-state.blocked{color:var(--c-blocked)}
+.chief-detail-deepen{margin-top:29px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.chief-detail-deepen>summary{list-style:none;padding:17px 0;cursor:pointer;font-size:14px;font-weight:750}
 .chief-detail-deepen>summary::-webkit-details-marker{display:none}
 .chief-detail-deepen>summary::after{content:"+";float:right;color:var(--muted)}
 .chief-detail-deepen[open]>summary::after{content:"−"}
 .chief-deepen-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:2px 0 18px}
-.chief-deepen-form>.chief-detail-intro{grid-column:1/-1;margin-bottom:0}
+.chief-deepen-form>.chief-detail-intro{grid-column:1/-1;margin-bottom:0;font-size:12.5px}
 .chief-deepen-form label{display:grid;gap:5px;color:var(--muted);font-size:10px;font-weight:650}
 .chief-deepen-form label.full{grid-column:1/-1}
 .chief-deepen-form textarea,.chief-deepen-form input{width:100%;border:1px solid var(--border);
@@ -2529,19 +2572,24 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
 .chief-deepen-submit button:disabled{opacity:.45;cursor:progress}
 .chief-detail-error{margin:0 0 12px;color:var(--c-blocked);font:10.5px/1.5 var(--mono)}
 .chief-deep-runs{display:grid;gap:0;border-top:1px solid var(--hairline)}
-.chief-deep-run{padding:11px 0;border-bottom:1px solid var(--hairline)}
-.chief-deep-run h4{margin:0;font-size:12px;line-height:1.4}
-.chief-deep-run p{margin:5px 0 0;color:var(--muted);font-size:10.5px;line-height:1.45}
+.chief-deep-run{padding:13px 0;border-bottom:1px solid var(--hairline)}
+.chief-deep-run h4{margin:0;font-size:13px;line-height:1.45}
+.chief-deep-run p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.55}
 .chief-deep-run footer{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:7px;
   color:var(--faint);font:9.5px/1.35 var(--mono)}
 .chief-deep-run footer a{color:var(--text);font-family:inherit}
 @media(max-width:620px){
   .chief-detail-panel{width:100vw}
-  .chief-detail-head{padding:16px 17px 13px}
-  .chief-detail-body{padding:18px 17px}
-  .chief-detail-grid,.chief-deepen-form{grid-template-columns:1fr}
+  .chief-detail-head{padding:19px 18px 16px}
+  .chief-detail-head h2{font-size:25px}
+  .chief-detail-head-meta span+span::before{display:none}
+  .chief-detail-body{padding:21px 18px 32px}
+  .chief-detail-grid,.chief-detail-grid.compact,.chief-detail-decision,.chief-deepen-form{grid-template-columns:1fr}
+  .chief-detail-decision-card.primary{grid-column:auto}
   .chief-deepen-form label.full,.chief-deepen-provider,.chief-deepen-submit{grid-column:auto}
   .chief-deepen-submit{align-items:stretch;flex-direction:column}
+  .chief-detail-action-buttons{align-items:stretch;flex-direction:column}
+  .chief-detail-action-buttons button,.chief-detail-action-buttons a{width:100%}
 }
 
 .chief-brief-grid{display:grid;grid-template-columns:minmax(0,1.2fr) repeat(3,minmax(150px,.55fr));gap:10px}
@@ -2918,7 +2966,7 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   <button class="chief-detail-shade" data-chief-detail-close aria-label="Close details"></button>
   <aside class="chief-detail-panel">
     <header class="chief-detail-head">
-      <div><p>Saved context</p><h2 id="chief-detail-title">Work details</h2></div>
+      <div><p>Saved context</p><h2 id="chief-detail-title">Work details</h2><div class="chief-detail-head-meta" id="chief-detail-head-meta"></div></div>
       <button type="button" data-chief-detail-close>Close</button>
     </header>
     <div class="chief-detail-body" id="chief-detail-body"></div>
@@ -4345,11 +4393,13 @@ async function chiefPollRun(key,runId){
     const res = await fetch(chiefGet(`session/status?id=${encodeURIComponent(runId)}`),{cache:"no-store"});
     const run = await res.json();
     chiefRuns[key] = run; if (tab === "chief") renderChief();
+    if (chiefDetailState.open && chiefDetailState.work_id === key) renderChiefDetail();
     if (chiefRunActive(run)) setTimeout(() => chiefPollRun(key,runId),2600);
     else { chiefNotice = run.status === "done" ? "Agent result recorded. Source state refreshed." : `Agent stopped: ${run.error || run.status || "attention needed"}`; await refreshChief(true); }
   }catch(e){
     chiefRuns[key] = {...chiefRuns[key],status:"unknown",error:String(e)};
     if (tab === "chief") renderChief();
+    if (chiefDetailState.open && chiefDetailState.work_id === key) renderChiefDetail();
     setTimeout(() => chiefPollRun(key,runId),5000);
   }
 }
@@ -4369,6 +4419,54 @@ async function chiefStartWork(id,title,engine=chiefEngine){
     chiefRuns[id] = run; chiefNotice = `${title} is assigned. The agent owns safe work through dev.`;
     renderChief(); chiefPollRun(id,run.run_id);
   }catch(e){ chiefRuns[id] = {status:"failed",error:String(e)}; chiefNotice = `Could not start ${title}: ${e.message || e}`; renderChief(); }
+}
+async function chiefStartResolution(id,title,engine=chiefEngine){
+  if (!id || chiefRunActive(chiefRuns[id])) return;
+  engine = chiefEngineValue(engine);
+  chiefRuns[id] = {status:"starting",activity:"Starting the verification session."};
+  chiefNotice = `Starting verification for ${title}…`; renderChief();
+  if (chiefDetailState.open) renderChiefDetail();
+  try{
+    const priorRes = await fetch(chiefGet(`session/status?work_id=${encodeURIComponent(id)}`),{cache:"no-store"});
+    const prior = priorRes.ok ? await priorRes.json() : null;
+    if (chiefRunActive(prior)){
+      chiefRuns[id] = prior;
+      chiefNotice = `${title} already has a live session; monitoring it instead of starting a duplicate.`;
+      renderChief(); if (chiefDetailState.open) renderChiefDetail(); chiefPollRun(id,prior.run_id); return;
+    }
+    const order = `Resolve this Needs-you work from current evidence, not from the old summary alone.\n\n`
+      + `First read the durable request/work order, Jira history, project instructions, and existing reports. Then verify the real current state with timestamped evidence. For cloud or cost work, identify the exact resources, current consumers, current cost/usage or billing evidence, and whether the production resource is intentionally active, already retired, or still needs action.\n\n`
+      + `Choose exactly one result and put it on the first line of the final receipt as one of:\n`
+      + `outcome: close_ready\noutcome: pr_required\noutcome: blocked\n\n`
+      + `If close_ready: record the evidence in the work order and Jira comment, but do not transition Jira to Done; Jade performs the final Complete + close Jira click. `
+      + `If pr_required: implement only the bounded safe fix, test it, open or update a PR to dev, and report its evidence; never merge production. `
+      + `If a genuinely separate issue is discovered, create and link a separate Jira ticket. If blocked, name the owner, failed dependency, observable unblock condition, and since-time. `
+      + `Finish with sections ## Outcome, ## Evidence, ## Remaining risks, and ## Next decision.`;
+    const run = await chiefPost("session",{work_id:id,engine,order});
+    chiefRuns[id] = run;
+    chiefNotice = `${title} is being verified. The agent will return close-ready, PR-required, or blocked.`;
+    renderChief(); if (chiefDetailState.open) renderChiefDetail(); chiefPollRun(id,run.run_id);
+  }catch(e){
+    chiefRuns[id] = {status:"failed",error:String(e)};
+    chiefNotice = `Could not start verification for ${title}: ${e.message || e}`;
+    renderChief(); if (chiefDetailState.open) renderChiefDetail();
+  }
+}
+async function chiefCompleteVerifiedWork(id,title,jira){
+  if (!/^REQ-\d{8}-\d{2}$/.test(String(id || ""))) return;
+  const confirmed = await s9dlg({kind:"confirm",cap:"Final human gate",title:"Complete this verified work?",
+    desc:`The agent reported close_ready. This will archive ${id}${jira ? ` and move ${jira} to Done` : ""}. It will not merge or deploy anything.`,
+    ok:"Complete + close Jira",cancel:"Keep open"});
+  if (!confirmed) return;
+  try{
+    await chiefPost("complete",{id,sync_jira:Boolean(jira),outcome:`Verified close-ready from the dashboard: ${title}.`});
+    chiefNotice = `${title} is complete${jira ? ` and ${jira} is closed` : ""}.`;
+    closeChiefDetails(); await refreshChief(true);
+  }catch(e){
+    chiefNotice = `The work stayed open: ${e.message || e}`;
+    if (chiefDetailState.open){ chiefDetailState.error = chiefNotice; renderChiefDetail(); }
+    renderChief();
+  }
 }
 async function chiefStartRelease(id,action,title,engine=chiefEngine){
   const key = `release:${id}:${action}`;
@@ -4427,27 +4525,50 @@ function renderChiefDetail(){
   const next = context.next_move || flow.next_move || {};
   const detail = context.detail || next.detail || context.work || {}, release = detail.release || context.release || {};
   const freshness = context.freshness || flow.freshness || {};
+  const work = context.work || next || {}, workId = chiefDetailState.work_id || work.id || next.id || "";
+  const workRun = chiefRuns[workId] || null, workRunActive = chiefRunActive(workRun);
+  const resolution = chiefNorm(workRun && workRun.result_outcome);
+  const resolutionDone = chiefNorm(workRun && workRun.status) === "done";
+  const closeReady = resolutionDone && resolution === "close_ready";
+  const canClose = closeReady && /^REQ-\d{8}-\d{2}$/.test(String(workId));
+  const workReport = workRun && workRun.run_id && resolutionDone ? chiefGet(`session/report?id=${encodeURIComponent(workRun.run_id)}`) : "";
+  const workSession = workRun && workRun.thread_id ? "t3code://app/" : "";
   $("#chief-detail-title").textContent = next.title || detail.goal || "Work details";
   const field = (label,value) => {
     const text = chiefDetailText(value), missing = text === "Not recorded";
     return `<div class="chief-detail-field"><dt>${esc(label)}</dt><dd class="${missing ? "not-recorded" : ""}">${esc(text)}</dd></div>`;
   };
+  const recorded = value => chiefDetailText(value) !== "Not recorded";
+  const decisionCard = (label,value,primary=false) => `<article class="chief-detail-decision-card ${primary ? "primary" : ""}"><h4>${esc(label)}</h4><p class="${recorded(value) ? "" : "not-recorded"}">${esc(chiefDetailText(value))}</p></article>`;
+  const sectionHead = (title,note="") => `<header class="chief-detail-section-head"><h3>${esc(title)}</h3>${note ? `<p>${esc(note)}</p>` : ""}</header>`;
   const evidence = chiefArr(detail.evidence);
   const trail = chiefArr(context.trail || flow.trail);
   const documents = chiefArr(context.documents || flow.documents);
+  const headMeta = [detail.jira,detail.project,chiefStatusText(detail.status),detail.updated].filter(recorded);
+  const headMetaNode = $("#chief-detail-head-meta");
+  if (headMetaNode) headMetaNode.innerHTML = headMeta.map(value => `<span>${esc(value)}</span>`).join("");
   const releaseLinks = `${release.promotion_url ? `<a href="${esc(release.promotion_url)}" target="_blank" rel="noopener">Production review PR</a>` : ""}${release.report_file ? `<a href="${esc(chiefGet(`report?f=${encodeURIComponent(release.report_file)}`))}" data-chief-report-open data-chief-report-title="${esc(`${release.project || "Release"} report`)}">Release report</a>` : ""}`;
   const documentLinks = documents.map(d => d.report_file ?
     `<a href="${esc(chiefGet(`report?f=${encodeURIComponent(d.report_file)}`))}" data-chief-report-open data-chief-report-title="${esc(d.title || d.kind || "Document")}">${esc(d.title || d.kind || "Report")}</a>` : d.path ?
     `<a href="${esc(chiefGet(`document?path=${encodeURIComponent(d.path)}`))}" data-chief-report-open data-chief-report-title="${esc(d.title || d.kind || "Document")}">${esc(d.title || d.kind || "Document")}</a>` : "").join("");
   const activeRuns = chiefDetailState.runs.some(r => ["requested","starting","running","working"].includes(chiefNorm(r.status)));
   const runs = chiefDetailState.runs.length ? chiefDetailState.runs.map(r => `<article class="chief-deep-run"><h4>${esc(r.question || "Deep detail run")}</h4><p>${esc(chiefDetailText(r.activity))}</p><footer><span>${esc(r.provider || "provider not recorded")}${r.model ? ` · ${esc(r.model)}` : ""}</span><span>${esc(r.status || "unknown")}</span><span>${esc(r.repo || "repo not recorded")}${r.branch ? ` · ${esc(r.branch)}` : ""}</span><span>${esc(r.created_at || "time not recorded")}</span>${r.report_ready && r.run_id ? `<a href="${esc(chiefGet(`session/report?id=${encodeURIComponent(r.run_id)}`))}" data-chief-report-open data-chief-report-title="Deep details report">Open report</a>` : ""}</footer></article>`).join("") : `<p class="chief-detail-intro">No saved deep-detail runs yet.</p>`;
-  body.innerHTML = `<p class="chief-detail-intro">Saved evidence opens instantly. Deepen with agent is optional and produces an analysis report only; it does not implement, merge, deploy, complete, or close this work.</p>
-    <dl class="chief-detail-grid">${field("Project",detail.project)}${field("Jira",detail.jira)}${field("Jira status",detail.jira_status)}${field("Work status",detail.status)}${field("Assignee",detail.assignee)}${field("Source",detail.source)}${field("Updated",detail.updated)}${field("Owner",detail.owner)}${field("Goal",detail.goal)}${field("Outcome",detail.outcome)}${field("What changed",detail.what_changed)}${field("Why now",detail.why_now)}${field("Impact",detail.impact)}${field("Next checkpoint",detail.next_checkpoint)}${field("Checklist",detail.checked != null || detail.total != null ? `${detail.checked ?? "?"}/${detail.total ?? "?"}` : null)}</dl>
-    <section class="chief-detail-section"><h3>Evidence</h3>${evidence.length ? `<ul class="chief-detail-evidence">${evidence.map(x => `<li>${esc(chiefDetailText(x))}</li>`).join("")}</ul>` : `<p class="chief-detail-intro">Not recorded</p>`}</section>
-    <section class="chief-detail-section"><h3>Release</h3><dl class="chief-detail-grid">${field("Project",release.project)}${field("Status",release.status)}${field("Summary",release.summary)}${field("Last changed",release.last_changed_at)}${field("Last checked",release.last_checked_at)}</dl><div class="chief-detail-links">${releaseLinks || "<span>Not recorded</span>"}</div></section>
-    <section class="chief-detail-section"><h3>Relations trail</h3>${trail.length ? `<ul class="chief-detail-evidence">${trail.map(x => `<li><b>${esc(x.kind || "relation")}</b> · ${esc(chiefDetailText([x.label,x.detail].filter(Boolean)))}</li>`).join("")}</ul>` : `<p class="chief-detail-intro">Not recorded</p>`}</section>
-    <section class="chief-detail-section"><h3>Documents</h3><div class="chief-detail-links">${documentLinks || "<span>Not recorded</span>"}</div></section>
-    <section class="chief-detail-section"><h3>Freshness</h3><dl class="chief-detail-grid">${field("Last changed",freshness.changed_at)}${field("Last checked",freshness.checked_at)}${field("Stale sources",chiefArr(freshness.sources).filter(x => x.stale || ["unreachable","error","failed","offline"].includes(chiefNorm(x.status))).map(x => `${x.name}: ${x.stale ? "stale" : x.status}`))}</dl></section>
+  const releaseRecorded = [release.project,release.status,release.summary,release.last_changed_at,release.last_checked_at,release.promotion_url,release.report_file].some(recorded);
+  const technicalRecorded = [detail.repo,detail.branch,detail.branch_commit].some(recorded);
+  const staleSources = chiefArr(freshness.sources).filter(x => x.stale || ["unreachable","error","failed","offline"].includes(chiefNorm(x.status))).map(x => `${x.name}: ${x.stale ? "stale" : x.status}`);
+  const runStateClass = closeReady ? "close-ready" : resolution === "blocked" || ["failed","needs_attention"].includes(chiefNorm(workRun && workRun.status)) ? "blocked" : "";
+  const runState = !workRun ? "No verification session has been started for this decision." : workRunActive ? (workRun.activity || "The verification session is working.") : closeReady ? "Verified close-ready. Review the report, then use the final human close gate." : resolution === "pr_required" ? "The verification found a required change. The agent report carries the PR/dev path." : resolution === "blocked" ? "Verification stopped at a named blocker. Open the report for the owner and unblock condition." : resolutionDone ? "Verification finished. Read the report before choosing the next action." : (workRun.error || workRun.activity || workRun.status || "Session state is not recorded.");
+  const engineButtons = Object.entries(CHIEF_ENGINES).map(([value,meta]) => `<button type="button" data-chief-engine="${value}" aria-pressed="${value === chiefEngine}" title="${esc(meta.note)}">${esc(meta.label)}</button>`).join("");
+  body.innerHTML = `<p class="chief-detail-intro">A saved, decision-ready view of this work. Opening it never starts an agent or changes Jira.</p>
+    <section class="chief-detail-section">${sectionHead("Decision brief","What matters now")}<div class="chief-detail-decision">${decisionCard("What changed",detail.what_changed || detail.outcome,true)}${decisionCard("Why now",detail.why_now)}${decisionCard("Impact",detail.impact)}${decisionCard("Next checkpoint",detail.next_checkpoint)}${decisionCard("Goal",detail.goal)}</div></section>
+    <section class="chief-detail-section">${sectionHead("Act on this work","Evidence first, action second")}<div class="chief-detail-action"><h4>Verify the current state, then resolve it</h4><p>The session checks live evidence and returns exactly one path: safe to close, a bounded PR/action is required, or a named blocker. Production remains your gate.</p><div class="chief-detail-action-engine"><span>Start with</span>${engineButtons}</div><div class="chief-detail-action-buttons"><button type="button" data-chief-resolve="${esc(workId)}" data-chief-title="${esc(next.title || detail.goal || "this work")}" ${workRunActive ? "disabled" : ""}>${workRunActive ? "Verification running…" : resolutionDone ? `Verify again with ${esc(CHIEF_ENGINES[chiefEngine].label)}` : `Verify & resolve with ${esc(CHIEF_ENGINES[chiefEngine].label)}`}</button>${workReport ? `<a class="secondary" href="${esc(workReport)}" data-chief-report-open data-chief-report-title="${esc(`${next.title || "Work"} · verification report`)}">Open verification report</a>` : ""}${workSession ? `<a class="secondary" href="${esc(workSession)}">Open T3 Code</a>` : ""}${canClose ? `<button type="button" class="secondary" data-chief-complete-verified="${esc(workId)}" data-chief-jira="${esc(detail.jira || work.jira || "")}" data-chief-title="${esc(next.title || detail.goal || "this work")}">Complete + close Jira</button>` : ""}</div><div class="chief-detail-run-state ${runStateClass}"><b>${workRunActive ? "Working" : closeReady ? "Ready for your close" : resolutionDone ? "Result ready" : "Current state"}</b><br>${esc(runState)}</div></div></section>
+    <section class="chief-detail-section">${sectionHead("Record","Ownership and source")}<dl class="chief-detail-grid compact">${field("Jira status",detail.jira_status)}${field("Assignee",detail.assignee)}${field("Owner",detail.owner)}${field("Source",detail.source)}${field("Updated",detail.updated)}${field("Checklist",detail.checked != null || detail.total != null ? `${detail.checked ?? "?"}/${detail.total ?? "?"}` : null)}</dl></section>
+    <section class="chief-detail-section">${sectionHead("Technical anchor",technicalRecorded ? "Exact place to inspect" : "No repository anchor")}${technicalRecorded ? `<dl class="chief-detail-grid">${field("Repository",detail.repo)}${field("Branch / ref",detail.branch)}${field("Commit",detail.branch_commit)}</dl>` : `<p class="chief-detail-empty">No repository, branch, or commit is recorded for this work.</p>`}</section>
+    <section class="chief-detail-section">${sectionHead("Evidence",evidence.length ? `${evidence.length} recorded` : "No evidence recorded")}${evidence.length ? `<ul class="chief-detail-evidence">${evidence.map(x => `<li>${esc(chiefDetailText(x))}</li>`).join("")}</ul>` : `<p class="chief-detail-empty">No durable evidence has been recorded for this work yet.</p>`}</section>
+    <section class="chief-detail-section">${sectionHead("Release",releaseRecorded ? "Connected release state" : "No release linked")}${releaseRecorded ? `<dl class="chief-detail-grid">${field("Project",release.project)}${field("Status",release.status)}${field("Summary",release.summary)}${field("Last changed",release.last_changed_at)}${field("Last checked",release.last_checked_at)}</dl><div class="chief-detail-links">${releaseLinks}</div>` : `<p class="chief-detail-empty">No release record is linked to this work.</p>`}</section>
+    <section class="chief-detail-section">${sectionHead("Relations trail",trail.length ? `${trail.length} explicit links` : "No links recorded")}${trail.length ? `<ul class="chief-detail-evidence">${trail.map(x => `<li><b>${esc(x.kind || "relation")}</b> · ${esc(chiefDetailText([x.label,x.detail].filter(Boolean)))}</li>`).join("")}</ul>` : `<p class="chief-detail-empty">No explicit Jira, project, work-order, session, PR, or follow-up relation is recorded.</p>`}</section>
+    <section class="chief-detail-section">${sectionHead("Documents",documents.length ? `${documents.length} connected` : "No documents linked")}<div class="chief-detail-links">${documentLinks || `<p class="chief-detail-empty">No durable document is linked to this work.</p>`}</div></section>
+    <section class="chief-detail-section">${sectionHead("Freshness","When this context moved")}<dl class="chief-detail-grid">${field("Last changed",freshness.changed_at)}${field("Last checked",freshness.checked_at)}${field("Stale sources",staleSources)}</dl></section>
     <details class="chief-detail-deepen" id="chief-detail-deepen" ${chiefDetailState.deepenOpen ? "open" : ""}><summary>Deepen with agent</summary><form class="chief-deepen-form" data-chief-deepen-form><p class="chief-detail-intro">Generate the standard evidence question from this saved work, repository, branch, relations, and release context. Nothing is implemented or merged.</p><div class="chief-deepen-provider" role="group" aria-label="Deep detail provider"><span>Provider</span><button type="button" data-chief-deep-provider="codex" aria-pressed="${chiefDetailState.provider === "codex"}">Codex <small>Terra · medium</small></button><button type="button" data-chief-deep-provider="claude" aria-pressed="${chiefDetailState.provider === "claude"}">Claude <small>Sonnet 5 · medium</small></button></div>${chiefDetailState.error ? `<p class="chief-detail-error" role="alert">${esc(chiefDetailState.error)}</p>` : ""}<div class="chief-deepen-submit"><p>Starts only on this click. The result is a bounded evidence report—not implementation or completion.</p><button type="submit" ${chiefDetailState.starting ? "disabled" : ""}>${chiefDetailState.starting ? "Starting…" : "Generate standard detail report"}</button></div></form></details>
     <section class="chief-detail-section"><h3>Saved deep-detail runs${activeRuns ? " · active" : ""}</h3>${chiefDetailState.loading ? `<p class="chief-detail-intro">Refreshing saved runs…</p>` : ""}<div class="chief-deep-runs">${runs}</div></section>`;
 }
@@ -4467,6 +4588,17 @@ async function loadChiefSelectedDetail(){
   }catch(e){
     chiefDetailState.error = `Full saved context is unavailable: ${e.message || e}`; renderChiefDetail();
   }
+}
+async function loadChiefResolutionRun(){
+  const workId = chiefDetailState.work_id;
+  if (!chiefDetailState.open || !workId) return;
+  try{
+    const res = await fetch(chiefGet(`session/status?work_id=${encodeURIComponent(workId)}`),{cache:"no-store"});
+    const run = await res.json();
+    if (!res.ok || run.ok === false || chiefNorm(run.status) === "not_found") return;
+    chiefRuns[workId] = run; renderChiefDetail();
+    if (chiefRunActive(run) && run.run_id) chiefPollRun(workId,run.run_id);
+  }catch(_e){ /* Saved context remains readable when session status is unavailable. */ }
 }
 async function loadChiefDeepRuns(){
   if (!chiefDetailState.open || !chiefDetailState.work_id || chiefDetailState.loading) return;
@@ -4511,6 +4643,7 @@ function openChiefDetails(workId,trigger){
   document.body.style.overflow = "hidden"; renderChiefDetail();
   requestAnimationFrame(() => $("#chief-detail-layer .chief-detail-head [data-chief-detail-close]")?.focus());
   loadChiefSelectedDetail();
+  loadChiefResolutionRun();
   loadChiefDeepRuns();
 }
 function closeChiefDetails(){
@@ -4690,7 +4823,7 @@ function chiefWorkCard(row, lane){
   const context = row.next || row.outcome || row.goal || row.why || row.summary || "No next note has been recorded.";
   const ref = row.jira || row.work_order || row.id || "Work";
   const run = chiefRuns[row.id], running = chiefRunActive(run);
-  const act = running ? "Working…" : lane === "needs" ? "Review" : lane === "progress" ? "Continue" : lane === "done" ? "Evidence" : "Start work";
+  const act = running ? "Working…" : lane === "needs" ? "Verify & resolve" : lane === "progress" ? "Continue" : lane === "done" ? "Evidence" : "Start work";
   const sessionReport = run && run.run_id && !running ? chiefGet(`session/report?id=${encodeURIComponent(run.run_id)}`) : "";
   const blocked = chiefNorm(row.status).startsWith("blocked");
   return `<article class="chief-work">
@@ -4752,7 +4885,7 @@ function chiefAccordionRows(rows,lane){
   const items = shown.map(row => {
     const ref = row.jira || row.work_order || row.id || "Work";
     const run = chiefRuns[row.id], running = chiefRunActive(run);
-    const act = running ? "Working…" : lane === "needs" ? "Review" : lane === "progress" ? "Continue" : "Evidence";
+    const act = running ? "Working…" : lane === "needs" ? "Verify & resolve" : lane === "progress" ? "Continue" : "Evidence";
     return `<article class="chief-accordion-item"><h3>${esc(row.title || ref)}</h3><p>${esc(chiefShort(row.next || row.outcome || row.goal || row.why || "No movement note recorded."))}</p><footer><span>${esc(ref)}${row.project ? ` · ${esc(row.project)}` : ""}</span><div class="chief-row-actions"><button class="chief-row-details" data-chief-open-details="${esc(row.id || "")}" aria-label="Open saved details for ${esc(row.title || ref)}">Details</button><button class="chief-text-action" data-chief-action="${esc(lane)}" data-chief-work="${esc(row.id || "")}" data-chief-title="${esc(row.title || ref)}" ${running ? "disabled" : ""}>${act}</button></div></footer></article>`;
   }).join("");
   return `<div class="chief-accordion-list" id="${listId}">${items}</div>${hidden ? `<button class="chief-lane-more" data-chief-lane-toggle="${esc(lane)}" aria-expanded="${expanded}" aria-controls="${listId}">${expanded ? "Show less" : `Show remaining ${hidden}`}</button>` : ""}`;
@@ -4812,7 +4945,7 @@ function renderChief(){
   const nextLane = next ? chiefLane(next) : "ready";
   const nextSemantics = useFlow && flowNext ? flowNext : next;
   const nextRun = next && chiefRuns[next.id], nextRunning = chiefRunActive(nextRun);
-  const nextAction = nextRunning ? "Working…" : nextLane === "needs" ? "Review" : nextLane === "progress" ? "Continue work" : "Start work";
+  const nextAction = nextRunning ? "Working…" : nextLane === "needs" ? "Verify & resolve" : nextLane === "progress" ? "Continue work" : "Start work";
   const attention = nextSemantics && nextSemantics.attention || {}, snoozedUntil = attention.snoozed_until || "";
   const snoozed = Boolean(attention.active && snoozedUntil), acknowledged = Boolean(attention.acknowledged_at);
   const attentionBusy = chiefAttentionState.work_id === (next && next.id) ? chiefAttentionState.busy : "";
@@ -9813,6 +9946,10 @@ document.addEventListener("click", async e => {
   if (detailClose){ closeChiefDetails(); return; }
   const openDetails = e.target.closest("[data-chief-open-details]");
   if (openDetails){ openChiefDetails(openDetails.dataset.chiefOpenDetails || "",openDetails); return; }
+  const resolveWork = e.target.closest("[data-chief-resolve]");
+  if (resolveWork){ chiefStartResolution(resolveWork.dataset.chiefResolve || "",resolveWork.dataset.chiefTitle || "this work"); return; }
+  const completeVerified = e.target.closest("[data-chief-complete-verified]");
+  if (completeVerified){ await chiefCompleteVerifiedWork(completeVerified.dataset.chiefCompleteVerified || "",completeVerified.dataset.chiefTitle || "this work",completeVerified.dataset.chiefJira || ""); return; }
   const deepProvider = e.target.closest("[data-chief-deep-provider]");
   if (deepProvider){
     captureChiefDetailForm();
@@ -9841,7 +9978,8 @@ document.addEventListener("click", async e => {
     chiefEngine = chiefEngineValue(engineChoice.dataset.chiefEngine);
     try{ localStorage.setItem("chief-session-engine",chiefEngine); }catch(_e){}
     tab === "chief" ? renderChief() : render();
-    requestAnimationFrame(() => document.querySelector(`[data-chief-engine="${chiefEngine}"]`)?.focus());
+    if (chiefDetailState.open) renderChiefDetail();
+    requestAnimationFrame(() => document.querySelector(`${chiefDetailState.open ? "#chief-detail-layer " : ""}[data-chief-engine="${chiefEngine}"]`)?.focus());
     return;
   }
   if (e.target.closest("[data-chief-home]")){
@@ -9947,6 +10085,7 @@ document.addEventListener("click", async e => {
     const id = chiefAct.dataset.chiefWork || "";
     const title = chiefAct.dataset.chiefTitle || chiefAct.dataset.chiefWork || "this work";
     const row = chiefArr(chiefData && chiefData.portfolio).find(r => r.id === id) || {};
+    if (action === "needs") { chiefStartResolution(id,title); return; }
     if (action === "ready" || action === "progress") { chiefStartWork(id,title); return; }
     if (row.report_file){ chiefOpenReport(chiefGet(`report?f=${encodeURIComponent(row.report_file)}`),title,chiefAct); return; }
     s9dlg({kind:"alert",cap:action === "needs" ? "Your decision" : "Evidence",title,
