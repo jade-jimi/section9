@@ -9474,10 +9474,23 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
             dead = float(r["live_age"])
         if dead is not None and (age is None or age >= dead - 5):
             win = min(win, STALLED_DEAD_WIN)
+    # 사람이 세워 둔(stopped) 문서에서는 **중단 도장이 잔상을 이긴다**
+    # (2026-08-31 18:12 실사고): 사용자가 ⏸ 로 세운 직후 카드가 죽인 위임
+    # 손의 열린 기여 → 리드의 중단 처리 명령(손길) 순으로 attached 를
+    # 갈아타며 ⏸ 를 계속 그렸다. 규칙: 도장 **뒤에 실제로 움직인** 손만
+    # 붙음을 주장할 수 있다. pid 생존을 확인한 현재-진실(워커·잡)은 그대로
+    # 이긴다 — 정말 도는 것을 세웠다고 감추면 반대편 병(REQ-20260829-034)이다.
+    _stop_at = (r.get("stopped") or {}).get("at")
+
+    def _moved_after_stop(ev_age_sec):
+        """이 증거의 마지막 움직임이 중단 도장 뒤인가 — 도장 없으면 참."""
+        if not _stop_at or ev_age_sec is None:
+            return True
+        return (now - ev_age_sec) > _stop_at
     # 서브에이전트에게 맡겨 그쪽이 붙어 있는 것도 같다 (REQ-20260828-003).
     # 판정을 두 벌 만들지 않는다 — 워처가 쓰는 그 함수를 그대로 쓴다.
     c = delegated_running(r["id"], now=now)
-    if c:
+    if c and _moved_after_stop(_path_age(str(c.get("transcript") or ""), now)):
         # 역할 슬러그(designer 등 영문 식별자)는 화면의 낱말이 아니다 — 카드가
         # 이미 쓰는 「나눠 맡은 일손」으로 (REQ-20260831-005 tech-writer 판정)
         return dict(v, state="attached",
@@ -9494,7 +9507,7 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
             if _h.get("req"):
                 assigned.setdefault(canon_id(_h["req"]), _h)
     ah = assigned.get(canon_id(r["id"]))
-    if ah:
+    if ah and _moved_after_stop(ah.get("age")):
         return dict(v, state="attached",
                     why="이 요청을 나눠 맡은 일손이 "
                         f"{int(ah.get('age') or 0)}초 전까지 움직였습니다 — "
@@ -9517,7 +9530,7 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
     # 귀속 선언이 아니다(근원 B). 손 뗀 클레임의 걱정(REQ-20260827-074)은
     # claim_dead 가 이미 맡는다 — 클레임 후 30분간 문서에 아무 일도 없으면
     # 클레임이 풀려 direct 가 저절로 꺼진다.
-    if r.get("live_kind") == "direct":
+    if r.get("live_kind") == "direct" and _moved_after_stop(r.get("live_age")):
         # 주어를 세우지 않는다 (REQ-20260831-005 문구 확정, 4인 검토):
         # 이 자리가 창인지 자동 작업인지 서버가 안 가려 주므로 주어를 세우면
         # 틀릴 수 있고, 「세션」은 화면 사전(REQ-20260830-039)이 걷어낸 낱말이다.
@@ -9544,8 +9557,12 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
     # 그 세션이 지금도 살아 있을 때만 선다 — 여기가 REQ-034 의 재발 방지선이다:
     # 깨운 워커가 클레임만 하고 죽으면, 종전에는 문서 도장이 경보를 15분 껐다.
     # 손길은 세션이 죽는 순간(활동 신선도 소진) 함께 죽는다.
+    # 손길은 중단 도장을 이기지 못한다: 세우기 직후의 s9 명령(보고·해제)이
+    # 곧 손길이라, 도장-이후 규칙으로도 못 거른다. 손길은 약한 증거("명령이
+    # 지나갔다")고 세우기는 명시 의사다 — 다시 일하는 손은 이어가기가 도장을
+    # 걷으며 제 얼굴(direct·위임)로 선다.
     hb = heartbeat_age(r["id"], now=now)
-    if hb is not None and hb < HEARTBEAT_ATTACH_WIN:
+    if hb is not None and hb < HEARTBEAT_ATTACH_WIN and not _stop_at:
         _hbs = heartbeat_session(r["id"])
         _hbb = read_binding(current_machine(), _hbs) if _hbs else None
         if _hbb and not _hbb.get("ended") and chat_live(_hbb):
