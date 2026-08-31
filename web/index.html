@@ -2985,6 +2985,62 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   min-height:37px;padding:8px 12px;font-size:11px;font-weight:750;text-decoration:none;cursor:pointer}
 .chief-release-actions .secondary{background:none;color:var(--text);border-color:var(--border)}
 .chief-release-actions button:disabled{opacity:.48;cursor:progress}
+.chief-meetings-page{max-width:1100px;margin:0 auto;padding:22px 0 72px}
+.chief-meetings-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:28px;
+  padding:20px 0 28px;border-bottom:1px solid var(--border)}
+.chief-meetings-hero .eyebrow{margin:0 0 9px;color:var(--c-done);font-size:10px;font-weight:750;
+  letter-spacing:.16em;text-transform:uppercase}
+.chief-meetings-hero h1{margin:0;font:700 clamp(38px,4.4vw,58px)/1.02 Georgia,"Times New Roman",serif;
+  letter-spacing:-.045em}
+.chief-meetings-hero .summary{max-width:690px;margin:16px 0 0;color:var(--muted);font-size:14px;line-height:1.58}
+.chief-calendar-source{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;
+  margin:24px 0 30px;padding:14px 16px;border:1px solid var(--border);background:var(--panel)}
+.chief-calendar-source .mark{width:34px;height:34px;border:1px solid var(--border);border-radius:50%;
+  display:grid;place-items:center;color:var(--c-done);font:700 12px/1 var(--mono)}
+.chief-calendar-source.stale .mark,.chief-calendar-source.not_connected .mark{color:var(--c-review)}
+.chief-calendar-source.unreachable .mark{color:var(--c-blocked)}
+.chief-calendar-source b{display:block;font-size:13px;line-height:1.35}
+.chief-calendar-source p{margin:3px 0 0;color:var(--muted);font:10px/1.45 var(--mono)}
+.chief-calendar-source button{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  padding:8px 11px;font-size:11px;font-weight:650;cursor:pointer}
+.chief-calendar-source button:hover{border-color:var(--text)}
+.chief-calendar-source button:disabled{opacity:.5;cursor:progress}
+.chief-meeting-section{margin-top:30px}
+.chief-meeting-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+  padding-bottom:10px;border-bottom:1px solid var(--border)}
+.chief-meeting-section-head h2{margin:0;font-size:18px;line-height:1.3}
+.chief-meeting-section-head span{color:var(--muted);font:10px/1.3 var(--mono)}
+.chief-meeting-list{display:grid}
+.chief-meeting{border-bottom:1px solid var(--hairline)}
+.chief-meeting>summary{list-style:none;display:grid;grid-template-columns:112px minmax(0,1fr) auto;
+  align-items:center;gap:18px;padding:17px 0;cursor:pointer}
+.chief-meeting>summary::-webkit-details-marker{display:none}
+.chief-meeting>summary time{color:var(--muted);font:10px/1.45 var(--mono);white-space:pre-line}
+.chief-meeting>summary h3{margin:0;font-size:15px;line-height:1.35;letter-spacing:-.015em}
+.chief-meeting>summary p{margin:4px 0 0;color:var(--muted);font-size:11px;line-height:1.4}
+.chief-meeting>summary .state{color:var(--c-review);font:750 9.5px/1.3 var(--mono);
+  text-transform:uppercase;letter-spacing:.06em}
+.chief-meeting.prepared>summary .state{color:var(--c-done)}
+.chief-meeting.cancelled>summary{opacity:.62}
+.chief-meeting.cancelled>summary h3{text-decoration:line-through}
+.chief-meeting-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,.85fr);gap:18px;
+  padding:0 0 20px 130px}
+.chief-meeting-context{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.chief-meeting-fact{padding:11px 12px;border:1px solid var(--hairline);background:var(--panel)}
+.chief-meeting-fact h4{margin:0 0 6px;color:var(--faint);font:750 9px/1.2 var(--mono);
+  letter-spacing:.09em;text-transform:uppercase}
+.chief-meeting-fact p{margin:0;color:var(--muted);font-size:11px;line-height:1.48}
+.chief-meeting-side{display:grid;align-content:start;gap:8px}
+.chief-meeting-actions{display:flex;gap:8px;flex-wrap:wrap}
+.chief-meeting-actions button,.chief-meeting-actions a{border:1px solid var(--text);background:var(--text);
+  color:var(--bg);padding:9px 11px;font-size:11px;font-weight:700;text-decoration:none;cursor:pointer}
+.chief-meeting-actions .secondary{background:none;color:var(--text);border-color:var(--border)}
+.chief-meeting-actions button:disabled{opacity:.5;cursor:progress}
+.chief-meeting-history{padding:11px 12px;border:1px solid var(--hairline);background:var(--panel)}
+.chief-meeting-history h4{margin:0 0 7px;font-size:11px}
+.chief-meeting-history p{margin:0;color:var(--muted);font-size:10.5px;line-height:1.48}
+.chief-meeting-history small{display:block;margin-top:6px;color:var(--faint);font:9px/1.35 var(--mono)}
+.chief-meeting-empty{padding:28px 0;color:var(--muted);font-size:12px;line-height:1.55}
 
 @media(max-width:900px){
   body[data-view="chief"] main{padding:10px 28px 70px}
@@ -3021,6 +3077,14 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   .chief-release-path{grid-template-columns:1fr}
   .chief-release-actions{align-items:stretch;flex-direction:column}
   .chief-release-actions button,.chief-release-actions a{width:100%;text-align:center}
+  .chief-meetings-page{padding:0 0 54px}
+  .chief-meetings-hero{grid-template-columns:1fr;align-items:start;padding:22px 0}
+  .chief-calendar-source{grid-template-columns:auto 1fr}
+  .chief-calendar-source button{grid-column:1/-1;width:100%}
+  .chief-meeting>summary{grid-template-columns:80px minmax(0,1fr);gap:12px}
+  .chief-meeting>summary .state{grid-column:2}
+  .chief-meeting-body{grid-template-columns:1fr;padding-left:0}
+  .chief-meeting-context{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -3030,6 +3094,7 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
     <button class="brand" data-chief-home><span class="dot"></span>Element Energy</button>
     <nav class="chief-primary-nav" aria-label="Chief pages">
       <button data-chief-nav="brief">Brief</button>
+      <button data-chief-nav="meetings">Meetings</button>
       <button data-chief-nav="release">Release</button>
       <button data-chief-nav="artifacts">Artifacts</button>
     </nav>
@@ -3253,6 +3318,7 @@ let chiefProjectEngineBusy = "";
 let chiefDetailState = {open:false,work_id:"",loading:false,starting:false,error:"",runs:[],
   provider:"codex",deepenOpen:false,context:null};
 let chiefDetailReturn = null, chiefDetailOverflow = "", chiefDetailPoll = null;
+let chiefMeetingBusy = "", chiefMeetingNotice = "", chiefMeetingSessions = {};
 const CHIEF_ENGINES = {
   codex:{label:"Codex",note:"Open in T3 Code with the Codex model"},
   claude:{label:"Claude",note:"Open in T3 Code with the Claude model"},
@@ -4094,7 +4160,7 @@ async function boot(){
 }
 
 const TABS = ["chief","board","docs","graph","audit","stream","terminal","settings"];
-const CHIEF_DAILY = ["brief","work","release","reports","relations","sessions","artifacts"];
+const CHIEF_DAILY = ["brief","meetings","work","release","reports","relations","sessions","artifacts"];
 function syncChiefNav(){
   document.querySelectorAll("[data-chief-nav]").forEach(b =>
     b.classList.toggle("active",tab === "chief" && b.dataset.chiefNav === chiefDaily));
@@ -5198,6 +5264,101 @@ function renderChiefArtifacts(){
   }).join("")}</div>` : `<div class="chief-artifact-empty"><b>${chiefArtifactsError ? "Artifact registry unavailable" : "No published artifacts match"}</b>${esc(chiefArtifactsError || (chiefArtifactQuery || kind !== "all" ? "Clear the search or kind filter." : "Chief and project sessions will publish useful reports and images here."))}</div>`;
   view.innerHTML = `<div class="chief-artifacts-page"><section class="chief-artifacts-hero"><div><p>Artifact library</p><h1>Reports and images,<br>ready to open.</h1><p class="summary">Useful session outputs are explicitly published here and grouped by project. Request files, status JSON, logs, and ordinary modified files stay out.</p></div><button class="chief-artifacts-refresh" data-chief-artifact-refresh ${chiefArtifactsLoading ? "disabled" : ""}>${chiefArtifactsLoading ? "Refreshing…" : "Refresh registry"}</button></section><section class="chief-artifact-tools"><input class="chief-artifact-search" data-chief-artifact-search type="search" value="${esc(chiefArtifactQuery)}" placeholder="Search title, summary, run or path"><div class="chief-artifact-kinds" role="group" aria-label="Artifact kind">${kindButtons}</div></section><p class="chief-source-health">${total} visible of ${chiefArtifacts && chiefArtifacts.total || 0} published artifacts${chiefArtifacts && chiefArtifacts.generated_at ? ` · checked ${esc(chiefArtifacts.generated_at)}` : ""}</p>${content}</div>`;
 }
+function chiefMeetingDatePart(value){
+  if (!value) return "";
+  return typeof value === "object" ? String(value.dateTime || value.datetime || value.date || "") : String(value);
+}
+function chiefMeetingInstant(value){
+  const raw = chiefMeetingDatePart(value);
+  if (!raw) return NaN;
+  if (/[zZ]$|[+-]\d\d:?\d\d$/.test(raw)) return Date.parse(raw);
+  const zone = value && typeof value === "object" ? String(value.timeZone || value.timezone || "") : "";
+  return Date.parse(raw + (zone === "Korea Standard Time" || zone === "Asia/Seoul" ? "+09:00" : ""));
+}
+function chiefMeetingWhen(event){
+  const instant = chiefMeetingInstant(event && event.start);
+  if (!Number.isFinite(instant)) return chiefMeetingDatePart(event && event.start) || "Time not recorded";
+  return new Intl.DateTimeFormat("en-US",{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}).format(new Date(instant));
+}
+function chiefMeetingPerson(value){
+  if (!value) return "Not recorded";
+  if (typeof value === "string") return value;
+  return value.name || value.displayName || value.address || value.email || "Not recorded";
+}
+function chiefMeetingHistory(event,history){
+  return chiefArr(history).filter(row => row && (row.event_key === event.key ||
+    (row.series_key && event.series_key && row.series_key === event.series_key)));
+}
+function chiefMeetingCard(event,history,index){
+  const prior = chiefMeetingHistory(event,history), latest = prior[0] || null;
+  const attendees = chiefArr(event.attendees).map(chiefMeetingPerson).filter(x => x !== "Not recorded");
+  const attendeeSummary = attendees.slice(0,8).join(", ") + (attendees.length > 8 ? ` · +${attendees.length - 8} more` : "");
+  const organizer = chiefMeetingPerson(event.organizer);
+  const projects = chiefArr(latest && latest.projects || event.projects), jira = chiefArr(latest && latest.jira || event.jira);
+  const releases = chiefArr(latest && latest.releases || event.releases), cancelled = Boolean(event.is_cancelled || event.isCancelled);
+  const session = chiefMeetingSessions[event.key], preparing = chiefMeetingBusy === event.key || session && session.state === "requested";
+  const relationText = [...projects.map(x => `Project: ${x}`),...jira.map(x => `Jira: ${x}`),...releases.map(x => `Release: ${x}`)].join(" · ") ||
+    "No explicit work links yet. Preparing the briefing will record evidence-backed relations.";
+  const reportFile = latest && latest.report_file ? String(latest.report_file).split("/").pop() : "";
+  const report = reportFile ? chiefGet(`report?f=${encodeURIComponent(reportFile)}`) : "";
+  return `<details class="chief-meeting ${prior.length ? "prepared" : ""} ${cancelled ? "cancelled" : ""}" ${index === 0 ? "open" : ""}>
+    <summary><time>${esc(chiefMeetingWhen(event).replace(", ",",\n"))}</time><div><h3>${esc(event.subject || "Untitled meeting")}</h3><p>${esc(organizer)} · ${attendees.length} attendee${attendees.length === 1 ? "" : "s"}${event.location ? ` · ${esc(typeof event.location === "string" ? event.location : event.location.displayName || "Location recorded")}` : ""}</p></div><span class="state">${cancelled ? "Cancelled" : prior.length ? "Brief ready" : "Needs preparation"}</span></summary>
+    <div class="chief-meeting-body"><div class="chief-meeting-context">
+      <section class="chief-meeting-fact"><h4>Latest briefing</h4><p>${esc(latest && (latest.summary || latest.outcome) || "No durable briefing has been prepared for this meeting instance yet.")}</p></section>
+      <section class="chief-meeting-fact"><h4>Attendees</h4><p>${esc(attendeeSummary || "Attendees not recorded in the calendar snapshot.")}</p></section>
+      <section class="chief-meeting-fact"><h4>Relations</h4><p>${esc(relationText)}</p></section>
+      <section class="chief-meeting-fact"><h4>What to carry forward</h4><p>${esc(latest && (latest.next || latest.open_questions || latest.decisions) || "Prepare the brief to recover prior decisions, promises, open questions, and current project changes.")}</p></section>
+    </div><aside class="chief-meeting-side">
+      ${prior.length ? prior.slice(0,3).map(row => `<section class="chief-meeting-history"><h4>${esc(row.title || "Saved meeting context")}</h4><p>${esc(row.summary || row.outcome || "Briefing evidence recorded.")}</p><small>${esc(row.prepared_at || row.updated || "time not recorded")}${row.provider ? ` · ${esc(row.provider)}` : ""}</small></section>`).join("") : `<section class="chief-meeting-history"><h4>History starts here</h4><p>The first preparation run will create a durable report and relation record for the next occurrence.</p></section>`}
+      <div class="chief-meeting-actions"><button data-chief-meeting-prepare="${esc(event.key)}" ${preparing || cancelled ? "disabled" : ""}>${preparing ? "Preparing in T3…" : `Prepare with ${esc(CHIEF_ENGINES[chiefEngine].label)}`}</button>${report ? `<a class="secondary" href="${esc(report)}" data-chief-report-open data-chief-report-title="${esc(event.subject || "Meeting brief")}">Open briefing</a>` : ""}${event.web_link ? `<a class="secondary" href="${esc(event.web_link)}" target="_blank" rel="noopener">Open calendar</a>` : ""}${session && session.open_url ? `<a class="secondary" href="${esc(session.open_url)}">Open T3 Code</a>` : ""}</div>
+    </aside></div></details>`;
+}
+async function chiefRefreshCalendar(){
+  if (chiefMeetingBusy) return;
+  chiefMeetingBusy = "calendar"; chiefMeetingNotice = "Starting a read-only Claude calendar refresh…"; renderChiefMeetingsPage();
+  try{
+    const session = await chiefPost("projectSessionStart",{project:"meeting-reports",title:"Refresh Chief calendar snapshot",engine:"claude",fresh:true});
+    const order = `Refresh the sanitized Chief calendar snapshot for Jade. Read projects/meeting-reports/assets/CALENDAR-SOURCE-INVENTORY.md, query the authenticated M365 calendar from 30 days before today through 60 days after today, and atomically replace /home/jade/chief/calendar/snapshot.json using the documented schema. Keep event identity, subject, organizer, attendees, exact times/timezones, location, cancellation/availability/recurrence and calendar link; exclude bodies, meeting join details, passcodes, tokens and cookies. Validate JSON. Do not mutate the calendar, Jira, cloud, Confluence or Teams. Finish after recording count, window and observation time in the inventory.`;
+    await chiefPost("projectSessionMessage",{thread_id:session.thread_id,text:order});
+    chiefMeetingSessions.calendar = {...session,state:"requested"};
+    chiefMeetingNotice = "Calendar refresh assigned to the Claude connector session. Existing events remain visible until its new snapshot is complete.";
+  }catch(e){ chiefMeetingNotice = `Calendar refresh did not start: ${e.message || e}`; }
+  finally{ chiefMeetingBusy = ""; renderChiefMeetingsPage(); }
+}
+async function chiefPrepareMeeting(eventKey){
+  if (chiefMeetingBusy) return;
+  const meetingData = chiefData && chiefData.meetings || {}, event = chiefArr(meetingData.events).find(row => row.key === eventKey);
+  if (!event) return;
+  chiefMeetingBusy = eventKey; chiefMeetingNotice = `Opening a ${CHIEF_ENGINES[chiefEngine].label} preparation session for ${event.subject || "this meeting"}…`; renderChiefMeetingsPage();
+  try{
+    const session = await chiefPost("projectSessionStart",{project:"meeting-reports",title:`Prepare — ${event.subject || "meeting"}`,engine:chiefEngine,fresh:true});
+    const safeEvent = JSON.stringify(event);
+    const order = `Prepare a decision-ready meeting brief for this exact calendar event.\n\nEvent JSON (sanitized calendar snapshot):\n${safeEvent}\n\nRead /home/jade/section9-chief/projects/meeting-reports/CONTEXT.md and MEETING-REPORT-TEMPLATE.md. Rebuild context from current Chief portfolio, Jira snapshots, repository work orders, releases, prior reports, decisions and session results. Use only explicit evidence-backed relations; state unknowns. The brief must answer: purpose/the one thing, what changed since the prior occurrence, decisions Jade needs, per-person questions/asks, exact numbers with source and observation time, promises/follow-ups from history, risks, and what not to claim. Do not modify calendar, Jira, repositories, cloud, Confluence or Teams.\n\nWrite Markdown to /home/jade/section9-chief/projects/meeting-reports/assets/MEETING-BRIEF-${event.key}.md and browser-ready HTML to /home/jade/chief/reports/MEETING-BRIEF-${event.key}.html. Also atomically write /home/jade/chief/calendar/history/${event.key}.json with event_key, series_key, title, subject, prepared_at, provider, summary, decisions, open_questions, next, projects, jira, releases, source_file, and report_file set to the basename MEETING-BRIEF-${event.key}.html. Register the HTML/Markdown as Chief artifacts if the registry helper is available. Finish with the report path and evidence timestamp.`;
+    await chiefPost("projectSessionMessage",{thread_id:session.thread_id,text:order});
+    chiefMeetingSessions[eventKey] = {...session,state:"requested"};
+    chiefMeetingNotice = `${event.subject || "Meeting"} preparation is running in T3 Code. The saved briefing will appear here after Chief refreshes.`;
+  }catch(e){ chiefMeetingNotice = `Meeting preparation did not start: ${e.message || e}`; }
+  finally{ chiefMeetingBusy = ""; renderChiefMeetingsPage(); }
+}
+function renderChiefMeetingsPage(){
+  const view = $("#view"); if (!view) return;
+  if (!chiefData){ view.innerHTML = `<section class="chief-state"><div class="chief-state-inner"><p class="chief-kicker">Meetings</p><h1>Loading calendar context…</h1></div></section>`; return; }
+  const data = chiefData.meetings || {}, calendar = data.calendar || {status:"not_connected"};
+  const events = data.events, history = chiefArr(data.history), now = Date.now();
+  const rows = chiefArr(events), upcoming = rows.filter(event => {
+    const end = chiefMeetingInstant(event.end), start = chiefMeetingInstant(event.start);
+    return Number.isFinite(end) ? end >= now : Number.isFinite(start) && start >= now;
+  });
+  const recent = rows.filter(event => {
+    const end = chiefMeetingInstant(event.end), start = chiefMeetingInstant(event.start);
+    return Number.isFinite(end) ? end < now : Number.isFinite(start) && start < now;
+  }).slice(-12).reverse();
+  const status = chiefNorm(calendar.status || "not_connected"), sourceTitle = status === "connected" ? "Calendar connected" : status === "stale" ? "Calendar snapshot is stale" : status === "unreachable" ? "Calendar source cannot be read" : "Calendar connection required";
+  const sourceMeta = calendar.fetched_at ? `As of ${chiefMoment(calendar.fetched_at)}${calendar.account ? ` · ${calendar.account}` : ""}` : "Chief has durable meeting history, but no structured calendar snapshot yet.";
+  const upcomingHTML = events === null ? `<div class="chief-meeting-empty"><b>Calendar state is unknown.</b><br>The previous briefing history is preserved; Chief will not call an unreachable source an empty calendar.</div>` : upcoming.length ? `<div class="chief-meeting-list">${upcoming.map((row,index) => chiefMeetingCard(row,history,index)).join("")}</div>` : `<div class="chief-meeting-empty"><b>No upcoming events in the connected snapshot window.</b><br>This is a measured empty result, not a failed calendar read.</div>`;
+  const recentHTML = recent.length ? `<div class="chief-meeting-list">${recent.map((row,index) => chiefMeetingCard(row,history,index + 1)).join("")}</div>` : `<div class="chief-meeting-empty">No recent calendar instances are present in this snapshot window.</div>`;
+  view.innerHTML = `<div class="chief-meetings-page"><section class="chief-meetings-hero"><div><p class="eyebrow">Meeting preparation</p><h1>Walk in knowing<br>the whole thread.</h1><p class="summary">Calendar gives the room and time. Chief keeps the decisions, project changes, Jira movement, release evidence, promises and unresolved questions across every occurrence.</p></div>${chiefEnginePickerHTML()}</section>${chiefMeetingNotice ? `<p class="chief-source-health">${esc(chiefMeetingNotice)}</p>` : ""}<section class="chief-calendar-source ${esc(status)}"><span class="mark">${status === "connected" ? "✓" : "!"}</span><div><b>${esc(sourceTitle)}</b><p>${esc(sourceMeta)} · ${rows.length} event${rows.length === 1 ? "" : "s"} in snapshot</p></div><button data-chief-calendar-refresh ${chiefMeetingBusy === "calendar" ? "disabled" : ""}>${chiefMeetingBusy === "calendar" ? "Starting…" : "Refresh calendar · Claude"}</button></section><section class="chief-meeting-section"><div class="chief-meeting-section-head"><h2>Upcoming</h2><span>${upcoming.length} meetings · ordered by start</span></div>${upcomingHTML}</section><section class="chief-meeting-section"><div class="chief-meeting-section-head"><h2>Recent calendar history</h2><span>${recent.length} instances · durable briefs stay attached</span></div>${recentHTML}</section></div>`;
+}
 function chiefReleasePageRank(row){
   return ({blocked:0,building:1,in_progress:1,ready_for_human:2,review:2,clear:3,released:4,done:4})[chiefNorm(row && row.status)] ?? 3;
 }
@@ -5237,6 +5398,7 @@ function chiefTrailStep(label,value,href){
   return `<li class="chief-trail-step"><b>${esc(label)}</b>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${text}</a>` : `<span class="${value ? "" : "unknown"}">${text}</span>`}</li>`;
 }
 function renderChief(){
+  if (chiefDaily === "meetings"){ renderChiefMeetingsPage(); return; }
   if (chiefDaily === "artifacts"){ renderChiefArtifacts(); return; }
   if (chiefDaily === "release"){ renderChiefReleasePage(); return; }
   const view = $("#view");
@@ -10344,6 +10506,9 @@ document.addEventListener("click", async e => {
     if (chiefDaily === "artifacts") chiefRefreshArtifacts();
     return;
   }
+  if (e.target.closest("[data-chief-calendar-refresh]")){ chiefRefreshCalendar(); return; }
+  const meetingPrep = e.target.closest("[data-chief-meeting-prepare]");
+  if (meetingPrep){ chiefPrepareMeeting(meetingPrep.dataset.chiefMeetingPrepare || ""); return; }
   const artifactKind = e.target.closest("[data-chief-artifact-kind]");
   if (artifactKind){ chiefArtifactKind = artifactKind.dataset.chiefArtifactKind || "all"; renderChiefArtifacts(); return; }
   const artifactMore = e.target.closest("[data-chief-artifact-more]");

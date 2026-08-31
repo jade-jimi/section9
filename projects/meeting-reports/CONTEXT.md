@@ -20,3 +20,18 @@ release state, and observation time instead of copying mutable status without pr
 - 프로젝트 문서(메타·멤버·이력): vault/projects/meeting-reports.md
 - 에셋(외부 파일): projects/meeting-reports/assets/
 - Chief report staging: `/home/jade/chief/reports/`
+
+## Calendar and briefing contract
+
+- Chief Meetings route: `#chief/meetings` in the Section9 shell.
+- Calendar authority: a sanitized read-only snapshot at `/home/jade/chief/calendar/snapshot.json`,
+  written atomically by a T3 Claude session with the authenticated M365 connector. The Linux Chief
+  backend does not call Microsoft Graph directly because Conditional Access blocks that host path.
+- Freshness: current for 24 hours. Missing is shown as **not connected**, malformed/unreadable as
+  **unreachable**, and an old snapshot as **stale**; none of these may be rendered as zero meetings.
+- Durable per-meeting history: `/home/jade/chief/calendar/history/<event-key>.json` plus Markdown
+  sources here under `assets/MEETING-BRIEF-<event-key>.md` and dashboard HTML under
+  `/home/jade/chief/reports/MEETING-BRIEF-<event-key>.html`.
+- Meeting preparation sessions may read Jira, releases, work orders, decisions, prior reports and
+  session results. Calendar/Jira/repository/cloud/Confluence/Teams writes remain forbidden unless
+  Jade separately authorizes them.
