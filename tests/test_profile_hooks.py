@@ -117,6 +117,49 @@ class InstallIntoProfile(unittest.TestCase):
             self.assertTrue(os.path.isdir(p), f"{p} 없음\n{self.out.stdout}")
             self.assertTrue(os.listdir(p), f"{p} 비어 있음")
 
+    def test_n4_global_claude_concurrency_is_managed_from_protocol(self):
+        path = os.path.join(self.prof, "CLAUDE.md")
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertEqual(text.count("<!-- section9-concurrency:begin -->"), 1)
+        self.assertEqual(text.count("<!-- section9-concurrency:end -->"), 1)
+        self.assertIn("17. **전역 병렬 위임 기본값**", text)
+        self.assertIn("최대 3개 subagent", text)
+
+
+class LegacyBrokenLinkRepair(unittest.TestCase):
+    """Broken temporary Section9 links are ours; unrelated broken links are not."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.src = os.path.join(self.temp.name, "source")
+        self.dst = os.path.join(self.temp.name, "dest")
+        os.makedirs(self.src)
+        os.makedirs(self.dst)
+        with open(os.path.join(self.src, "designer.md"), "w", encoding="utf-8") as handle:
+            handle.write("role\n")
+        self.mod = _load("s9inst_legacy_links", INSTALL)
+
+    def test_repairs_exact_legacy_section9_temp_link(self):
+        target = "/tmp/section9-origin-main-deleted/harness/claude/agents/designer.md"
+        link = os.path.join(self.dst, "designer.md")
+        os.symlink(target, link)
+
+        self.mod.link_into(self.src, self.dst, "test")
+
+        self.assertEqual(os.path.realpath(link), os.path.realpath(
+            os.path.join(self.src, "designer.md")))
+
+    def test_does_not_replace_arbitrary_broken_user_link(self):
+        link = os.path.join(self.dst, "designer.md")
+        os.symlink("/tmp/my-own-missing-role.md", link)
+
+        self.mod.link_into(self.src, self.dst, "test")
+
+        self.assertTrue(os.path.islink(link))
+        self.assertEqual(os.readlink(link), "/tmp/my-own-missing-role.md")
+
 
 class CodePreflightSeesProfile(unittest.TestCase):
     """B2 — `s9 code` 의 자가 치유가 프로필을 본다.

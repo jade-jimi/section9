@@ -14,6 +14,7 @@ usage: s9-install [--quiet] [--no-claude]
 """
 import json
 import os
+import re
 import stat
 import sys
 
@@ -166,7 +167,17 @@ def link_into(src_dir, dst_dir, label):
         dst = os.path.join(dst_dir, name)
         marker = os.path.join(dst, ".section9-copy") if os.path.isdir(dst) else None
         if os.path.islink(dst):
-            if os.path.realpath(dst).startswith(os.path.realpath(ROOT)):
+            target = os.readlink(dst).replace("\\", "/")
+            # Old installers could run from a temporary origin checkout and leave
+            # links under /tmp/section9-origin-*/harness/claude. Once /tmp was
+            # cleaned those links became broken, and realpath could no longer prove
+            # ownership. Recognize only that exact historical shape; an arbitrary
+            # broken user symlink must remain untouched.
+            legacy_owned = (not os.path.exists(dst) and
+                            target.startswith("/tmp/section9-origin-") and
+                            "/harness/claude/" in target)
+            if (os.path.realpath(dst).startswith(os.path.realpath(ROOT)) or
+                    legacy_owned):
                 os.remove(dst)  # section9 소유 링크 → 갱신
             else:
                 say(f"  skip (남의 링크): {dst}")
@@ -254,6 +265,8 @@ def install_skills_agents():
 
 BEGIN_MARK = "<!-- section9:begin -->"
 END_MARK = "<!-- section9:end -->"
+CONCURRENCY_BEGIN_MARK = "<!-- section9-concurrency:begin -->"
+CONCURRENCY_END_MARK = "<!-- section9-concurrency:end -->"
 
 
 def managed_block(path, label):
@@ -285,6 +298,50 @@ def managed_block(path, label):
         say(f"{label}: 최신 상태 ({path})")
 
 
+def managed_claude_concurrency():
+    """Inject the canonical global concurrency section into Claude instructions.
+
+    Claude uses CLAUDE.md rather than the whole managed AGENTS block. Extract section 17 from the
+    common protocol so Codex/Gemini/Claude cannot quietly drift apart, while preserving all
+    user-owned text outside this installer-owned fragment.
+    """
+    proto_path = os.path.join(ROOT, "harness", "common", "PROTOCOL.md")
+    try:
+        with open(proto_path, encoding="utf-8") as handle:
+            protocol = handle.read()
+    except OSError:
+        return
+    match = re.search(r"(?ms)^17\. \*\*전역 병렬 위임 기본값\*\*.*\Z", protocol)
+    if not match:
+        say("  ⚠ common protocol에 전역 병렬 위임 기본값(17항)이 없어 Claude 주입 생략")
+        return
+    fragment = ("# Global concurrent subagent execution\n\n" + match.group(0).strip())
+    block = f"{CONCURRENCY_BEGIN_MARK}\n{fragment}\n{CONCURRENCY_END_MARK}"
+    path = os.path.join(claude_home(), "CLAUDE.md")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            current = handle.read()
+    except OSError:
+        current = ""
+    if CONCURRENCY_BEGIN_MARK in current and CONCURRENCY_END_MARK in current:
+        pre = current.split(CONCURRENCY_BEGIN_MARK)[0]
+        post = current.split(CONCURRENCY_END_MARK, 1)[1]
+        updated = pre + block + post
+    else:
+        anchor = "# QA loop (all workers)"
+        if anchor in current:
+            updated = current.replace(anchor, block + "\n\n" + anchor, 1)
+        else:
+            updated = (current.rstrip() + "\n\n" if current.strip() else "") + block + "\n"
+    if updated != current:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(updated)
+        say(f"claude: global concurrency fragment 갱신 → {path}")
+    else:
+        say(f"claude: global concurrency fragment 최신 상태 ({path})")
+
+
 def install_other_harnesses():
     # 존재하는 하네스만 감지해 적용 (프로토콜 모드 — harness/README.md 매트릭스 참조)
     targets = [
@@ -314,6 +371,7 @@ def main():
     if "--no-claude" not in sys.argv:
         install_claude_hooks()
         install_skills_agents()
+        managed_claude_concurrency()
     install_other_harnesses()
     start_dashboard()
     say("section9 install 완료")

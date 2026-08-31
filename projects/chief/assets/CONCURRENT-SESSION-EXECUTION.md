@@ -21,6 +21,12 @@ publish to Confluence, post to Teams, send notifications, or make any other exte
 The lead integrates the bounded results, resolves overlap, runs the final combined tests/evidence
 checks, and owns the durable result and final report.
 
+If a track needs its own branch/worktree/PR or must survive after the parent context ends, route it
+to a separate T3 worker session with a durable work order instead of a subagent. Use subagents for
+bounded investigation, evidence, review, and non-overlapping short implementation tracks. If the
+harness has no subagent capability, record the limit and continue sequentially; never claim parallel
+work that did not occur.
+
 The executable canonical copy is `CONCURRENT_SESSION_EXECUTION` in
 `/home/jade/chief/bin/session_jobs.py`, with the idempotent public wrapper
 `with_concurrent_session_execution(text)`. Keep specialized launchers aligned with that copy

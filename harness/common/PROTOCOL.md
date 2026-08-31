@@ -119,3 +119,15 @@
    Read해 범용 에이전트 프롬프트 서두에 역할 규정으로 주입하라(동적 스폰). 무인 워커
    (반려 재작업·승인 후속)는 해당 REQ의 project에 `agents/worker.md` 가 있으면 자동으로
    그 봉투를 프롬프트에 주입한다. 관리: `s9 project agents sync|ls`.
+17. **전역 병렬 위임 기본값** (REQ-20260831-037): 모든 프로젝트·하네스의 리드는 작업을
+   편집 전에 분류한다. size S 또는 진짜 단일 파일 작업은 조율 비용을 피하려고 직접 처리한다.
+   size M/L 이고 서로 독립적인 트랙이 2개 이상이면, 리드는 유용한 통합 작업을 계속하면서
+   **최대 3개 subagent(리드 포함 총 4개 실행 트랙)** 를 동시에 시작해야 한다.
+   각 subagent에는 겹치지 않는 파일/컴포넌트/증거 범위와 구체 산출물을 주고, claim과 결과를
+   권위 있는 REQ 또는 repo work order에 기록한다. subagent는 독립적으로 deploy/production write,
+   merge, Jira 변경·종료, Confluence 게시, Teams/ntfy 발송 등 외부 상태를 바꾸지 않는다.
+   리드가 결과를 통합하고 충돌을 해결하며 최종 테스트·증거 확인·보고를 소유한다. 도구에
+   subagent 기능이 없으면 그 한계를 기록하고 리드가 순차 처리한다 — 가짜 병렬을 주장하지 않는다.
+   독립 branch/worktree/PR이 필요하거나 부모 컨텍스트 종료 후에도 살아야 하는 구현 트랙은
+   subagent가 아니라 별도 T3 worker session + work order로 라우팅한다. subagent는 bounded
+   조사·증거·리뷰·서로 겹치지 않는 단기 구현 트랙에 쓴다.

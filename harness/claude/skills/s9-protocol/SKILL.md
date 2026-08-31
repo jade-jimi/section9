@@ -24,3 +24,8 @@ description: section9 외부기억 작업 규약. 어떤 역할이든 작업 기
   (REQ-20260827-028). 판정을 청하면서 증거를 상대가 직접 열게 만들지 마라.
 - 파생 작업 발견 시 `s9 new request --parent <REQ>` 로 분리 등록.
 - 세션 식별자가 주어졌으면 모든 s9 호출에 `S9_SESSION=<8자>` 를 붙여라.
+- size S/단일 파일은 리드가 직접 처리한다. size M/L에 독립 트랙이 2개 이상이면 최대 3개
+  subagent를 동시에 시작하고 리드는 통합 작업을 계속한다. 범위는 겹치지 않게 claim하고 결과는
+  REQ/work order에 남긴다. 외부 상태 변경은 subagent가 아니라 리드가 최종 검증 후 수행한다.
+- 독립 branch/worktree/PR이나 부모 종료 후에도 살아야 하는 구현은 subagent가 아니라 별도 T3
+  worker session + work order로 보낸다. subagent는 bounded 조사·증거·리뷰·단기 구현에 쓴다.
