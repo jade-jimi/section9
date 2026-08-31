@@ -307,6 +307,9 @@ class StallRendersTheSame(unittest.TestCase):
             _const(self.src, "DRIFT_LABEL"),
             _const(self.src, "GLYPH_PLAY"),
             _const(self.src, "GLYPH_PAUSE"),
+            # 눌린 손잡이의 잠금 표시도 원문에서 (REQ-20260831-009) — 이 시험이
+            # 재는 것이 바로 "되돌아온 ▶ 가 잠겨 있나"라, 베끼면 판정이 거짓이 된다.
+            _const(self.src, "DEED_BUSY"),
             g("wokePending"), g("stopPending"), g("stallState"),
             # 세우기 손잡이의 네 갈래 (REQ-20260830-035) — 문안 표와 공용
             # 조각도 원문에서 떠 온다. 베끼면 두 벌이 되고, 갈래 하나가 카드에만
@@ -719,14 +722,18 @@ class StallRendersTheSame(unittest.TestCase):
         out = self.render(self.ROWS,
                           pre='wokeAt.delete("REQ-A");'
                               ' stopAt.set("REQ-A", Date.now());')
-        self.assertNotIn("disabled", out["REQ-A"]["belt"],
+        # 잠금 표시는 `aria-disabled` 다 (REQ-20260831-009) — `disabled` 로
+        # 잠그면 눌린 손잡이가 포커스를 잃어 키보드 손이 자기 자리를 잃는다.
+        self.assertNotIn("aria-disabled", out["REQ-A"]["belt"],
                          "되돌아온 ▶ 가 잠겨 있다 — 방금 중단한 것을 못 켠다")
         # 지우지 않았다면 잠겼을 것이다 — 이 시험이 무엇을 잡는지 스스로 보인다
         out2 = self.render(self.ROWS,
                            pre='wokeAt.set("REQ-A", Date.now());'
                                ' stopAt.set("REQ-A", Date.now());')
-        self.assertIn("disabled", out2["REQ-A"]["belt"],
+        self.assertIn('aria-disabled="true"', out2["REQ-A"]["belt"],
                       "잠금 자체가 사라졌다 — 연타 보호가 없다")
+        self.assertNotRegex(out2["REQ-A"]["belt"], r'(?<!-)\bdisabled\b(?!=)',
+                            "아직 disabled 로 잠근다 — 포커스가 걷힌다")
 
     # ---------- 카드와 문서는 같은 조각을 쓴다 ----------
     def test_card_and_document_render_the_same_pieces(self):

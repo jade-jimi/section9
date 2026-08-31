@@ -59,10 +59,13 @@ class WakeHandle(unittest.TestCase):
         cls.handle = "\n".join([cls.stall, _grab(cls.src, "wakeBtnHTML"),
                                 _grab(cls.src, "driftBtnHTML"),
                                 _grab(cls.src, "deedBeltHTML")])
-        # 답을 창으로 옮기는 자리가 wakeDlg 로 갈라졌다 (REQ-20260829-030) —
-        # 진단(`?dlg=wakewait`)이 사람이 누를 때와 **같은 함수**를 부르게 하려는
-        # 것이라, 이 시험이 보는 "깨우기의 길"은 그 둘을 합한 것이다.
-        cls.wake = _grab(cls.src, "wakeDoc") + "\n" + _grab(cls.src, "wakeDlg")
+        # 답을 창으로 옮기는 자리가 wakeDlg 로 갈라졌고(REQ-20260829-030), 그
+        # 앞에 **창이 설지를 가르는 자리**(wakeAnswer)가 한 겹 더 섰다
+        # (REQ-20260830-049). 진단이 사람이 누를 때와 **같은 함수**를 부르게
+        # 하려는 것이라, 이 시험이 보는 "깨우기의 길"은 셋을 합한 것이다.
+        cls.wake = "\n".join([_grab(cls.src, "wakeDoc"),
+                              _grab(cls.src, "wakeAnswer"),
+                              _grab(cls.src, "wakeDlg")])
         cls.card = _grab(cls.src, "cardHTML")
         cls.doc = _grab(cls.src, "openDoc") if "function openDoc(" in cls.src \
             else cls.src
@@ -185,8 +188,14 @@ class WakeHandle(unittest.TestCase):
         # 누른 뒤의 얼굴이 자기가 도는 중임을 말해야 한다.
         self.assertIn("WAKE_GOING", self.handle)
         self.assertIn("이어가는 중…", self.src)
-        self.assertIn("disabled", self.handle,
+        # 잠금은 `disabled` 가 아니라 `aria-disabled` 다 (REQ-20260831-009) —
+        # `disabled` 는 눌린 손잡이에서 포커스를 걷어 키보드 손을 떨어뜨린다.
+        self.assertIn("DEED_BUSY", self.handle,
                       "다시 그려도 도는 중인 손잡이가 되살아난다")
+        self.assertIn('const DEED_BUSY = \' aria-disabled="true"\'', self.src,
+                      "잠금 표시가 한 곳에서 오지 않는다")
+        self.assertNotRegex(self.handle, r'\?\s*" disabled"',
+                            "눌린 손잡이를 아직 disabled 로 잠근다")
 
     # ---------- ⑥ 새 층 없음 ----------
 
@@ -351,6 +360,157 @@ class ThePaintIsNotTheTarget(unittest.TestCase):
         self.assertTrue(inv, "반전된 카드 위에서 칩을 뒤집는 규칙이 없다")
         self.assertTrue(any("background-color:var(--bg)" in d for d in inv),
                         "반전 카드에서 칩이 배경색에 묻힌다")
+
+
+class TheWindowStandsOnlyForExceptions(unittest.TestCase):
+    """성공을 알리는 창은 자격이 없다 (REQ-20260830-049, designer 판정 A안).
+
+    이어가기는 비파괴·자동·되돌림 가능(⏸)이다. 누른 손 아래에서 ▶ 가 ⏸ 로
+    서는 것이 이미 답인데, 그 위에 판을 하나 더 세우면 원인과 결과가 공간적으로
+    끊기고 **창이 자기가 가리키는 그 카드를 가린다**(designer 실측 캡처). 게다가
+    이 화면에서 창은 「물음 아니면 거절」의 신호로 학습돼 있어(중단하기 확인 ·
+    닿지 못했습니다 · 이어가지 않음), 아무 문제도 없는데 문제의 옷을 입고
+    나타난다. 카드 사실 줄의 규율(REQ-20260830-040 「예외만 말한다」)을 창에
+    그대로 옮긴다.
+
+    계약은 넷이다.
+      ① 성공에 덧붙일 **예외 사실(`note`)이 없으면 창은 서지 않는다.**
+      ② 실패·대기(`ok=false`)의 창은 그대로 선다 — 읽을 이유가 실제로 있다.
+      ③ 갈래(워크스페이스)는 화면이 다시 판정하지 않는다 — 서버가 할 말을
+         가졌는가 하나만 읽는다(bin/s9 `_wake_note` 가 유일한 판정처).
+      ④ 급이 다른 두 말은 슬롯도 둘이다 — `message` 는 제목(.dlgt),
+         `note` 는 부가(.dlgs). 화면이 한 문자열을 마침표로 쪼개지 않는다.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        with open(INDEX, encoding="utf-8") as f:
+            cls.src = f.read()
+        cls.answer = _grab(cls.src, "wakeAnswer")
+        cls.dlg = _grab(cls.src, "wakeDlg")
+
+    # ---------- ① 성공은 조용하다 ----------
+
+    def test_a_plain_success_raises_no_window(self):
+        """할 말이 없는 성공은 창을 세우지 않고 그냥 돌아간다."""
+        self.assertRegex(
+            self.answer, r"if\s*\(d\.ok\s*&&\s*!d\.note\)\s*return",
+            "예외 사실 없는 성공이 아직 창을 세운다 — 카드의 ▶→⏸ 가 이미 답이다")
+
+    def test_the_click_goes_through_the_verdict_not_around_it(self):
+        """누른 길도 진단의 길도 **판정을 지나서** 창에 닿는다. 어느 한쪽이
+        wakeDlg 를 직접 부르면 규칙이 한 자리에 있지 않게 된다."""
+        doc = _grab(self.src, "wakeDoc")
+        self.assertIn("wakeAnswer(id, d)", doc,
+                      "누른 길이 판정을 건너뛰고 창을 짓는다")
+        self.assertNotIn("wakeDlg(id, d)", doc)
+        # 진단(diag.js `?dlg=wakespawn…`)도 같은 자리를 지난다
+        self.assertNotIn("wakeDlg(\"REQ-", self.src,
+                         "진단이 판정을 건너뛰고 창을 직접 짓는다 — 캡처가 "
+                         "사람이 보는 화면을 비추지 못한다")
+
+    # ---------- ② 실패·대기의 창은 남는다 ----------
+
+    def test_a_refusal_still_stands(self):
+        """`ok=false` 는 note 가 없어도 창이 선다 — 읽을 이유가 있다."""
+        self.assertIn("d.ok &&", self.answer,
+                      "성공 여부를 보지 않고 창을 없앤다 — 거절까지 조용해진다")
+        self.assertIn("return wakeDlg(id, d);", self.answer,
+                      "판정을 지난 답이 창으로 서지 않는다")
+
+    # ---------- ③ 갈래는 화면이 짓지 않는다 ----------
+
+    def test_the_screen_never_re_reads_the_workspace(self):
+        """화면이 워크스페이스를 다시 캐면 그리기와 답이 두 벌이 된다."""
+        for w in ("workspace", "worktree", "kind ===", "WS_MEANS"):
+            self.assertNotIn(w, self.answer,
+                             "창을 세울지를 화면이 갈래로 판정한다: %s" % w)
+
+    # ---------- ④ 두 말은 슬롯도 둘 ----------
+
+    def test_two_slots_for_two_ranks_of_speech(self):
+        self.assertIn("title: d.message", self.dlg, "제목 칸이 없다")
+        self.assertIn("desc: d.note", self.dlg,
+                      "부가 사실이 설 슬롯이 없다 — 한 슬롯에 겹치면 강조가 둘")
+
+    def test_the_screen_does_not_split_the_sentence_itself(self):
+        """서버 문장을 화면이 마침표로 쪼개면 문장 안 쉼표에서 깨진다."""
+        for bad in (".split(", "indexOf(\".\")", "lastIndexOf(\".\")"):
+            self.assertNotIn(bad, self.dlg + self.answer,
+                             "화면이 서버 문장을 손으로 쪼갠다: %s" % bad)
+
+
+class ThePressedHandKeepsItsPlace(unittest.TestCase):
+    """누른 손은 그 자리에 남는다 (REQ-20260831-009).
+
+    049 로 성공 경로의 창이 사라지자 키보드 손이 갈 곳을 잃었다. CDP 실측:
+    ▶ 에 포커스를 주고 누르면 `activeAfter=BODY` — 눌린 단추를 `disabled` 로
+    만드는 순간 브라우저가 포커스를 걷고, 이어지는 재그리기가 그 단추 개체
+    자체를 지운다. 창이 있던 동안에는 창이 landmark 노릇을 했지만 이제 없다.
+
+    잠금을 지는 것은 원래 `wokePending`/`stopPending` 이지 `disabled` 가
+    아니다 — 누르는 자리 둘이 그 관문을 먼저 지난다. 그러니 계약은 셋이다.
+      ① 잠금은 **보이되 닿는** `aria-disabled` 로 말한다 (포커스가 남는다).
+      ② 연타 관문은 그대로다 — 잠금 표시를 바꾼다고 두 번 나가면 안 된다.
+      ③ 재그리기를 건너 손이 같은 카드의 손잡이로 돌아온다. 다만 **내 자리였을
+         때만**, 그리고 **창이 서 있지 않을 때만** — 창이 서면 손은 창의 것이다.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        with open(INDEX, encoding="utf-8") as f:
+            cls.src = f.read()
+        cls.face = _grab(cls.src, "faceDeed")
+        cls.keep = _grab(cls.src, "keepDeedFocus")
+        cls.doc = _grab(cls.src, "wakeDoc")
+
+    # ---------- ① 잠금은 포커스를 걷지 않는다 ----------
+
+    def test_the_lock_no_longer_takes_the_focus_away(self):
+        self.assertNotIn("b.disabled", self.face,
+                         "눌린 손잡이를 아직 disabled 로 잠근다 — 브라우저가 "
+                         "포커스를 걷어 키보드 손이 body 로 떨어진다")
+        self.assertIn('setAttribute("aria-disabled", "true")', self.face)
+        self.assertIn('removeAttribute("aria-disabled")', self.face,
+                      "잠금이 풀려도 표시가 남는다")
+
+    def test_the_lock_is_written_once(self):
+        """그린 얼굴과 칠하는 얼굴이 같은 말을 해야 한다 — 상수 하나."""
+        self.assertIn('const DEED_BUSY = \' aria-disabled="true"\'', self.src)
+        self.assertNotRegex(self.src, r'\$\{going \? " disabled" : ""\}',
+                            "아직 disabled 로 그리는 손잡이가 남아 있다")
+
+    def test_the_paint_follows_the_new_lock(self):
+        """CSS 가 옛 표시를 보고 있으면 눌린 얼굴이 통째로 사라진다."""
+        css = _css(self.src)
+        for who in ("wake", "stop"):
+            self.assertIn('button.%s[aria-disabled="true"]' % who, css,
+                          "%s 의 눌린 얼굴이 새 잠금 표시를 안 본다" % who)
+            self.assertNotIn("button.%s[disabled]" % who, css,
+                             "%s 규칙이 아직 옛 표시를 본다" % who)
+
+    # ---------- ② 연타 관문은 그대로 ----------
+
+    def test_the_double_press_gate_is_untouched(self):
+        """잠금 표시를 바꾼다고 두 번 나가면 안 된다 — 관문은 눌리는 자리에."""
+        self.assertIn("if (wokePending(id)) return;", self.doc)
+        self.assertIn("if (stopPending(id)) return;", _grab(self.src, "stopDoc"))
+
+    # ---------- ③ 재그리기를 건너 자리가 남는다 ----------
+
+    def test_the_focus_crosses_the_redraw(self):
+        self.assertIn("await keepDeedFocus(id, () => refreshCatalog(true))",
+                      self.doc, "재그리기가 손잡이를 갈아 끼우는데 손이 "
+                                "따라가지 않는다")
+
+    def test_it_only_returns_a_hand_that_was_there(self):
+        self.assertIn("if (!mine || held.isConnected) return;", self.keep,
+                      "남의 자리를 빼앗거나, 멀쩡한 자리를 다시 잡는다")
+
+    def test_an_open_window_owns_the_hand(self):
+        """창이 서 있으면 뒤의 카드로 포커스를 끌어오지 않는다."""
+        self.assertIn(".dlgbox", self.keep,
+                      "창이 서 있는지 보지 않고 포커스를 가져간다")
 
 
 if __name__ == "__main__":

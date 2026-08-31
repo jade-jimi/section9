@@ -83,6 +83,28 @@ class StallJudgmentServer(unittest.TestCase):
                 f.write(json.dumps({"role": "assistant", "text": "x"}) + "\n")
             os.utime(p, (time.time(), time.time()))
         cls._backdate(cls.STALE, 3600)
+        # 클레임도 한 시간 전으로 (REQ-20260831-005). 문서만 되감고 클레임을
+        # 방금 것으로 두면 "지금 활동 중인 세션이 방금 잡은 것"이 되는데, 그
+        # 조합은 이제 멈춤이 아니라 attached 다(긴 턴 진행 중 — 일하는 세션
+        # 위에 두 번째 손을 얹지 않는다). 이 시험이 겨냥한 손 뗀 것(REQ-074)은
+        # "한 시간 전에 잡고 그 뒤 문서에 아무 일도 없던 것"이고, 그 클레임은
+        # claim_dead(30분 유예)가 풀어 준다 — 실제로 한 시간 방치된 요청이
+        # 겪는 바로 그 경로다.
+        cls._backdate_claim("aaaa1111", cls.STALE, 3500)
+
+    @classmethod
+    def _backdate_claim(cls, sid, rid, secs):
+        import datetime
+        p = os.path.join(cls.root, "state", "sessions", f"testbox__{sid}.json")
+        with open(p, encoding="utf-8") as f:
+            b = json.load(f)
+        ts = (datetime.datetime.now().astimezone()
+              - datetime.timedelta(seconds=secs)).isoformat(timespec="seconds")
+        cat = dict(b.get("claim_at") or {})
+        cat[rid] = ts
+        b["claim_at"] = cat
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(b, f)
 
     @classmethod
     def _backdate(cls, rid, secs):
@@ -144,9 +166,17 @@ class StallJudgmentServer(unittest.TestCase):
         self.assertGreaterEqual(row["stalled_mins"], 15)
 
     # S2. 세션이 살아 있다고 진전이 아니다 — 그게 이번 사고의 거짓말이었다
+    #
+    # 개정 (REQ-20260831-005): 원래는 live=True(직접)인 채로 멈춤이 함께 서는
+    # 것을 계약으로 삼았다. 이제 그 조합은 정의상 없다 — 클레임 + 2분 내 활동은
+    # attached(긴 턴 진행 중)지 멈춤이 아니다(일하는 세션 위에 두 번째 손을
+    # 얹지 않는다). 이 시험의 과녁("세션 맥박 ≠ 진전")은 그대로 남는다: 손 뗀
+    # 것의 클레임은 유예가 풀고, 그 뒤에도 세션 맥박(간접, live_kind=session)이
+    # 뛰는 동안 멈춤은 멈춤이라 말해야 한다.
     def test_s2_live_session_still_stalled(self):
         row = self.catalog()[self.STALE]
-        self.assertTrue(row.get("live"), "이 상황(세션은 활동 중)이 아니다")
+        self.assertEqual(row.get("live_kind"), "session",
+                         "이 상황(세션은 활동 중, 클레임은 풀림)이 아니다")
         self.assertIsNotNone(row.get("stalled_mins"),
                              "세션 맥박을 요청의 진전으로 치고 있다")
 

@@ -314,9 +314,16 @@ class StallTrust(unittest.TestCase):
                                 "'한 일 없이 경보만 꺼진다' 의 반대편 병이다")
 
     def test_c3b_cli_and_screen_agree(self):
-        """C6. 화면·CLI 가 같은 판정을 먹는다."""
+        """C6. 화면·CLI 가 같은 판정을 먹는다.
+
+        개정 (REQ-20260831-005): 미상의 손을 lead1234 가 아니라 클레임 없는
+        세션에 붙인다. 손의 transcript 는 그 세션의 활동이기도 해서, 클레임을
+        쥔 lead1234 에 붙이면 그 활동이 A 를 attached(맡은 세션이 일하는 중)로
+        만든다 — 그것대로 옳은 판정이고, '미상' 계약의 과녁(누구 것인지 모르는
+        손이 도는 동안 멈춤이라 단정하지 않는다)은 주인 없는 손으로 세운다."""
         self.clear_hands("lead1234")
-        self.hand("lead1234", req=None, age=5)
+        self.addCleanup(self.clear_hands, "orph9876")
+        self.hand("orph9876", req=None, age=5)
         ids = [r["id"] for r in self.m.stalled_requests()]
         self.assertNotIn(self.A, ids,
                          "CLI 는 '멈췄다' 는데 화면은 '미상' 이다")
@@ -326,8 +333,10 @@ class StallTrust(unittest.TestCase):
 
     # ---- C4. 겹쳐 띄우지 않는다 ------------------------------------------
     def test_c4_wake_refuses_while_a_hand_may_be_attached(self):
+        # 미상의 손은 클레임 없는 세션에 — c3b 개정(REQ-20260831-005)과 같다.
         self.clear_hands("lead1234")
-        self.hand("lead1234", req=None, age=5)
+        self.addCleanup(self.clear_hands, "orph9876")
+        self.hand("orph9876", req=None, age=5)
         res = self.m.wake_request(self.A, actor="tester")
         self.assertFalse(res["ok"], res)
         self.assertEqual(res["action"], "unknown", res)

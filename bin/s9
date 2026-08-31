@@ -6377,18 +6377,38 @@ WS_MEANS_KO = {
     "main": "고친 내용은 이 화면에 바로 보입니다",
     "worktree": "고친 내용은 작업이 끝난 뒤에 이 화면에 보입니다",
 }
-# 깨우기 성공 창의 본문 전체 (REQ-20260830-048). 「사본」·「커밋」은 사용자
+# 깨우기 성공의 답은 **두 칸**이다 (REQ-20260830-049). 「사본」·「커밋」은 사용자
 # 세계에 지시 대상이 없는 말이라 내렸고(옮기는 게 아니라 내리는 것 —
 # tech-writer·translator 판정), 갈래 문장은 문서 메타 표의 이름(「바로 보임」·
-# 「끝나면 보임」)과 같은 결로 맞췄다. Board·Stream 안내 문장은 창이 그
-# 카드들을 가리고 서기에 지웠다(designer 실측). 진단 답본(web/app/diag.js
-# ?dlg=wakespawn)이 이 문장을 그대로 비추므로 시험이 둘을 묶는다.
-WAKE_SPAWNED_KO = "멈춰 있던 작업이 다시 이어집니다. {means}."
+# 「끝나면 보임」)과 같은 결로 맞췄다(REQ-20260830-048).
+#
+# 048 은 둘을 한 문자열로 이어 보냈는데, 그러면 급이 다른 두 말(결과 그 자체 /
+# 예외 사실)이 창의 한 슬롯에 겹쳐 앉는다 — 한 창의 강조는 하나다(designer 판정).
+# 화면이 마침표로 쪼개는 것은 금지다(문장 안에 쉼표가 있으면 깨진다). 그래서
+# 말은 여전히 서버 한 곳에서 오되 칸을 둘로 나눈다:
+#
+#   message  한 절, 결과 그 자체        — 창이 서면 제목(.dlgt)
+#   note     예외 사실 한 줄, 없으면 없음 — 창이 서면 부가(.dlgs)
+#
+# **`note` 가 없다는 것은 창이 설 이유가 없다는 뜻이다.** main 갈래의 성공은
+# 카드의 ▶→⏸ 가 이미 답이라(비파괴·자동·되돌림 가능) 창을 세우지 않는다 —
+# 화면은 갈래를 다시 판정하지 않고 이 칸의 유무만 읽는다(web/app/card.js
+# `wakeAnswer`). 진단 답본(web/app/diag.js)이 이 두 칸을 그대로 비추므로
+# 시험이 셋을 묶는다(tests/test_dialog_voice.py V3b).
+WAKE_SPAWNED_KO = "멈춰 있던 작업이 다시 이어집니다."
 
 
-def _workspace_means(doc_id):
+def _wake_note(doc_id):
+    """깨우기 성공에 덧붙일 **예외 사실 한 줄** — 없으면 빈 문자열.
+
+    말할 것이 있는 갈래는 워크트리 하나다: 고친 것이 지금 보는 화면에 바로
+    들어오지 않는다는 사실은 결과를 보러 가는 순간 사람을 헤매게 한다. main
+    갈래의 「바로 보입니다」는 기대대로인 사실이라 말할 것이 없다 — 그 자리에
+    창을 세우면 창이 자기가 가리키는 카드를 가린다(designer 실측)."""
     kind = _workspace_marker(doc_id).get("kind")
-    return WS_MEANS_KO.get(kind) or WS_MEANS_KO["main"]
+    if kind != "worktree":
+        return ""
+    return WS_MEANS_KO["worktree"] + "."
 
 
 def _wake_refusal(cid, row, win, updated, now):
@@ -6548,21 +6568,23 @@ def wake_request(doc_id, actor="", win=None):
             actor)
     out = {}
     if _spawn_wake(cid, meta, mins=mins, by=actor, out=out):
-        # 어디에 앉혔는지를 함께 말한다 (REQ-20260829-028-62x6 V3). 자리가
-        # 다르면 사람이 확인할 자리도 다르다 — 워크트리에서 고친 화면은
-        # 9909 에 영영 안 나타난다. **자리 이름 대신 그 뜻을 말한다**
-        # (REQ-20260830-007): 사람이 알아야 하는 것은 저장소의 생김새가 아니라
-        # 자기가 보는 화면에서 결과를 볼 수 있느냐다.
+        # 어디에 앉혔는지는 **말할 것이 있을 때만** 함께 말한다
+        # (REQ-20260829-028-62x6 V3 → REQ-20260830-049 로 개정). 자리가 다르면
+        # 사람이 확인할 자리도 다르다 — 워크트리에서 고친 화면은 9909 에 영영
+        # 안 나타난다. **자리 이름 대신 그 뜻을 말하고**(REQ-20260830-007),
+        # 기대대로인 갈래(main)에는 아무 말도 얹지 않는다: 없는 `note` 가 곧
+        # "창을 세우지 마라"는 답이다(_wake_note 주석).
         #
         # 문서 번호는 여기 다시 적지 않는다 — 창머리가 이미 주소를 달고 있고
         # (REQ-20260828-007: "주소는 머리에, 말은 본문에"), 한 창에 같은 번호가
         # 두 번 서면 읽는 눈이 그 둘이 같은 것인지 다시 맞춰 봐야 한다.
         # 기계가 읽을 번호는 이 응답의 `id` 에 그대로 있다.
-        return _wake_audit({"ok": True, "id": cid, "action": "spawned",
-                            "mins": mins,
-                            "message": WAKE_SPAWNED_KO.format(
-                                means=_workspace_means(cid))},
-                           actor)
+        res = {"ok": True, "id": cid, "action": "spawned", "mins": mins,
+               "message": WAKE_SPAWNED_KO}
+        note = _wake_note(cid)
+        if note:
+            res["note"] = note
+        return _wake_audit(res, actor)
     return _wake_audit(
         {"ok": False, "id": cid, "action": out.get("blocked") or "blocked",
          "mins": mins,
@@ -9387,6 +9409,24 @@ def stall_verdict(r, now, win, hands=None, assigned=None):
         # 방금 착수한 것 — 아직 멈춘 게 아니다
         return dict(v, state="moving", why="방금 움직였습니다")
     # ---- 여기부터는 '조용하다' 가 확정이다. 무엇 때문에 조용한가만 남는다.
+    # 맡은 세션이 지금 턴을 돌고 있다 (REQ-20260831-005). 리드의 한 턴이
+    # 길어지면(도구 호출만 계속) 문서에는 아무것도 안 찍히는데, transcript 는
+    # 호출마다 자라고 `catalog_with_live` 가 그것으로 live_kind == "direct"
+    # (클레임 + 2분 내 활동)를 **이미** 행에 실어 준다. 이 판정만 그 입력을
+    # 안 먹어서, 12:51부터 연속 작업 중인 세션의 카드 둘이 「멈춤 17분째」로
+    # 그려졌다(13:18 재현: live_age=1 인데 stalled). 새 신호가 아니라 기존
+    # 신호의 소비다 (DOC-20260830-003 — "새 신호는 새 함수가 아니라 새 입력").
+    #
+    # **attached 까지만이다** (계약 C2): 진전의 시계는 문서 updated 하나고,
+    # 세션이 도는 것은 진전이 아니라 붙어 있음이다 — quiet_mins 는 그대로
+    # 낸다. 간접(live_kind == "session")은 안 먹는다: 클레임 없는 활동은
+    # 귀속 선언이 아니다(근원 B). 손 뗀 클레임의 걱정(REQ-20260827-074)은
+    # claim_dead 가 이미 맡는다 — 클레임 후 30분간 문서에 아무 일도 없으면
+    # 클레임이 풀려 direct 가 저절로 꺼진다.
+    if r.get("live_kind") == "direct":
+        return dict(v, state="attached",
+                    why="맡은 세션이 지금 일하는 중입니다 — 문서에는 "
+                        f"{v['quiet_mins']}분째 새 기록이 없습니다")
     w = _wait_info(r["id"], now=now)
     if w:
         return dict(v, state="waiting", wait=w,

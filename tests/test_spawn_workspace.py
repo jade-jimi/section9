@@ -526,21 +526,46 @@ class Visible(Repo):
         self.assertEqual((sp.get("workspace") or {}).get("reason"),
                          "dirty-spine", sp)
 
-    # V3. 손잡이의 답이 자리를 말한다 — **이름이 아니라 뜻으로**.
-    def test_v3_wake_says_where_it_sat_the_worker(self):
+    # V3. 손잡이의 답은 **두 칸**이고, 자리 말은 예외일 때만 선다.
+    def test_v3_wake_says_the_place_only_when_it_is_an_exception(self):
         """자리 이름(`본 저장소`·`워크트리`)은 깃을 아는 사람의 말이라 창에
-        세우지 않는다 (REQ-20260830-007). 그래도 **뜻은 남아야 한다** — 사람이
-        이 답에서 얻어야 하는 것은 저장소의 생김새가 아니라 "내가 지금 보는
-        화면에서 그 결과를 볼 수 있나" 하나다. 여기가 비면 워크트리에서 고친
-        화면을 9909 에서 영영 찾는 그 헛수고가 돌아온다."""
+        세우지 않는다 (REQ-20260830-007). 뜻도 **말할 것이 있을 때만** 선다
+        (REQ-20260830-049): main 갈래의 「바로 보입니다」는 기대대로인 사실이라
+        말할 것이 없고, 없는 `note` 가 곧 "창을 세우지 마라"는 답이다. 여기에
+        빈 문자열이라도 실리면 화면은 창을 세우고, 그 창이 자기가 가리키는
+        카드를 가린다.
+
+        경계: 여기서 지키는 것은 **자리 말이 사라지지 않는 것**이다 — 워크트리
+        갈래에서 `note` 가 비면 워크트리에서 고친 화면을 9909 에서 영영 찾는
+        그 헛수고가 돌아온다(V3 의 본래 이유)."""
         self.dirty("web/index.html")
         with _spawn_patch():
             res = self.m.wake_request(self.doc_tests, actor="tester", win=0)
         self.assertTrue(res.get("ok"), res)
-        self.assertIn(self.m.WS_MEANS_KO["main"], res["message"], res)
+        # 제목은 한 절 — 갈래 문장이 섞여 들어오지 않는다.
+        self.assertEqual(res["message"], self.m.WAKE_SPAWNED_KO, res)
+        self.assertNotIn("note", res,
+                         "말할 것이 없는 갈래(main)가 부가 칸을 실었다 — "
+                         "빈 칸 하나가 창을 세운다")
         for word in ("본 저장소", "워크트리"):
             self.assertNotIn(word, res["message"],
                              "창에 깃 낱말이 그대로 섰다")
+
+    def test_v3b_the_worktree_branch_keeps_its_one_extra_line(self):
+        """워크트리 갈래만 창이 선다 — 부가 한 줄이 그 창의 존재 이유다.
+
+        여기서는 저장소를 더럽히지 않는다: 깨끗하면 워커가 워크트리에 앉고
+        (Decision W1), 그 마커를 읽어 부가 줄이 실린다 — 갈래를 손으로 심지
+        않고 실제 경로를 그대로 지난다."""
+        with _spawn_patch():
+            res = self.m.wake_request(self.doc_tests, actor="tester", win=0)
+        self.assertTrue(res.get("ok"), res)
+        self.assertEqual(res["message"], self.m.WAKE_SPAWNED_KO, res)
+        self.assertEqual(res.get("note"),
+                         self.m.WS_MEANS_KO["worktree"] + ".", res)
+        for word in ("본 저장소", "워크트리", "커밋", "사본"):
+            self.assertNotIn(word, res["note"],
+                             "부가 줄에 사용자 세계 밖의 낱말이 섰다: %s" % word)
 
     # V4. 대기는 실패처럼 보이지 않는다 — 누가 무엇을 잡고 있는지 말한다.
     def test_v4_wake_reports_waiting_not_failure(self):

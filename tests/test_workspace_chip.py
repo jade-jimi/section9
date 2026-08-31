@@ -88,6 +88,10 @@ class WorkspaceChip(unittest.TestCase):
         # 카드가 실제로 뱉는 글자 — 훑는 자리에 깃 낱말이 없어야 한다(W8b)
         cls.card_html = cls.card
         cls.wake = grab(cls.src, r"^async function wakeDoc\(id\)\{.*?^\}", "wakeDoc")
+        # 창이 **설지를 가르는 자리**가 한 겹 더 섰다 (REQ-20260830-049) —
+        # 누른 길도 진단도 여기를 지나 창에 닿는다.
+        cls.wakeans = grab(cls.src, r"^function wakeAnswer\(id, d\)\{.*?^\}",
+                           "wakeAnswer")
         cls.wakedlg = grab(cls.src, r"^function wakeDlg\(id, d\)\{.*?^\}", "wakeDlg")
 
     # ---------- node 로 실제 실행 ----------
@@ -412,24 +416,29 @@ class WorkspaceChip(unittest.TestCase):
                         rows=[self.row(id="REQ-A")])
         self.assertIsNone(r["dlg"], "그릴 것이 없는데 창을 열었다")
 
-    # W11 — 깨우기 창은 `ok` 와 `message` 둘만 읽는다
-    def test_w11_wake_reads_only_ok_and_message(self):
+    # W11 — 깨우기 창은 `ok`·`message`·`note` 셋만 읽는다
+    def test_w11_wake_reads_only_the_three_agreed_fields(self):
         """서버에 `action` 값이 하나 늘었다(`waiting`). 화면이 그 값을 알기
-        시작하면 같은 말이 서버와 화면 두 벌이 된다."""
-        both = self.wake + self.wakedlg
-        self.assertNotIn("d.action", both, "화면이 action 을 읽기 시작했다")
-        self.assertNotIn('"waiting"', both, "화면이 서버의 답 이름을 베껴 적었다")
+        시작하면 같은 말이 서버와 화면 두 벌이 된다. 049 로 칸이 하나 늘었지만
+        (`note` — 예외 사실 한 줄) 늘어난 것은 **말이 실릴 칸**이지 화면이
+        읽는 사유가 아니다."""
+        all3 = self.wake + self.wakeans + self.wakedlg
+        self.assertNotIn("d.action", all3, "화면이 action 을 읽기 시작했다")
+        self.assertNotIn('"waiting"', all3, "화면이 서버의 답 이름을 베껴 적었다")
         self.assertIn("d.message", self.wakedlg)
+        self.assertIn("d.note", self.wakedlg)
         self.assertIn("d.ok", self.wakedlg)
 
     def test_w12_a_refusal_is_not_a_failure(self):
         """`waiting`·`busy`·`capped`·`moving` 은 전부 정상적인 답이다 —
         붉은 실패 창으로 그리면 사람은 고장으로 읽는다. 대기는 차례다."""
         self.assertRegex(self.wakedlg, r"stop:\s*false")
-        # 창을 짓는 자리도 하나다 — 진단(?dlg=wakewait)이 같은 함수를 부른다
-        self.assertIn("wakeDlg(id, d)", self.wake)
-        self.assertIn("wakeDlg(", grab(self.src, r"if \(m\[1\] === \"wakewait\".*?\n  \}",
-                                       "?dlg=wakewait 진단"))
+        # 답을 받는 자리도 하나다 — 누른 길도 진단(?dlg=wakewait)도 창이 설지를
+        # 가르는 그 함수를 지나서 창에 닿는다 (REQ-20260830-049).
+        self.assertIn("wakeAnswer(id, d)", self.wake)
+        self.assertIn("wakeAnswer(",
+                      grab(self.src, r"if \(m\[1\] === \"wakewait\".*?\n  \}",
+                           "?dlg=wakewait 진단"))
 
     # W13 — 진단은 **진짜 함수**를 부른다
     def test_w13_the_probe_draws_nothing_of_its_own(self):
