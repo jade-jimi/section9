@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>section9</title>
+<title>Chief</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <style>
 :root{
   --bg:#fafaf8; --panel:#ffffff; --border:#d8d8d3; --hairline:#e9e9e5;
@@ -6879,12 +6880,10 @@ async function refreshUsage(){
   }catch(e){ /* 다음 폴 */ }
 }
 
-/* 브라우저 탭 제목 = 워크스페이스명 · 선택 프로젝트 (REQ-20260824-064) —
-   다중 워크스페이스 대시보드를 브라우저 탭에서 구분한다. */
+/* Browser identity belongs to the product. Section9 remains the internal system name under
+   Advanced, but Jade's daily browser tab is consistently Chief. */
 function updateTitle(){
-  const ws = (window.__whoami || {}).workspace || "section9";
-  const pj = ($("#f-project") || {}).value || "";
-  document.title = pj ? `${ws} · ${pj}` : ws;
+  document.title = "Chief";
 }
 
 function stopChat(){
