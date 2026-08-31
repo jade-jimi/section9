@@ -76,6 +76,15 @@ class ChiefReleasePage(unittest.TestCase):
         self.assertIn('!promotionOpen && state === "ready_for_human"', gate)
         self.assertNotIn('!promotionOpen && !promotionMerged && state === "ready_for_human"', gate)
 
+    def test_brief_release_preview_exposes_all_records_and_jumps_to_release(self):
+        brief = self.source[self.source.index("const compactReleases"):
+                            self.source.index("async function refreshChief")]
+        self.assertIn("compactReleases.map(chiefReleaseHTML)", brief)
+        self.assertNotIn("compactReleases.slice(0,3)", brief)
+        self.assertIn('class="chief-release-scroll"', brief)
+        self.assertIn('data-chief-nav="release">Open all ${releases.length} in Release', brief)
+        self.assertIn(".chief-release-scroll{max-height:", self.source)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
