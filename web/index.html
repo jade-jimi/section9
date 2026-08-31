@@ -5095,7 +5095,7 @@ function chiefReleaseGate(row){
     acceptanceOpen ? ["verify_live","Check live acceptance"] :
     state === "blocked" ? ["verify","Recheck release blockers"] :
     promotionOpen && !blastPassed ? ["verify","Refresh release evidence"] :
-    !promotionOpen && !promotionMerged && state === "ready_for_human" ? ["prepare_prod","Create dev → production PR"] : null;
+    !promotionOpen && state === "ready_for_human" ? ["prepare_prod","Create dev → production PR"] : null;
   return {state,featureOpen,staging,stagingPassed,promotion,promotionOpen,promotionMerged,
           acceptance,acceptanceOpen,blastPassed,runChoices};
 }
