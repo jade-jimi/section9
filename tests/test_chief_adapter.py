@@ -43,6 +43,13 @@ class FakeChief(http.server.BaseHTTPRequestHandler):
                 "projects": [{"id": "argon"}], "portfolio": [{"id": "REQ-1"}],
                 "releases": [{"id": "argon-live"}], "sources": {"reqs": {"status": "ok"}},
             }))
+        if self.path == "/api/artifacts":
+            return self.send_body(200, "application/json", json.dumps({
+                "ok": True, "total": 1, "groups": [{"id": "zinc", "title": "Zinc",
+                    "items": [{"path": "/safe/short-report.md", "kind": "report"}]}],
+            }))
+        if self.path.startswith("/api/artifact?"):
+            return self.send_body(200, "text/html; charset=utf-8", "<h1>Short report</h1>")
         if self.path.startswith("/api/work/detail?"):
             return self.send_body(200, "application/json", json.dumps({
                 "ok": True, "work_id": "REQ-1", "flow": {"next_move": {"id": "REQ-1"}},
@@ -153,6 +160,18 @@ class TestChiefAdapter(unittest.TestCase):
         self.assertEqual((code, ctype), (200, "text/html"))
         self.assertIn(b"Rendered report", raw)
         self.assertIn(("GET", "/refdoc?f=report.md&embed=1", None), FakeChief.calls)
+
+    def test_artifact_library_and_viewer_are_fixed_safe_routes(self):
+        code, ctype, raw = self.call("/api/chief/artifacts")
+        self.assertEqual((code, ctype), (200, "application/json"))
+        self.assertEqual(json.loads(raw)["groups"][0]["id"], "zinc")
+
+        code, ctype, raw = self.call(
+            "/api/chief/artifact?path=%2Fsafe%2Fshort-report.md&evil=ignored")
+        self.assertEqual((code, ctype), (200, "text/html"))
+        self.assertIn(b"Short report", raw)
+        self.assertIn(("GET", "/api/artifact?path=%2Fsafe%2Fshort-report.md", None),
+                      FakeChief.calls)
 
     def test_document_reader_preserves_html_and_only_path_query(self):
         code, ctype, raw = self.call("/api/chief/document?path=%2Ftmp%2FREQ.md&evil=x")
