@@ -1,6 +1,9 @@
 """Meeting preparation page and durable calendar boundary (REQ-20260831-020-wfow)."""
 
+import json
 import os
+import shutil
+import subprocess
 import unittest
 
 
@@ -64,8 +67,30 @@ class ChiefMeetingsPage(unittest.TestCase):
         self.assertIn("Related completed outcomes", self.meetings)
         self.assertIn("Problem", self.meetings)
         self.assertIn("Solution", self.meetings)
-        self.assertIn("chiefShort(row.problem", self.meetings)
-        self.assertIn("chiefShort(row.solution", self.meetings)
+        self.assertIn("row.problem_summary || chiefFirstSentence(row.problem)", self.meetings)
+        self.assertIn("row.solution_summary || chiefFirstSentence(row.solution)", self.meetings)
+        self.assertNotIn("chiefShort(row.problem", self.meetings)
+        self.assertNotIn("chiefShort(row.solution", self.meetings)
+
+    def test_first_sentence_fallback_executes_bounded_and_missing_stays_empty(self):
+        node = shutil.which("node") or shutil.which("nodejs")
+        if not node:
+            self.skipTest("node is unavailable")
+        start = self.meetings.index("function chiefFirstSentence")
+        end = self.meetings.index("function chiefMeetingPresentationRow", start)
+        helper = self.meetings[start:end]
+        script = helper + "\nconsole.log(JSON.stringify([" \
+            "chiefFirstSentence('First fact. Second fact.')," \
+            "chiefFirstSentence('')," \
+            "chiefFirstSentence('Word ' + 'evidence '.repeat(40) + 'done.')" \
+            "]));"
+        result = subprocess.run([node, "-e", script], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        first, missing, bounded = json.loads(result.stdout)
+        self.assertEqual(first, "First fact.")
+        self.assertEqual(missing, "")
+        self.assertLessEqual(len(bounded), 180)
+        self.assertTrue(bounded.endswith("…"))
 
     def test_related_outcome_actions_use_existing_presentation_routes_and_engine(self):
         self.assertIn("chiefPresentationLinks(row,\"Read source\")", self.meetings)
@@ -85,6 +110,9 @@ class ChiefMeetingsPage(unittest.TestCase):
         self.assertIn("never infer from the meeting title", self.meetings)
         self.assertIn("real cited plots when numeric evidence exists", self.meetings)
         self.assertIn("presentations (id/title/project/jira/pptx_path", self.meetings)
+        self.assertIn("problem_summary/solution_summary", self.meetings)
+        self.assertIn("one evidence-faithful sentence", self.meetings)
+        self.assertIn("problem, solution, problem_summary, solution_summary", self.source)
 
     def test_outcome_visual_language_uses_lines_type_depth_and_mobile_reflow(self):
         outcome_css = self.meeting_css[

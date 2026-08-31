@@ -28,3 +28,7 @@ copying mutable work state into a second ledger.
 - Chief backend: `/home/jade/chief/mobile/server.py`
 - Previous frontend/rollback: `/home/jade/chief/mobile/`
 - Section9 clone: `/home/jade/repo/section9`
+- Session concurrency policy: `projects/chief/assets/CONCURRENT-SESSION-EXECUTION.md` — size M/L
+  work with at least two independent tracks uses up to three bounded subagents concurrently;
+  single-file/S work stays direct, and the lead retains integration, verification, and all
+  production/external writes.
