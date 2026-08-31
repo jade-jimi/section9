@@ -70,6 +70,12 @@ class ChiefReleasePage(unittest.TestCase):
         self.assertIn("data-chief-release-engine", compact)
         self.assertIn("Open Release", compact)
 
+    def test_previous_merged_promotion_does_not_hide_next_batch_action(self):
+        gate = self.source[self.source.index("function chiefReleaseGate"):
+                           self.source.index("function chiefReleaseHTML")]
+        self.assertIn('!promotionOpen && state === "ready_for_human"', gate)
+        self.assertNotIn('!promotionOpen && !promotionMerged && state === "ready_for_human"', gate)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
