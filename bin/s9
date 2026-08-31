@@ -10953,6 +10953,7 @@ def cmd_serve(args):
                     "/api/chief/project-session/start": "/api/project-session/start",
                     "/api/chief/project-session/message": "/api/project-session/message",
                     "/api/chief/work/create": "/api/work/create",
+                    "/api/chief/work/attention": "/api/work/attention",
                     "/api/chief/work/complete": "/api/work/done",
                     "/api/chief/work/investigate": "/api/work/investigate",
                     "/api/chief/order": "/api/order",
