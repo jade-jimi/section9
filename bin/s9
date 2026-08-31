@@ -12906,43 +12906,165 @@ def do_member_rm(slug, uname, actor=None, via=""):
     return {"slug": meta["slug"], "member": uname}
 
 
+def project_history_tail(body, limit=10):
+    """PRJ 문서 body 의 ## History 마지막 limit 줄 (관리정보 패널용).
+    다른 절(## Notes 등)의 리스트 줄은 세지 않는다."""
+    lines, in_hist = [], False
+    for ln in (body or "").splitlines():
+        if ln.startswith("## "):
+            in_hist = ln.strip() == "## History"
+            continue
+        if in_hist and ln.startswith("- "):
+            lines.append(ln[2:].strip())
+    return lines[-limit:]
+
+
+def _next_project_id():
+    """PRJ id 발번. next_id()는 파일명을 스캔하는데 프로젝트 문서는
+    <slug>.md 라 기존 PRJ 순번을 하나도 못 봐 같은 날 생성분이 전부
+    -001 로 충돌했다 (REQ-20260831-027 실측). 여기서는 frontmatter id 를
+    스캔한다 — .trash 포함(os.walk), 지워진 번호 재발급 방지는 next_id 와 동일."""
+    ymd = datetime.date.today().strftime("%Y%m%d")
+    fp = machine_fp()
+    pat = re.compile(rf"PRJ-{ymd}-(\d{{3,}})(?:-([0-9a-z]{{4}}))?$")
+    seq = 0
+    if os.path.isdir(PROJECTS):
+        for dirpath, _dirs, files in os.walk(PROJECTS):
+            for fn in files:
+                if not fn.endswith(".md"):
+                    continue
+                meta, _ = read_doc(os.path.join(dirpath, fn))
+                m = pat.match(str(meta.get("id", "")))
+                if m and (not m.group(2) or m.group(2) == fp):
+                    seq = max(seq, int(m.group(1)))
+    return f"PRJ-{ymd}-{seq + 1:03d}-{fp}"
+
+
+def do_project_add(slug, name=None, summary=None, customer=None,
+                   contact_name=None, contact_email=None, contact_phone=None,
+                   contact_org=None, actor=None, via=""):
+    """프로젝트 생성의 단일 코드 경로 — CLI(project add)와 웹 서버
+    (POST /api/project/add)가 공유. 거부는 ValueError.
+    권한(REQ-20260831-026 G0): 등록 사용자 누구나 + 생성자 자동 owner.
+    admin 우회는 별도 분기가 필요 없다 — admin 도 등록 사용자다(as 대리는
+    do_POST 서두가 등록 사용자만 통과시킨다)."""
+    slug = (slug or "").strip()
+    if not slug or not re.fullmatch(r"[A-Za-z0-9._-]+", slug):
+        raise ValueError(f"invalid slug: {slug!r} (허용: 영문/숫자/._-)")
+    if not actor or actor not in registered_users():
+        raise ValueError(
+            f"권한 없음: 프로젝트 생성은 등록 사용자만 가능 "
+            f"('{actor or '(없음)'}' 미등록 — s9 user add 먼저)")
+    ts = now_iso()
+    acquire_lock()
+    try:
+        # 중복 검사도 lock 안 — 동시 생성 race 에서 두 승자가 나오지 않게
+        if project_path(slug):
+            raise ValueError(f"already exists: {slug}")
+        doc_id = _next_project_id()
+        meta = {
+            "id": doc_id, "type": "project", "slug": slug,
+            "title": name or slug, "summary": summary or "",
+            "status": "active", "customer": customer or "",
+            "contact_name": contact_name or "",
+            "contact_email": contact_email or "",
+            "contact_phone": contact_phone or "",
+            "contact_org": contact_org or "",
+            "members": [{"user": actor, "role": "owner",
+                         "since": today_date(), "until": ""}],
+            "created": ts, "updated": ts,
+        }
+        body = (f"\n## Notes\n"
+                f"\n## History\n"
+                f"- {ts} created by {actor} (owner{via})\n")
+        os.makedirs(PROJECTS, exist_ok=True)
+        write_doc(os.path.join(PROJECTS, slug + ".md"), meta, body)
+        rebuild_index(quiet=True)
+    finally:
+        release_lock()
+    scaffold_asset_space(slug, name or slug)  # 멱등·인덱스 무관 — lock 밖
+    return {"id": doc_id, "slug": slug, "owner": actor,
+            "title": meta["title"]}
+
+
+# set 이 받는 8필드 (요청 키 → frontmatter 키). status 만 own 게이트가 따로 선다.
+PROJECT_SET_FIELDS = {
+    "name": "title", "summary": "summary", "customer": "customer",
+    "status": "status", "contact_name": "contact_name",
+    "contact_email": "contact_email", "contact_phone": "contact_phone",
+    "contact_org": "contact_org"}
+
+
+def do_project_set(slug, name=None, summary=None, customer=None, status=None,
+                   contact_name=None, contact_email=None, contact_phone=None,
+                   contact_org=None, actor=None, via=""):
+    """프로젝트 설정 변경의 단일 코드 경로 — CLI(project set)와 웹 서버
+    (POST /api/project/set)가 공유. 거부는 ValueError. None=미변경(직교성),
+    빈 문자열은 '비우기'. 변경은 History 에 남는다 (예전 CLI set 은 멤버
+    변경만 기록하고 설정 변경은 안 남기던 비대칭을 여기서 교정).
+    권한: manage(maintainer+). status 변경(보관/복원)만 own(owner) —
+    project_can 독스트링과 어긋나 있던 구현을 own 쪽으로 해소
+    (REQ-20260831-026 G0 확정)."""
+    pr = load_project(slug)
+    if not pr:
+        raise ValueError(f"not found: {slug}")
+    meta, body, path = pr
+    if not project_can(meta["slug"], actor, "manage"):
+        raise ValueError(
+            f"권한 없음: '{actor}'({project_role(meta['slug'], actor) or '미참여'})는 "
+            f"프로젝트 설정을 변경할 수 없다 (maintainer 이상 필요)")
+    req = {"name": name, "summary": summary, "customer": customer,
+           "status": status, "contact_name": contact_name,
+           "contact_email": contact_email, "contact_phone": contact_phone,
+           "contact_org": contact_org}
+    if status is not None:
+        if status not in ("active", "archived"):
+            raise ValueError("status 는 active|archived")
+        if status == meta.get("status"):
+            req["status"] = None  # 같은 값 = 무변경 (own 게이트도 안 선다)
+        elif not project_can(meta["slug"], actor, "own"):
+            raise ValueError(
+                f"권한 없음: 프로젝트 보관/복원(status)은 owner만 가능 "
+                f"('{actor}'={project_role(meta['slug'], actor) or '미참여'})")
+    changed = []
+    for arg_key, meta_key in PROJECT_SET_FIELDS.items():
+        v = req[arg_key]
+        if v is not None and v != meta.get(meta_key, ""):
+            meta[meta_key] = v
+            changed.append(meta_key)
+    if not changed:
+        raise ValueError("변경할 필드 없음 (--name/--customer/--status/--contact-* ...)")
+    meta["updated"] = now_iso()
+    # History 한 줄 — 값은 80자에서 끊는다(요약이 통째로 들어가 이력이 밀리지 않게)
+    kv = " ".join(f"{k}={str(meta[k])[:80] or '(빈값)'}" for k in changed)
+    body = body.rstrip("\n") + \
+        f"\n- {now_iso()} set {kv} (by {actor}{via})\n"
+    acquire_lock()
+    try:
+        write_doc(path, meta, body)
+        rebuild_index(quiet=True)
+    finally:
+        release_lock()
+    return {"slug": meta["slug"], "changed": changed,
+            "status": meta.get("status", "")}
+
+
 def cmd_project(args):
     action = args.action
 
     if action == "add":
-        slug = args.slug
-        if not slug or not re.fullmatch(r"[A-Za-z0-9._-]+", slug):
-            die(f"invalid slug: {slug!r} (허용: 영문/숫자/._-)")
-        if project_path(slug):
-            die(f"already exists: {slug}")
         user = resolve_user(args.user)
-        ts = now_iso()
-        acquire_lock()
         try:
-            doc_id = next_id("PRJ", "projects")
-            meta = {
-                "id": doc_id, "type": "project", "slug": slug,
-                "title": args.name or slug, "summary": args.summary or "",
-                "status": "active", "customer": args.customer or "",
-                "contact_name": args.contact_name or "",
-                "contact_email": args.contact_email or "",
-                "contact_phone": args.contact_phone or "",
-                "contact_org": args.contact_org or "",
-                "members": [{"user": user, "role": "owner",
-                             "since": today_date(), "until": ""}],
-                "created": ts, "updated": ts,
-            }
-            body = (f"\n## Notes\n"
-                    f"\n## History\n"
-                    f"- {ts} created by {user} (owner)\n")
-            os.makedirs(PROJECTS, exist_ok=True)
-            write_doc(os.path.join(PROJECTS, slug + ".md"), meta, body)
-            rebuild_index(quiet=True)
-        finally:
-            release_lock()
-        scaffold_asset_space(slug, args.name or slug)
-        print(f"{doc_id}  ({slug})  owner={user}")
-        print(f"  ↳ 에셋 공간: projects/{slug}/ — CONTEXT.md(진입점) + assets/")
+            res = do_project_add(
+                args.slug, name=args.name, summary=args.summary,
+                customer=args.customer, contact_name=args.contact_name,
+                contact_email=args.contact_email,
+                contact_phone=args.contact_phone,
+                contact_org=args.contact_org, actor=user)
+        except ValueError as e:
+            die(str(e))
+        print(f"{res['id']}  ({res['slug']})  owner={res['owner']}")
+        print(f"  ↳ 에셋 공간: projects/{res['slug']}/ — CONTEXT.md(진입점) + assets/")
         return
 
     if action == "agents":
@@ -13007,34 +13129,18 @@ def cmd_project(args):
         return
 
     if action == "set":
-        pr = load_project(args.slug) or die(f"not found: {args.slug}")
-        meta, body, path = pr
         actor = resolve_user(args.user)
-        if not project_can(meta["slug"], actor, "manage"):
-            die(f"권한 없음: '{actor}'({project_role(meta['slug'], actor) or '미참여'})는 "
-                f"프로젝트 설정을 변경할 수 없다 (maintainer 이상 필요)")
-        fields = {"name": "title", "summary": "summary", "customer": "customer",
-                  "status": "status", "contact_name": "contact_name",
-                  "contact_email": "contact_email", "contact_phone": "contact_phone",
-                  "contact_org": "contact_org"}
-        changed = []
-        for arg_key, meta_key in fields.items():
-            v = getattr(args, arg_key, None)
-            if v is not None:
-                if meta_key == "status" and v not in ("active", "archived"):
-                    die("status 는 active|archived")
-                meta[meta_key] = v
-                changed.append(meta_key)
-        if not changed:
-            die("변경할 필드 없음 (--name/--customer/--status/--contact-* ...)")
-        meta["updated"] = now_iso()
-        acquire_lock()
         try:
-            write_doc(path, meta, body)
-            rebuild_index(quiet=True)
-        finally:
-            release_lock()
-        print(f"{meta['slug']}: updated {', '.join(changed)}")
+            res = do_project_set(
+                args.slug, name=args.name, summary=args.summary,
+                customer=args.customer, status=args.status,
+                contact_name=args.contact_name,
+                contact_email=args.contact_email,
+                contact_phone=args.contact_phone,
+                contact_org=args.contact_org, actor=actor)
+        except ValueError as e:
+            die(str(e))
+        print(f"{res['slug']}: updated {', '.join(res['changed'])}")
         return
 
     if action == "member":
@@ -15176,9 +15282,16 @@ def cmd_serve(args):
         return {"events": events}
 
     def projects_data():
-        """모든 프로젝트 + 멤버(활성/만료) — 대시보드 셀렉터·정보패널용."""
+        """모든 프로젝트 + 멤버(활성/만료) — 대시보드 셀렉터·정보패널용.
+        history_tail 은 관리정보 패널용 additive 확장 (REQ-20260831-027) —
+        body 가 필요해 all_projects(meta만) 대신 직접 읽는다."""
         out = []
-        for meta in all_projects():
+        docs = []
+        if os.path.isdir(PROJECTS):
+            for fn in sorted(os.listdir(PROJECTS)):
+                if fn.endswith(".md"):
+                    docs.append(read_doc(os.path.join(PROJECTS, fn)))
+        for meta, body in docs:
             members = []
             for m in meta.get("members", []):
                 members.append({**m, "active": member_active(m)})
@@ -15193,6 +15306,7 @@ def cmd_serve(args):
                 "members": members,
                 "member_active": sum(1 for m in members if m["active"]),
                 "member_total": len(members),
+                "history_tail": project_history_tail(body),
             })
         return {"projects": out}
 
@@ -16425,6 +16539,34 @@ def cmd_serve(args):
                     res = do_member_rm(
                         str(req.get("slug") or ""),
                         str(req.get("member") or "").strip(),
+                        actor=actor, via=" via dashboard")
+                    self._json({"ok": True, **res})
+                elif parsed.path == "/api/project/add":
+                    # 생성 — CLI(project add)와 동일 코드 경로(do_project_add):
+                    # 등록 사용자 게이트·slug 검증·생성자=owner 판정이 전부
+                    # do_* 안이다. 핸들러는 중계만 (인라인 인가 = 옆문 금지).
+                    res = do_project_add(
+                        str(req.get("slug") or ""),
+                        name=req.get("name"), summary=req.get("summary"),
+                        customer=req.get("customer"),
+                        contact_name=req.get("contact_name"),
+                        contact_email=req.get("contact_email"),
+                        contact_phone=req.get("contact_phone"),
+                        contact_org=req.get("contact_org"),
+                        actor=actor, via=" via dashboard")
+                    self._json({"ok": True, **res})
+                elif parsed.path == "/api/project/set":
+                    # 설정 8필드 — do_project_set 단일 경로: manage 인가,
+                    # status(보관/복원)만 own, History 기록까지 그 안이다.
+                    res = do_project_set(
+                        str(req.get("slug") or ""),
+                        name=req.get("name"), summary=req.get("summary"),
+                        customer=req.get("customer"),
+                        status=req.get("status"),
+                        contact_name=req.get("contact_name"),
+                        contact_email=req.get("contact_email"),
+                        contact_phone=req.get("contact_phone"),
+                        contact_org=req.get("contact_org"),
                         actor=actor, via=" via dashboard")
                     self._json({"ok": True, **res})
                 elif parsed.path == "/api/user/config":
