@@ -1,0 +1,159 @@
+/* project.css — 프로젝트 화면의 규칙 한 벌 (REQ-20260831-028 · 설계 REQ-20260831-026)
+
+   프로젝트는 새 탭도 새 화면도 갖지 않는다 — 세 자리에 얹힐 뿐이다:
+     ① Docs 좌측 `PROJECT` 목록 머리(.pjhead)와 행의 셋째 줄(.pjmeta)
+     ② PRJ 문서 뷰의 프로젝트 패널(.pjset · .pmem · .pjsum)
+     ③ Board/Graph 위 문맥 띠(.pjstrip) — 244px 표를 대신하는 32px 한 줄
+
+   **여기 있는 것은 배치와 밀도뿐이다.** 색은 토큰에서만 오고(리터럴 0), 단추의
+   얼굴은 이 파일이 짓지 않는다 — 「+ 새 프로젝트」·「보관됨 N개」는 목록이 이미
+   쓰는 `.more`, 표 안의 「추가」·「제거」는 카드·문서가 이미 쓰는 `.acts button`
+   이다. 그 둘은 스킨 열 벌이 저마다 잉크를 말해 둔 자리라, 새 단추를 그리는
+   순간 스킨 수만큼 색을 다시 적게 된다(벨트 글리프 때의 그 함정 —
+   s9-design 「벨트 글리프 단추의 확정값」).
+
+   같은 이유로 이 파일은 패널 껍데기(테두리 두른 상자·배경 판)를 만들지 않는다.
+   `.proj-info` 는 스킨 여섯 벌이 저마다 다시 그려 놓은 상자였다 — 문서 뷰 안에
+   사는 이 패널은 상자가 아니라 **문서의 한 절**이라 `.metatbl`·`.viewer` 가
+   이미 입혀 둔 옷을 그대로 입는다.
+
+   ── 멤버 표의 관문은 여기 한 곳이다 (.pmem)
+   header.css 의 `.proj-info table|th|td|select|input|.pi-x|.m-*` (163~236행)은
+   B2 에서 **지워지고** 그 마크업이 `.pmem` 을 입는다. 지금 두 벌인 것은 이번
+   물결이 기존 css 를 만지지 않기 때문이고, 두 벌인 채로 끝나면 관문이 둘이 된다
+   — B2 의 첫 손이 그 블록 삭제다.
+
+   ── 배율 불변 (s9-design 「배율 불변」)
+   새 홀수 px 상자·소수 px 테두리를 만들지 않는다. 점은 확정된 7px 무대(.cdot)를
+   그대로 쓰고 여기서 다시 그리지 않는다. 컨트롤 과녁은 28px(짝수)로 못박고
+   density=compact 에서도 줄이지 않는다 — 밀도 축은 여백을 줄이는 축이지 과녁을
+   깎는 축이 아니다(actions.css 가 27px 벨트에 세워 둔 그 선). */
+
+/* ── 인라인 즉시 저장의 얼굴 한 벌 ─────────────────────────────
+   설정 격자와 멤버 표가 **같은 컨트롤**을 쓴다. 한 화면에 저장 규칙이 둘일 수
+   없듯(설계 판정), 그 규칙을 입는 얼굴도 하나여야 한다. */
+.pjc{border:1px solid var(--hairline);background:var(--panel);color:var(--text);
+  font-family:var(--mono);font-size:11px;padding:4px 6px;border-radius:0;
+  min-height:28px;max-width:100%}
+.pjc:hover:not(:disabled){border-color:var(--border)}
+.pjc:focus{border-color:var(--text)}
+/* 보더 색 변화만으로는 키보드 사용자에게 약하다(설계 노트가 짚은 자리).
+   테두리 **안쪽**에 두른다 — 상자 밖으로 번지면 표의 이웃 칸을 덮는다. */
+.pjc:focus-visible{outline:1px solid var(--text);outline-offset:-2px}
+.pjc:disabled{color:var(--faint);cursor:not-allowed}
+input.pjc[type="date"]{width:132px}
+select.pjc{padding-right:4px}
+
+/* 값 자리 편집 — 쉼 상태는 **글자**다. 여섯 칸이 모두 입력 상자로 서 있으면
+   문서가 폼이 된다. 점선 밑줄 자리는 늘 잡아 두어 손이 얹혀도 줄이 안 밀린다. */
+.pjv{border:0;background:none;color:var(--text);font:inherit;text-align:left;
+  padding:2px 0;cursor:text;border-bottom:1px dotted transparent;max-width:100%}
+.pjv:hover{border-bottom-color:var(--faint)}
+.pjv:focus-visible{outline:1px solid var(--text);outline-offset:1px}
+.pjv .none{font-family:var(--mono);font-size:11px;color:var(--faint)}
+
+/* ── ① Docs › PROJECT 목록 ───────────────────────────────── */
+.pjhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:8px 14px;border-bottom:1px solid var(--hairline);font-family:var(--mono);
+  font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  font-weight:600}
+/* `.more` 는 목록에서 한 줄을 통째로 먹는 문법이다 — 머리 오른쪽에 설 때만
+   폭을 놓는다. 색·hover 는 그대로 물려받는다. */
+.pjhead .more{display:inline-block;width:auto;padding:0;font-size:11px;
+  text-align:right}
+.pjhead .pjn{color:var(--faint)}
+/* 행의 셋째 줄 — 이 목록의 값(관리 정보의 요약)이 여기 산다. */
+.pjmeta{font-family:var(--mono);font-size:10.5px;color:var(--faint);
+  letter-spacing:.02em;margin-top:2px}
+/* 상태 낱말(ACTIVE/ARCHIVED)은 새로 그리지 않는다 — 목록 행이 이미 오른쪽에
+   `.st` 로 세우고 잉크는 `--sc` 로 받는다. 보관된 줄은 제목까지 한 급 물린다. */
+.pjrow.off .pjmeta,.pjrow.off>div{color:var(--muted)}
+.pjlist .more{padding-left:14px}
+.pjnone{padding:14px;font-size:12px;color:var(--muted)}
+.pjnone .more{width:auto;display:inline-block;padding:6px 0 0}
+
+/* ── ② PRJ 문서 뷰 — 설정 격자 · 멤버 표 · 관리 요약 ───────────
+   격자는 문서의 메타 표(.metatbl)를 **그대로** 쓴다: 라벨 타이포·행 구분선·
+   폭이 이미 정해져 있고, 스킨 열 벌이 그 표를 이미 알고 있다. */
+.pjset td .pjc{width:100%;max-width:340px}
+.pjh{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);font-weight:600;margin:22px 0 8px}
+/* 표는 제 상자 안에서 구른다 — 쪽이 가로로 밀리지 않게(s9-design 반응형).
+   min-width 는 일곱 칸이 접히지 않는 최소치다: 그 아래로 좁아지면 머리글이
+   두 줄로 접혀 표가 흔들려 보인다. */
+.pmemwrap{overflow-x:auto}
+.pmem{border-collapse:collapse;width:100%;min-width:520px;font-size:12px}
+.pmem caption{text-align:left;font-family:var(--mono);font-size:10px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;
+  padding:0 0 6px}
+.pmem th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--faint);font-weight:600;
+  border-bottom:1px solid var(--hairline);padding:2px 10px 6px 0}
+.pmem td{padding:4px 10px 4px 0;border-bottom:1px solid var(--hairline);
+  vertical-align:middle}
+.pmem .m-you{font-weight:600}
+.pmem .m-tag{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.pmem .m-role{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.pmem .m-state{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em}
+.pmem .m-on{color:var(--c-done)}
+/* 만료는 고장이 아니다 — 붉은 잉크(--c-blocked)를 물린다(설계 판정).
+   --faint 까지 내리면 4.5:1 을 놓치므로 --muted 선에서 멈춘다. */
+.pmem .m-off{color:var(--muted)}
+.pmem .m-soon{color:var(--c-inprogress)}
+/* 만료된 줄은 통째로 물러난다 — 컨트롤은 색을 물려받지 않으므로 따로 말한다
+   (안 그러면 이름·참여일만 흐리고 권한·만료 상자만 또렷한 반쪽이 된다). */
+.pmem tr.exp td{color:var(--muted)}
+.pmem tr.exp .pjc{color:var(--muted)}
+.pmem .pjadd td{border-bottom:0;border-top:1px solid var(--border);padding-top:8px}
+/* 표 안의 단추 무리 — 얼굴은 `.acts button` 이 짓고, 여기서는 자리만 없앤다 */
+.acts.pjcell{margin:0;display:inline-flex;gap:4px}
+/* **못 누르는 단추는 못 누르게 보여야 한다.** `.acts button` 은 잉크색을 못박아
+   브라우저 기본 회색을 덮고, hover 반전은 disabled 를 가리지 않는다 — 그대로
+   두면 마지막 owner 의 「제거」가 멀쩡한 단추처럼 보이고 손을 얹으면 반전까지
+   된다(실캡처에서 그랬다). 회색은 여기서만 허용된다: 왜 이 한 자리만 다른가에
+   title 이 답한다. */
+.acts.pjcell button:disabled{color:var(--faint);cursor:not-allowed}
+.acts.pjcell button:disabled:hover{background:var(--panel);color:var(--faint);
+  border-color:var(--border)}
+.pjsum{font-family:var(--mono);font-size:11px;color:var(--muted);
+  letter-spacing:.02em;margin:0}
+.pjnote{font-size:11.5px;color:var(--muted);margin:8px 0 0}
+.pjerr{font-family:var(--mono);font-size:10.5px;color:var(--c-blocked);margin:6px 0 0}
+.pjerr[hidden]{display:none}
+
+/* ── 생성 다이얼로그 본문 — 창은 `s9dlg` 것이고 여기 있는 것은 네 줄뿐 ── */
+.pjform{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 12px;
+  align-items:center;margin:8px 0 0}
+.pjform label{font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--faint)}
+.pjform .pjc{width:100%}
+.pjform .pjhint{grid-column:2;font-size:11px;color:var(--muted);margin:-4px 0 0}
+.pjform .pjerr{grid-column:1 / -1}
+
+/* ── ③ Board/Graph 위 문맥 띠 — 한 줄, 아래 hairline 하나 ─────
+   좌측 세로 색 띠 없음 · 배경 색면 없음 — 상태는 앞머리 점과 대문자 글자가
+   말한다. 높이를 32px 로 못박아 두면 이름이 길어져도 Board 머리가 안 밀린다. */
+.pjstrip{display:flex;align-items:center;gap:8px;height:32px;padding:0 2px;
+  margin:0 0 14px;border-bottom:1px solid var(--hairline);font-size:12px;
+  white-space:nowrap;overflow:hidden}
+.pjstrip[hidden]{display:none}
+.pjstrip .cdot{display:inline-block;width:7px;height:7px;flex:none}
+.pjstrip .pjs-t{font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pjstrip .pjs-m{font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  letter-spacing:.04em;overflow:hidden;text-overflow:ellipsis}
+/* 사실들 사이의 가운뎃점 — 낱말마다 손으로 적으면 자리마다 빠뜨린다 */
+.pjstrip .pjs-t ~ span:not(.pjs-open)::before{content:"·";margin-right:8px;
+  color:var(--faint)}
+.pjstrip .pjs-st{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);flex:none}
+.pjstrip .pjs-open{margin-left:auto;flex:none;font-size:11px}
+
+/* ── 밀도 (compact) — 여백만 줄인다. 과녁(28px)과 테두리는 그대로.
+   B2 에서 density.css 로 옮길지는 그 축의 주인이 정한다 — 지금 여기 두는 것은
+   이 물결이 기존 css 를 만지지 않기 때문이다. */
+[data-density="compact"] .pjhead{padding:6px 10px}
+[data-density="compact"] .pmem td{padding:3px 8px 3px 0}
+[data-density="compact"] .pmem th{padding:2px 8px 5px 0}
+[data-density="compact"] .pjh{margin:16px 0 6px}
+[data-density="compact"] .pjstrip{margin-bottom:10px}
+[data-density="compact"] .pjlist .more,[data-density="compact"] .pjnone{padding-left:10px}

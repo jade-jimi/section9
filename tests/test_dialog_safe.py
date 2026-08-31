@@ -153,6 +153,15 @@ CENSUS = {
         (True, "창 제목이 그대로 적는다 — 되돌릴 수 없다"),
     ("tidy.js", "휴지통으로", "그만두기"):
         (False, "휴지통에서 되돌릴 수 있다"),
+    # 프로젝트 화면 (REQ-20260831-028). 문안이 PRJ_TEXT 한 표에서 오므로 열쇠도
+    # 그 표를 읽는 이름이다 — card.js 의 `stopAsk` 와 같은 방식.
+    ("project.js", "dlgOk", "dlgCancel"):
+        (False, "새 프로젝트를 만든다 — 만들어 놓고 보관하면 그만이다"),
+    ("project.js", "rmOk", "dlgCancel"):
+        (False, "문서는 그대로 남고 접근만 끊긴다 — 다시 넣으면 원상복구다"
+                " (app.js 멤버 빼기와 같은 자리)"),
+    ("project.js", "statusOk", "dlgCancel"):
+        (False, "보관은 되돌릴 수 있다 — 「다시 열기」가 같은 셀렉트에 있다"),
     # 진단이 세우는 거울 — 본 창과 같은 표를 따른다
     ("diag.js", "취소하기", "그만두기"): (False, "card.js 취소하기의 거울"),
     ("diag.js", "지우기", "그만두기"): (True, "session.js 계정 자리 지우기의 거울"),

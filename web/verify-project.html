@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ko" data-theme="system" data-skin="ledger" data-density="normal">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>프로젝트 화면 — 상태 대조표</title>
+<!-- 프로젝트 화면의 상태를 한 장에 세운다 (REQ-20260831-028 · 설계 REQ-20260831-026).
+
+     실데이터로는 이 상태들이 한 화면에 모이는 순간이 없다 — 프로젝트가 0개인
+     저장소와 N개인 저장소가 동시에 있을 수 없고, 뷰어 권한과 owner 권한을
+     한 사람이 동시에 갖지 않는다. 그래서 **같은 함수를 그대로 불러** 행만
+     지어 넣는다: 여기서 보는 것은 화면이 쓸 그 함수의 출력이지 베낀 그림이
+     아니다 (web/verify-livedot.html 과 같은 규율).
+
+     ?skin=ledger|calm|soft|glass|terminal|grid|slate|cobalt|field|cork
+     ?theme=system|paper|mist|carbon|graphite|phosphor
+     ?density=normal|compact
+     ?only=list|dlg|panel|strip   — 한 구획만 (캡처를 크게 뜰 때)
+
+     창(다이얼로그)의 껍데기는 s9dlg 의 것을 그대로 옮겨 세운다 — 창을 띄우려면
+     dialog.js 가 화면 전체(tab·selectedDoc·render)를 요구하므로, 여기서는 그
+     껍데기 안에 **진짜 폼(prjFormHTML)과 진짜 검사(prjFormWire)** 를 끼워
+     넣는다. 검사·자동 slug·확인 단추 잠금이 실제로 도는지 손으로 눌러 본다. -->
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/header.css">
+<link rel="stylesheet" href="css/board.css">
+<link rel="stylesheet" href="css/docs.css">
+<link rel="stylesheet" href="css/project.css">
+<link rel="stylesheet" href="css/terminal.css">
+<link rel="stylesheet" href="css/graph.css">
+<link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/actions.css">
+<link rel="stylesheet" href="css/skins.css">
+<link rel="stylesheet" href="css/density.css">
+<link rel="stylesheet" href="css/calm.css">
+<link rel="stylesheet" href="css/tidy.css">
+<link rel="stylesheet" href="css/overlay.css">
+<style>
+body{padding:18px 22px}
+h1{font-size:15px;margin:0 0 4px}
+p.sub{color:var(--muted);font-size:11.5px;margin:0 0 16px}
+.case{border:1px solid var(--border);background:var(--panel);margin:0 0 14px}
+.case>h2{font-family:var(--mono);font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);margin:0;font-weight:700;
+  padding:8px 12px;border-bottom:1px solid var(--hairline)}
+.case>.body{padding:12px}
+.case.plain>.body{padding:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.viewer{max-height:none;overflow:visible;padding:0}
+/* 창은 실제로 화면 한가운데 떠 있는 부품(.dlgbox = position:fixed)이다 —
+   대조표에서는 자리를 제자리에 눕혀 다른 구획과 함께 훑는다. 규칙(테두리·
+   그림자·머리·바닥)은 그대로 둔 채 자리만 바꾼다. */
+.dlg.dlgbox{position:static;transform:none;margin:0;max-height:none;
+  width:min(432px,100%)}
+</style></head><body>
+<h1>프로젝트 화면 — 상태 대조표</h1>
+<p class="sub">목록(0·1·N·보관·권한) · 생성 창 · 문서 패널(권한 셋 · 멤버 0 두 갈래 · 만료) · 문맥 띠</p>
+<div id="out"></div>
+
+<!-- 조각의 순서는 껍데기(index.html)의 그것이다 — const → state → project.
+     state.js 는 첫머리에서 const.js 의 상수(AUDIT_PAGE)를 읽으므로, 하나만
+     불러 두면 `esc` 가 초기화되기 전에 죽는다(첫 실행에서 실제로 그랬다). -->
+<script src="app/const.js"></script>
+<script src="app/state.js"></script>
+<script src="app/format.js"></script>
+<script src="app/card.js"></script>
+<script src="app/dialog.js"></script>
+<script src="app/project.js"></script>
+<script>
+const Q = new URLSearchParams(location.search);
+["skin", "theme", "density"].forEach(k => {
+  const v = Q.get(k);
+  if (v) document.documentElement.setAttribute("data-" + k, v);
+});
+const ONLY = Q.get("only") || "";
+
+/* ── mock 행 — 서버 /api/projects 의 모양 그대로 (project.js 머리의 가정) ── */
+const NOW = "2026-08-31T22:00:00+09:00";
+const P_MAIN = {
+  id: "PRJ-20260823-001", slug: "section9", title: "Section9 하네스 시스템",
+  summary: "프롬프트 audit·외부기억 하네스", status: "active", customer: "내부(자체)",
+  contact_name: "", contact_org: "", contact_email: "", contact_phone: "",
+  members: [
+    {user: "nicehugepark", role: "owner", since: "2026-08-23", until: "", position: "PM/오너", active: true},
+    {user: "e7test", role: "maintainer", since: "2026-08-25", until: "2026-09-08", position: "", active: true},
+    {user: "hkim", role: "contributor", since: "2026-08-20", until: "2026-08-28", position: "QA", active: false},
+  ],
+  member_active: 2, member_total: 3,
+};
+const P_PORTAL = {
+  id: "PRJ-20260901-002", slug: "portal", title: "고객사 포털 개편",
+  summary: "", status: "active", customer: "ACME",
+  members: [{user: "nicehugepark", role: "owner", since: "2026-08-30", until: "", position: "", active: true}],
+  member_active: 1, member_total: 1,
+};
+const P_OLD = {
+  id: "PRJ-20260710-003", slug: "legacy-mig", title: "레거시 이관 (2026 상반기)",
+  summary: "", status: "archived", customer: "ACME", members: [],
+  member_active: 0, member_total: 0,
+};
+const P_EMPTY = {
+  id: "PRJ-20260901-004", slug: "newthing", title: "이름 없는 새 일감",
+  summary: "", status: "active", customer: "", members: [], member_active: 0, member_total: 0,
+};
+const USERS = [{name: "nicehugepark"}, {name: "e7test"}, {name: "hkim"}];
+const STATS = {
+  section9: {open: 12, total: 431, last: "2026-08-31T21:56:00+09:00", when: "4분 전"},
+  portal: {open: 3, total: 3, last: "2026-08-30T10:00:00+09:00", when: "어제"},
+  "legacy-mig": {open: 0, total: 87, last: "2026-07-30T10:00:00+09:00", when: "32일 전"},
+  newthing: {open: 0, total: 0, last: "", when: "활동 없음"},
+};
+const base = {users: USERS, statsBy: STATS, now: NOW};
+
+const box = (title, html, plain) =>
+  `<div class="case${plain ? " plain" : ""}"><h2>${title}</h2><div class="body">${html}</div></div>`;
+const docs = html => `<div class="docs" style="display:block"><div class="doclist"`
+  + ` style="max-height:none;border:0">${html}</div></div>`;
+const viewer = html => `<div class="viewer">${html}</div>`;
+
+const parts = [];
+const want = k => !ONLY || ONLY === k;
+
+if (want("list")) parts.push(box("① 목록 — N개 · 보관 접힘 · 만들 수 있음",
+  docs(prjListHTML([P_MAIN, P_PORTAL, P_OLD], {...base, canCreate: true,
+    selected: "PRJ-20260823-001"})), true)
+  + `<div class="grid2">`
+  + box("목록 — 0개 (안내가 아니라 행동)",
+      docs(prjListHTML([], {...base, canCreate: true})), true)
+  + box("목록 — 1개 (구조가 바뀌지 않는다)",
+      docs(prjListHTML([P_PORTAL], {...base, canCreate: true})), true)
+  + box("목록 — 만들 권한 없음 (회색 단추가 아니라 없음)",
+      docs(prjListHTML([P_MAIN, P_OLD], {...base, canCreate: false})), true)
+  + box("목록 — 보관 펼침",
+      docs(prjListHTML([P_MAIN, P_OLD], {...base, canCreate: true, arcOpen: true})), true)
+  + `</div>`);
+
+// 창은 **진짜 창**이다 — dialog.js 를 그대로 불러 띄우고 이 자리로 옮겨 놓는다.
+// (흉내 낸 껍데기는 실제 캐스케이드와 다를 수 있어 검증이 거짓이 된다)
+if (want("dlg")) parts.push(box("② 새 프로젝트 — 네 필드(담당자 4필드는 없다)",
+  `<div id="dlghost"></div>`));
+
+if (want("panel")) parts.push(box("③ 문서 패널 — owner (전부 고칠 수 있음)",
+  viewer(prjPanelHTML(P_MAIN, {...base, me: "nicehugepark"})))
+  + box("문서 패널 — maintainer (owner 행만 잠김)",
+      viewer(prjPanelHTML(P_MAIN, {...base, me: "e7test"})))
+  + box("문서 패널 — 뷰어 (컨트롤을 그리지 않는다)",
+      viewer(prjPanelHTML(P_MAIN, {...base, me: "hkim"})))
+  + `<div class="grid2">`
+  + box("멤버 0 · 넣을 사람 있음 (추가 행이 표 자리에)",
+      viewer(prjPanelHTML(P_EMPTY, {...base, me: "nicehugepark", isAdmin: true})))
+  + box("멤버 0 · 등록 사용자도 0 (막다른 길 대신 갈 자리)",
+      viewer(prjPanelHTML(P_EMPTY, {...base, users: [], me: "nicehugepark", isAdmin: true})))
+  + `</div>`
+  // 저장 실패 — 서버가 거부한 판. 컨트롤이 원복되고 사유는 **서버의 말**로 선다
+  + box("문서 패널 — 저장 실패 (원복 + 서버가 준 사유)",
+      `<div class="viewer" id="failhost"></div>`));
+
+if (want("strip")) parts.push(`<div class="grid2">`
+  + box("④ 문맥 띠 — 32px 한 줄", prjStripHTML(P_MAIN, base))
+  + box("문맥 띠 — 보관됨", prjStripHTML(P_OLD, base))
+  + `</div>`);
+
+document.getElementById("out").innerHTML = parts.join("");
+
+/* 창을 진짜로 띄운다 — 검사(빈 표시명·한글 slug·중복 이름)도 저장도 실제 경로다.
+   창은 화면 한가운데 뜨는 부품이라 대조표에서는 제 자리로 옮겨 눕힌다. */
+const dlgHost = document.getElementById("dlghost");
+if (dlgHost && typeof s9dlg === "function"){
+  prjCreateDlg({taken: ["section9", "portal"], me: "nicehugepark",
+    post: async (path, body) => {
+      dlgHost.insertAdjacentHTML("beforeend",
+        `<div class="pjerr" style="color:var(--muted)">[mock] POST ${path} `
+        + `${JSON.stringify(body)}</div>`);
+      return {ok: true};
+    }});
+  const d = document.querySelector(".dlg");
+  if (d) dlgHost.appendChild(d);
+}
+
+/* 패널 배선 — 저장은 실제로 나가지 않고 마지막 요청을 화면에 적는다(mock post).
+   눌러 보는 사람이 "무엇이 나갔나"를 눈으로 확인할 수 있어야 골격 검증이다. */
+document.querySelectorAll(".pjpanel").forEach(el => {
+  if (el.closest("#failhost")) return;          // 아래 mountFail 이 맡는다
+  const slug = el.dataset.pjslug;
+  const p = [P_MAIN, P_PORTAL, P_OLD, P_EMPTY].find(x => x.slug === slug);
+  prjWire(el, p, {...base, me: "nicehugepark", isAdmin: true,
+    post: async (path, body) => {
+      const line = el.querySelector(".pjerr");
+      line.hidden = false;
+      line.style.color = "var(--muted)";
+      line.textContent = `[mock] POST ${path} ${JSON.stringify(body)}`;
+      return {ok: true};
+    }});
+});
+
+/* 거부당한 판 — 서버가 아니라고 답하면 화면은 **원복하고 서버의 말을 그대로**
+   적는다. 원복은 판을 다시 그리는 일이라, 실패 줄을 미리 잡아 둔 노드에 쓰면
+   떨어져 나간 판에 남는다(이 저장소가 한 번 치른 값). 그래서 여기서도 진짜처럼
+   다시 그린 뒤에 확인한다. */
+const failHost = document.getElementById("failhost");
+function mountFail(){
+  if (!failHost) return;
+  const o = {...base, me: "nicehugepark", isAdmin: true};
+  failHost.innerHTML = prjPanelHTML(P_PORTAL, o);
+  prjWire(failHost.querySelector(".pjpanel"), P_PORTAL, {...o,
+    post: async () => ({ok: false, error: "maintainer 이상이 필요합니다"}),
+    reload: async () => mountFail()});
+}
+mountFail();
+</script>
+</body></html>
