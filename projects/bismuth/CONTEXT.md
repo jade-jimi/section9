@@ -13,6 +13,10 @@ system-health snapshots to cloud consumers.
 
 - Execution host: `Louiville`; repository: `/home/jade/bismuth`
 - Evidence rule: runtime, database, Parquet, container, and station evidence is gathered on Louisville.
+- T3 Code opens from local control workspace `/home/jade/section9-chief/projects/bismuth`, then the
+  bootstrap binds every project/runtime command to
+  `ssh -o ClearAllForwardings=yes Louiville ...` at `/home/jade/bismuth`. The control workspace is
+  coordination context only and must never substitute for missing remote evidence or an older clone.
 
 ## 핵심 링크
 
