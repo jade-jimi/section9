@@ -63,6 +63,47 @@ class GlobalConcurrencyProtocolTests(unittest.TestCase):
         ):
             self.assertIn(phrase, protocol)
 
+    def test_codex_reversible_artifact_fast_lane_delivers_primary_output_first(self):
+        protocol = read("harness", "common", "PROTOCOL.md")
+        adapter = read("harness", "codex", "README.md")
+        required = (
+            "Codex reversible-artifact fast lane",
+            "size M/L",
+            "evidence/source",
+            "diagram/plot/table",
+            "QA 트랙",
+            "spawn_agent",
+            "리드는 기다리지 않고 primary artifact",
+            "basic open/render validation",
+            "PPT/report/draft",
+            "TDD ceremony",
+            "HTML/preview",
+            "artifact registry",
+            "Section9 note/status",
+            "bookkeeping",
+        )
+        for phrase in required:
+            self.assertIn(phrase, protocol)
+            self.assertIn(phrase, adapter)
+
+    def test_codex_fast_lane_preserves_durable_external_and_claude_boundaries(self):
+        protocol = read("harness", "common", "PROTOCOL.md")
+        adapter = read("harness", "codex", "README.md")
+        for phrase in (
+            "durable code/PR",
+            "별도 T3 worker session",
+            "merge/push/deploy",
+            "production write·traffic·grade/data/resource",
+            "destructive action",
+            "외부 메시지·게시",
+            "Jira 변경·close",
+            "credential source",
+            "Claude",
+            "gate 순서",
+        ):
+            self.assertIn(phrase, protocol)
+            self.assertIn(phrase, adapter)
+
     def test_installer_manages_global_codex_agents_from_common_protocol(self):
         installer = read("bin", "s9-install")
         self.assertIn('os.path.expanduser("~/.codex/AGENTS.md")', installer)

@@ -156,3 +156,17 @@
    `gcloud config configurations activate jade`를 실행하거나 `active_config`를 바꾸거나
    `CLOUDSDK_ACTIVE_CONFIG_NAME=jade`를 export하지 않는다. `bq`가 명시적으로 Jade 권한을 필요로
    하는 예외는 한 프로세스에만 `CLOUDSDK_ACTIVE_CONFIG_NAME=jade bq ...`를 inline 적용한다.
+19. **Codex reversible-artifact fast lane** (REQ-20260901-004): Codex는 size M/L의
+   되돌릴 수 있는 PPT/report/draft 산출물을 durable code/PR 및 비가역·외부 상태 변경과 별도로
+   분류한다. 이런 산출물은 시작 즉시 서로 겹치지 않는 evidence/source, diagram/plot/table,
+   QA 트랙을 `spawn_agent`로 fan-out하고, 리드는 기다리지 않고 primary artifact를 동시에 만든다.
+   first useful output의 gate는 파일이 실제로 열리고(open) 핵심 페이지/슬라이드가 render되며
+   깨짐·치명적 가독성 문제가 없는지 확인하는 basic open/render validation이다. 이 검증을 통과한
+   PPT/report/draft는 독립 QA 완료나 TDD ceremony를 기다리지 않고 먼저 사용자에게 전달한다.
+   전달 뒤 같은 active workflow에서 HTML/preview, metadata/source notes, artifact registry,
+   Section9 note/status, commit 등 되돌릴 수 있는 bookkeeping을 한 번에 batch한다.
+   이 fast lane은 merge/push/deploy, production write·traffic·grade/data/resource 변경,
+   destructive action, 외부 메시지·게시, Jira 변경·close 같은 비가역/외부 action의 승인·검증 gate를 줄이지
+   않는다. branch/worktree/PR을 소유하는 durable code track은 계속 별도 T3 worker session +
+   work order로 보낸다. 제18항의 credential source·host·configuration 경계도 그대로 적용한다.
+   이는 **Codex 전용 실행 순서**이며 Claude의 제17항 병렬 호출 의미와 기존 gate 순서를 변경하지 않는다.

@@ -2,9 +2,9 @@
 
 ## Presentation purpose
 
-Explain how Bismuth prevents incomplete or stale evidence from becoming a battery disposition,
-what the recorded incidents prove, and where the end-to-end boundary still belongs to the BT2
-station client. This deck must never imply that every Bin 2 or Bin 6 is false.
+Explain the exact Bin 2/6 same-side recheck and cloud-promotion gate, what the recorded correction
+proves, and which checkout/completeness controls are separate. This deck must never imply that every
+Bin 2 or Bin 6 is false.
 
 Prepared: 2026-09-01 KST  
 Primary system: Bismuth, Louisville offline/failover node  
@@ -12,7 +12,11 @@ Evidence mode: saved reports, tests, configuration and work records; no new live
 
 ## Problem
 
-Two different incomplete-evidence paths can look like a battery failure:
+The cloud or station-facing side result can arrive as Bin 2 or Bin 6. Some are legitimate; others
+can reflect incomplete/stale evidence. Bismuth needs an independent same-side check without
+overwriting a valid cloud verdict.
+
+Adjacent failures still matter, but they are not the Bin 2/6 gate itself:
 
 1. **Checkout / Bin 2:** an empty HTTP 200 or no final aggregate reaches the station result-fetch
    path. The historical station contract converts an empty answer into retest/Bin 2. A 503
@@ -25,9 +29,20 @@ Legitimate Bin 2/6 results still exist. One bounded BT1 cohort contained one rea
 station result with 4.17168195 V against a 4.049 V high-critical threshold. The gate must therefore
 test **evidence completeness and finality**, not suppress a bin number.
 
-## Solution performed
+## Solution performed — the exact Bin 2/6 gate
 
-Bismuth uses a layered gate rather than one boolean:
+1. A side result appears as **Bin 2 or Bin 6**.
+2. Bismuth runs its own ML **on that same side**, side by side with the existing result.
+3. If Bismuth returns an attempt-proven **Bin 1**, append that correction to cloud.
+4. Otherwise send nothing; the existing cloud result stands.
+
+The gate is deliberately asymmetric: it can promote a proven pass over a suspect retest/fail, but
+it does not push another Bin 2/6, does not overwrite equal/worse evidence, and does not synthesize
+station-owned `result_bin_ets`.
+
+## Adjacent safeguards — not the Bin 2/6 gate
+
+Bismuth also uses separate safeguards around the gate:
 
 - **Attempt identity/finality:** grade and checkout evidence must belong to the current EESN/side/
   attempt instead of a recent output timestamp from a prior tester or cycle.
@@ -112,6 +127,9 @@ transformation/image/snapshot remains an explicit Max-owned evidence boundary.
 
 | Situation | Bismuth action | Operator interpretation |
 |---|---|---|
+| side result is Bin 2 or Bin 6 | run Bismuth ML on the same side | independent recheck candidate |
+| same-side Bismuth ML is attempt-proven Bin 1 | append Bin 1 correction to cloud | promote strictly better evidence |
+| same-side Bismuth ML is not Bin 1 | send nothing | existing cloud result stands |
 | known unit, current attempt incomplete | 503 `NOT_READY` + retry | availability state, not battery grade |
 | current attempt has complete L/R final evidence | 200 with a real aggregate row | station may bank `max(L,R)` |
 | observed sequence gap / missing charge cycle | hold persistent grade | do not manufacture Bin 6 |
@@ -140,8 +158,8 @@ separate checkout-grace issue.
 ## Slide sequence
 
 1. The gate protects a decision, not a bin number.
-2. Incomplete evidence has two failure paths: checkout Bin 2 and grading Bin 6.
-3. Four layers keep availability separate from grade.
+2. Exact gate: Bin 2/6 side → same-side ML → promote only Bin 1.
+3. Checkout/completeness are adjacent safeguards, not this gate.
 4. Online parity is strong, but the decisive proof is offline/failover.
 5. Checkout withholding works; station timeout remains the open end-to-end boundary.
 6. The Bin 6 cohort was corrected through attempt-proven reconciliation.

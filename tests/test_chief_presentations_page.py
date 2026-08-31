@@ -62,6 +62,8 @@ class ChiefPresentationsPage(unittest.TestCase):
         ]
         self.assertIn("row.pptx_path || row.pptx_file", links)
         self.assertIn("artifact?path=", links)
+        self.assertIn("row.report_path", links)
+        self.assertIn("artifact?path=${encodeURIComponent(row.report_path)}", links)
         self.assertIn("Download PowerPoint", links)
         self.assertIn("download", links)
         self.assertIn("Read presentation", links)

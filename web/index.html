@@ -5436,7 +5436,9 @@ function chiefPresentationLinks(row,sourceLabel="Read source report"){
   if (pptxPath){
     links.push(`<a class="chief-presentation-primary-link" href="${esc(chiefGet(`artifact?path=${encodeURIComponent(pptxPath)}`))}" download>Download PowerPoint</a>`);
   }
-  if (row.report_file){
+  if (row.report_path){
+    links.push(`<a href="${esc(chiefGet(`artifact?path=${encodeURIComponent(row.report_path)}`))}" data-chief-report-open data-chief-report-title="${esc(`${row.title || "Completed work"} · presentation`)}">Read presentation</a>`);
+  }else if (row.report_file){
     links.push(`<a href="${esc(chiefGet(`report?f=${encodeURIComponent(row.report_file)}`))}" data-chief-report-open data-chief-report-title="${esc(`${row.title || "Completed work"} · presentation`)}">Read presentation</a>`);
   }
   if (row.source_path && row.source_path !== row.report_file){
