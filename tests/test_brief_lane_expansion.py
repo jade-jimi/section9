@@ -36,7 +36,7 @@ class BriefLaneExpansion(unittest.TestCase):
         self.assertEqual(self.source.count("let chiefLaneExpanded ="), 1)
         state = self.source[self.source.index("let chiefLaneExpanded ="):
                             self.source.index("const CHIEF_ENGINES")]
-        for lane in ("needs", "progress", "done"):
+        for lane in ("needs", "ready", "progress", "done"):
             self.assertIn(f"{lane}:false", state)
         self.assertNotIn("localStorage", state)
 
