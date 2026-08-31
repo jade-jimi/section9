@@ -43,6 +43,14 @@ class FakeChief(http.server.BaseHTTPRequestHandler):
                 "projects": [{"id": "argon"}], "portfolio": [{"id": "REQ-1"}],
                 "releases": [{"id": "argon-live"}], "sources": {"reqs": {"status": "ok"}},
             }))
+        if self.path.startswith("/api/work/detail?"):
+            return self.send_body(200, "application/json", json.dumps({
+                "ok": True, "work_id": "REQ-1", "flow": {"next_move": {"id": "REQ-1"}},
+            }))
+        if self.path.startswith("/api/work/deep-details?"):
+            return self.send_body(200, "application/json", json.dumps({
+                "ok": True, "work_id": "REQ-1", "items": [],
+            }))
         if self.path == "/api/now":
             return self.send_body(200, "application/json", json.dumps({"counts": {"working": 2}}))
         if self.path.startswith("/api/work-session/status?"):
@@ -67,7 +75,7 @@ class FakeChief(http.server.BaseHTTPRequestHandler):
         size = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(size) or b"{}")
         self.calls.append(("POST", self.path, body))
-        if self.path in {"/api/sync", "/api/work-session/start", "/api/work/create", "/api/work/attention", "/api/work/done",
+        if self.path in {"/api/sync", "/api/work-session/start", "/api/work/create", "/api/work/attention", "/api/work/deep-details/start", "/api/work/done",
                          "/api/work/investigate", "/api/project-session/start", "/api/project-session/message", "/api/chief-chat/session",
                          "/api/chief-chat/message", "/api/order",
                          "/api/release/autopilot/ensure"}:
@@ -174,6 +182,26 @@ class TestChiefAdapter(unittest.TestCase):
         result = json.loads(raw)
         self.assertEqual(code, 200)
         self.assertEqual(result["path"], "/api/work/attention")
+        self.assertEqual(result["received"], payload)
+
+    def test_card_detail_and_deep_report_use_named_routes(self):
+        code, _ctype, raw = self.call(
+            "/api/chief/work/detail?work_id=REQ-1&evil=ignored")
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(raw)["flow"]["next_move"]["id"], "REQ-1")
+        self.assertIn(("GET", "/api/work/detail?work_id=REQ-1", None), FakeChief.calls)
+
+        code, _ctype, raw = self.call(
+            "/api/chief/work/deep-details?work_id=REQ-1&evil=ignored")
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(raw)["items"], [])
+        self.assertIn(("GET", "/api/work/deep-details?work_id=REQ-1", None), FakeChief.calls)
+
+        payload = {"work_id": "REQ-1", "provider": "codex"}
+        code, _ctype, raw = self.call("/api/chief/work/deep-details/start", payload)
+        self.assertEqual(code, 200)
+        result = json.loads(raw)
+        self.assertEqual(result["path"], "/api/work/deep-details/start")
         self.assertEqual(result["received"], payload)
 
     def test_project_chat_and_orders_are_named_routes(self):
