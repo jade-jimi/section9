@@ -2881,6 +2881,73 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
 .chief-home .chief-sessions{grid-template-columns:190px minmax(0,1fr);min-height:420px}
 .chief-home .chief-session-rows{max-height:410px}
 
+/* Completed work, shaped into an honest speaking sequence. */
+.chief-presentations-page{max-width:1100px;margin:0 auto;padding:22px 0 72px}
+.chief-presentations-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,330px);
+  align-items:end;gap:42px;padding:34px 0 31px;border-bottom:1px solid var(--border)}
+.chief-presentations-hero .eyebrow{margin:0 0 9px;color:var(--c-done);font-size:10px;font-weight:750;
+  letter-spacing:.14em;text-transform:uppercase}
+.chief-presentations-hero h1{margin:0;font:700 clamp(38px,4.4vw,58px)/1.02 Georgia,"Times New Roman",serif;
+  letter-spacing:-.05em;text-wrap:balance}
+.chief-presentations-hero .summary{max-width:650px;margin:17px 0 0;color:var(--muted);font-size:14px;line-height:1.58}
+.chief-presentation-tally{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;
+  padding:3px 0 4px;border-top:1px solid var(--border)}
+.chief-presentation-tally div{padding-top:14px}
+.chief-presentation-tally strong{display:block;color:var(--text);font:700 30px/1 Georgia,serif}
+.chief-presentation-tally span{display:block;margin-top:6px;color:var(--muted);font:9.5px/1.35 var(--mono);
+  letter-spacing:.06em;text-transform:uppercase}
+.chief-presentation-tools{display:flex;align-items:center;justify-content:space-between;gap:22px;
+  padding:16px 0;border-bottom:1px solid var(--border)}
+.chief-presentation-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.chief-presentation-filter{border:1px solid var(--border);background:var(--panel);color:var(--text);
+  min-height:36px;padding:7px 30px 7px 10px;font:11px/1.3 inherit}
+.chief-presentation-state-filters{display:flex;gap:2px}
+.chief-presentation-state-filters button{border:1px solid transparent;background:none;color:var(--muted);
+  min-height:34px;padding:6px 9px;font-size:10.5px;font-weight:700;cursor:pointer}
+.chief-presentation-state-filters button[aria-pressed="true"]{border-color:var(--border);background:var(--panel);color:var(--text)}
+.chief-presentation-groups{display:grid;gap:38px;padding-top:30px}
+.chief-presentation-group-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+  padding-bottom:11px;border-bottom:1px solid var(--border)}
+.chief-presentation-group-head h2{margin:0;font-size:20px;letter-spacing:-.025em}
+.chief-presentation-group-head p{margin:0;color:var(--faint);font:10px/1.4 var(--mono)}
+.chief-presentation-list{display:grid;gap:16px;margin-top:14px}
+.chief-presentation-card{border:1px solid var(--hairline);background:var(--panel);
+  box-shadow:0 9px 27px color-mix(in srgb,var(--text) 5%,transparent)}
+.chief-presentation-card-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;
+  gap:14px;padding:18px 20px;border-bottom:1px solid var(--hairline)}
+.chief-presentation-seal{width:42px;height:42px;border:1px solid color-mix(in srgb,var(--c-done) 48%,var(--border));
+  border-radius:50%;display:grid;place-items:center;color:var(--c-done);font:750 10px/1 var(--mono)}
+.chief-presentation-card.needs-brief .chief-presentation-seal{border-color:color-mix(in srgb,var(--c-inprogress) 52%,var(--border));color:var(--c-inprogress)}
+.chief-presentation-card-head h3{margin:0;font-size:19px;line-height:1.3;letter-spacing:-.025em}
+.chief-presentation-meta{display:flex;gap:5px 11px;flex-wrap:wrap;margin:6px 0 0;color:var(--faint);font:9.5px/1.4 var(--mono)}
+.chief-presentation-readiness{color:var(--c-done);font:750 9.5px/1.3 var(--mono);letter-spacing:.06em;
+  text-transform:uppercase;white-space:nowrap;padding-top:4px}
+.chief-presentation-card.needs-brief .chief-presentation-readiness{color:var(--c-inprogress)}
+.chief-presentation-story{list-style:none;counter-reset:presentation-step;display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));margin:0;padding:0 20px}
+.chief-presentation-story li{counter-increment:presentation-step;position:relative;min-width:0;
+  padding:19px 18px 21px 39px;border-bottom:1px solid var(--hairline)}
+.chief-presentation-story li:nth-child(odd){padding-left:39px;border-right:1px solid var(--hairline)}
+.chief-presentation-story li::before{content:counter(presentation-step);position:absolute;left:4px;top:19px;
+  width:22px;height:22px;border:1px solid var(--border);border-radius:50%;display:grid;place-items:center;
+  color:var(--c-done);font:700 9px/1 var(--mono)}
+.chief-presentation-story h4{margin:0;color:var(--c-done);font:750 9px/1.25 var(--mono);
+  letter-spacing:.1em;text-transform:uppercase}
+.chief-presentation-story p{margin:8px 0 0;color:var(--text);font-size:12.5px;line-height:1.58;white-space:pre-line}
+.chief-presentation-story .unrecorded{color:var(--muted);font-style:italic}
+.chief-presentation-card-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:14px 20px 17px}
+.chief-presentation-links,.chief-presentation-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.chief-presentation-links a{color:var(--text);font-size:10.5px;font-weight:650;text-underline-offset:3px}
+.chief-presentation-actions button{border:1px solid var(--text);background:var(--text);color:var(--bg);
+  min-height:36px;padding:7px 12px;font-size:11px;font-weight:750;cursor:pointer}
+.chief-presentation-actions button:disabled{opacity:.48;cursor:progress}
+.chief-presentation-notice{margin:16px 0 0;padding:11px 0;border-bottom:1px solid var(--hairline);
+  color:var(--muted);font-size:11px;line-height:1.5}
+.chief-presentation-empty{padding:56px 24px;text-align:center;border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);color:var(--muted)}
+.chief-presentation-empty b{display:block;margin-bottom:7px;color:var(--text);font-size:17px}
+
 /* Curated artifact library — explicit registry, never a broad filesystem crawl. */
 .chief-artifacts-page{max-width:1100px;margin:0 auto;padding:22px 0 72px}
 .chief-artifacts-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:28px;
@@ -3050,10 +3117,12 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   .chief-return{padding-top:16px}
   .chief-right{padding-top:0;border-top:1px solid var(--border)}
   .chief-artifact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .chief-presentations-hero{grid-template-columns:1fr;gap:24px}
+  .chief-presentation-tally{max-width:420px}
   .chief-release-grid{grid-template-columns:1fr}
 }
 @media(max-width:600px){
-  body[data-view="chief"] .hrow1{padding:18px 18px}
+  body[data-view="chief"] .hrow1{padding:18px 18px;flex-wrap:wrap}
   body[data-view="chief"] main{padding:0 18px 76px}
   .chief-return{padding:18px 0 30px}
   .chief-return h1{font-size:46px}
@@ -3067,8 +3136,19 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
   .chief-engine-options{width:100%}
   .chief-engine-options button{flex:1;padding-left:5px;padding-right:5px}
   .chief-talk-float{right:18px;bottom:16px}
-  .chief-primary-nav{margin-left:4px}
-  .chief-primary-nav button{padding-left:6px;padding-right:6px}
+  .chief-primary-nav{order:3;width:100%;margin:2px 0 0;overflow-x:auto;scrollbar-width:none}
+  .chief-primary-nav button{padding-left:7px;padding-right:7px;white-space:nowrap}
+  .chief-presentations-page{padding:0 0 54px}
+  .chief-presentations-hero{padding:22px 0}
+  .chief-presentation-tools{align-items:stretch;flex-direction:column}
+  .chief-presentation-filters{align-items:stretch;flex-direction:column}
+  .chief-presentation-state-filters button{flex:1}
+  .chief-presentation-card-head{grid-template-columns:auto minmax(0,1fr)}
+  .chief-presentation-readiness{grid-column:2}
+  .chief-presentation-story{grid-template-columns:1fr;padding:0 17px}
+  .chief-presentation-story li:nth-child(odd){border-right:0}
+  .chief-presentation-card-foot{align-items:stretch;flex-direction:column}
+  .chief-presentation-actions button{width:100%}
   .chief-artifacts-page{padding:0 0 54px}
   .chief-artifacts-hero{align-items:flex-start;flex-direction:column;padding:22px 0}
   .chief-artifact-tools{align-items:stretch;flex-direction:column}
@@ -3098,6 +3178,7 @@ body[data-view="chief"] .count,body[data-view="chief"] .mystrip,body[data-view="
       <button data-chief-nav="brief">Brief</button>
       <button data-chief-nav="meetings">Meetings</button>
       <button data-chief-nav="release">Release</button>
+      <button data-chief-nav="presentations">Presentations</button>
       <button data-chief-nav="artifacts">Artifacts</button>
     </nav>
     <div class="advanced-nav">
@@ -3316,6 +3397,8 @@ let chiefArtifacts = null, chiefArtifactsLoading = false, chiefArtifactsError = 
 let chiefArtifactQuery = "", chiefArtifactKind = "all";
 const chiefArtifactExpanded = new Set();
 let chiefArtifactSearchTimer = null;
+let chiefPresentationProject = "", chiefPresentationState = "ready";
+let chiefPresentationBusy = "", chiefPresentationNotice = "";
 let chiefProjectEngineBusy = "";
 let chiefDetailState = {open:false,work_id:"",loading:false,starting:false,error:"",runs:[],
   provider:"codex",deepenOpen:false,context:null};
@@ -4162,7 +4245,7 @@ async function boot(){
 }
 
 const TABS = ["chief","board","docs","graph","audit","stream","terminal","settings"];
-const CHIEF_DAILY = ["brief","meetings","work","release","reports","relations","sessions","artifacts"];
+const CHIEF_DAILY = ["brief","meetings","work","release","reports","relations","sessions","presentations","artifacts"];
 function syncChiefNav(){
   document.querySelectorAll("[data-chief-nav]").forEach(b =>
     b.classList.toggle("active",tab === "chief" && b.dataset.chiefNav === chiefDaily));
@@ -5244,6 +5327,106 @@ function chiefAccordionRows(rows,lane){
   }).join("");
   return `<div class="chief-accordion-list" id="${listId}">${items}</div>${hidden ? `<button class="chief-lane-more" data-chief-lane-toggle="${esc(lane)}" aria-expanded="${expanded}" aria-controls="${listId}">${expanded ? "Show less" : `Show remaining ${hidden}`}</button>` : ""}`;
 }
+function chiefPresentationInstant(row){
+  const value = String(row && row.completed_at || "").trim();
+  const kst = value.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?) KST$/);
+  const parsed = Date.parse(kst ? `${kst[1]}T${kst[2]}+09:00` : value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+function chiefPresentationWhen(row){
+  const instant = chiefPresentationInstant(row);
+  if (!instant) return row && row.completed_at || "Completion time not recorded";
+  return new Intl.DateTimeFormat("en-US",{year:"numeric",month:"short",day:"numeric"}).format(new Date(instant));
+}
+function chiefPresentationReady(row){
+  const state = chiefNorm(row && row.presentation_status).replaceAll("_"," ").replaceAll("-"," ");
+  const declaredReady = ["ready","presentation ready","generated","current","published","complete","completed"].includes(state);
+  return declaredReady && Boolean(row && row.problem && row.solution && row.result && row.remaining && (row.report_file || row.source_path));
+}
+function chiefPresentationMissing(row){
+  const missing = [];
+  if (!row.problem) missing.push("problem");
+  if (!row.solution) missing.push("solution performed");
+  if (!row.result) missing.push("result / evidence");
+  if (!row.report_file && !row.source_path) missing.push("readable artifact");
+  if (!missing.length && !chiefPresentationReady(row)) missing.push("presentation-ready confirmation");
+  return missing;
+}
+function chiefPresentationLinks(row){
+  const links = [];
+  if (row.report_file){
+    links.push(`<a href="${esc(chiefGet(`report?f=${encodeURIComponent(row.report_file)}`))}" data-chief-report-open data-chief-report-title="${esc(`${row.title || "Completed work"} · presentation`)}">Read presentation</a>`);
+  }
+  if (row.source_path && row.source_path !== row.report_file){
+    links.push(`<a href="${esc(chiefGet(`document?path=${encodeURIComponent(row.source_path)}`))}" data-chief-report-open data-chief-report-title="${esc(`${row.title || "Completed work"} · source`)}">Read source report</a>`);
+  }
+  return links.join("");
+}
+function chiefPresentationCard(row){
+  const ready = chiefPresentationReady(row), missing = chiefPresentationMissing(row);
+  const id = row.id || row.jira || row.source_path || row.report_file || row.title || "presentation";
+  const project = row.project || "chief";
+  const busy = chiefPresentationBusy === String(id);
+  const story = [
+    ["Problem",row.problem,"The original problem is not recorded yet."],
+    ["Solution performed",row.solution,"The performed solution is not recorded yet."],
+    ["Result / evidence",row.result,"An evidence-backed result is not recorded yet."],
+    ["Remaining boundary",row.remaining,"No remaining boundary was recorded; this does not prove that none remains."],
+  ].map(([label,value,fallback]) => `<li><h4>${label}</h4><p class="${value ? "" : "unrecorded"}">${esc(value || fallback)}</p></li>`).join("");
+  const links = chiefPresentationLinks(row);
+  const action = row.report_file ? "Refresh presentation" : ready ? "Create presentation page" : "Generate presentation";
+  return `<article class="chief-presentation-card ${ready ? "presentation-ready" : "needs-brief"}"><header class="chief-presentation-card-head"><span class="chief-presentation-seal" aria-hidden="true">${ready ? "R" : "…"}</span><div><h3>${esc(row.title || row.jira || "Completed work")}</h3><p class="chief-presentation-meta"><span>${esc(row.jira || row.id || "work reference not recorded")}</span><span>Completed ${esc(chiefPresentationWhen(row))}</span>${row.status ? `<span>${esc(String(row.status).replaceAll("_"," "))}</span>` : ""}</p></div><span class="chief-presentation-readiness">${ready ? "Presentation ready" : `Needs brief · ${esc(missing.join(", "))}`}</span></header><ol class="chief-presentation-story">${story}</ol><footer class="chief-presentation-card-foot"><div class="chief-presentation-links">${links || `<span class="chief-report-pending">No readable report attached</span>`}</div><div class="chief-presentation-actions"><button type="button" data-chief-presentation-action="${ready ? "refresh" : "generate"}" data-chief-presentation-id="${esc(id)}" data-chief-presentation-project="${esc(project)}" data-chief-presentation-engine="${esc(chiefEngine)}" ${busy ? "disabled" : ""}>${busy ? "Opening session…" : `${action} with ${esc(CHIEF_ENGINES[chiefEngine].label)}`}</button></div></footer></article>`;
+}
+async function chiefGeneratePresentation(id,project,engine=chiefEngine){
+  const row = chiefArr(chiefData && chiefData.presentations).find(item => String(item.id || item.jira || item.source_path || item.report_file || item.title || "presentation") === String(id));
+  if (!row || chiefPresentationBusy) return;
+  engine = chiefEngineValue(engine);
+  chiefPresentationBusy = String(id);
+  chiefPresentationNotice = `Opening a ${CHIEF_ENGINES[engine].label} presentation session for ${row.title || row.jira || "completed work"}…`;
+  renderChiefPresentations();
+  try{
+    const key = String(row.id || row.jira || id || "work").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,100) || "work";
+    const sourceFile = `/home/jade/section9-chief/projects/meeting-reports/assets/PRESENTATION-${key}.md`;
+    const reportFile = `/home/jade/chief/reports/PRESENTATION-${key}.html`;
+    const metadataFile = `/home/jade/chief/presentations/${key}.json`;
+    const session = await chiefPost("projectSessionStart",{project:"meeting-reports",title:`Presentation — ${row.jira || row.title || id}`,engine,fresh:true});
+    const evidence = JSON.stringify({id:row.id || "",title:row.title || "",project:row.project || "",jira:row.jira || "",completed_at:row.completed_at || "",problem:row.problem || "",solution:row.solution || "",result:row.result || "",remaining:row.remaining || "",report_file:row.report_file || "",source_path:row.source_path || "",presentation_status:row.presentation_status || ""},null,2);
+    const order = `Create or refresh a browser-readable presentation brief for this completed work.\n\nRecorded presentation facts:\n${evidence}\n\nRead the durable source and any attached report before writing. Build the speaking sequence exactly as: Problem → Solution performed → Result/evidence → Remaining boundary, followed by concise talking points and a source table. Use only verified facts, attach measurements to source and observation time, and say Not recorded instead of inferring. Preserve the remaining boundary even when the work is complete.\n\nWrite the durable Markdown source to ${sourceFile}. Write the standalone browser HTML to ${reportFile}. Atomically write ${metadataFile} with: id, title, project, project_title, jira, prepared_at, problem, solution, result, remaining, source_file (the Markdown path), and report_file (the HTML basename PRESENTATION-${key}.html). Register both artifacts with Chief under project meeting-reports. Validate the HTML and JSON before finishing.\n\nThis is read/report-only: do not change Jira, releases, repositories, PRs, cloud resources, Confluence, or Teams. If Jade later requests a PowerPoint, build it separately from /home/jade/EE the.thmx using its actual slide master and layouts.`;
+    if (!session.thread_id) throw new Error("project session did not return a thread id");
+    await chiefPost("projectSessionMessage",{thread_id:session.thread_id,text:order});
+    chiefPresentationNotice = `${row.title || row.jira || "Presentation"} was assigned to ${CHIEF_ENGINES[engine].label}. Its HTML and source will attach here when the session publishes them.`;
+  }catch(e){
+    chiefPresentationNotice = `Presentation session did not start: ${e.message || e}`;
+  }finally{
+    chiefPresentationBusy = "";
+    renderChiefPresentations();
+  }
+}
+function renderChiefPresentations(){
+  const view = $("#view"); $("#count").textContent = "";
+  const all = chiefArr(chiefData && chiefData.presentations).slice().sort((a,b) =>
+    chiefPresentationInstant(b) - chiefPresentationInstant(a) || String(a.title || "").localeCompare(String(b.title || "")));
+  const projectRows = new Map();
+  all.forEach(row => {
+    const id = row.project || "unfiled";
+    if (!projectRows.has(id)) projectRows.set(id,{id,title:row.project_title || row.project || "Unfiled",items:[]});
+    projectRows.get(id).items.push(row);
+  });
+  if (chiefPresentationProject && !projectRows.has(chiefPresentationProject)) chiefPresentationProject = "";
+  const readyCount = all.filter(chiefPresentationReady).length;
+  const visible = all.filter(row => (!chiefPresentationProject || (row.project || "unfiled") === chiefPresentationProject) &&
+    (chiefPresentationState === "all" || (chiefPresentationState === "ready") === chiefPresentationReady(row)));
+  const groups = new Map();
+  visible.forEach(row => {
+    const id = row.project || "unfiled", source = projectRows.get(id);
+    if (!groups.has(id)) groups.set(id,{...source,items:[]});
+    groups.get(id).items.push(row);
+  });
+  const projectOptions = [...projectRows.values()].map(group => `<option value="${esc(group.id)}" ${chiefPresentationProject === group.id ? "selected" : ""}>${esc(group.title)} · ${group.items.length}</option>`).join("");
+  const stateButtons = [["all","All"],["ready","Ready"],["needs","Needs brief"]].map(([value,label]) => `<button type="button" data-chief-presentation-state="${value}" aria-pressed="${chiefPresentationState === value}">${label}</button>`).join("");
+  const content = groups.size ? `<div class="chief-presentation-groups">${[...groups.values()].map(group => `<section class="chief-presentation-group"><header class="chief-presentation-group-head"><h2>${esc(group.title)}</h2><p>${group.items.length} completed item${group.items.length === 1 ? "" : "s"} · newest first</p></header><div class="chief-presentation-list">${group.items.map(chiefPresentationCard).join("")}</div></section>`).join("")}</div>` : `<div class="chief-presentation-empty"><b>${all.length ? "No completed work matches this view." : "No presentation candidates are connected yet."}</b>${all.length ? "Choose another project or readiness filter." : "Completed work will appear when Chief records its problem, performed solution, result evidence, and remaining boundary."}</div>`;
+  view.innerHTML = `<div class="chief-presentations-page"><section class="chief-presentations-hero"><div><p class="eyebrow">Completed work</p><h1>What changed,<br>ready to present.</h1><p class="summary">Each finished item keeps the speaking sequence intact: the problem, the solution performed, the result and its evidence, then the boundary that still remains.</p></div><div class="chief-presentation-tally" aria-label="Presentation readiness"><div><strong>${readyCount}</strong><span>Presentation ready</span></div><div><strong>${all.length - readyCount}</strong><span>Need a brief</span></div></div></section><section class="chief-presentation-tools"><div class="chief-presentation-filters"><select class="chief-presentation-filter" data-chief-presentation-project aria-label="Filter presentations by project"><option value="">All projects · ${all.length}</option>${projectOptions}</select><div class="chief-presentation-state-filters" role="group" aria-label="Filter by presentation readiness">${stateButtons}</div></div>${chiefEnginePickerHTML()}</section>${chiefPresentationNotice ? `<p class="chief-presentation-notice" role="status">${esc(chiefPresentationNotice)}</p>` : ""}<p class="chief-source-health">${visible.length} visible of ${all.length} completed work items · a ready label requires all four narrative fields and a readable artifact</p>${content}</div>`;
+}
 function chiefArtifactSize(bytes){
   const value = Number(bytes || 0);
   if (value < 1024) return `${value} B`;
@@ -5430,6 +5613,7 @@ function chiefTrailStep(label,value,href){
 }
 function renderChief(){
   if (chiefDaily === "meetings"){ renderChiefMeetingsPage(); return; }
+  if (chiefDaily === "presentations"){ renderChiefPresentations(); return; }
   if (chiefDaily === "artifacts"){ renderChiefArtifacts(); return; }
   if (chiefDaily === "release"){ renderChiefReleasePage(); return; }
   const view = $("#view");
@@ -10548,6 +10732,15 @@ document.addEventListener("click", async e => {
   if (meetingPrep){ chiefPrepareMeeting(meetingPrep.dataset.chiefMeetingPrepare || ""); return; }
   const artifactKind = e.target.closest("[data-chief-artifact-kind]");
   if (artifactKind){ chiefArtifactKind = artifactKind.dataset.chiefArtifactKind || "all"; renderChiefArtifacts(); return; }
+  const presentationState = e.target.closest("[data-chief-presentation-state]");
+  if (presentationState){ chiefPresentationState = presentationState.dataset.chiefPresentationState || "all"; renderChiefPresentations(); return; }
+  const presentationAction = e.target.closest("[data-chief-presentation-action]");
+  if (presentationAction && !presentationAction.disabled){
+    chiefGeneratePresentation(presentationAction.dataset.chiefPresentationId || "",
+      presentationAction.dataset.chiefPresentationProject || "",
+      presentationAction.dataset.chiefPresentationEngine || chiefEngine);
+    return;
+  }
   const artifactMore = e.target.closest("[data-chief-artifact-more]");
   if (artifactMore){
     const project = artifactMore.dataset.chiefArtifactMore || "";
@@ -10871,6 +11064,11 @@ document.addEventListener("input", e => {
       if (input){ input.focus(); input.setSelectionRange(input.value.length,input.value.length); }
     });
   },140);
+});
+document.addEventListener("change", e => {
+  if (!e.target.matches("[data-chief-presentation-project]")) return;
+  chiefPresentationProject = e.target.value || "";
+  renderChiefPresentations();
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && !$("#chief-report-reader").hidden){ e.preventDefault(); chiefCloseReport(); }
