@@ -2531,6 +2531,10 @@ body[data-view="chief"] main{max-width:1540px;margin:0 auto;padding:0 28px 48px}
   box-shadow:0 8px 24px color-mix(in srgb,var(--text) 4%,transparent)}
 .chief-detail-action h4{margin:0;font-size:16px;line-height:1.35;letter-spacing:-.015em}
 .chief-detail-action>p{max-width:660px;margin:7px 0 0;color:var(--muted);font-size:12.8px;line-height:1.58}
+.chief-detail-recommendation{margin-top:14px;padding:12px 13px;border-left:3px solid var(--c-done);
+  background:var(--bg);color:var(--text);font-size:12px;line-height:1.58}
+.chief-detail-recommendation b{display:block;margin-bottom:4px;color:var(--faint);font:750 9px/1.2 var(--mono);
+  letter-spacing:.09em;text-transform:uppercase}
 .chief-detail-action-engine{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:16px}
 .chief-detail-action-engine>span{margin-right:4px;color:var(--faint);font:700 9px/1 var(--mono);
   letter-spacing:.08em;text-transform:uppercase}
@@ -4525,6 +4529,47 @@ async function chiefStartResolution(id,title,engine=chiefEngine){
     renderChief(); if (chiefDetailState.open) renderChiefDetail();
   }
 }
+async function chiefApplyRecommendation(id,title,engine=chiefEngine){
+  if (!id || chiefRunActive(chiefRuns[id])) return;
+  const context = chiefDetailState.context || {}, next = context.next_move || {};
+  const detail = context.detail || next.detail || context.work || {};
+  const recommendation = String(detail.next_checkpoint || next.next || (context.work || {}).next || "").trim();
+  if (!recommendation){
+    chiefDetailState.error = "No recorded recommendation is available to apply.";
+    renderChiefDetail(); return;
+  }
+  engine = chiefEngineValue(engine);
+  const confirmed = await s9dlg({kind:"confirm",cap:"Apply recorded recommendation",
+    title:`Start ${CHIEF_ENGINES[engine].label} to apply this?`,
+    desc:`The session will first revalidate current evidence. Recorded recommendation: ${chiefShort(recommendation,760)}`,
+    ok:"Apply with session",cancel:"Not now"});
+  if (!confirmed) return;
+  chiefRuns[id] = {status:"starting",activity:"Starting the recommendation session."};
+  chiefNotice = `Starting the recommended action for ${title}…`; renderChief();
+  if (chiefDetailState.open) renderChiefDetail();
+  try{
+    const priorRes = await fetch(chiefGet(`session/status?work_id=${encodeURIComponent(id)}`),{cache:"no-store"});
+    const prior = priorRes.ok ? await priorRes.json() : null;
+    if (chiefRunActive(prior)){
+      chiefRuns[id] = prior;
+      chiefNotice = `${title} already has a live session; monitoring it instead of starting a duplicate.`;
+      renderChief(); if (chiefDetailState.open) renderChiefDetail(); chiefPollRun(id,prior.run_id); return;
+    }
+    const order = `Jade explicitly accepted the currently recorded recommendation below. Apply it through this bounded project session only after revalidating that it is still correct.\n\nRecorded recommendation:\n${recommendation}\n\n`
+      + `Read the current Jira issue, durable request/work order, project instructions, release/runtime evidence, and any newer report before writing. If evidence has changed or the recommendation is stale, perform no mutation and return outcome: recommendation_changed with the corrected recommendation.\n\n`
+      + `Allowed actions when the recommendation still matches current evidence: Jira priority, due date, evidence comment, or non-Done lifecycle state; Chief hold/snooze/status; work-order, report and checkpoint/timer updates; source refresh; and a bounded code/configuration fix through an isolated branch, tests, PR and verified integration to dev. Create a separate Jira ticket only for genuinely separate work.\n\n`
+      + `Never perform destructive cloud/data/resource actions from this generic authorization. Never transition Jira to Done, merge/deploy production, publish Confluence, or send Teams messages. Those remain separate explicit gates.\n\n`
+      + `Put exactly one result on the first line: outcome: applied, outcome: recommendation_changed, or outcome: blocked. Record every read/write, timestamped evidence, verification, remaining risk, and next human gate in the result and durable work files. Publish a concise report through the Chief artifact registry.`;
+    const run = await chiefPost("session",{work_id:id,engine,order});
+    chiefRuns[id] = run;
+    chiefNotice = `${title} recommendation is agent-owned; Done and production remain your gates.`;
+    renderChief(); if (chiefDetailState.open) renderChiefDetail(); chiefPollRun(id,run.run_id);
+  }catch(e){
+    chiefRuns[id] = {status:"failed",error:String(e)};
+    chiefNotice = `Could not start the recommended action for ${title}: ${e.message || e}`;
+    renderChief(); if (chiefDetailState.open) renderChiefDetail();
+  }
+}
 async function chiefCompleteVerifiedWork(id,title,jira){
   if (!/^REQ-\d{8}-\d{2}$/.test(String(id || ""))) return;
   const confirmed = await s9dlg({kind:"confirm",cap:"Final human gate",title:"Complete this verified work?",
@@ -4606,6 +4651,7 @@ function renderChiefDetail(){
   const canClose = closeReady && /^REQ-\d{8}-\d{2}$/.test(String(workId));
   const workReport = workRun && workRun.run_id && resolutionDone ? chiefGet(`session/report?id=${encodeURIComponent(workRun.run_id)}`) : "";
   const workSession = workRun && workRun.thread_id ? "t3code://app/" : "";
+  const recommendation = String(detail.next_checkpoint || next.next || work.next || "").trim();
   $("#chief-detail-title").textContent = next.title || detail.goal || "Work details";
   const field = (label,value) => {
     const text = chiefDetailText(value), missing = text === "Not recorded";
@@ -4634,7 +4680,7 @@ function renderChiefDetail(){
   const engineButtons = Object.entries(CHIEF_ENGINES).map(([value,meta]) => `<button type="button" data-chief-engine="${value}" aria-pressed="${value === chiefEngine}" title="${esc(meta.note)}">${esc(meta.label)}</button>`).join("");
   body.innerHTML = `<p class="chief-detail-intro">A saved, decision-ready view of this work. Opening it never starts an agent or changes Jira.</p>
     <section class="chief-detail-section">${sectionHead("Decision brief","What matters now")}<div class="chief-detail-decision">${decisionCard("What changed",detail.what_changed || detail.outcome,true)}${decisionCard("Why now",detail.why_now)}${decisionCard("Impact",detail.impact)}${decisionCard("Next checkpoint",detail.next_checkpoint)}${decisionCard("Goal",detail.goal)}</div></section>
-    <section class="chief-detail-section">${sectionHead("Act on this work","Evidence first, action second")}<div class="chief-detail-action"><h4>Verify the current state, then resolve it</h4><p>The session checks live evidence and returns exactly one path: safe to close, a bounded PR/action is required, or a named blocker. Production remains your gate.</p><div class="chief-detail-action-engine"><span>Start with</span>${engineButtons}</div><div class="chief-detail-action-buttons"><button type="button" data-chief-resolve="${esc(workId)}" data-chief-title="${esc(next.title || detail.goal || "this work")}" ${workRunActive ? "disabled" : ""}>${workRunActive ? "Verification running…" : resolutionDone ? `Verify again with ${esc(CHIEF_ENGINES[chiefEngine].label)}` : `Verify & resolve with ${esc(CHIEF_ENGINES[chiefEngine].label)}`}</button>${workReport ? `<a class="secondary" href="${esc(workReport)}" data-chief-report-open data-chief-report-title="${esc(`${next.title || "Work"} · verification report`)}">Open verification report</a>` : ""}${workSession ? `<a class="secondary" href="${esc(workSession)}">Open T3 Code</a>` : ""}${canClose ? `<button type="button" class="secondary" data-chief-complete-verified="${esc(workId)}" data-chief-jira="${esc(detail.jira || work.jira || "")}" data-chief-title="${esc(next.title || detail.goal || "this work")}">Complete + close Jira</button>` : ""}</div><div class="chief-detail-run-state ${runStateClass}"><b>${workRunActive ? "Working" : closeReady ? "Ready for your close" : resolutionDone ? "Result ready" : "Current state"}</b><br>${esc(runState)}</div></div></section>
+    <section class="chief-detail-section">${sectionHead("Act on this work","Evidence first, action second")}<div class="chief-detail-action"><h4>Verify the current state, then resolve it</h4><p>The session checks live evidence and returns exactly one path: safe to close, a bounded PR/action is required, or a named blocker. Production remains your gate.</p>${recommendation ? `<div class="chief-detail-recommendation"><b>Recorded recommendation</b>${esc(recommendation)}</div>` : ""}<div class="chief-detail-action-engine"><span>Start with</span>${engineButtons}</div><div class="chief-detail-action-buttons"><button type="button" data-chief-resolve="${esc(workId)}" data-chief-title="${esc(next.title || detail.goal || "this work")}" ${workRunActive ? "disabled" : ""}>${workRunActive ? "Verification running…" : resolutionDone ? `Verify again with ${esc(CHIEF_ENGINES[chiefEngine].label)}` : `Verify & resolve with ${esc(CHIEF_ENGINES[chiefEngine].label)}`}</button>${recommendation ? `<button type="button" class="secondary" data-chief-apply-recommendation="${esc(workId)}" data-chief-title="${esc(next.title || detail.goal || "this work")}" ${workRunActive ? "disabled" : ""}>Apply recommendation with ${esc(CHIEF_ENGINES[chiefEngine].label)}</button>` : ""}${workReport ? `<a class="secondary" href="${esc(workReport)}" data-chief-report-open data-chief-report-title="${esc(`${next.title || "Work"} · verification report`)}">Open verification report</a>` : ""}${workSession ? `<a class="secondary" href="${esc(workSession)}">Open T3 Code</a>` : ""}${canClose ? `<button type="button" class="secondary" data-chief-complete-verified="${esc(workId)}" data-chief-jira="${esc(detail.jira || work.jira || "")}" data-chief-title="${esc(next.title || detail.goal || "this work")}">Complete + close Jira</button>` : ""}</div><div class="chief-detail-run-state ${runStateClass}"><b>${workRunActive ? "Working" : closeReady ? "Ready for your close" : resolutionDone ? "Result ready" : "Current state"}</b><br>${esc(runState)}</div></div></section>
     <section class="chief-detail-section">${sectionHead("Record","Ownership and source")}<dl class="chief-detail-grid compact">${field("Jira status",detail.jira_status)}${field("Assignee",detail.assignee)}${field("Owner",detail.owner)}${field("Source",detail.source)}${field("Updated",detail.updated)}${field("Checklist",detail.checked != null || detail.total != null ? `${detail.checked ?? "?"}/${detail.total ?? "?"}` : null)}</dl></section>
     <section class="chief-detail-section">${sectionHead("Technical anchor",technicalRecorded ? "Exact place to inspect" : "No repository anchor")}${technicalRecorded ? `<dl class="chief-detail-grid">${field("Repository",detail.repo)}${field("Branch / ref",detail.branch)}${field("Commit",detail.branch_commit)}</dl>` : `<p class="chief-detail-empty">No repository, branch, or commit is recorded for this work.</p>`}</section>
     <section class="chief-detail-section">${sectionHead("Evidence",evidence.length ? `${evidence.length} recorded` : "No evidence recorded")}${evidence.length ? `<ul class="chief-detail-evidence">${evidence.map(x => `<li>${esc(chiefDetailText(x))}</li>`).join("")}</ul>` : `<p class="chief-detail-empty">No durable evidence has been recorded for this work yet.</p>`}</section>
@@ -10099,6 +10145,8 @@ document.addEventListener("click", async e => {
   if (openDetails){ openChiefDetails(openDetails.dataset.chiefOpenDetails || "",openDetails); return; }
   const resolveWork = e.target.closest("[data-chief-resolve]");
   if (resolveWork){ chiefStartResolution(resolveWork.dataset.chiefResolve || "",resolveWork.dataset.chiefTitle || "this work"); return; }
+  const applyRecommendation = e.target.closest("[data-chief-apply-recommendation]");
+  if (applyRecommendation){ await chiefApplyRecommendation(applyRecommendation.dataset.chiefApplyRecommendation || "",applyRecommendation.dataset.chiefTitle || "this work"); return; }
   const completeVerified = e.target.closest("[data-chief-complete-verified]");
   if (completeVerified){ await chiefCompleteVerifiedWork(completeVerified.dataset.chiefCompleteVerified || "",completeVerified.dataset.chiefTitle || "this work",completeVerified.dataset.chiefJira || ""); return; }
   const deepProvider = e.target.closest("[data-chief-deep-provider]");
