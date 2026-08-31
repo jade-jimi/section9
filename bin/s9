@@ -10980,6 +10980,7 @@ def cmd_serve(args):
                     "/api/chief/release/ensure": "/api/release/autopilot/ensure",
                     "/api/chief/project-session/start": "/api/project-session/start",
                     "/api/chief/project-session/message": "/api/project-session/message",
+                    "/api/chief/project/engine": "/api/project/engine",
                     "/api/chief/work/create": "/api/work/create",
                     "/api/chief/work/attention": "/api/work/attention",
                     "/api/chief/work/deep-details/start": "/api/work/deep-details/start",

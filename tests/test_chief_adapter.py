@@ -82,7 +82,7 @@ class FakeChief(http.server.BaseHTTPRequestHandler):
         size = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(size) or b"{}")
         self.calls.append(("POST", self.path, body))
-        if self.path in {"/api/sync", "/api/work-session/start", "/api/work/create", "/api/work/attention", "/api/work/deep-details/start", "/api/work/done",
+        if self.path in {"/api/sync", "/api/work-session/start", "/api/work/create", "/api/work/attention", "/api/work/deep-details/start", "/api/work/done", "/api/project/engine",
                          "/api/work/investigate", "/api/project-session/start", "/api/project-session/message", "/api/chief-chat/session",
                          "/api/chief-chat/message", "/api/order",
                          "/api/release/autopilot/ensure"}:
@@ -247,6 +247,14 @@ class TestChiefAdapter(unittest.TestCase):
             "/api/chief/project-session/message", {"thread_id": "t-1", "text": "continue"})
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(raw)["path"], "/api/project-session/message")
+
+    def test_project_engine_is_a_named_persisted_route(self):
+        payload = {"project": "cobalt", "engine": "codex"}
+        code, _ctype, raw = self.call("/api/chief/project/engine", payload)
+        self.assertEqual(code, 200)
+        result = json.loads(raw)
+        self.assertEqual(result["path"], "/api/project/engine")
+        self.assertEqual(result["received"], payload)
 
     def test_board_start_uses_linked_jira_work_session_then_transitions(self):
         request_id = self.new_request("Start linked work", "Jira BDA-9999")
