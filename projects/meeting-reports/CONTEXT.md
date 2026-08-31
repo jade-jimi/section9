@@ -48,3 +48,17 @@ release state, and observation time instead of copying mutable status without pr
   the watcher sends one personal ntfy message through `/home/jade/chief/bin/chief-notify` with the
   meeting title/time and `#chief/meetings` link. `notified_at` in automation state deduplicates it;
   a failed ntfy send remains unacknowledged and retries on a later timer tick. Teams is never used.
+
+## Completed-work presentations
+
+- Chief route: `#chief/presentations`.
+- Eligibility is evidence-first: terminal work needs recorded Problem, Solution performed,
+  Result/evidence, Remaining boundary, and a readable source/report before it is labelled
+  **Presentation ready**. Everything else remains **Needs brief**.
+- Generated Markdown: `assets/PRESENTATION-<work-key>.md`.
+- Generated browser HTML: `/home/jade/chief/reports/PRESENTATION-<work-key>.html`.
+- Discovery metadata: `/home/jade/chief/presentations/<work-key>.json` with exact problem,
+  solution, result, remaining boundary, source and report references.
+- Generation runs in the local `meeting-reports` T3 project with Jade's selected Codex/Claude model
+  and is read/report-only. It never transitions Jira, merges PRs, deploys, publishes Confluence or
+  sends Teams messages. PowerPoint is a later explicit action and must use `/home/jade/EE the.thmx`.
