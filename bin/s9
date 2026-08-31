@@ -471,7 +471,12 @@ POLL_SNAPSHOT_SEC = 0.0     # cmd_serve 가 2.0 으로 올린다 — 다른 자�
 _POLL_EPOCH = [0]           # 서버 POST(행동)마다 +1 — 행동 직후 조회는 신선
 # /api/catalog 응답 바이트 캐시 — 키는 (게이트 세대 seq, 뷰어, archived).
 # 항상 게이트 **뒤에서만** 조회된다(신선도 판정은 게이트 한 곳) — 핸들러 참조.
-_CATALOG_RESP = {"key": None, "body": b""}
+# etag/zbody (REQ-20260831-004): 이 기계의 TCP 루프백은 virtioproxy 프록시를
+# 지나 ~6MB/s 다(유닉스 소켓 1.8GB/s — TCP 경로만). 548KB 응답을 95연결이
+# 폴링하면 ~70MB/s 수요로 회선이 12배 초과돼 p95 12s 가 됐다(실측). 계산·
+# 직렬화가 아니라 **바이트 수**가 병목이므로, 안 바뀐 본문은 안 보낸다(304)
+# 그리고 보낼 때는 gzip 이다. 해시·압축은 본문 세대당 한 번, 여기 캐시된다.
+_CATALOG_RESP = {"key": None, "body": b"", "etag": "", "zbody": b""}
 _CATALOG_RESP_LOCK = threading.Lock()
 
 
@@ -11690,15 +11695,36 @@ def session_log_append(session, text, user=None):
 ROLES = ["admin", "member", "viewer"]
 
 
+_ROLE_CACHE = {}          # name -> (profile.md mtime_ns, role)
+_ROLE_LOCK = threading.Lock()
+
+
 def user_role(name):
-    """profile.md의 role (기본 member). admin만 harness(bin/web/claude/) 수정 가능."""
+    """profile.md의 role (기본 member). admin만 harness(bin/web/claude/) 수정 가능.
+
+    mtime 검증 캐시다 (REQ-20260831-004): doc_visible 이 행마다 부르므로
+    무캐시면 카탈로그 한 응답에 open+fm_parse 가 740회다 — 95연결 폭풍에서
+    이 함수 하나가 GIL 을 삼켜 전 스레드가 여기 서 있었다(faulthandler 실측).
+    stat 한 번으로 신선도를 확인하니 role 변경은 다음 요청에 바로 반영된다."""
+    path = os.path.join(USERS, name, "profile.md")
     try:
-        with open(os.path.join(USERS, name, "profile.md"), encoding="utf-8") as f:
-            meta, _ = fm_parse(f.read())
-        r = meta.get("role", "member")
-        return r if r in ROLES else "member"
+        mt = os.stat(path).st_mtime_ns
     except OSError:
         return ""  # 미등록
+    with _ROLE_LOCK:
+        hit = _ROLE_CACHE.get(name)
+        if hit and hit[0] == mt:
+            return hit[1]
+    try:
+        with open(path, encoding="utf-8") as f:
+            meta, _ = fm_parse(f.read())
+        r = meta.get("role", "member")
+        r = r if r in ROLES else "member"
+    except OSError:
+        return ""  # 미등록
+    with _ROLE_LOCK:
+        _ROLE_CACHE[name] = (mt, r)
+    return r
 
 
 GH_ACCT = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})"
@@ -15385,6 +15411,37 @@ def cmd_serve(args):
             self.end_headers()
             self.wfile.write(data)
 
+        def _send_catalog(self, body, etag, zbody):
+            """catalog 만 no-store 가 아니라 no-cache+ETag 다 (REQ-20260831-004).
+
+            no-cache 는 "쓰기 전에 물어봐라"다 — 브라우저는 매 폴마다
+            If-None-Match 로 재검증하므로 신선도는 no-store 와 같고, 안 바뀐
+            폴은 548KB 대신 304 헤더 한 줄이 간다. virtioproxy 로 TCP 가
+            ~6MB/s 인 이 기계에서 95연결 폴링이 사는 길은 바이트를 줄이는 것
+            뿐이다. 본문이 갈 때도 gzip 을 받는 클라이언트면 압축본이 간다.
+            """
+            if etag and self.headers.get("If-None-Match") == etag:
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            data, enc = body, None
+            if zbody and "gzip" in (self.headers.get("Accept-Encoding") or ""):
+                data, enc = zbody, "gzip"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            if etag:
+                self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Vary", "Accept-Encoding")
+            if enc:
+                self.send_header("Content-Encoding", enc)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
         def _send_asset(self, full, ctype):
             """첨부 서빙 — 잠깐 물리고, 안 바뀌었으면 안 보낸다 (REQ-20260829-019).
 
@@ -15557,19 +15614,48 @@ def cmd_serve(args):
                 # 두 번째 신선도 판정이 생긴다 — 판정은 게이트 한 곳이다.
                 rows = catalog_with_live()
                 key = (catalog_with_live._state["seq"], me, want)
+                # 빌드는 single-flight 다 — 잠금을 빌드 **내내** 쥔다. 확인과
+                # 빌드 사이가 열려 있으면 세대가 바뀌는 순간 95스레드가 전부
+                # 미스를 보고 같은 본문을 각자 굽는다(faulthandler 실측:
+                # 95스레드 전원이 이 필터 안, GIL 직렬로 p95 12s). 빌드는
+                # ~수십 ms 라 뒤에 선 스레드는 그만큼 기다렸다 재사용한다.
+                def _coarse(r):
+                    # 초 단위 나이(live_age·stopped.age·worker.age)는 화면
+                    # 문구용이다 — 정밀값 그대로 실으면 스냅샷 세대마다
+                    # 본문이 바뀌어 ETag 가 매번 죽고 304 는 없다(실측:
+                    # 3초 간격 diff 에서 live_age 만 변함). 10초 눈금으로
+                    # 내림해 싣는다 — 서버 내부 판정(멈춤·워처)은 직렬화
+                    # 전 정밀값으로 이미 끝났다. 중첩 dict 는 게이트
+                    # 스냅샷과 공유되므로 복사 후 고친다.
+                    if isinstance(r.get("live_age"), int):
+                        r["live_age"] -= r["live_age"] % 10
+                    for k in ("stopped", "worker"):
+                        d = r.get(k)
+                        if isinstance(d, dict) \
+                                and isinstance(d.get("age"), int):
+                            r[k] = {**d, "age": d["age"] - d["age"] % 10}
+                    return r
                 with _CATALOG_RESP_LOCK:
-                    body = (_CATALOG_RESP["body"]
-                            if _CATALOG_RESP["key"] == key else None)
-                if body is None:
-                    body = json.dumps(
-                        [r for r in rows
-                         if bool(r.get("archived")) == want
-                         and doc_visible(r, me)],
-                        ensure_ascii=False).encode()
-                    with _CATALOG_RESP_LOCK:
-                        _CATALOG_RESP["key"] = key
-                        _CATALOG_RESP["body"] = body
-                self._send(200, "application/json; charset=utf-8", body)
+                    if _CATALOG_RESP["key"] != key:
+                        import hashlib
+                        body = json.dumps(
+                            [_coarse(r) for r in rows
+                             if bool(r.get("archived")) == want
+                             and doc_visible(r, me)],
+                            ensure_ascii=False).encode()
+                        # ETag 는 본문 해시다 — 게이트 세대(seq)가 아니라.
+                        # 세대가 바뀌어도 내용이 같으면 304 가 유효해야 하고,
+                        # 뷰어마다 본문이 다르므로 교차 뷰어 304 오염도 원천
+                        # 차단된다.
+                        z = zlib.compressobj(6, zlib.DEFLATED, 31)  # 31=gzip
+                        _CATALOG_RESP.update(
+                            key=key, body=body,
+                            etag='"' + hashlib.md5(body).hexdigest() + '"',
+                            zbody=z.compress(body) + z.flush())
+                    body, etag, zbody = (_CATALOG_RESP["body"],
+                                         _CATALOG_RESP["etag"],
+                                         _CATALOG_RESP["zbody"])
+                self._send_catalog(body, etag, zbody)
             elif parsed.path == "/api/graph":
                 me = viewer_of(qs)
                 g = graph_data()
