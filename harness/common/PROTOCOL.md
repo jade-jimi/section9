@@ -131,3 +131,28 @@
    독립 branch/worktree/PR이 필요하거나 부모 컨텍스트 종료 후에도 살아야 하는 구현 트랙은
    subagent가 아니라 별도 T3 worker session + work order로 라우팅한다. subagent는 bounded
    조사·증거·리뷰·서로 겹치지 않는 단기 구현 트랙에 쓴다.
+   **실행 절차**: (1) spawn 전에 REQ/work order에 lead와 각 트랙의 claim·범위·산출물을 적는다.
+   (2) Codex는 `spawn_agent(task_name, message)`를 최대 3번 호출한다(고유 role type은 없으므로
+   역할·범위는 task_name/message에 쓴다). `list_agents`로 상태를 보고, 추가 지시는 `send_message`/
+   `followup_task`, 취소는 `interrupt_agent`, 필요한 마지막 대기만 `wait_agent`를 쓴다.
+   Claude는 **한 assistant message에서** 독립 트랙별 `Agent` 호출을 최대 3개 함께 내고
+   `description`, `prompt`, `subagent_type`, 보통 `run_in_background:true`를 지정한다. 완료는 자동 통지되므로
+   `TaskOutput` polling하지 말고, 조향은 `SendMessage`를 쓴다. (3) 리드는 기다리기만 하지 말고
+   통합 준비나 자기 트랙을 계속한다. (4) 결과가 오면 각 요지를
+   `s9 note --label subagent --agent <role>` 또는 work-order handoff에 붙이고, 충돌을 해결한 뒤
+   합쳐진 트리에서 최종 테스트를 실행한다. "subagent를 써라"라는 문장만 남기고 실제 spawn을
+   하지 않은 것은 병렬 실행으로 인정하지 않는다.
+18. **전역 credential routing** (REQ-20260831-039): eek-p620의 Bitbucket/Jira REST 인증은
+   `/home/jade/.bitbucket_creds` 가 승인된 로컬 소스다. 값을 출력·로그·문서·attachment·commit에
+   남기지 말고, 직접 REST가 필요하면 `/home/jade/chief/bin/atlassian-env.sh` 를 source해
+   `ATLASSIAN_EMAIL`을 쓰거나 기존 `chief/bin/jira`·release helper를 사용한다(`USER` 충돌 방지).
+   project-local 문서는 추가 권한/검증 gate를 더할 수 있지만 jira-cli나 별도 JIRA_EMAIL/JIRA_TOKEN
+   등 다른 credential source로 바꾸지 않는다. 승인된 로컬 소스가 없으면 fail closed한다.
+   Git fetch/push는 repo의 SSH remote/key를 쓰며 이 토큰 파일을 Git credential로 복사하지 않는다.
+   파일은 Louisville/다른 호스트로 복사·전송하지 않는다. remote 작업이 Atlassian API를 필요로
+   하면 로컬 Chief 세션에 인계하고, 없음을 우회하지 않는다.
+   GCP 일반 작업은 crew의 현재 `default` configuration을 그대로 쓴다. **특별 작업이 명시적으로
+   Jade 권한을 요구할 때만** 그 한 명령에 `gcloud --configuration=jade ...`를 붙인다. 절대
+   `gcloud config configurations activate jade`를 실행하거나 `active_config`를 바꾸거나
+   `CLOUDSDK_ACTIVE_CONFIG_NAME=jade`를 export하지 않는다. `bq`가 명시적으로 Jade 권한을 필요로
+   하는 예외는 한 프로세스에만 `CLOUDSDK_ACTIVE_CONFIG_NAME=jade bq ...`를 inline 적용한다.

@@ -4839,6 +4839,26 @@ async function chiefCompleteVerifiedWork(id,title,jira){
     renderChief();
   }
 }
+async function chiefClaimProductionDone(row,title){
+  const action = chiefProductionAction(row,"ready");
+  if (!action){
+    chiefNotice = "Production close is unavailable because the saved card has no verified close action.";
+    renderChief(); return;
+  }
+  const payload = {...action.body};
+  const confirmed = await s9dlg({kind:"confirm",cap:"Final human gate",title:"Claim production done and close Jira?",
+    desc:`${chiefProductionEvidenceText(action)} Chief refreshes these exact sources again before Jira closes. It will not merge or deploy anything.`,
+    ok:"Claim production done + close Jira",cancel:"Keep open"});
+  if (!confirmed) return;
+  try{
+    await chiefPost("complete",payload);
+    chiefNotice = `${title} is production done and ${row.jira} is closed.`;
+    await refreshChief(true);
+  }catch(e){
+    chiefNotice = `The work stayed open: ${e.message || e}`;
+    renderChief();
+  }
+}
 async function chiefStartRelease(id,action,title,engine=chiefEngine){
   const key = `release:${id}:${action}`;
   if (!id || chiefRunActive(chiefRuns[key])) return;
@@ -5342,6 +5362,27 @@ function chiefReportHTML(row){
     <p>${esc(row.project_title || row.project || row.authority || "Chief")} · ${esc(row.updated || row.status || "recorded")}</p></div>
     ${href ? `<a href="${esc(href)}" data-chief-report-open data-chief-report-title="${esc(row.title || row.source || "Report")}">Open report</a>` : `<span class="chief-report-pending">link pending</span>`}</article>`;
 }
+function chiefProductionAction(row,lane){
+  const action = row && row.production_action, evidence = action && action.evidence;
+  const body = action && action.body;
+  const terminalJira = new Set(["done","closed","resolved","complete","completed","cancelled","canceled"]);
+  if (lane !== "ready" || !row || row.production_complete !== true || !action ||
+      action.id !== "claim_production_done" || !/^REQ-\d{8}-\d{2}$/.test(String(row.id || "")) ||
+      !row.jira || terminalJira.has(chiefNorm(row.jira_status))) return null;
+  if (action.endpoint !== "/api/work/done" || !body || body.id !== row.id ||
+      String(body.jira || "").toUpperCase() !== String(row.jira).toUpperCase() ||
+      body.sync_jira !== true || body.production_action !== action.id ||
+      !body.production_evidence_fingerprint) return null;
+  if (!evidence || !Array.isArray(evidence.feature_prs) || !evidence.feature_prs.length ||
+      !evidence.production_pr || !evidence.production_pr.id || !evidence.verified_at) return null;
+  return action;
+}
+function chiefProductionEvidenceText(action){
+  const evidence = action && action.evidence || {};
+  const featurePrs = chiefArr(evidence.feature_prs).map(pr => `#${pr.id}`).join(", ");
+  const productionPr = evidence.production_pr || {};
+  return `Feature PR${chiefArr(evidence.feature_prs).length === 1 ? "" : "s"} ${featurePrs}; production PR #${productionPr.id} merged ${productionPr.merged_at || "at a recorded time"}; verified ${evidence.verified_at}.`;
+}
 function chiefAccordionRows(rows,lane){
   const expanded = Boolean(chiefLaneExpanded[lane]);
   const shown = expanded ? rows : rows.slice(0,3);
@@ -5351,9 +5392,11 @@ function chiefAccordionRows(rows,lane){
   const items = shown.map(row => {
     const ref = row.jira || row.work_order || row.id || "Work";
     const run = chiefRuns[row.id], running = chiefRunActive(run);
-    const act = running ? "Working…" : lane === "needs" ? "Verify & resolve" : lane === "progress" ? "Continue" : lane === "ready" ? "Start work" : "Evidence";
+    const productionAction = chiefProductionAction(row,lane);
+    const act = running ? "Working…" : productionAction ? "Claim production done + close Jira" : lane === "needs" ? "Verify & resolve" : lane === "progress" ? "Continue" : lane === "ready" ? "Start work" : lane === "done" && row.production_complete ? "Production done" : "Evidence";
+    const actionId = productionAction ? productionAction.id : lane;
     const priority = lane === "needs" ? `<em class="chief-row-priority p${chiefPriorityRank(row)}">${esc(chiefPriorityLabel(row))}</em>` : "";
-    return `<article class="chief-accordion-item"><h3>${esc(row.title || ref)}</h3><p>${esc(chiefShort(row.next || row.outcome || row.goal || row.why || "No movement note recorded."))}</p><footer><span>${esc(ref)}${row.project ? ` · ${esc(row.project)}` : ""}${priority}</span><div class="chief-row-actions"><button class="chief-row-details" data-chief-open-details="${esc(row.id || "")}" aria-label="Open saved details for ${esc(row.title || ref)}">Details</button><button class="chief-text-action" data-chief-action="${esc(lane)}" data-chief-work="${esc(row.id || "")}" data-chief-title="${esc(row.title || ref)}" ${running ? "disabled" : ""}>${act}</button></div></footer></article>`;
+    return `<article class="chief-accordion-item"><h3>${esc(row.title || ref)}</h3><p>${esc(chiefShort(row.next || row.outcome || row.goal || row.why || "No movement note recorded."))}</p><footer><span>${esc(ref)}${row.project ? ` · ${esc(row.project)}` : ""}${priority}</span><div class="chief-row-actions"><button class="chief-row-details" data-chief-open-details="${esc(row.id || "")}" aria-label="Open saved details for ${esc(row.title || ref)}">Details</button><button class="chief-text-action" data-chief-action="${esc(actionId)}" data-chief-work="${esc(row.id || "")}" data-chief-title="${esc(row.title || ref)}" ${running ? "disabled" : ""}>${act}</button></div></footer></article>`;
   }).join("");
   return `<div class="chief-accordion-list" id="${listId}">${items}</div>${hidden ? `<button class="chief-lane-more" data-chief-lane-toggle="${esc(lane)}" aria-expanded="${expanded}" aria-controls="${listId}">${expanded ? "Show less" : `Show remaining ${hidden}`}</button>` : ""}`;
 }
@@ -10919,6 +10962,7 @@ document.addEventListener("click", async e => {
     const title = chiefAct.dataset.chiefTitle || chiefAct.dataset.chiefWork || "this work";
     const row = chiefArr(chiefData && chiefData.portfolio).find(r => r.id === id) || {};
     if (action === "needs") { chiefStartResolution(id,title); return; }
+    if (action === "claim_production_done") { await chiefClaimProductionDone(row,title); return; }
     if (action === "ready" || action === "progress") { chiefStartWork(id,title); return; }
     if (row.report_file){ chiefOpenReport(chiefGet(`report?f=${encodeURIComponent(row.report_file)}`),title,chiefAct); return; }
     s9dlg({kind:"alert",cap:action === "needs" ? "Your decision" : "Evidence",title,

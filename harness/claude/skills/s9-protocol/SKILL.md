@@ -29,3 +29,10 @@ description: section9 외부기억 작업 규약. 어떤 역할이든 작업 기
   REQ/work order에 남긴다. 외부 상태 변경은 subagent가 아니라 리드가 최종 검증 후 수행한다.
 - 독립 branch/worktree/PR이나 부모 종료 후에도 살아야 하는 구현은 subagent가 아니라 별도 T3
   worker session + work order로 보낸다. subagent는 bounded 조사·증거·리뷰·단기 구현에 쓴다.
+- spawn 전 REQ/work order에 범위·산출물을 claim한다. Codex는 역할을 task_name/message에 적어
+  `spawn_agent`를 최대 3번 쓰고 `list_agents`/`wait_agent`/`send_message`로 관리한다. Claude는 한
+  message에서 역할별 `Agent` 호출을 최대 3개 함께 내며 보통 background로 실행한다. 리드는 기다리지 말고
+  자기/통합 트랙을 계속하고, 결과를 subagent note로 붙인 뒤 합쳐진 상태를 최종 검증한다.
+- eek의 Bitbucket/Jira REST는 `/home/jade/.bitbucket_creds`를 값 노출 없이 기존 helper로 쓴다.
+  GCP는 crew/default가 기본이며, 명시적 Jade 권한 작업만 한 명령에 `--configuration=jade`를 쓴다.
+  configuration을 activate/switch하거나 credential을 Louisville로 복사하지 않는다.

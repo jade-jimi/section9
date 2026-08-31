@@ -26,6 +26,16 @@ class GlobalConcurrencyProtocolTests(unittest.TestCase):
             "리드가 결과를 통합",
             "subagent 기능이 없으면",
             "별도 T3 worker session + work order",
+            "spawn_agent(task_name, message)",
+            "list_agents",
+            "followup_task",
+            "interrupt_agent",
+            "wait_agent",
+            "한 assistant message에서",
+            "subagent_type",
+            "run_in_background:true",
+            "TaskOutput",
+            "SendMessage",
         )
         for phrase in required:
             self.assertIn(phrase, protocol)
@@ -33,8 +43,25 @@ class GlobalConcurrencyProtocolTests(unittest.TestCase):
     def test_claude_role_skill_repeats_the_operational_threshold(self):
         skill = read("harness", "claude", "skills", "s9-protocol", "SKILL.md")
         for phrase in ("size S/단일 파일", "size M/L", "최대 3개", "REQ/work order",
-                       "별도 T3"):
+                       "별도 T3", "spawn_agent", "list_agents", "Agent"):
             self.assertIn(phrase, skill)
+
+    def test_global_credential_routing_is_local_conditional_and_never_switches_default(self):
+        protocol = read("harness", "common", "PROTOCOL.md")
+        for phrase in (
+                "/home/jade/.bitbucket_creds",
+                "/home/jade/chief/bin/atlassian-env.sh",
+                "ATLASSIAN_EMAIL",
+                "다른 credential source로 바꾸지 않는다",
+                "Git fetch/push",
+                "Louisville/다른 호스트로 복사·전송하지 않는다",
+                "GCP 일반 작업은 crew의 현재 `default` configuration",
+                "특별 작업이 명시적으로",
+                "gcloud --configuration=jade",
+                "gcloud config configurations activate jade",
+                "CLOUDSDK_ACTIVE_CONFIG_NAME=jade`를 export하지 않는다",
+        ):
+            self.assertIn(phrase, protocol)
 
     def test_installer_manages_global_codex_agents_from_common_protocol(self):
         installer = read("bin", "s9-install")

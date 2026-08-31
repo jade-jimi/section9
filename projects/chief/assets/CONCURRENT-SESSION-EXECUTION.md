@@ -27,6 +27,29 @@ bounded investigation, evidence, review, and non-overlapping short implementatio
 harness has no subagent capability, record the limit and continue sequentially; never claim parallel
 work that did not occur.
 
+## Executable harness procedure
+
+Before spawn, record each non-overlapping track's claim, scope and deliverable in the REQ/work order.
+
+- Codex: call `spawn_agent(task_name, message)` up to three times. Put the role in the task name and
+  prompt; inspect with `list_agents`, steer with `send_message`/`followup_task`, cancel with
+  `interrupt_agent`, and use `wait_agent` only after the lead has exhausted useful integration work.
+- Claude: issue up to three independent `Agent` calls in one assistant message with `description`,
+  `prompt`, `subagent_type`, and normally `run_in_background:true`. Completion is pushed; steer with
+  `SendMessage` and do not poll `TaskOutput`.
+- Lead: continue its own/integration track, append every returned result as a subagent note or
+  work-order handoff, resolve overlap, and run combined tests on the integrated result.
+
+Saying "use subagents" without an actual spawn is not parallel execution.
+
+## Credential boundary carried by project assignments
+
+Bitbucket/Jira REST credentials remain local at `/home/jade/.bitbucket_creds` and are used only via
+the existing Chief helpers without printing/copying values. Git uses repository SSH remotes. Never
+copy credentials to Louisville. GCP stays on crew/default; only explicitly Jade-authorized special
+commands add `gcloud --configuration=jade` for that invocation. Never activate/switch the global
+configuration or export Jade as the active configuration.
+
 The executable canonical copy is `CONCURRENT_SESSION_EXECUTION` in
 `/home/jade/chief/bin/session_jobs.py`, with the idempotent public wrapper
 `with_concurrent_session_execution(text)`. Keep specialized launchers aligned with that copy
