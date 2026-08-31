@@ -81,6 +81,16 @@ document.addEventListener("click", e => {
     pushRoute();
     render();
     refreshCatalog(true);
+    /* 프로젝트 목록은 **탭에 들어올 때** 한 번 받는다 (REQ-20260831-026 G0 폴링
+       계약) — 15초 벨트에서 내렸으므로 여기가 그 자리다. 값이 그대로면 다시
+       그리지 않는다: 탭을 옮길 때마다 판을 흔들 이유가 없다.
+       고르는 칸은 refreshProjects 가 스스로 고친다(파생 뷰). */
+    {
+      const was = JSON.stringify(projects);
+      refreshProjects(true).then(() => {
+        if (JSON.stringify(projects) !== was) render();
+      });
+    }
     // 탭 전환은 visibilitychange 를 일으키지 않는다 — 터미널로 돌아온 순간
     // 스트립을 서버 목록으로 맞춘다 (REQ-20260826-016).
     if (tab === "terminal" && TERM && TERM.agTick) TERM.agTick();
@@ -205,6 +215,32 @@ document.addEventListener("click", e => {
     const k = ex.dataset.expand;
     expanded.has(k) ? expanded.delete(k) : expanded.add(k);
     render(); return;
+  }
+  /* 프로젝트 목록의 세 손잡이 (REQ-20260831-028). 문서를 여는 길보다 먼저 잡는다 —
+     목록 안의 손잡이는 목록이 아니라는 이 화면의 규칙 그대로다.
+     펴고 접는 둘은 다른 목록의 「N개 더 보기」와 같은 기억(expanded)을 쓴다. */
+  const pjm = evEl(e.target)?.closest("[data-prjmore],[data-prjarc]");
+  if (pjm){
+    e.stopPropagation();
+    const k = pjm.dataset.prjmore !== undefined ? "prj:more" : "prj:arc";
+    expanded.has(k) ? expanded.delete(k) : expanded.add(k);
+    render(); return;
+  }
+  const pjn = evEl(e.target)?.closest("[data-prjnew]");
+  if (pjn){
+    e.stopPropagation();
+    /* 만들고 나면 **그 문서로 간다** — 갓 만든 프로젝트에는 할 일(멤버·현업
+       담당자)이 남아 있고, 그 자리가 문서다(설계 판정). 목록으로 되돌리면
+       사용자가 방금 만든 것을 다시 찾아 눌러야 한다.
+       거부는 창이 닫힌 뒤에 오므로 판이 아니라 알림 한 장으로 말한다. */
+    prjCreateDlg({...prjViewOpt(), taken: projects.map(p => p.slug),
+      say: text => s9dlg({kind: "alert", cap: PRJ_TEXT.dlgCap, title: text}),
+      reload: async () => {
+        await refreshProjects();
+        await refreshCatalog();
+        render();
+      }}).then(d => { if (d && d.id) docOpen(d.id); });
+    return;
   }
   if (evEl(e.target)?.closest("[data-depmore]")){
     // 전체 render()는 그래프 물리·카메라를 리셋한다 — 표만 제자리에서 갈아끼운다

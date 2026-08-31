@@ -63,8 +63,23 @@ async function refreshProjects(rerender){
     return (j && Array.isArray(j.projects)) ? j : null;
   }, {tries: rerender ? 2 : 3});
   if (!d) return;   // 구버전 서버·끊긴 연결 — SUPPLY 가 그 사실을 들고 있다
+  const was = JSON.stringify(projects);
   projects = d.projects || [];
   window.__projects = projects;
+  /* 고르는 칸은 이 목록의 **파생 뷰**다 — 목록이 바뀌면 여기서 다시 짓는다.
+     종전엔 15초 카탈로그 폴이 프로젝트도 함께 끌고 다녀서 그 김에 고쳐졌는데,
+     벨트에서 내리는 순간 그 우연한 보정도 사라진다: 부트에서 목록이 늦게 오면
+     칸에는 `portal ·미등록` 같은 옛 이름이 그대로 남는다(실측). */
+  if (JSON.stringify(projects) !== was && document.getElementById("f-project"))
+    fillProjects();
+  /* 재료가 늦게 온 판을 메운다 (REQ-20260831-028). 프로젝트 문서를 목록보다
+     **먼저** 열면 패널을 그릴 재료가 없어 맨 메타 표만 서고, 그 뒤로는
+     "안 바뀌었으니 건너뛴다"에 걸려 목록이 도착해도 영영 안 그려졌다.
+     없는 것과 아직 안 온 것은 다른 화면이다 — 오면 그때 채운다. */
+  const v = document.getElementById("viewer");
+  if (v && v.dataset.showing && !v.querySelector(".pjpanel")
+      && projects.some(p => p.id === v.dataset.showing))
+    loadDoc(v.dataset.showing, true, true);
 }
 
 async function refreshCatalog(rerender){
@@ -85,9 +100,11 @@ async function refreshCatalog(rerender){
   if (!transReady() && Date.now() - transAt > 10000) transRefill(selectedDoc);
   if (!fresh) return fresh;   // 못 받았다 — 빈 판으로 덮지 않는다. 화면이 그렇게 말한다.
   const before = JSON.stringify(projects);
-  // 프로젝트는 자주 안 바뀌므로 catalog 와 함께 갱신한다. 다만 방금(1초 안에)
-  // 받았으면 건너뛴다 — 부트가 나란히 던진 것과 겹쳐 같은 값을 두 번 받았다.
-  if (Date.now() - ((SUPPLY.projects || {}).at || 0) > 1000) await refreshProjects(rerender);
+  /* **프로젝트 목록은 폴링 벨트 밖이다** (REQ-20260831-026 G0 폴링 계약).
+     한때 여기서 catalog 와 함께 15초마다 끌고 다녔다 — 프로젝트는 수명에 몇 번
+     바뀌는 값인데 매 주기 요청을 하나 더 얹었고, 화면이 편집 중일 때 그 응답이
+     판을 갈아 끼울 길도 함께 열었다. 이제 받는 때는 셋뿐이다: 부트 1회 ·
+     탭 진입(events.js) · **변이 성공 직후**(prjWire 의 reload). */
   const changed = JSON.stringify(fresh) !== JSON.stringify(catalog)
                || JSON.stringify(projects) !== before;
   catalog = fresh;
@@ -148,125 +165,32 @@ function fillProjects(){
   el.value = [...el.options].some(o => o.value === cur) ? cur : "";
 }
 
-// 선택된 프로젝트의 정보 패널(고객/담당자/멤버) — 특정 프로젝트 선택 시 표시.
-// '내 것만' ON + mine 1개면 선택 없이도 범위가 단일 확정이므로 병행 표시 (필터는 안 건드림).
+/* Board/Graph/Docs 위 **문맥 띠** — 244px 표가 32px 한 줄이 됐다
+   (REQ-20260831-028 · 설계 REQ-20260831-026).
+
+   실측이 이 자리를 정했다: 1440×900 에서 옛 패널이 세로 244px(뷰포트 27%, 카드
+   두 장)를 먹어 Board 컬럼 머리가 y=169 대신 y=413 에서 시작했다. Board 가
+   답하는 질문은 "무엇을 다음에 옮길까"인데 그 위에 권한 셀렉트 표가 앉아
+   있었다 — 「한 화면 한 결정」 위반이다.
+
+   그래서 관리 도구는 프로젝트 문서로 갔고(Docs › PRJ 뷰), 여기 남은 것은
+   "지금 무엇을 보고 있나" 한 줄이다. 짓는 곳은 project.js 하나 — 이 자리와
+   문서 패널이 각자 표를 그리면 같은 프로젝트가 두 얼굴을 갖는다.
+
+   '내 것만' ON + mine 1개면 선택 없이도 범위가 단일 확정이므로 병행 표시
+   (필터는 안 건드림). */
 function renderProjectInfo(){
-  const box = $("#proj-info"), slug = $("#f-project").value, meName = viewMe();
+  const box = $("#proj-info"), slug = $("#f-project").value;
   let p = slug && projects.find(x => x.slug === slug);
   if (!p && mineActive()){
     const mp = mineProjects();
     if (mp.length === 1) p = mp[0];
   }
-  if (!p){ box.hidden = true; box.innerHTML = ""; return; }
-  const contact = [p.contact_name, p.contact_org, p.contact_email, p.contact_phone]
-    .filter(Boolean).map(esc).join(" · ");
-  // manage 권한 판정(표시용) — 실제 인가는 서버 do_member_set/rm(project_can) 단일 경로
-  const LVL = {viewer:1, contributor:2, maintainer:3, owner:4};
-  const isAdmin = ((window.__users || []).find(u => u.name === meName) || {}).role === "admin";
-  const myMem = meName && (p.members || []).find(m => m.user === meName && m.active);
-  const myLvl = isAdmin ? 4 : (myMem ? (LVL[myMem.role] || 0) : 0);
-  const canManage = myLvl >= 3, canOwn = myLvl >= 4;
-  const roleSel = (cur, cls) => {
-    const roles = (canOwn || cur === "owner")
-      ? ["owner","maintainer","contributor","viewer"] : ["maintainer","contributor","viewer"];
-    return `<select class="${cls}"${cur === "owner" && !canOwn ? " disabled title='owner 변경은 owner만 가능'" : ""}>${
-      roles.map(r => `<option value="${r}"${r === cur ? " selected" : ""}>${r}</option>`).join("")}</select>`;
-  };
-  const nameCell = m => m.user === meName
-    ? `<span class="m-me-name">${esc(m.user)}</span> <span class="m-me">· ME</span>`
-    : esc(m.user);
-  const rows = (p.members || []).map(m => canManage ? `<tr data-member="${esc(m.user)}">
-      <td>${nameCell(m)}</td>
-      <td>${roleSel(m.role, "pi-role")}</td>
-      <td><input class="pi-pos" value="${esc(m.position || "")}" placeholder="—" size="10"></td>
-      <td>${esc(m.since || "")}</td>
-      <td><input class="pi-until" type="date" value="${esc(m.until || "")}" title="비우면 무기한"></td>
-      <td class="${m.active ? "m-act" : "m-exp"}">${m.active ? "활성" : "만료"}</td>
-      <td><button class="pi-x" data-rm="${esc(m.user)}"${m.role === "owner" && !canOwn
-        ? " disabled title='owner 제거는 owner만 가능'" : ""}>− 제거</button></td>
-    </tr>` : `<tr>
-      <td>${nameCell(m)}</td>
-      <td class="m-role">${esc(m.role)}</td>
-      <td>${m.position ? esc(m.position) : "<span class='pi-k'>—</span>"}</td>
-      <td>${esc(m.since || "")}</td>
-      <td>${m.until ? esc(m.until) : "<span class='pi-k'>무기한</span>"}</td>
-      <td class="${m.active ? "m-act" : "m-exp"}">${m.active ? "활성" : "만료"}</td>
-    </tr>`).join("");
-  // 추가 행: 아직 멤버가 아닌 등록 사용자만 후보로
-  const memberSet = new Set((p.members || []).map(m => m.user));
-  const candidates = (window.__users || []).map(u => u.name).filter(n => !memberSet.has(n));
-  const addRow = canManage ? `<tr class="pi-addrow">
-      <td>${candidates.length
-        ? `<select class="pi-newuser">${candidates.map(n => `<option>${esc(n)}</option>`).join("")}</select>`
-        : "<span class='pi-k'>추가할 등록 사용자 없음</span>"}</td>
-      <td>${candidates.length ? roleSel("contributor", "pi-newrole") : ""}</td>
-      <td>${candidates.length ? `<input class="pi-newpos" placeholder="직무(선택)" size="10">` : ""}</td>
-      <td></td>
-      <td>${candidates.length ? `<input class="pi-newuntil" type="date" title="비우면 무기한">` : ""}</td>
-      <td></td>
-      <td>${candidates.length ? `<button class="pi-x" data-add="1">+ 추가</button>` : ""}</td>
-    </tr>` : "";
+  // 수는 들고 있지 않고 그때 센다 — 목록·문서 요약과 같은 함수, 같은 낱말
+  const html = p ? prjStripHTML(p, {statsBy: prjStatsBy(catalog, [p])}) : "";
+  if (!html){ box.hidden = true; box.innerHTML = ""; return; }
   box.hidden = false;
-  box.innerHTML = `
-    <div class="pi-head">
-      <div><span class="pi-title">${esc(p.title || p.slug)}</span>
-        <span class="pi-slug">${esc(p.id)} · ${esc(p.slug)}</span></div>
-      <span class="pi-status">${esc(p.status)} · 멤버 ${p.member_active}/${p.member_total}</span>
-    </div>
-    <div class="pi-grid">
-      <span class="pi-k">고객</span><span class="pi-v">${esc(p.customer) || "<span class='pi-k'>—</span>"}</span>
-      <span class="pi-k">현업 담당자</span><span class="pi-v">${contact || "<span class='pi-k'>—</span>"}</span>
-      ${p.summary ? `<span class="pi-k">개요</span><span class="pi-v">${esc(p.summary)}</span>` : ""}
-    </div>
-    ${rows || addRow ? `<table><thead><tr><th>사용자</th><th>권한</th><th>직무</th><th>참여일</th><th>만료</th><th>상태</th>${
-      canManage ? "<th></th>" : ""}</tr></thead>
-      <tbody>${rows}${addRow}</tbody></table>` : "<p class='pi-k'>멤버 없음</p>"}
-    <div class="pi-err" hidden></div>`;
-  if (canManage) wireMemberControls(box, p.slug, meName);
-}
-
-// 멤버 관리 컨트롤 배선 — 변경 즉시 POST(서버 단일 인가 경로), 성공 시 전체 갱신
-function wireMemberControls(box, slug, meName){
-  // render()는 패널을 통째로 다시 그리므로, 오류는 재렌더 후의 .pi-err에 써야 남는다
-  const fail = msg => {
-    const e2 = document.querySelector("#proj-info .pi-err");
-    if (e2){ e2.textContent = "거부: " + msg; e2.hidden = false; }
-  };
-  const post = async (path, payload) => {
-    try{
-      const r = await fetch(path, {method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({user: meName, slug, ...payload})});
-      const d = await r.json();
-      if (!d.ok){ render(); fail(d.error); return; }  // 컨트롤 원복 후 거부 사유 표시
-      await refreshProjects();
-      render();  // mine 스코프·스트립·패널 즉시 갱신
-    }catch(e){ render(); fail("서버에 연결할 수 없습니다"); }
-  };
-  box.querySelectorAll("tr[data-member]").forEach(tr => {
-    const member = tr.dataset.member;
-    tr.querySelector(".pi-role").addEventListener("change",
-      e => post("/api/project/member", {member, role: e.target.value}));
-    tr.querySelector(".pi-until").addEventListener("change",
-      e => post("/api/project/member", {member, until: e.target.value}));
-    const pos = tr.querySelector(".pi-pos");
-    pos.addEventListener("change",
-      e => post("/api/project/member", {member, position: e.target.value}));
-    const rm = tr.querySelector("[data-rm]");
-    rm && !rm.disabled && rm.addEventListener("click", async () => {
-      if (await s9dlg({kind:"confirm", cap:"멤버",
-            title:`${member}${josa(member, "을", "를")} ${slug} 에서 뺍니다`,
-            desc:"프로젝트 문서는 그대로 남고, 이 사람의 접근만 끊깁니다.",
-            ok:"멤버 빼기", cancel:"그만두기"}))
-        post("/api/project/member/rm", {member});
-    });
-  });
-  const add = box.querySelector("[data-add]");
-  add && add.addEventListener("click", () => {
-    const v = c => { const el = box.querySelector(c); return el ? el.value : ""; };
-    post("/api/project/member", {member: v(".pi-newuser"), role: v(".pi-newrole"),
-      position: v(".pi-newpos"), until: v(".pi-newuntil")});
-  });
+  box.innerHTML = html;
 }
 
 /* MY PROJECTS 레저 스트립 — '내 것만' ON일 때 board/docs/graph에서 표시 (DOC-20260823-006).

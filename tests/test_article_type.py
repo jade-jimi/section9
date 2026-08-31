@@ -23,6 +23,7 @@
 """
 import importlib.machinery
 import importlib.util
+import datetime
 import os
 import subprocess
 import tempfile
@@ -66,7 +67,9 @@ class ArticleType(unittest.TestCase):
         self.assertTrue(aid.startswith("ART-"), aid)
         self.assertIn("type: article", self.cli("show", aid, "--meta"))
         self.assertTrue(os.path.isfile(os.path.join(
-            self.root, "vault", "articles", "2026", "08", aid + ".md")))
+            self.root, "vault", "articles",
+            "%04d" % datetime.date.today().year,
+            "%02d" % datetime.date.today().month, aid + ".md")))
 
     # N2. 원문과 글 자리가 한 문서에 있다
     def test_n2_original_and_article(self):

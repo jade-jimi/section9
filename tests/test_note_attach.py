@@ -10,6 +10,7 @@
 
 실행: python3 tests/ note_attach
 """
+import datetime
 import os
 import subprocess
 import tempfile
@@ -52,8 +53,10 @@ class NoteAttach(unittest.TestCase):
         return self.cli("show", self.id)
 
     def asset(self, name):
-        return os.path.join(self.tmp, "vault", "requests", "2026", "08",
-                            "assets", self.id, name)
+        # 달을 못박으면 달이 넘어가는 날 시험이 통째로 붉는다 (2026-09-01 실사고)
+        ym = datetime.date.today()
+        return os.path.join(self.tmp, "vault", "requests", "%04d" % ym.year,
+                            "%02d" % ym.month, "assets", self.id, name)
 
     # N1. 이미지 첨부는 [Image: assets/<id>/f] 로 남고 파일이 실제로 놓인다
     def test_n1_image_attached_and_stored(self):

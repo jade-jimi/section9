@@ -6,7 +6,7 @@
      ③ Board/Graph 위 문맥 띠(.pjstrip) — 244px 표를 대신하는 32px 한 줄
 
    **여기 있는 것은 배치와 밀도뿐이다.** 색은 토큰에서만 오고(리터럴 0), 단추의
-   얼굴은 이 파일이 짓지 않는다 — 「+ 새 프로젝트」·「보관됨 N개」는 목록이 이미
+   얼굴은 이 파일이 짓지 않는다 — 「프로젝트 만들기」·「보관된 프로젝트 N개」는 목록이 이미
    쓰는 `.more`, 표 안의 「추가」·「제거」는 카드·문서가 이미 쓰는 `.acts button`
    이다. 그 둘은 스킨 열 벌이 저마다 잉크를 말해 둔 자리라, 새 단추를 그리는
    순간 스킨 수만큼 색을 다시 적게 된다(벨트 글리프 때의 그 함정 —
@@ -18,10 +18,9 @@
    이미 입혀 둔 옷을 그대로 입는다.
 
    ── 멤버 표의 관문은 여기 한 곳이다 (.pmem)
-   header.css 의 `.proj-info table|th|td|select|input|.pi-x|.m-*` (163~236행)은
-   B2 에서 **지워지고** 그 마크업이 `.pmem` 을 입는다. 지금 두 벌인 것은 이번
-   물결이 기존 css 를 만지지 않기 때문이고, 두 벌인 채로 끝나면 관문이 둘이 된다
-   — B2 의 첫 손이 그 블록 삭제다.
+   header.css 의 `.proj-info table|th|td|select|input|.pi-x|.m-*` 는 B2 에서
+   **지워졌다** — 그 마크업이 이제 `.pmem` 을 입는다. 규칙이 두 벌이면 스킨 열
+   벌이 저마다 한 벌만 고친다(벨트 글리프 때의 그 함정). 되살리지 마라.
 
    ── 배율 불변 (s9-design 「배율 불변」)
    새 홀수 px 상자·소수 px 테두리를 만들지 않는다. 점은 확정된 7px 무대(.cdot)를
@@ -57,11 +56,16 @@ select.pjc{padding-right:4px}
   padding:8px 14px;border-bottom:1px solid var(--hairline);font-family:var(--mono);
   font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
   font-weight:600}
-/* `.more` 는 목록에서 한 줄을 통째로 먹는 문법이다 — 머리 오른쪽에 설 때만
-   폭을 놓는다. 색·hover 는 그대로 물려받는다. */
+/* `.more` 는 목록에서 한 줄을 통째로 먹는 문법이다 — 머리에 설 때만 폭을 놓는다.
+   **잉크는 한 급 올린다**(리드 판정 1): 이 REQ 가 푸는 문제가 「문이 없다」인데
+   `.more` 의 `--faint`(≈2.8:1)로 그리면 그 문을 화면에서 가장 옅게 그린 셈이다.
+   hover 는 base 그대로 `--text` 로 올라온다. */
 .pjhead .more{display:inline-block;width:auto;padding:0;font-size:11px;
-  text-align:right}
+  text-align:left;color:var(--muted)}
 .pjhead .pjn{color:var(--faint)}
+/* 보관 묶음은 펴면 접을 수 있어야 한다 — `.more::before` 의 "+ " 는 여는 손짓이라
+   접는 자리에서는 반대 부호가 선다(목록의 다른 「더 보기」와 같은 층). */
+.pjlist .more[aria-expanded="true"]::before{content:"− "}
 /* 행의 셋째 줄 — 이 목록의 값(관리 정보의 요약)이 여기 산다. */
 .pjmeta{font-family:var(--mono);font-size:10.5px;color:var(--faint);
   letter-spacing:.02em;margin-top:2px}
@@ -81,6 +85,10 @@ select.pjc{padding-right:4px}
 /* 표는 제 상자 안에서 구른다 — 쪽이 가로로 밀리지 않게(s9-design 반응형).
    min-width 는 일곱 칸이 접히지 않는 최소치다: 그 아래로 좁아지면 머리글이
    두 줄로 접혀 표가 흔들려 보인다. */
+/* 표의 이름은 caption 이 지므로 위에 머리글이 없다 — 절 사이 숨은 `.pjh` 가
+   가지던 그 여백은 멤버 무리가 통째로 갖는다(표가 아니라 안내 한 줄이 서는
+   갈래도 같은 자리에서 시작해야 절의 리듬이 흔들리지 않는다). */
+.pjmem{margin-top:22px}
 .pmemwrap{overflow-x:auto}
 .pmem{border-collapse:collapse;width:100%;min-width:520px;font-size:12px}
 .pmem caption{text-align:left;font-family:var(--mono);font-size:10px;
@@ -118,6 +126,14 @@ select.pjc{padding-right:4px}
 .pjsum{font-family:var(--mono);font-size:11px;color:var(--muted);
   letter-spacing:.02em;margin:0}
 .pjnote{font-size:11.5px;color:var(--muted);margin:8px 0 0}
+/* role 넷의 뜻 — 표 아래 한 줄(권한 셀렉트를 볼 수 있는 사람에게만). 읽는 줄이지
+   훑는 줄이 아니라 잉크를 한 급 물린다. */
+.pjlegend{font-family:var(--mono);font-size:10.5px;color:var(--faint);
+  letter-spacing:.02em;margin:8px 0 0;line-height:1.6}
+/* 고칠 수 없는 칸의 까닭 한 줄 — 값 바로 아래(생성 창의 slug 도움말과 같은 얼굴) */
+.pjhint{font-size:11px;color:var(--muted);margin:2px 0 0}
+/* 읽는 자리의 status 점 — 확정된 7px 무대를 그대로 쓴다(여기서 다시 그리지 않는다) */
+.pjdot{display:inline-block;width:7px;height:7px;margin-right:5px;vertical-align:1px}
 .pjerr{font-family:var(--mono);font-size:10.5px;color:var(--c-blocked);margin:6px 0 0}
 .pjerr[hidden]{display:none}
 
@@ -142,8 +158,10 @@ select.pjc{padding-right:4px}
 .pjstrip .pjs-m{font-family:var(--mono);font-size:10.5px;color:var(--muted);
   letter-spacing:.04em;overflow:hidden;text-overflow:ellipsis}
 /* 사실들 사이의 가운뎃점 — 낱말마다 손으로 적으면 자리마다 빠뜨린다 */
-.pjstrip .pjs-t ~ span:not(.pjs-open)::before{content:"·";margin-right:8px;
-  color:var(--faint)}
+/* 잉크는 **제 낱말을 따른다**(currentColor) — `--faint` 로 못박아 두었더니 컬러
+   지면 스킨(field)에서 가운뎃점만 사라져 띠가 이어 붙은 한 덩이로 읽혔다.
+   문장 안의 `·`(stripMeta)는 이미 그 낱말의 잉크라, 둘이 같아야 한 줄이 된다. */
+.pjstrip .pjs-t ~ span:not(.pjs-open)::before{content:"·";margin-right:8px}
 .pjstrip .pjs-st{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
   text-transform:uppercase;color:var(--muted);flex:none}
 .pjstrip .pjs-open{margin-left:auto;flex:none;font-size:11px}
@@ -155,5 +173,6 @@ select.pjc{padding-right:4px}
 [data-density="compact"] .pmem td{padding:3px 8px 3px 0}
 [data-density="compact"] .pmem th{padding:2px 8px 5px 0}
 [data-density="compact"] .pjh{margin:16px 0 6px}
+[data-density="compact"] .pjmem{margin-top:16px}
 [data-density="compact"] .pjstrip{margin-bottom:10px}
 [data-density="compact"] .pjlist .more,[data-density="compact"] .pjnone{padding-left:10px}

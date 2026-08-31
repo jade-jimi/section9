@@ -159,29 +159,10 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
 .settings-panel select{border:1px solid var(--border);padding:6px 9px;font-size:12.5px;
   background:var(--panel);color:var(--text);font-family:inherit;text-transform:none;letter-spacing:0}
 .settings-note{font-size:11px;color:var(--faint);margin:2px 0 0;line-height:1.5}
-/* 프로젝트 정보 패널 — 계기판/장부 스타일(둥근모서리·pill 금지) */
-.proj-info{border:1px solid var(--text);background:var(--panel);margin:0 0 14px;
-  padding:12px 14px;display:grid;gap:10px}
-.proj-info[hidden]{display:none}  /* display:grid가 UA [hidden] 규칙을 덮어써 빈 박스가 남던 버그 수정 */
-.proj-info .pi-head{display:flex;justify-content:space-between;align-items:baseline;
-  border-bottom:1px solid var(--hairline);padding-bottom:8px;gap:12px;flex-wrap:wrap}
-.proj-info .pi-title{font-size:14px;font-weight:600}
-.proj-info .pi-slug{font-family:var(--mono);font-size:11px;color:var(--faint)}
-.proj-info .pi-status{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
-  text-transform:uppercase;color:var(--muted)}
-.proj-info .pi-grid{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;
-  font-size:12px;align-items:baseline}
-.proj-info .pi-k{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;
-  text-transform:uppercase;color:var(--faint)}
-.proj-info .pi-v{color:var(--text)}
-.proj-info table{border-collapse:collapse;width:100%;font-size:12px}
-.proj-info th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
-  text-transform:uppercase;color:var(--faint);font-weight:600;
-  border-bottom:1px solid var(--hairline);padding:3px 10px 5px 0}
-.proj-info td{padding:4px 10px 4px 0;border-bottom:1px solid var(--hairline)}
-.proj-info .m-role{font-family:var(--mono);font-size:11px;color:var(--muted)}
-.proj-info .m-exp{color:var(--c-blocked);font-family:var(--mono);font-size:10.5px}
-.proj-info .m-act{color:var(--c-done);font-family:var(--mono);font-size:10.5px}
+/* 프로젝트 패널의 규칙은 여기 없다 (REQ-20260831-028 B2). Board 위 244px 표는
+   32px 문맥 띠(.pjstrip)가 대신하고, 멤버 표·설정 격자는 PRJ 문서 뷰로 옮겨
+   `web/css/project.css` 의 `.pmem`·`.pjset` 한 관문을 지난다 — 규칙이 두 벌이면
+   스킨 열 벌이 저마다 한 벌만 고친다(벨트 글리프 때의 그 함정). */
 .hrow2 input[type="text"],.hrow2 select{border:1px solid var(--border);
   padding:5px 9px;font-size:12.5px;background:var(--panel);color:var(--text);font-family:inherit}
 .hrow2 input[type="text"]{width:190px;font-family:var(--mono)}
@@ -221,19 +202,6 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
 .mystrip .ms-until.soon{color:var(--c-inprogress)}  /* until ≤14일 임박 — 색은 보조 신호 */
 .mystrip .ms-note{padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--faint)}
 .mystrip .more{padding-left:14px}
-.proj-info .m-me{font-family:var(--mono);font-size:10px;color:var(--muted)}
-.proj-info .m-me-name{font-weight:600}
-/* 멤버 관리(manage 권한 me) — 인라인 편집 컨트롤: 플랫, 모노, 헤어라인 */
-.proj-info select,.proj-info input{border:1px solid var(--hairline);background:var(--panel);
-  color:var(--text);font-family:var(--mono);font-size:11px;padding:2px 4px;border-radius:0}
-.proj-info select:focus,.proj-info input:focus{outline:none;border-color:var(--text)}
-.proj-info input[type="date"]{width:118px}
-.proj-info .pi-x{border:1px solid var(--border);background:var(--panel);color:var(--text);
-  font-family:var(--mono);font-size:10.5px;padding:2px 8px;cursor:pointer;letter-spacing:.03em}
-.proj-info .pi-x:hover:not(:disabled){background:var(--text);color:var(--bg);border-color:var(--text)}
-.proj-info .pi-x:disabled{color:var(--faint);cursor:not-allowed}
-.proj-info .pi-addrow td{border-bottom:0;border-top:1px solid var(--border);padding-top:6px}
-.proj-info .pi-err{font-family:var(--mono);font-size:10.5px;color:var(--c-blocked);margin-top:6px}
 
 main{padding:18px 22px}
 .count{color:var(--muted);font-size:11px;margin:0 0 14px;font-family:var(--mono);

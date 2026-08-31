@@ -108,9 +108,19 @@ async function renderDocs(rows){
     return `<button class="tb${curType===t?" on":""}" data-typef="${t}"
       title="${tip}" aria-label="${tip}">${t}${num}</button>`;
   }).join("");
+  /* 프로젝트 줄의 재료도 **한 곳**이다 (REQ-20260831-028). 프로젝트는 상태 축이
+     달라(active/archived) 요청의 상태색을 못 쓰고, 셋째 줄(멤버·열린 요청·마지막
+     활동)이 이 목록에서 그 문서의 값이다 — 그 줄을 여기서 다시 지으면 문법이 두
+     벌이 되므로 project.js 의 `prjRowHTML` 을 그대로 부른다. 수는 들고 있지 않고
+     그때 센다(catalog 파생). */
+  const prjBy = prjStatsBy(catalog, projects);
+  const prjById = Object.fromEntries(projects.map(p => [p.id, p]));
+  const prjOpt = () => ({statsBy: prjBy, selected: selectedDoc});
   /* 목록 행은 한 곳에서 짓는다 — 줄이 어떤 상태든 **같은 재료**여야 한다
      (REQ-20260828-009). 두 벌로 만들면 한 벌만 고쳐진다. */
   const rowHTML = r => {
+      if (r.type === "project" && prjById[r.id])
+        return prjRowHTML(prjById[r.id], prjOpt());
       // 첨부에서 온 줄이면 어느 파일인지 밝힌다 (REQ-20260827-005) — 파일
       // 이름 없이 줄 번호만 보이면 문서 본문의 그 줄로 읽힌다.
       const snips = matchMap?.[r.id] ? matchMap[r.id].slice(0, 3).map(m =>
@@ -141,7 +151,24 @@ async function renderDocs(rows){
         <div class="id">${esc(shortId(r.id))}${prioHTML(r)}${off}</div><div>${esc(r.title)}</div>${snips}</div>`;
   };
   let list = `<div class="typebar">${bar}</div>`;
-  for (const [g, grp] of Object.entries(groups)){
+  /* PROJECT 를 골라 보는 중이면 목록은 **한 장**이다 (REQ-20260831-028).
+     여기에 그룹 루프를 태우면 만드는 손잡이·보관 접힘이 갈 곳이 없어 화면 밖에
+     새 자리를 만들게 된다 — 목록의 머리와 꼬리를 함께 아는 것은 prjListHTML
+     하나뿐이다. 머리 낱말은 바로 위 타입바가 이미 말했으므로 겹쳐 쓰지 않는다
+     (`.grp` 머리글을 접는 그 규칙). */
+  if (curType === "project"){
+    const ids = new Set(ordered.filter(r => r.type === "project").map(r => r.id));
+    const plist = projects.filter(p => ids.has(p.id));
+    const narrowed = plist.length < projects.length;
+    list += prjListHTML(plist, {...prjOpt(), headLabel: false,
+      // 만드는 권한은 등록 사용자면 누구나 — 판정은 서버가 다시 한다
+      canCreate: !!viewMe() && (window.__users || []).some(u => u.name === viewMe()),
+      expanded: expanded.has("prj:more"), arcOpen: expanded.has("prj:arc"),
+      // 조건이 걸러 낸 빈 목록과 정말 하나도 없는 목록은 **다른 화면**이다 —
+      // 같은 문장을 쓰면 "하나도 안 만들었나" 하고 만들러 간다
+      noneText: narrowed ? PRJ_TEXT.noneFiltered : PRJ_TEXT.none});
+  }
+  else for (const [g, grp] of Object.entries(groups)){
     if (!grp.length) continue;
     const open = expanded.has("grp:"+g) || !!matchMap;
     // session은 직접 열어보는 일이 드물다 — 목록에서 자리는 지키되 기본 노출은 짧게.
@@ -195,8 +222,15 @@ async function renderDocs(rows){
   if (tbEl && dlEl) dlEl.style.setProperty("--tbh", tbEl.offsetHeight + "px");
   sizeDocs();
   requestAnimationFrame(sizeDocs);   // 헤더가 자란 뒤(사용량 줄 등) 다시 잰다
-  // 사람이 고른 것이면 위에서부터 새로, 그 밖에는 배경 갱신(읽던 자리 보존).
-  if (selectedDoc) loadDoc(selectedDoc, !fresh);
+  /* 사람이 고른 것이면 위에서부터 새로, 그 밖에는 배경 갱신(읽던 자리 보존).
+
+     **적고 있는 손은 배경 갱신이 밀어내지 않는다** (REQ-20260831-028 · REQ-055 E7
+     의 Settings 가드와 같은 판단). 프로젝트 패널은 값 자리를 그 자리에서 고치는
+     화면이라, 15초 폴이 판을 갈아 끼우면 적던 글자가 사라진다. 막는 것은 **배경
+     갱신뿐**이다 — 변이 뒤의 되읽기(prjWire 의 reload)는 loadDoc 을 직접 부르므로
+     이 문을 지나지 않는다. 그래야 편집 중이라고 갱신까지 멈추는 일이 없다. */
+  if (selectedDoc && !(!fresh && prjEditing($("#viewer"))))
+    loadDoc(selectedDoc, !fresh);
 }
 
 // 목록/뷰어의 높이를 판이 실제로 시작하는 위치에서 잰다 — 헤더 높이는 skin·density·
@@ -222,10 +256,28 @@ if (window.ResizeObserver) requestAnimationFrame(() => {
   if (h) new ResizeObserver(sizeDocsSoon).observe(h);
 });
 
+/* 프로젝트 패널이 쓰는 한 벌 — 누가 보고 있나 · 넣을 수 있는 사람은 누구인가 ·
+   수는 얼마인가. **판정은 아니다**: 여기 계산은 무엇을 그릴지만 정하고, 인가는
+   서버의 project_can 단일 경로가 다시 한다 (project.js 규율 3).
+   `as` 는 admin 의 대리 조작이라 화면 시점(viewMe)과 함께 서버로도 실린다. */
+function prjViewOpt(){
+  const me = viewMe();
+  return {me, as: asUser || "",
+          isAdmin: ((window.__users || []).find(u => u.name === me) || {}).role === "admin",
+          users: window.__users || [],
+          statsBy: prjStatsBy(catalog, projects)};
+}
+
 // bg=true — renderDocs 경유(탭 진입·필터·15s 폴링) 재로드: updated 무변화면 스킵하고,
 // 같은 문서면 뷰어 스크롤·열린 스트림 터미널 상태를 보존한다. 사용자가 직접 문서를
 // 클릭하는 경로는 bg 없이 호출되어 기존처럼 상단부터·접힘 기본 (REQ-20260823-071).
-async function loadDoc(id, bg){
+/* `force` — **배경이되 반드시 다시 그린다** (REQ-20260831-028 실사고).
+   `bg` 는 여태 두 가지를 한꺼번에 뜻했다: "안 바뀌었으면 건너뛴다"와 "읽던
+   자리를 지킨다". 변이 뒤의 되읽기는 뒤엣것만 원한다 — 실제로 멤버를 추가하고
+   문서에도 들어갔는데, 카탈로그의 `updated` 를 아직 못 받은 그 한 순간의
+   되읽기가 "안 바뀌었다"로 판정돼 **화면만 옛 표를 그대로 들고 있었다**.
+   그래서 둘을 갈랐다: 되읽기는 bg=true, force=true 로 부른다. */
+async function loadDoc(id, bg, force){
   selectedDoc = id;
   document.querySelectorAll(".doclist .row").forEach(el => {
     const on = el.dataset.doc === id;
@@ -240,7 +292,8 @@ async function loadDoc(id, bg){
   // 주의: 뷰어의 '표시 중 문서' 상태는 data-showing에 둔다 — data-doc을 쓰면
   // 전역 클릭 위임([data-doc]=문서 링크)과 충돌해 뷰어 내부 클릭마다 리로드된다 (REQ-20260823-076)
   const sameDoc = viewer.dataset.showing === id;
-  if (bg && sameDoc && row && viewer.dataset.updated === (row.updated || "")) return;
+  if (bg && !force && sameDoc && row
+      && viewer.dataset.updated === (row.updated || "")) return;
   let keep = null;  // 같은 문서의 백그라운드 재로드 — 읽던 위치를 잃지 않는다
   if (bg && sameDoc){
     keep = {viewerTop: viewer.scrollTop};
@@ -506,16 +559,52 @@ async function loadDoc(id, bg){
         <div class="md">${md2html(rest)}</div>
       </details>${streamSec}
       <div class="backlinks" id="backlinks"></div>`;
-  } else viewer.innerHTML = `
+  } else {
+    /* 프로젝트 문서는 **제 관리 화면이다** (REQ-20260831-028 · 설계 REQ-20260831-026).
+
+       종전에는 같은 프로젝트가 두 자리에 반쪽씩 살았다 — Board 위 패널은 고객·
+       멤버를 보여 주되 History 가 없고, 이 문서 뷰는 status·summary·History 를
+       보여 주되 멤버도 고객도 안 그렸다. 어느 쪽도 "이 프로젝트가 무엇인가"에
+       온전히 답하지 못했다. 정본이 여기이므로 관리 정보도 여기 산다: 멤버를
+       바꾸면 아래 History 에 줄이 남고, 그 줄을 같은 화면에서 바로 읽는다.
+
+       격자는 **한 표**다 — 프로젝트만의 여덟 필드(pjset)에 이 문서가 공통으로
+       갖는 줄(tags·created/updated…)을 이어 붙인다. 두 표로 나누면 한 화면에
+       라벨 사전이 둘이 된다(ux-writer 형식 판정). status·summary 는 pjset 이
+       이미 말하므로 꼬리에서 뺀다 — 같은 값이 두 자리에 서지 않게. */
+    const prjRec = m.type === "project"
+      ? projects.find(p => p.id === m.id || p.slug === m.slug) : null;
+    const PRJ_OWNED = new Set(["status", "summary"]);
+    const rowsOf = ff => ff.filter(f => f[1])
+      .map(f => `<tr><td>${f[0]}</td><td>${f[1]}</td></tr>`).join("");
+    const prjOpts = prjRec ? prjViewOpt() : null;   // 한 번만 센다
+    const meta = prjRec
+      ? prjPanelHTML(prjRec, {...prjOpts,
+          tailRows: rowsOf(fields.filter(f => !PRJ_OWNED.has(f[0])))})
+      : `<table class="metatbl">${rowsOf(fields)}</table>`;
+    viewer.innerHTML = `
     <div class="path dpath">${esc(d.path)}</div>
     <div class="dhead">
     <h1 class="dtitle">${esc(m.title)}
       <span class="did" title="${esc(m.id)}">${esc(shortId(m.id))}</span>
       <span class="dst" style="--sc:${SCOLOR[m.status] || "var(--muted)"}">${esc(statusLabel(m))}</span>
     </h1>${docActs}</div>${stallRow}${gate}
-    <table class="metatbl">${fields.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td></tr>`).join("")}</table>
+    ${meta}
     <div class="md">${md2html(d.body)}</div>${streamSec}
     <div class="backlinks" id="backlinks"></div>`;
+    /* 배선은 그린 직후에 — 부르는 쪽이 `reload` 를 주어야 원복이 완성된다
+       (낙관적 갱신 금지). 되읽기 순서가 곧 계약이다: 프로젝트 → 카탈로그 →
+       **문서 판이 다시 설 때까지 기다린 뒤** 목록·띠. 기다리지 않으면 거부
+       사유가 떨어져 나간 판에 적혀 아무도 못 본다. */
+    if (prjRec) prjWire(viewer.querySelector(".pjpanel"), prjRec, {
+      ...prjOpts,
+      reload: async () => {
+        await refreshProjects();
+        await refreshCatalog();
+        await loadDoc(id, true, true);   // 배경이되 **반드시** 다시 그린다
+        render();
+      }});
+  }
   viewer.dataset.showing = id;
   viewer.dataset.updated = m.updated || "";
   // 표가 안 왔으면 **여기서 다시 받는다**. 받으면 이 문서를 다시 그려 버튼을

@@ -207,7 +207,7 @@
 /* 패널 = 떠 있는 유리판: 반투명 + blur + 라운드 + 부드러운 그림자 */
 [data-skin="glass"] .stats,[data-skin="glass"] .board,[data-skin="glass"] .docs,
 [data-skin="glass"] .audit,[data-skin="glass"] .graphwrap,[data-skin="glass"] .depsum,[data-skin="glass"] .streamwrap,
-[data-skin="glass"] .proj-info,[data-skin="glass"] .mystrip{
+[data-skin="glass"] .mystrip{
   background:var(--gl-panel);
   -webkit-backdrop-filter:blur(18px) saturate(1.25);
   backdrop-filter:blur(18px) saturate(1.25);
@@ -245,8 +245,7 @@
 [data-skin="glass"] .settings-panel select,[data-skin="glass"] .uf,
 [data-skin="glass"] .uform input,[data-skin="glass"] .uform select,
 [data-skin="glass"] .uform button,[data-skin="glass"] .gear,
-[data-skin="glass"] .acts button,[data-skin="glass"] .gmode,
-[data-skin="glass"] .pi-x{border-radius:9px;
+[data-skin="glass"] .acts button,[data-skin="glass"] .gmode{border-radius:9px;
   background:var(--gl-card);border-color:var(--gl-line)}
 [data-skin="glass"] .gmode.on,[data-skin="glass"] .gear:hover,
 [data-skin="glass"] .acts button:hover,[data-skin="glass"] .uform button:hover{
@@ -258,7 +257,6 @@
 [data-skin="glass"] .hovercard{background:var(--gl-solid);
   -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
   border-radius:12px;border-color:var(--gl-line);box-shadow:var(--gl-shadow)}
-[data-skin="glass"] .proj-info{border-color:var(--gl-line)}
 [data-skin="glass"] .term{background:rgba(13,17,22,.92)}
 [data-skin="glass"] .ccterm{border-radius:14px;border-color:var(--gl-line)}
 [data-skin="glass"] .ghint{background:var(--gl-solid);border-color:var(--gl-hairline);
@@ -316,7 +314,7 @@
 [data-skin="field"] .pdiv{background:var(--fd-line)}
 [data-skin="field"] .stats,[data-skin="field"] .docs,[data-skin="field"] .audit,
 [data-skin="field"] .graphwrap,[data-skin="field"] .depsum,[data-skin="field"] .streamwrap,
-[data-skin="field"] .proj-info,[data-skin="field"] .mystrip{border-color:var(--fd-line)}
+[data-skin="field"] .mystrip{border-color:var(--fd-line)}
 /* Board: 패널 상자를 버리고 컬럼 자체가 지면 위 백색 판 — 판 사이로 필드가 흐른다 */
 [data-skin="field"] .board{background:transparent;border:0;gap:16px;padding-bottom:4px}
 [data-skin="field"] .col,[data-skin="field"] .col:last-child{
@@ -385,7 +383,7 @@
 /* 콘텐츠: 라운드 카드 그리드 — 밴드 아래는 밝고 정돈된 작업면 */
 [data-skin="cobalt"] .stats,[data-skin="cobalt"] .docs,[data-skin="cobalt"] .audit,
 [data-skin="cobalt"] .graphwrap,[data-skin="cobalt"] .depsum,[data-skin="cobalt"] .streamwrap,
-[data-skin="cobalt"] .proj-info,[data-skin="cobalt"] .mystrip{border-radius:12px}
+[data-skin="cobalt"] .mystrip{border-radius:12px}
 [data-skin="cobalt"] .docs,[data-skin="cobalt"] .audit,[data-skin="cobalt"] .graphwrap,[data-skin="cobalt"] .depsum,
 [data-skin="cobalt"] .streamwrap,[data-skin="cobalt"] .stats{overflow:hidden}
 [data-skin="cobalt"] .board{background:transparent;border:0;gap:12px}
@@ -399,8 +397,7 @@
    프로젝트 스트립(.ms-row)은 다른 컴포넌트라 그대로 둔다. */
 [data-skin="cobalt"] .mystrip .ms-row.sel{box-shadow:inset 2px 0 0 var(--c-open)}
 [data-skin="cobalt"] .more:hover{color:var(--c-open)}
-[data-skin="cobalt"] .acts button,[data-skin="cobalt"] .gmode,[data-skin="cobalt"] .pi-x,
-[data-skin="cobalt"] .uform button{border-radius:7px}
+[data-skin="cobalt"] .acts button,[data-skin="cobalt"] .gmode,[data-skin="cobalt"] .uform button{border-radius:7px}
 [data-skin="cobalt"] .hovercard{border-radius:10px}
 [data-skin="cobalt"] .ccterm{border-radius:12px}
 
@@ -425,7 +422,7 @@
    문법인 잉크 인버스로 바꾼다 — 컬럼 헤더·그룹 헤더와 같은 규칙. */
 [data-skin="grid"] .stat.on{background:var(--text);color:var(--bg);box-shadow:none}
 [data-skin="grid"] .stat.on b{color:var(--bg)}
-[data-skin="grid"] .proj-info,[data-skin="grid"] .mystrip{margin:10px 14px}
+[data-skin="grid"] .mystrip{margin:10px 14px}
 /* 컬럼: 고정폭을 버리고 화면을 나눠 가진다 — 잉크 헤더 바가 구획의 앵커 */
 [data-skin="grid"] .board{padding-bottom:0}
 [data-skin="grid"] .col{flex:1 1 0;width:auto;min-width:212px;padding-bottom:0}
@@ -503,17 +500,15 @@
 [data-skin="slate"] .chk input{accent-color:var(--sl-blue)}
 /* 버튼 = 블루 프라이머리 문법 (베이스 잉크 인버스를 블루로 교체) */
 [data-skin="slate"] .gear,[data-skin="slate"] .acts button,[data-skin="slate"] .gmode,
-[data-skin="slate"] .uform button,[data-skin="slate"] .pi-x{border-radius:4px}
+[data-skin="slate"] .uform button{border-radius:4px}
 [data-skin="slate"] .gear:hover,[data-skin="slate"] .acts button:hover,
 [data-skin="slate"] .uform button:hover{
   background:var(--sl-blue);color:#fff;border-color:var(--sl-blue)}
 [data-skin="slate"] .gmode.on{background:var(--sl-blue);color:#fff;border-color:var(--sl-blue)}
-[data-skin="slate"] .pi-x:hover:not(:disabled){background:var(--sl-blue);color:#fff;
-  border-color:var(--sl-blue)}
 /* 패널 = 화이트 카드: 라운드 8px + 미세 그림자 */
 [data-skin="slate"] .stats,[data-skin="slate"] .docs,[data-skin="slate"] .audit,
 [data-skin="slate"] .graphwrap,[data-skin="slate"] .depsum,[data-skin="slate"] .streamwrap,
-[data-skin="slate"] .proj-info,[data-skin="slate"] .mystrip{
+[data-skin="slate"] .mystrip{
   border-radius:8px;border-color:var(--sl-line);box-shadow:var(--sl-shadow)}
 [data-skin="slate"] .docs,[data-skin="slate"] .audit,[data-skin="slate"] .graphwrap,[data-skin="slate"] .depsum,
 [data-skin="slate"] .streamwrap,[data-skin="slate"] .stats{overflow:hidden}
@@ -585,7 +580,7 @@
 [data-skin="cork"] .hrow2 input[type="text"],[data-skin="cork"] .hrow2 select{
   border-radius:6px;border-color:var(--ck-line)}
 [data-skin="cork"] .gear,[data-skin="cork"] .gmode,[data-skin="cork"] .acts button,
-[data-skin="cork"] .uform button,[data-skin="cork"] .pi-x{border-radius:6px}
+[data-skin="cork"] .uform button{border-radius:6px}
 [data-skin="cork"] .pdiv{background:var(--ck-line)}
 /* Board = 주인공: 프레임 상자를 버리고 웰 컬럼이 캔버스 위에 뜬다 */
 [data-skin="cork"] .board{background:transparent;border:0;gap:12px;padding-bottom:6px}
@@ -604,7 +599,7 @@
 /* 다른 탭들도 같은 문법: 캔버스 위 라운드 화이트 판 */
 [data-skin="cork"] .stats,[data-skin="cork"] .docs,[data-skin="cork"] .audit,
 [data-skin="cork"] .graphwrap,[data-skin="cork"] .depsum,[data-skin="cork"] .streamwrap,
-[data-skin="cork"] .proj-info,[data-skin="cork"] .mystrip{
+[data-skin="cork"] .mystrip{
   border:0;border-radius:12px;box-shadow:var(--ck-shadow)}
 [data-skin="cork"] .docs,[data-skin="cork"] .audit,[data-skin="cork"] .graphwrap,[data-skin="cork"] .depsum,
 [data-skin="cork"] .streamwrap,[data-skin="cork"] .stats{overflow:hidden}
