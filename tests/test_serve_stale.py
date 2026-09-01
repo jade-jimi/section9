@@ -35,6 +35,7 @@ HOOK = os.path.join(HERE, "..", "bin", "s9-audit-prompt")
 HOOK_SESSION = os.path.join(HERE, "..", "bin", "s9-audit-session")
 
 from portpool import free_port, wait_server  # noqa: E402
+from s9src import serve_tail  # noqa: E402  — 소스 구간은 한 곳에서 (s9src 참조)
 
 
 def _load(name, path):
@@ -43,6 +44,7 @@ def _load(name, path):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
 
 
 class ServeStale(unittest.TestCase):
@@ -131,9 +133,7 @@ class ServeStale(unittest.TestCase):
     #     잡기 전에 남기면 못 잡고 죽은 프로세스의 지문이 남아, 실제로 응답하는
     #     옛 서버를 가린다. 지문은 지금 듣고 있는 쪽을 가리켜야 한다.
     def test_n5_stamp_after_bind(self):
-        src = open(S9, encoding="utf-8").read()
-        i = src.index("SERVE_CODE_STAMP = running_code_stamp()")
-        seg = src[i:i + 2200]
+        seg = serve_tail(open(S9, encoding="utf-8").read())
         bind = seg.index("QuietDisconnectServer((args.host")
         stamp = seg.index("serve-code.json")
         self.assertLess(bind, stamp,
@@ -141,17 +141,14 @@ class ServeStale(unittest.TestCase):
 
     # N6. 포트를 못 잡으면 시끄럽게 죽는다 — 조용히 죽으면 성공으로 읽힌다
     def test_n6_bind_failure_is_loud(self):
-        src = open(S9, encoding="utf-8").read()
-        i = src.index("SERVE_CODE_STAMP = running_code_stamp()")
-        seg = src[i:i + 2200]
+        seg = serve_tail(open(S9, encoding="utf-8").read())
         self.assertIn("잡지 못했다", seg)
         self.assertIn("except OSError", seg)
 
     # N3. serve 가 기동 시 지문을 남긴다 — 남기지 않으면 물어볼 데가 없다
     def test_n3_serve_writes_stamp(self):
-        src = open(S9, encoding="utf-8").read()
-        i = src.index("SERVE_CODE_STAMP = running_code_stamp()")
-        self.assertIn("serve-code.json", src[i:i + 2200],
+        seg = serve_tail(open(S9, encoding="utf-8").read())
+        self.assertIn("serve-code.json", seg,
                       "serve 가 기동 지문을 디스크에 남기지 않는다")
 
     # N4. 프롬프트 훅이 매 턴 주입한다 — 배너는 화면을 볼 때만 보인다

@@ -117,11 +117,19 @@ class ServeConcurrency(unittest.TestCase):
         finally:
             hold.close()
 
-    # F1. 리슨 큐 계약 — 파이썬 기본값(5)으로 되돌아가면 잡는다
+    # F1. 리슨 큐 계약 — 파이썬 기본값(5)으로 되돌아가면 잡는다.
+    #     수는 이제 이름을 얻었다(SERVE_BACKLOG, REQ-20260901-020) — 그래서
+    #     대입 자리의 글자가 아니라 **실제로 쓰이는 값**을 잰다. 리터럴만 보면
+    #     이름 뒤에서 5로 내려가도 시험이 침묵한다.
     def test_f1_queue_size_contract(self):
         src = open(os.path.join(HERE, "..", "bin", "s9"), encoding="utf-8").read()
-        m = re.search(r"ThreadingHTTPServer\.request_queue_size\s*=\s*(\d+)", src)
-        self.assertIsNotNone(m, "request_queue_size 설정이 사라졌다")
+        self.assertIsNotNone(
+            re.search(r"ThreadingHTTPServer\.request_queue_size\s*=\s*"
+                      r"SERVE_BACKLOG", src),
+            "request_queue_size 설정이 사라졌다")
+        m = re.search(r"^SERVE_BACKLOG\s*=.*?(\d+)\s*,\s*int\)", src,
+                      re.M)
+        self.assertIsNotNone(m, "SERVE_BACKLOG 기본값을 못 찾았다")
         self.assertGreaterEqual(int(m.group(1)), 32, m.group(0))
 
     # R1. 서버가 다시 단일 스레드로 바뀌면 잡는다 — N2 보다 먼저, 명시적으로

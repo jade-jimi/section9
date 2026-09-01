@@ -23,6 +23,7 @@ import json
 import os
 import tempfile
 import unittest
+from s9src import serve_tail     # 소스 구간은 한 곳에서 (s9src 참조)
 from webasset import index_path   # 화면은 조각이다 — 계약은 이어 붙인 한 장을 본다 (REQ-20260829-027)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -129,8 +130,7 @@ class HookStamp(unittest.TestCase):
     def test_h9_serve_stamps_both(self):
         src = open(S9, encoding="utf-8").read()
         self.assertIn("SERVE_CODE_STAMP = running_code_stamp()", src)
-        i = src.index("SERVE_CODE_STAMP = running_code_stamp()")
-        self.assertIn("serve-code.json", src[i:i + 2200])
+        self.assertIn("serve-code.json", serve_tail(src))
 
     # H10. /api/serveinfo 도 같은 지문으로 판정한다 — 화면과 CLI 가 갈리면
     #      둘 중 어느 쪽을 믿어야 하는지가 또 하나의 문제가 된다

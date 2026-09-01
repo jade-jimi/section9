@@ -13,6 +13,7 @@ import getpass
 import json
 import os
 import re
+import select
 import shutil
 import socket
 import struct
@@ -504,6 +505,73 @@ _ALIAS_LOCK = threading.Lock()
 # 판정을 지난다"는 계약을 그 블록에서 읽는다.
 POLL_SNAPSHOT_SEC = 0.0     # cmd_serve 가 2.0 으로 올린다 — 다른 자리 금지
 _POLL_EPOCH = [0]           # 서버 POST(행동)마다 +1 — 행동 직후 조회는 신선
+
+
+def _envnum(name, default, cast=float):
+    """환경변수 하나에서 숫자 하나 — 못 읽으면 기본값 (시험이 이 문을 쓴다)."""
+    try:
+        v = cast(os.environ.get(name, "").strip())
+    except (TypeError, ValueError):
+        return default
+    return v if v > 0 else default
+
+
+# ── 연결을 놓아 주는 세 자 (REQ-20260901-020) ────────────────────────────
+# 대시보드 서버는 연결 하나에 스레드 하나다. 놓아 주지 않는 연결은 곧 놓아
+# 주지 않는 스레드이고, 스레드가 쌓이면 새 연결이 리셋된다.
+#   KEEPALIVE_IDLE  요청과 요청 사이 **노는** 시간의 상한. 처리 시간은 안 잰다.
+#                   화면의 가장 느린 폴은 2.5초(터미널 폴백)라, 20초면
+#                   정상 폴링은 한 번도 안 걸리고 버려진 연결만 걷힌다.
+#   MAX_CONNS       동시 연결 상한. 넘으면 조용히 리셋되게 두지 않고 503 으로
+#                   답한다. **상한은 폭주를 막는 마지막 그물이지 평시의 목줄이
+#                   아니다** — 64로 잡았다가 대시보드가 통째로 503 을 받았다:
+#                   이 기계의 정상 작업량이 실측 63연결이었고(모두 lastrcv 15초
+#                   이내의 살아 있는 폴), REQ-20260831-002 이 잰 재시도 폭풍은
+#                   95연결이다. 그 위에 여유를 두어야 상한이 병이 되지 않는다.
+#   SERVE_BACKLOG   받아들이기 큐. 32는 재접속 폭풍(브라우저 F5·SSE 재연결)
+#                   에서 넘쳐, 커널이 SYN 을 버리면 화면이 「죽은」 것으로 보인다.
+KEEPALIVE_IDLE = _envnum("S9_KEEPALIVE_IDLE", 20.0)
+MAX_CONNS = int(_envnum("S9_MAX_CONNS", 256, int))
+SERVE_BACKLOG = int(_envnum("S9_SERVE_BACKLOG", 128, int))
+
+# ── 낡은 SSE 스트림 은퇴 (REQ-20260901-020) ──────────────────────────────
+# SSE 는 유휴 상한을 못 건다 — 요청 하나가 오래 사는 것이지 노는 게 아니라,
+# 시간으로 끊으면 대시보드가 죽는다. 그런데 이 기계의 WSL2 프록시 뒤에서는
+# 브라우저가 EventSource 를 닫아도 **FIN 이 서버까지 오지 않는다**: 서버는
+# 상대의 죽음을 볼 방법이 없고, 버려진 스트림이 만기(5분)까지 살아 남는다.
+# 실측 2026-09-01: ESTAB 64개 중 15초 동안 갈린 것이 3개 — 정확히 300초
+# 수명의 산수(64×15/300=3.2)다. 그래서 세는 기준을 시간에서 **세대**로 옮긴다:
+# 같은 세션에 새 스트림이 열렸다면 옛 스트림은 이미 낡은 것이다. 한 세션을
+# 여러 창에서 볼 수 있으니 여유 몇 개는 남긴다.
+SSE_PER_SESSION = int(_envnum("S9_SSE_PER_SESSION", 3, int))
+_SSE_LIVE = {}          # 표 -> {"sid": 세션}
+_SSE_STOP = set()       # 은퇴를 통보받은 표
+_SSE_LOCK = threading.Lock()
+_SSE_SEQ = [0]
+
+
+def sse_open(sid):
+    """새 스트림을 등록하고 넘치는 옛 세대에 그만두라 이른다. 표를 준다."""
+    with _SSE_LOCK:
+        _SSE_SEQ[0] += 1
+        tok = _SSE_SEQ[0]
+        _SSE_LIVE[tok] = sid
+        mine = sorted(k for k, v in _SSE_LIVE.items() if v == sid)
+        for k in mine[:-SSE_PER_SESSION] if SSE_PER_SESSION > 0 else mine:
+            _SSE_STOP.add(k)
+        return tok
+
+
+def sse_retired(tok):
+    """이 스트림은 은퇴 통보를 받았는가 (등록이 사라졌어도 은퇴로 본다)."""
+    with _SSE_LOCK:
+        return tok in _SSE_STOP or tok not in _SSE_LIVE
+
+
+def sse_close(tok):
+    with _SSE_LOCK:
+        _SSE_LIVE.pop(tok, None)
+        _SSE_STOP.discard(tok)
 # /api/catalog 응답 바이트 캐시 — 키는 (게이트 세대 seq, 뷰어, archived).
 # 항상 게이트 **뒤에서만** 조회된다(신선도 판정은 게이트 한 곳) — 핸들러 참조.
 # etag/zbody (REQ-20260831-004): 이 기계의 TCP 루프백은 virtioproxy 프록시를
@@ -16790,6 +16858,110 @@ def cmd_serve(args):
         # HTTP/1.1 은 Content-Length 명시가 전제다(_send가 항상 넣는다).
         protocol_version = "HTTP/1.1"
 
+        # **놓아 주는 시간** (REQ-20260901-020). 이 서버는 연결 하나에 스레드
+        # 하나다 — 그래서 놓아 주지 않는 연결은 곧 놓아 주지 않는 스레드다.
+        # keep-alive 를 켠 뒤로 서버는 「다음 요청」을 영원히 기다렸고, 상대가
+        # 조용히 사라진 연결이 스레드·fd 를 물고 쌓였다 (2026-09-01 실측:
+        # 재시작 10분 만에 ESTAB 129·스레드 143, 새 연결은 리셋).
+        # 상한은 **노는 시간에만** 건다 — 요청을 처리하는 동안(SSE 같은 긴
+        # 응답 포함)에는 걸리지 않는다. parse_request 가 성공하는 순간 푼다.
+        idle_timeout = KEEPALIVE_IDLE
+
+        # 상한 밖 연결에 주는 읽기 시간. 짧아야 한다 — 거절할 연결이 정상
+        # 연결과 같은 20초를 쓰면, 거절이 곧 새로운 점유가 된다.
+        refuse_read_timeout = 2.0
+
+        def setup(self):
+            super().setup()
+            # 상한 판정은 **연결당 한 번**. 거절도 답이라 요청을 끝까지 읽고
+            # 정상 응답으로 돌려보낸다 — 안 읽고 닫으면 커널이 RST 를 보내
+            # 우리가 적어 보낸 이유를 지운다(실측: 상대가 받은 것은 빈 응답).
+            try:
+                self._over = self.server.over_capacity()
+            except AttributeError:
+                self._over = False
+            if self._over:
+                self.idle_timeout = self.refuse_read_timeout
+
+        def handle_one_request(self):
+            """요청과 요청 사이의 기다림에 상한을 둔다.
+
+            소켓 타임아웃 하나로 요청줄+헤더 읽기를 감싼다. 버퍼드 리더가
+            먼저 소진되므로 파이프라이닝된 요청은 소켓을 건드리지 않고 그대로
+            읽힌다 — select 로 원시 소켓만 보면 그 요청을 잃는다.
+            시간이 다하면 stdlib 이 TimeoutError 를 잡아 close_connection 을
+            세운다(로그는 log_message 가 이미 조용하다).
+            """
+            if self.idle_timeout and self.idle_timeout > 0:
+                try:
+                    self.connection.settimeout(self.idle_timeout)
+                except OSError:
+                    pass
+            super().handle_one_request()
+
+        def parse_request(self):
+            """요청이 다 왔으면 상한을 푼다 — 처리 시간은 재지 않는다.
+
+            동시 연결 상한도 여기서 한 곳으로 판정한다. stdlib 의 계약이
+            "parse_request 가 False 면 응답은 이미 보냈으니 그냥 나간다"라,
+            메서드(do_GET·do_POST…)마다 같은 검사를 흩지 않아도 된다 —
+            나중에 붙는 메서드도 자동으로 이 문을 지난다.
+            """
+            ok = super().parse_request()
+            if not ok:
+                return False
+            try:
+                self.connection.settimeout(None)
+            except OSError:
+                pass
+            return not self._capacity_guard()
+
+        def _capacity_guard(self):
+            """상한 밖이면 503 으로 돌려보낸다. 막았으면 True.
+
+            조용한 리셋은 「서버가 죽었다」로 읽힌다. 같은 거절이라도 이유와
+            재시도 시점이 적혀 있으면 클라이언트가 스스로 물러설 수 있다.
+            """
+            if not getattr(self, "_over", False):
+                return False
+            self.close_connection = True
+            self.send_response(503)
+            body = ("동시 연결이 상한에 닿았다 — 잠시 뒤 다시 시도하라."
+                    .encode())
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Retry-After", "1")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+
+        def end_headers(self):
+            """상한을 말해 준다 — 클라이언트가 눈치로 알게 두지 않는다."""
+            if not self.close_connection and self.idle_timeout \
+                    and self.protocol_version >= "HTTP/1.1":
+                self.send_header("Keep-Alive",
+                                 f"timeout={int(self.idle_timeout)}")
+            super().end_headers()
+
+        def _peer_gone(self):
+            """상대가 이미 갔는가 — 긴 연결(SSE)이 스스로 묻는 말.
+
+            긴 연결에는 유휴 상한을 못 건다(끊으면 대시보드가 죽는다). 대신
+            상대의 생사를 직접 묻는다: EventSource 를 닫으면 FIN 이 오고 그
+            소켓은 '읽을 것 있음'으로 뜨며 recv 는 b'' 를 준다.
+            **쓰기는 답이 못 된다** — 반쯤 닫힌 소켓으로의 write 는 RST 가
+            돌아올 때까지 성공하고, WSL2 프록시 뒤에서는 그 RST 가 안 온다.
+            그래서 좀비 스트림이 만기(5분)까지 4Hz 로 CPU 를 태웠다.
+            """
+            try:
+                r, _, _ = select.select([self.connection], [], [], 0)
+                if not r:
+                    return False
+                return self.connection.recv(1, socket.MSG_PEEK) == b""
+            except OSError:
+                return True
+
         def _send(self, code, ctype, data):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
@@ -16982,7 +17154,17 @@ def cmd_serve(args):
                                 "ttl": POLL_SNAPSHOT_SEC,
                                 "seq": catalog_with_live._state["seq"],
                                 "dur": round(
-                                    catalog_with_live._state["dur"], 3)}})
+                                    catalog_with_live._state["dur"], 3)},
+                            # 연결 계기판 (REQ-20260901-020) — 「쌓이고 있는가」
+                            # 를 사람이 ss 를 쳐서 알게 두지 않는다. 연결 하나에
+                            # 스레드 하나인 서버라 이 셋이 곧 건강이다.
+                            "conns": {
+                                "live": getattr(self.server, "_live", -1),
+                                "max": getattr(self.server, "max_conns", -1),
+                                "sse": len(_SSE_LIVE),
+                                "threads": threading.active_count(),
+                                "idle_timeout": KEEPALIVE_IDLE,
+                                "backlog": SERVE_BACKLOG}})
             elif parsed.path == "/api/serveguard":
                 # 대시보드가 왜 죽었는지를 대시보드 안에서 답한다
                 # (REQ-20260826-018). 명세는 그 문서의 decision 노트 —
@@ -17120,8 +17302,19 @@ def cmd_serve(args):
                 self.end_headers()
                 deadline = time.time() + 300   # 5분 후 종료 — 클라이언트 재접속
                 last_beat = 0.0
+                tok = sse_open(sid)
                 try:
                     while time.time() < deadline:
+                        # 만기를 기다리지 않고 끝내는 두 가지 (REQ-20260901-020).
+                        # ① 상대가 갔다: 예전엔 write 가 실패해야 알았는데,
+                        #    반쯤 닫힌 소켓으로의 write 는 RST 가 올 때까지
+                        #    성공한다 — 버려진 스트림이 5분 내내 0.25초마다
+                        #    스트림 파일을 다시 읽었다(좀비 140개 = 8.7코어).
+                        # ② 은퇴했다: 같은 세션에 새 스트림이 열렸다. WSL2
+                        #    프록시 뒤에서는 ①의 FIN 이 아예 안 와서, 세대가
+                        #    유일하게 믿을 수 있는 신호다.
+                        if sse_retired(tok) or self._peer_gone():
+                            break
                         d = stream_events(sid, after)
                         if d and d.get("events"):
                             after = d["offset"]
@@ -17138,6 +17331,8 @@ def cmd_serve(args):
                         time.sleep(0.25)
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     pass
+                finally:
+                    sse_close(tok)
             elif parsed.path == "/api/agents":
                 # 에이전트 스트립 (REQ-044): 세션의 위임 에이전트 목록·라벨·토큰
                 sid = qs.get("session", [""])[0]
@@ -17906,8 +18101,6 @@ def cmd_serve(args):
     # 반려 재작업 워처 (REQ-20260823-083) — 반려는 대시보드 행위이므로 serve가
     # 반려 시점에 살아있다. 유예 후 미클레임 반려를 무인 스폰. 끄기: S9_REWORK_WATCH=off
     if os.environ.get("S9_REWORK_WATCH", "").lower() != "off":
-        import threading
-
         def _rework_loop():
             tick = 0
             while True:
@@ -17954,8 +18147,6 @@ def cmd_serve(args):
     # 임계에서 우리 잔여물을 회수하고, 치명 직전이면 점유자를 자동 회수한다.
     # 끄기: S9_PORT_GUARD=off
     if os.environ.get("S9_PORT_GUARD", "").lower() != "off":
-        import threading
-
         def _port_guard_loop():
             n = 0
             while True:
@@ -17993,7 +18184,7 @@ def cmd_serve(args):
     # CLI 는 기본 0 그대로: 한 번 묻고 끝나는 프로세스에 낡음을 들이지 않는다.
     POLL_SNAPSHOT_SEC = 2.0
 
-    http.server.ThreadingHTTPServer.request_queue_size = 32
+    http.server.ThreadingHTTPServer.request_queue_size = SERVE_BACKLOG
 
     class QuietDisconnectServer(http.server.ThreadingHTTPServer):
         """예상된 끊김은 조용히 (REQ-20260830-028).
@@ -18002,7 +18193,42 @@ def cmd_serve(args):
         연결을 끊고, 기본 handle_error 는 그때마다 traceback 을 통째로 찍는다 —
         사용자가 그 화면을 보고 "버그가 있는 건가?" 를 실제로 물었다(2026-08-30
         16:18 캡처). 동작엔 문제가 없는 소음이라 이 두 종류만 삼킨다. 그 밖의
-        예외는 지금처럼 전부 보인다 — 진짜 결함까지 조용해지면 그게 더 나쁘다."""
+        예외는 지금처럼 전부 보인다 — 진짜 결함까지 조용해지면 그게 더 나쁘다.
+
+        그리고 **넘칠 때 답을 준다** (REQ-20260901-020). 연결 하나에 스레드
+        하나인 서버에 상한이 없으면, 쌓인 연결이 받아들이기 큐를 채우고 커널이
+        새 연결을 말없이 리셋한다 — 사용자에겐 「서버가 죽었다」로 보인다.
+        상한을 넘긴 연결은 스레드를 만들기 전에 503 으로 돌려보낸다: 같은
+        거절이라도 이유가 적힌 거절은 클라이언트가 재시도를 조절할 수 있다."""
+
+        max_conns = MAX_CONNS
+
+        def __init__(self, *a, **kw):
+            self._live = 0
+            self._live_lock = threading.Lock()
+            super().__init__(*a, **kw)
+
+        def process_request(self, request, client_address):
+            with self._live_lock:
+                self._live += 1
+            super().process_request(request, client_address)
+
+        def process_request_thread(self, request, client_address):
+            try:
+                super().process_request_thread(request, client_address)
+            finally:
+                with self._live_lock:
+                    self._live -= 1
+
+        def over_capacity(self):
+            """이 연결이 상한 밖인가 — 연결이 열릴 때 **한 번만** 묻는다.
+
+            자기 자신이 이미 세어져 있으므로 비교는 초과(>)다. 한 번만 묻는
+            이유: 상한 안에서 받아들인 연결이 나중에 남들 때문에 거절당하면
+            화면이 쓰다 말고 끊기는 것으로 보인다.
+            """
+            with self._live_lock:
+                return self._live > self.max_conns
 
         def handle_error(self, request, client_address):
             e = sys.exc_info()[1]
@@ -18034,6 +18260,21 @@ def cmd_serve(args):
                            "started": SERVE_STARTED,
                            "pid": os.getpid(), "port": args.port}, _f)
     except OSError:
+        pass
+    # 스레드가 **어디서 자고 있는지**를 서버가 직접 답한다 (REQ-20260901-020).
+    # DOC-20260831-001 의 3단계 판별(faulthandler 스택)을 서버를 죽이지 않고
+    # 언제든 쓰게 만든다: `kill -USR1 <pid>` 한 번이면 모든 스레드의 파이썬
+    # 스택이 state/serve-threads.txt 에 쌓인다. 연결이 쌓일 때 "누가 안 놓고
+    # 있나"를 추측으로 답하지 않기 위한 계기다 — 실제로 이 결함의 규명이
+    # 그 한 장에 걸려 있었다.
+    try:
+        import faulthandler
+        import signal as _sig
+        _dump = open(os.path.join(ROOT, "state", "serve-threads.txt"),
+                     "a", buffering=1)
+        faulthandler.register(_sig.SIGUSR1, file=_dump, all_threads=True,
+                              chain=False)
+    except (OSError, ValueError, AttributeError, ImportError):
         pass
     print(f"section9 dashboard: http://{args.host}:{args.port}/  (Ctrl-C to stop)")
     try:
