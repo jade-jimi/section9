@@ -9,12 +9,19 @@ function hideHover(){ hovercard.classList.remove("show"); }
 const hoverWide = on => hovercard.classList.toggle("uwide", !!on);
 function placeHover(el){
   const rect = el.getBoundingClientRect();
-  const top = rect.bottom + 8 + 260 > innerHeight ? rect.top - 8 - 150 : rect.bottom + 8;
   // 폭을 상수로 박아 두면 넓은 카드가 화면 밖으로 나간다 — 내용을 넣은 뒤라
   // 실제로 잰다 (카드는 늘 DOM 에 있고 opacity 로만 숨으므로 측정된다).
+  /* 키도 마찬가지다 (REQ-20260901-019). 여태 위아래 판정에 260·150 이라는
+     **어림수**를 썼는데, 카드의 키는 내용마다 다르다 — 짧은 카드는 짚은 곳에서
+     멀찍이 떨어져 뜨고, 긴 카드(사용량·우선순위)는 뒤집고도 화면 밖으로
+     나갔다. 폭에 대고 이미 하고 있는 그대로, 잰 값으로 뒤집고 잰 값으로
+     물린다. 이 카드는 손이 닿지 않는 쪽지라(pointer-events:none) 넘친 자리를
+     굴려 볼 수 없으므로, 넘치지 않게 두는 것이 유일한 답이다. */
   const w = hovercard.offsetWidth || 340;
+  const h = hovercard.offsetHeight || 160;
+  const top = rect.bottom + 8 + h > innerHeight ? rect.top - 8 - h : rect.bottom + 8;
   hovercard.style.left = Math.max(8, Math.min(rect.left, innerWidth - w - 8)) + "px";
-  hovercard.style.top = Math.max(8, top) + "px";
+  hovercard.style.top = Math.max(8, Math.min(top, innerHeight - h - 8)) + "px";
   hovercard.classList.add("show");
 }
 /* 우선순위 척도 (REQ-20260827-029). 문서 메타 행에 상주하던 설명문

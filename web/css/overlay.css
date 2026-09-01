@@ -135,11 +135,29 @@
    시작 단추가 잘렸다 — 스크롤은 내용이 max-height 를 넘을 때만 생기므로 아무
    손잡이도 없었다. 같은 값(--dlgtop)으로 시작점과 최대 키를 함께 재면 줄 수와
    무관하게 바닥 24px 이 남는다. */
+/* 그런데 키를 물린 것만으로는 바닥이 안 지켜졌다 (REQ-20260901-019 실사고).
+   창이 **통째로** 굴렀기 때문이다: 머리도 바닥도 본문과 같은 흐름에 실려
+   있어서, 내용이 최대 키를 넘는 순간 바닥 띠가 접힌 자리 아래로 밀려났다.
+   화면 배율 125%(뷰포트 1531×684)에서 모델 창이 정확히 그 처지였다 — 창은
+   규격대로 섰는데 `그만두기`·`다시 시작` 이 반쯤 잘려 보였고, 잘린 것이
+   **굴리면 나온다**는 사실을 말해 주는 것은 아무것도 없었다.
+   그래서 창을 **세 띠**로 세운다 — 머리(무엇에 대한 창인가) · 본문(구르는
+   것) · 바닥(무엇을 할 수 있는가). 판이 아무리 낮아져도 묻는 말과 답하는
+   손잡이는 화면에 남고, 길어진 것은 본문 하나뿐이다. 장부의 문법(3단 구조)이
+   이미 이 창의 뼈대였으니, 굴리는 축을 그 뼈대에 맞춰 옮겨 놓는 것뿐이다.
+   구르는 띠는 이름으로 지목한다(.dlgbody · 치운 것 판의 .tlist). 나머지 직계
+   자식은 전부 붙박이다 — 새 띠를 얹는 사람이 아무것도 안 적으면 「안 구르는
+   띠」가 되게 두는 쪽이 안전하다. */
 .dlgbox{position:fixed;pointer-events:auto;opacity:1;z-index:80;padding:0;
   --dlgtop:clamp(48px,18vh,180px);
   left:50%;transform:translateX(-50%);top:var(--dlgtop);
   width:min(432px,calc(100vw - 32px));max-width:none;
-  max-height:calc(100vh - var(--dlgtop) - 24px);overflow:auto}
+  max-height:calc(100vh - var(--dlgtop) - 24px);
+  display:flex;flex-direction:column;overflow:hidden}
+.dlgbox>*{flex:0 0 auto}
+/* min-height:0 이 없으면 flex 항목의 최소 키가 내용 키라 띠가 안 줄고, 결국
+   판이 다시 넘친다 — 세로 flex 에서 이 한 줄이 스크롤을 실제로 만든다. */
+.dlgbox>.dlgbody,.dlgbox>.tlist{flex:1 1 auto;min-height:0;overflow:auto}
 .dlgbox[hidden]{display:none}
 /* 부양은 스킨 그림자를 덮는다 — 스킨마다 카드 그림자가 다르면 판의 무게도
    달라져서, "이건 판이다"가 어떤 스킨에선 서지 않는다. 링은 검정 그림자가

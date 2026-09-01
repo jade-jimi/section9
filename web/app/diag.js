@@ -357,6 +357,24 @@
     setTimeout(() => clearInterval(t), 12000);
     return;
   }
+  /* ?dlg=tidy — 「치운 것」 판도 그림이 아니라 **진짜**로 연다
+     (REQ-20260901-019). 이 판은 `.dlgbox` 를 함께 쓰면서 제 안에 목록 띠를
+     따로 두는 유일한 창이라, 창이 낮아질 때 머리·바닥이 붙박이로 남는지는
+     여기서만 확인된다. 손으로는 Docs 목록의 손잡이를 눌러야 열리므로 손이
+     없는 환경에서는 이 길이 아니면 캡처가 안 된다. */
+  if (m[1] === "tidy"){
+    setTimeout(async () => {
+      await tidyOpen();
+      // `&dlgtab=trash` — 줄이 많은 쪽(휴지통)을 세워 목록 띠가 실제로 구르는
+      // 것까지 본다. 보관함은 대개 몇 줄이라 넘치는 판을 못 만든다.
+      const tb = (/[?&]dlgtab=([a-z]+)/.exec(location.search) || [])[1];
+      if (tb){
+        const b = document.querySelector(`.tidypanel [data-tab="${tb}"]`);
+        if (b) b.click();
+      }
+    }, 1200);
+    return;
+  }
   const o = shapes[m[1]] || shapes.reject;
   /* ?dlgnav=<탭> — 창을 연 뒤 그 탭으로 옮겨 가 **정말 닫히는지** 확인한다.
      **헤더 탭 버튼을 실제로 누른다** (REQ-20260828-007). 앞서는 `location.hash`
@@ -386,16 +404,38 @@
     }
     if (pk){
       const rb = dlg.querySelector(`.dlgopt[data-opt="${decodeURIComponent(pk)}"]`);
-      if (rb) rb.click();
+      /* 누른 줄에 **손도 얹는다** (REQ-20260901-019). `click()` 은 포커스를
+         옮기지 않아서, 사람이 마우스로 눌렀을 때와 화면이 달라졌다 — 목록이
+         구르는 낮은 판에서는 그 차이가 「고른 줄이 안 보인다」로 나온다.
+         포커스가 있어야 브라우저가 그 줄을 보이는 자리로 굴려 준다. */
+      if (rb){ rb.click(); rb.focus(); }
     }
     // 잰 값을 제목에 찍는다 — 헤드리스에서 --dump-dom 으로 읽어 **자·폭이 정말
     // 같은지 눈이 아니라 숫자로** 확인한다. 승인 창과 반려 창의 왼쪽 위 모서리와
     // 폭이 같아야 한다는 것이 이 재작업의 요구였고, 눈으로만 보면 또 놓친다.
     setTimeout(() => {
-      const r = document.querySelector(".dlgbox").getBoundingClientRect();
+      const box = document.querySelector(".dlgbox");
+      const r = box.getBoundingClientRect();
+      /* 세 띠가 정말 판 안에 있나 (REQ-20260901-019). 눈으로만 보면 또 놓친다 —
+         바닥 띠의 아랫변이 판의 아랫변 안에 있고, 판의 아랫변이 뷰포트 안에
+         있는지를 숫자로 남긴다. `fit=1` 이 아니면 어딘가 잘린 것이다.
+         `body` 는 본문 띠가 실제로 구르는지(스크롤 여지) 말한다. */
+      const foot = box.querySelector(".dlgfoot,.tfoot");
+      const body = box.querySelector(".dlgbody,.tlist");
+      const fr = foot && foot.getBoundingClientRect();
+      const fit = fr ? (fr.bottom <= r.bottom + 1 && r.bottom <= innerHeight) : null;
+      /* 고른 줄이 보이는 자리에 있나 — 목록이 구르는 낮은 판에서 ↑↓ 가
+         화면 밖으로 나가면 고르는 일 자체가 안 된다. */
+      const a = document.activeElement, ar = a && a.getBoundingClientRect();
+      const seen = ar && body
+        ? (ar.top >= body.getBoundingClientRect().top - 1
+           && ar.bottom <= body.getBoundingClientRect().bottom + 1) : null;
       document.title = `dlg ${m[1]} L${Math.round(r.left)} T${Math.round(r.top)}`
-        + ` W${Math.round(r.width)} H${Math.round(r.height)}`;
-    }, 60);
+        + ` W${Math.round(r.width)} H${Math.round(r.height)}`
+        + ` fit=${fit === null ? "-" : (fit ? 1 : 0)}`
+        + ` body=${body ? Math.round(body.scrollHeight - body.clientHeight) : "-"}`
+        + ` seen=${seen === null ? "-" : (seen ? 1 : 0)}`;
+    }, 260);
   }, 1200);
 })();
 
