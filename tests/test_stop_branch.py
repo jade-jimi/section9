@@ -140,7 +140,11 @@ class ThreeWaysToStand(unittest.TestCase):
         r = self.m.stop_request(DOC, actor="nicehugepark")
         self.assertTrue(r.get("ok"), r.get("message"))
         self.assertEqual(r.get("action"), "no-recipient")
-        self.assertIn("지시를 받을 무인 작업이 없어", r.get("message", ""))  # tech-writer: 창은 두 뜻을 진다
+        # 문장은 REQ-20260901-005 로 개정 — 「세워 두다」 잔재가 「자동
+        # 이어받기 끄기」 정책 문법으로 갔다. 고정할 성질은 "사람 문장 + 정책만
+        # 걸었다는 사실"이다.
+        self.assertIn("지시를 받을 곳이 없어", r.get("message", ""))
+        self.assertIn("자동 이어받기", r.get("message", ""))
         self.assertTrue(self.m.stop_mark(DOC))
         self.assertEqual(self.inbox(sid), [], "죽은 수신함에 지시를 넣었다")
 

@@ -229,13 +229,21 @@ class DeadEnd(unittest.TestCase):
         m = re.search(r"const stallRow = ([\s\S]+?);\n", self.src)
         self.assertTrue(m, "문서 화면이 조각을 잇는 자리가 없다")
         made = " ".join(m.group(1).split())
-        # 벨트·잠금은 머리 띠(.dacts)로 갔다 (REQ-20260830-046) — 사실 줄만 남는다.
-        self.assertEqual(made, "stallHTML(stallDoc) + holdTellHTML(stallDoc)")
-        # 띠도 **같은 두 함수**를 부른다 — wordy 는 얼굴 인자일 뿐 조건이 아니다.
+        # 벨트·잠금은 머리 띠(.dacts)로 갔다 (REQ-20260830-046). 사실 줄 층의
+        # 맨 앞에는 정책 예고 줄이 선다 (REQ-20260901-005) — 관문은 그 함수
+        # 안의 holdLockHTML 하나라 조건이 두 벌이 되지 않는다.
+        self.assertEqual(made, "holdForecastHTML(stallDoc) + stallHTML(stallDoc)"
+                               " + holdTellHTML(stallDoc)")
+        # 띠도 **같은 함수**를 부른다 — wordy 는 얼굴 인자일 뿐 조건이 아니다.
+        # 정책 단추는 제 무리로 갈라섰다 (REQ-20260901-005 designer 보조).
         m2 = re.search(r"const beltDoc = ([\s\S]+?);\n", self.src)
         self.assertTrue(m2, "문서 머리 띠가 벨트를 잇는 자리가 없다")
         self.assertEqual(" ".join(m2.group(1).split()),
-                         "deedBeltHTML(stallDoc, true) + holdLockHTML(stallDoc)")
+                         "deedBeltHTML(stallDoc, true)")
+        m3 = re.search(r"const polBtn = ([\s\S]+?);\n", self.src)
+        self.assertTrue(m3, "정책 단추 무리가 없다")
+        self.assertEqual(" ".join(m3.group(1).split()),
+                         "holdLockHTML(stallDoc)")
 
     # ---------- ⑥ 눈으로 볼 길 ----------
 

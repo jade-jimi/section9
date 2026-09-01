@@ -68,7 +68,7 @@ async function prioSet(id){
   // 창마다 제 문장을 지으면 언젠가 하나만 제목을 잃고 조사가 어긋난다.
   const pick = await s9dlg({
     kind: "choose", cap: "우선순위", ...dlgFor(id, "어느 자리에 둘까요"),
-    desc: "위에 둔 것을 다음에 맡습니다 — 자동 작업도 이 순서를 따릅니다.",
+    desc: "위에 둔 것을 다음에 맡습니다 — 무인 작업도 이 순서를 따릅니다.",
     items, cancel: "그만두기",
   });
   if (!pick || !pick.key || Number(pick.key) === cur) return;

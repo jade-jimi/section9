@@ -598,11 +598,11 @@ class StallRendersTheSame(unittest.TestCase):
         길은 새로 파지 않는다 — 같은 stop 경로의 idle 갈래를 그대로 쓴다."""
         out = self.render(self.ROWS)
         lock = out["REQ-H"]["lock"]
-        self.assertIn("저절로 이어지지 않게 하기", lock, "문서에 낱말 단추가 없다")
+        self.assertIn("자동 이어받기 끄기", lock, "문서에 낱말 단추가 없다")
         self.assertIn('data-kind="idle"', lock, "idle 갈래로 안 간다")
         self.assertIn("data-stop=", lock, "기존 stop 경로를 안 쓴다")
         # 카드에는 서지 않는다 — 카드의 한 결정은 "지금 이어갈까" 하나다
-        self.assertNotIn("저절로 이어지지 않게 하기", out["REQ-H"]["card"])
+        self.assertNotIn("자동 이어받기 끄기", out["REQ-H"]["card"])
         # 붙어 있는 카드에는 잠글 것이 없다
         for rid in ("REQ-F", "REQ-L"):
             self.assertEqual("", out[rid]["lock"],
@@ -800,4 +800,6 @@ class StallRendersTheSame(unittest.TestCase):
         """idle 갈래의 개념어는 「담당」이다 (039 리드 확정)."""
         table = _code(_const(self.src, "STOP_KIND"))
         self.assertIn("담당하는 것이 없습니다", table)
-        self.assertIn("중단해 두면", table, "반려어 「세워 두다」가 안 걷혔다")
+        # 「~어 두다」 꼴은 유지하되 동사가 「끄다」로 갔다 (REQ-20260901-005) —
+        # 반려어 「세워 두다」 계열이 돌아오지 않는지는 어휘 게이트가 함께 잰다.
+        self.assertIn("꺼 두면", table, "정책 툴팁이 끄기 문법을 잃었다")

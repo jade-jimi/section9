@@ -450,7 +450,7 @@ async function loadDoc(id, bg, force){
      손잡이를 잃는다 — 카드에만 관문이 있어 같은 요청이 두 자리에서 다른 말을
      하던 그 결함(REQ-20260828-041 2차)의 거울상이다. */
   const stallDoc = catFind(m.id);
-  /* 문서에는 조각이 하나 더 선다 (REQ-20260830-042): 「저절로 이어지지 않게 하기」.
+  /* 문서에는 조각이 하나 더 선다 (REQ-20260830-042): 「자동 이어받기 끄기」.
      idle 의 ⏸ 가 카드에서 사라지면서, 앞으로 안 맡게 잠그는 **정책**은 지금
      내리는 행위들과 층을 나눠 문서로 왔다. 새 경로가 아니라 같은 stop 길의
      idle 갈래다 — 카드에서 옮겨 왔을 뿐이다. */
@@ -466,12 +466,22 @@ async function loadDoc(id, bg, force){
      서고, 띠는 제목과 함께 붙박이(.dhead)라 아무리 내려도 손끝에 남는다.
      사실 줄(stallHTML)은 띠에 넣지 않는다 — 붙박이에 얹으면 같은 문장이
      스크롤 내내 따라다닌다. */
-  const beltDoc = deedBeltHTML(stallDoc, true) + holdLockHTML(stallDoc);
+  const beltDoc = deedBeltHTML(stallDoc, true);
+  /* 정책 단추는 **제 무리**다 (REQ-20260901-005 designer 보조) — 행위(지금
+     이어간다·중단한다)와 정책(앞으로 어떻게 한다)의 축이 헤어라인으로 갈리고,
+     ▶ 의 유무와 무관하게 자리가 안 변한다. 무리는 통째로 줄을 바꾼다
+     (.dgrp nowrap) — 좁은 폭에서 무리 가운데가 접히면 어느 단추가 어느 무리
+     것인지 못 읽는다. */
+  const polBtn = holdLockHTML(stallDoc);
   // 무리 사이만 헤어라인(.adiv)이 가른다 — 빈 무리는 가를 것도 없다.
   const docActs = `<div class="acts dacts">`
-    + [beltDoc, transBtns, pickBtn].filter(Boolean)
+    + [beltDoc, polBtn, transBtns, pickBtn].filter(Boolean)
+        .map(h => `<span class="dgrp">${h}</span>`)
         .join(`<span class="adiv"></span>`) + `</div>`;
-  const stallRow = stallHTML(stallDoc) + holdTellHTML(stallDoc);
+  /* 예고 줄은 사실 줄 층의 맨 앞이다 — 행동 띠 바로 아래에서 단추(정책)와
+     붙어 읽힌다. 관문은 holdForecastHTML 안의 holdLockHTML 하나다. */
+  const stallRow = holdForecastHTML(stallDoc) + stallHTML(stallDoc)
+    + holdTellHTML(stallDoc);
   // review/blocked 문서: 판단 근거(전이 --note)가 본문 최하단 History에 묻힌다
   // (REQ-20260825-006 반려) — 현재 회차의 note를 상단 callout으로, 과거 회차
   // (이전 확인 포인트·반려 사유)는 접힘 이력으로 (REQ-20260825-011 반려:

@@ -44,6 +44,8 @@ BANNED = {
     "자리 지우기": "오류 제목에 내부 은유 — 「계정 지우기」로",
     "화면 조각": "조각 = JS 모듈, 사용자에게 지시 대상이 없다 — 「화면 기능」으로",
     "손잡이가 붙습니다": "사용자 창이 버튼을 손잡이라 부른다 — 「이 버튼이 다시 생깁니다」로",
+    "저절로 이어지지 않게 하기": "3차 반려(REQ-20260901-005) — 부정형 데뷔 + "
+        "무주어 자동사 + 「이어가기」 어간 충돌, 「자동 이어받기 끄기」로",
 }
 # 낱말 하나가 두 표면에 살면 안 되는 것은 아니다 — 개발자만 보는 진단 출력은
 # 이 게이트 밖이다(진단은 코드 말이 오히려 정확하다). 파일 단위로 뺀다.
@@ -68,20 +70,11 @@ DIAG_FILES = {"boot.js", "graph.js", "diag.js"}
 #
 # 판정표 전문: REQ-20260831-024-62x6 tech-writer 노트(유지 12 · 옮김 20).
 KEPT_AUTO = {
-    # 정책 단추가 끄는 것이 정확히 '저절로 다시 맡음'이다. 단추 자신의 이름은
-    # 「저절로 이어지지 않게 하기」로 개정됐고(DOC-20260831-005), 아래 둘은 그
-    # 정책을 서술하는 문장이라 「자동」이 참이다.
-    "자동 작업은 이 요청을 다시 맡지 않습니다",
-    "중단해 두면 자동 작업이 다시 맡지 않습니다",
-    # 대비 열거라 셋째 항이 이름을 가져야 한다(창·일손·자동 작업).
-    "맡은 창도, 일손도, 자동 작업도 없습니다",
-    # 우선순위 창: 앞으로 맡는 순서에 대한 서술.
-    "자동 작업도 이 순서를 따릅니다",
-    # 세션 목록·재기동 창의 「자동 작업 진행 중」·「진행 중인 자동 작업 N건」은
-    # 리드 판정(REQ-20260831-025)으로 「무인 작업」에 흡수됐다 — 대비 항(사람
-    # 창)의 취지는 「무인」이 자리 축으로 그대로 지고, 개체 이름이 하나가 된다.
-    # bin/s9 의 「자동 작업이 이 요청을 되살리지 않습니다」도 같은 판정으로
-    # 「저절로 되살아나지 않습니다」(서술)로 갔다.
+    # 비었다 (REQ-20260901-005). 마지막 넷(정책 서술 둘·개체 열거·우선순위 창)이
+    # 「무인 작업」·「자동 이어받기」로 개편되며 뜻 A 자리도 「자동 작업」이라는
+    # 이름을 더는 안 쓴다 — 정책의 이름은 「자동 이어받기」(명사구)다.
+    # 뜻 A 로 참인 새 문장이 필요해지면 근거와 함께 여기 올려라: 목록이 빈
+    # 것과 게이트가 없어진 것은 다르다.
 }
 
 
@@ -229,7 +222,7 @@ class TheAutoNameOnlyStandsWhereItIsTrue(unittest.TestCase):
         """신설어가 실제로 서 있다 — 지우기만 하고 안 채우면 문장이 사라진다."""
         joined = "\n".join(self.surfaces.values())
         for word in ("무인 작업", "이어받", "도는 일 ",
-                     "저절로 이어지지 않게 하기"):
+                     "자동 이어받기 끄기"):
             self.assertIn(word, joined,
                           "채택어 「%s」가 화면 어디에도 없다" % word.strip())
 
@@ -247,12 +240,39 @@ class TheAutoNameOnlyStandsWhereItIsTrue(unittest.TestCase):
                              "사실 줄 본문이 주체를 다시 세웠다 (%s) — 신원은 "
                              "점과 툴팁의 몫이다" % bad)
 
-    def test_the_stop_hold_button_says_what_will_not_happen(self):
-        """정책 단추는 개체 이름을 부르지 않는다 — 결과를 적는다."""
+    def test_the_stop_hold_button_speaks_policy_grammar(self):
+        """정책 단추는 정책 문법(자동 OO 끄기)으로 선다 (REQ-20260901-005 3차).
+
+        옛 이름 두 벌이 되살아나지 않는 것도 여기서 함께 잰다 — 1차는 개체
+        오칭, 2차는 부정형 데뷔·무주어가 반려 사유였다."""
         card = self.surfaces["app/card.js"]
-        self.assertIn("저절로 이어지지 않게 하기", card)
+        self.assertIn("자동 이어받기 끄기", card)
         self.assertNotIn("자동 작업 중단해 두기", card,
-                         "옛 단추 이름이 되살아났다 (DOC-20260831-005 로 개정)")
+                         "1차 반려 이름이 되살아났다 (DOC-20260831-005 로 개정)")
+
+    def test_the_forecast_line_shares_the_buttons_gate(self):
+        """예고 줄과 정책 단추는 **한 관문**이다 (REQ-20260901-005 designer 1안).
+
+        holdForecastHTML 이 제 조건을 지으면 줄만 서고 단추가 없는(또는 그
+        반대) 화면이 언젠가 생긴다 — 조건은 holdLockHTML 하나에서만 나온다."""
+        with open(os.path.join(WEB, "app", "card.js"), encoding="utf-8") as f:
+            raw = f.read()
+        m = re.search(r"function holdForecastHTML\(r\)\{([\s\S]*?)\n\}", raw)
+        self.assertTrue(m, "예고 줄 함수가 없다")
+        body = m.group(1)
+        self.assertIn("holdLockHTML(", body, "예고 줄이 단추의 관문을 안 쓴다")
+        for own in ("stoppable", "heldState", "status"):
+            self.assertNotIn(own, body,
+                             "예고 줄이 제 조건을 지었다 — 관문이 둘이다: %s" % own)
+        # 낭독기에도 같은 짝이 들린다 — 단추가 줄을 가리킨다.
+        self.assertIn('aria-describedby="pol-fore"', raw,
+                      "단추가 예고 줄을 가리키지 않는다")
+        self.assertIn('id="pol-fore"', body, "예고 줄에 짝의 이름표가 없다")
+        # 문서 화면이 실제로 그 줄을 세운다.
+        with open(os.path.join(WEB, "app", "docs.js"), encoding="utf-8") as f:
+            docs = f.read()
+        self.assertIn("holdForecastHTML(stallDoc)", docs,
+                      "문서 화면이 예고 줄을 안 부른다")
 
     def test_nobody_stops_things_here_except_people(self):
         """「누군가」(중단 주어)는 폐기 — 이 화면에서 중단하는 것은 사람뿐이다."""

@@ -451,6 +451,9 @@
    테두리·알약 모양은 스킨이 주는 그대로다 — 여기서는 글리프 조각의 크기와
    틈만 정한다. */
 .dacts .deedbelt{margin:0}
+/* 무리는 통째로 줄을 바꾼다 (REQ-20260901-005) — 바깥 띠는 무리 사이에서만
+   접히고, 무리 안은 nowrap 이라 좁은 폭에서도 단추가 제 무리를 안 떠난다. */
+.dacts .dgrp{display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap}
 .dacts button.deed.wgly{display:inline-flex;align-items:center;gap:5px}
 .dacts button.deed.wgly .gly{display:block;width:13px;height:13px}
 /* 정책 단추(잠금)는 잉크 한 급 낮음 — 행위와 정책의 위계다. 색면 없음. */
