@@ -3972,6 +3972,62 @@ def pid_env(pid, key):
     return ""
 
 
+def pid_start_time(pid):
+    """그 프로세스가 뜬 시각(epoch 초). 모를 수 있으면 0.0.
+
+    장수 프로세스가 **언제 코드를 메모리에 들었나**를 아는 유일한 1차 증거다
+    (REQ-20260901-017 R3). 지문 파일이 없던 시절에 뜬 래퍼도 이것으로는
+    판정할 수 있다 — 없는 근거로 단정하지 않으면서 아는 만큼은 말하기 위해.
+    """
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return 0.0
+    if pid <= 0:
+        return 0.0
+    how = proc_backend()
+    if how == "proc":
+        try:
+            with open(f"/proc/{pid}/stat", encoding="utf-8") as f:
+                # comm 에 공백·괄호가 들어갈 수 있다 — 마지막 ')' 뒤부터 센다
+                fields = f.read().rpartition(")")[2].split()
+            ticks = float(fields[19])          # (22번 필드) starttime
+        except (OSError, ValueError, IndexError):
+            return 0.0
+        try:
+            hz = os.sysconf("SC_CLK_TCK") or 100
+            with open("/proc/stat", encoding="utf-8") as f:
+                btime = next(float(ln.split()[1]) for ln in f
+                             if ln.startswith("btime "))
+        except (OSError, ValueError, StopIteration, AttributeError):
+            return 0.0
+        return btime + ticks / hz
+    if how != "ps":
+        return 0.0                              # 볼 길이 없다 (win·none)
+    import time as _time
+    for ln in _ps_lines(("ps", "-o", "etimes=", "-p", str(pid))):
+        try:
+            return _time.time() - float(ln.strip())
+        except ValueError:
+            continue
+    # 맥의 ps 에는 `etimes` 가 없다 — POSIX `etime`([[dd-]hh:]mm:ss)로 다시 묻는다
+    for ln in _ps_lines(("ps", "-o", "etime=", "-p", str(pid))):
+        s = ln.strip()
+        if not s:
+            continue
+        days, _, rest = s.rpartition("-") if "-" in s else ("0", "", s)
+        parts = rest.split(":")
+        try:
+            t = 0.0
+            for p in parts:
+                t = t * 60 + float(p)
+            secs = float(days or 0) * 86400 + t
+        except ValueError:
+            continue
+        return _time.time() - secs
+    return 0.0
+
+
 def _inbox_watch_alive(sid8):
     """세션의 수신함 tail(Monitor) 프로세스 존재 여부 (REQ-20260824-042).
     'inbox를 듣고 있는 세션 = 채팅 수신 가능한 세션' — 프롬프트·pid 기록과
@@ -4037,11 +4093,29 @@ def chat_live(b, win=300):
     있다 하고 보내기는 "라이브 클로드 세션이 없다" 를 냈다. 손으로 덧붙이는
     규칙은 언젠가 빠지니, 판정을 여기 한 곳으로 들인다.
     """
+    return (not b.get("ended")
+            and (_inbox_watch_alive(b.get("session", "")) or chat_alive(b, win)))
+
+
+def chat_alive(b, win=300):
+    """세션이 **떠 있는가** — 프로세스·기록 근거만 (REQ-20260901-017 R5).
+
+    `listening`(수신함 tail)과 갈라 두는 이유가 있다. tail 은 세션이 **첫 턴을
+    끝내야** 생기는 2차 산물이다: 기동 턴이 한도 소진으로 죽으면 세션은 멀쩡히
+    떠 있는데 tail 이 영영 안 선다. 재시작 완료 판정이 그 하나에 묶여 있어,
+    화면은 90초를 세다 「돌아온 것을 확인하지 못했습니다」로 갔다 — 세션은
+    그때 떠 있었다 (2026-09-01 16:03:46 실사고).
+
+    그래서 1차 증거를 따로 준다: attach 프로세스 생존, 또는 신선한 활동
+    (트랜스크립트·스트림). 화면은 `alive && !listening` 을 "돌아왔습니다 —
+    아직 수신 대기 전"으로 말할 수 있고, 그 상태로 굳으면 그 사실(한도 등)을
+    말한다.
+
+    **끝난 세션은 어느 신호로도 되살아나지 않는다** (REQ-20260829-023).
+    """
     import time as _time
     if b.get("ended"):
         return False
-    if _inbox_watch_alive(b.get("session", "")):
-        return True
     if pid_alive(b.get("attach_pid")):
         return True
     now = _time.time()
@@ -4419,6 +4493,24 @@ def claude_home():
     """
     return (os.environ.get("CLAUDE_CONFIG_DIR") or "").strip() \
         or os.path.expanduser("~/.claude")
+
+
+def account_home_dir():
+    """`@home` 계정이 사는 자리 — **언제나 `~/.claude`** (REQ-20260901-017 R6).
+
+    `claude_home()` 과 뜻이 다르다. 그쪽은 "**이 프로세스**가 쓰는 설정"이라
+    `CLAUDE_CONFIG_DIR` 에 흔들린다 — 훅·스킬 설치를 볼 때는 그게 맞다.
+    그런데 계정 목록의 `@home` 줄은 그 뜻이면 안 된다: 재시작 루프의 `@home`
+    갈래는 그 변수를 **지우고** 띄우므로 래퍼에게 `@home` 은 언제나 `~/.claude`
+    다. 두 뜻이 갈리면 서버는 대화를 프로필 X 로 옮겨 놓고 래퍼는 `~/.claude`
+    로 띄운다 — 이어받을 것이 없는 자리에서 세션이 뜬다.
+
+    이번 사고의 원인은 아니었다(실측: 그때 serve 에 그 변수가 없었다). 원인이
+    아니었던 함정을 고치는 이유는, 정상 사용 경로 하나 건너에 있기 때문이다:
+    프로필 계정으로 연 세션이 대시보드를 처음 띄우면 그 순간부터 서버가 그
+    변수를 상속한다.
+    """
+    return os.path.abspath(os.path.expanduser("~/.claude"))
 
 
 def hook_script_path(cmd):
@@ -5410,7 +5502,8 @@ def account_rows(cfg_dir=None, settle=True):
     연 자리(`/api/accounts`·CLI)에서만 settle 을 돌린다.
     """
     base = profiles_base()
-    home = os.path.abspath(claude_home())
+    # `@home` 은 서버 환경이 아니라 **자리**로 정해진다 (REQ-20260901-017 R6)
+    home = os.path.abspath(account_home_dir())
     cur = os.path.abspath(os.path.expanduser(cfg_dir)) if cfg_dir else home
     live = _live_cfg_dirs()
     rows = [{"key": ACCOUNT_HOME_KEY, "path": home, "email": account_of(home)}]
@@ -5454,6 +5547,28 @@ def account_rows(cfg_dir=None, settle=True):
     if not any(r["current"] for r in out):
         out[0]["current"] = True       # 짚을 곳이 없으면 기본 계정이다
     return out
+
+
+def accounts_warm_usage(rows, limit=6):
+    """계정 창을 연 순간, 줄마다 사용량을 **뒤에서** 데운다 (REQ-20260901-017 R4).
+
+    전환 판정(대상 계정의 한도가 100%인가)은 조회를 기다리면 안 된다 — 사람이
+    단추를 누른 자리에서 업스트림 타임아웃을 세게 할 수는 없다. 그래서 사람이
+    창을 여는 순간(창을 열고 줄을 고르기까지의 그 몇 초)에 미리 물어 둔다.
+    5초 폴이 아니라 **사람의 명시 동작**에서만 도는 자리라 업스트림에 짐이
+    되지 않고, `claude_usage` 의 60초 캐시가 나머지를 막는다.
+    """
+    import threading
+    n = 0
+    for r in rows or []:
+        if not r.get("ready") or not r.get("path"):
+            continue
+        if n >= limit:
+            break
+        n += 1
+        threading.Thread(target=claude_usage, args=(r["path"],),
+                         daemon=True).start()
+    return n
 
 
 def account_switchable(rows):
@@ -5586,9 +5701,14 @@ def _restart_attempt(sid, why_kind):
     화면이 세면 창을 새로 열 때마다 1 로 돌아간다. 사람이 네 번째 같은 벽을
     보고 있다는 사실은 화면이 말을 바꿔야 할 근거인데(실사고 12:37~12:41 에
     사람은 같은 거부를 네 번 봤다), 그 근거를 아는 것은 거부를 낸 쪽이다.
-    사유가 바뀌거나 시간 폭을 넘기면 1 부터 다시 센다."""
+    사유가 바뀌거나 시간 폭을 넘기면 1 부터 다시 센다.
+
+    파일 이름이 `restart-` 로 시작하지 **않는** 이유가 있다 (REQ-20260901-017):
+    래퍼의 마커 수거는 `restart-*.json` 을 훑으면서 60초 넘은 것을 지우는데,
+    회차 창은 600초다 — 이름을 같은 접두사로 두면 방금 넣은 "같은 벽 몇 번째"
+    카운터가 래퍼에 의해 조용히 1 로 되돌아간다. 이름 공간을 가른다."""
     import time as _time
-    p = _terminal_state_path(f"restart-try-{safe_name(sid[:8])}.json")
+    p = _terminal_state_path(f"rtry-{safe_name(sid[:8])}.json")
     n, now = 1, _time.time()
     try:
         with open(p, encoding="utf-8") as f:
@@ -5608,31 +5728,67 @@ def _restart_attempt(sid, why_kind):
 
 def _restart_attempt_clear(sid):
     """한 번 지나갔으면 회차는 0 이다 — 다음 벽은 첫 번째 벽이다."""
-    try:
-        os.remove(_terminal_state_path(f"restart-try-{safe_name(sid[:8])}.json"))
-    except OSError:
-        pass
+    for name in (f"rtry-{safe_name(sid[:8])}.json",
+                 # 이름을 가르기 전에 쓰던 자리도 함께 치운다 (한 번이면 끝난다)
+                 f"restart-try-{safe_name(sid[:8])}.json"):
+        try:
+            os.remove(_terminal_state_path(name))
+        except OSError:
+            pass
 
 
 def _lineage_path(wrapper_pid):
-    return os.path.join(ROOT, "state", "terminal",
-                        f"lineage-{int(wrapper_pid)}.json")
+    return _terminal_state_path(f"lineage-{int(wrapper_pid)}.jsonl")
 
 
-def _lineage_write(wrapper_pid, old_sid, **kv):
-    """재시작이 낳을 새 세션을 옛 세션에 이을 실마리를 남긴다.
+def _lineage_read(path):
+    """계보 기록 파일 → 기록들 (한 줄에 하나).
 
-    `claude --resume` 는 **새 sid** 를 만든다(실측 2026-09-01: a8186437 →
+    옛 `.json`(래퍼당 한 벌 덮어쓰기)도 그대로 읽힌다 — `json.dump` 는 줄바꿈을
+    넣지 않으므로 한 줄짜리 JSONL 과 같은 모양이다."""
+    recs = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return recs
+    for ln in lines:
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            r = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(r, dict):
+            recs.append(r)
+    return recs
+
+
+def _lineage_write(wrapper_pid, old_sid, from_pid=0, **kv):
+    """재시작이 낳을 새 세션을 옛 세션에 이을 실마리를 **덧붙인다**.
+
+    `claude --resume` 는 대개 **새 sid** 를 만든다(실측 2026-09-01: a8186437 →
     60e39ff2). 화면의 완료 판정도 s9 의 클레임·SES 승계도 전부 sid 를 열쇠로
     써서, sid 가 갈리는 순간 성공한 재시작이 「돌아오지 않음」이 되고(사용자가
     본 1m31s) 문서가 고아가 됐다. 열쇠는 **래퍼 pid** 다 — 재시작 루프를 든
-    `s9 code` 프로세스는 sid 가 갈려도 그대로다."""
+    `s9 code` 프로세스는 sid 가 갈려도 그대로다.
+
+    덮어쓰기가 아니라 append 인 이유 (REQ-20260901-017): 래퍼당 한 파일이라
+    두 번째 재시작이 첫 번째를 지웠다. 16:03 의 계정 전환은 state/ 에 흔적을
+    하나도 안 남겼고, 그 조사는 프로필 디렉토리 mtime 으로 복원해야 했다.
+    관측 비용은 거의 0, 다음 조사 비용은 크게 준다.
+
+    `from_pid` 는 **같은 sid 로 돌아온 재시작**을 알아볼 유일한 근거다: sid 가
+    그대로면 「이미 이어진 것」과 「아직 안 뜬 것」이 구별되지 않는데, 새로 뜬
+    쪽은 attach 프로세스가 다르다."""
     import time as _time
+    rec = {"from": old_sid, "from8": old_sid[:8],
+           "wrapper_pid": int(wrapper_pid), "from_pid": int(from_pid or 0),
+           "ts": _time.time(), **kv}
     try:
-        with open(_lineage_path(wrapper_pid), "w", encoding="utf-8") as f:
-            json.dump({"from": old_sid, "from8": old_sid[:8],
-                       "wrapper_pid": int(wrapper_pid),
-                       "ts": _time.time(), **kv}, f, ensure_ascii=False)
+        with open(_lineage_path(wrapper_pid), "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except (OSError, ValueError):
         pass
 
@@ -5643,88 +5799,138 @@ def lineage_link():
     새 세션의 attach_pid 의 부모가 그 래퍼면 그 둘은 같은 계보다. 이으면
     새 바인딩에 `resumed_from`, 옛 바인딩에 `resumed_to` 가 남고 계보 기록은
     소비된다. 낡은 기록(재시작 실패)은 잇지 않고 정리한다 — 엉뚱한 세션이
-    남의 계보를 무는 것이 고아 문서보다 나쁘다."""
+    남의 계보를 무는 것이 고아 문서보다 나쁘다.
+
+    **같은 sid 로 돌아오는 경우도 있다** (REQ-20260901-017): 실측 2026-09-01
+    16:03·16:05 의 두 재시작은 `--resume` 이 sid 를 그대로 유지했다. 그 갈래를
+    모르던 종전 코드는 `sid == old` 를 건너뛰기만 해서, 이을 것도 소비할 것도
+    없는 기록이 900초를 떠다녔다 — `resumed_from` 미기록의 정체가 고장이 아니라
+    **가정 밖**이었다. 새 attach 프로세스(`from_pid` 와 다른 pid)를 증거로
+    「이미 이어진 것」으로 판정하고 기록을 소비한다.
+
+    기록은 **지우지 않고 `done` 으로 닫는다** — 파일이 곧 그 래퍼의 재시작
+    이력이다 (관측 비용 거의 0, 다음 조사 비용은 크게 준다). 살아 있는 계보는
+    언제나 **가장 최근 기록 하나**뿐이다: 래퍼의 자식은 한 번에 하나이므로,
+    앞선 미결 기록은 그 뒤의 재시작이 대체한 것(`superseded`)이다.
+    """
     import glob as _glob
     import time as _time
     linked = []
-    for lp in _glob.glob(os.path.join(ROOT, "state", "terminal",
-                                      "lineage-*.json")):
-        try:
-            with open(lp, encoding="utf-8") as f:
-                rec = json.load(f)
-        except (OSError, ValueError):
-            try:
-                os.remove(lp)
-            except OSError:
-                pass
+    # `.json` 은 append 이전(래퍼당 한 벌 덮어쓰기) 형식 — 함께 읽어 이어 쓴다
+    for lp in sorted(_glob.glob(os.path.join(ROOT, "state", "terminal",
+                                             "lineage-*.json*"))):
+        recs = _lineage_read(lp)
+        live = [i for i, r in enumerate(recs) if not r.get("done")]
+        if not live:
             continue
+        changed = False
+        for i in live[:-1]:
+            recs[i]["done"] = "superseded"      # 뒤에 온 재시작이 대체했다
+            changed = True
+        rec = recs[live[-1]]
         if _time.time() - float(rec.get("ts") or 0) > LINEAGE_FRESH_SEC:
-            try:
-                os.remove(lp)
-            except OSError:
-                pass
-            continue
-        wrapper = int(rec.get("wrapper_pid") or 0)
-        old = str(rec.get("from") or "")
-        if not wrapper or not old:
-            continue
-        machine = current_machine()
-        for bp in _glob.glob(os.path.join(
-                STATE, f"{safe_name(machine)}__*.json")):
-            try:
-                with open(bp, encoding="utf-8") as f:
-                    b = _norm_binding(json.load(f))
-            except (OSError, ValueError):
-                continue
-            sid = b.get("session") or ""
-            if not sid or sid == old or b.get("ended"):
-                continue
-            pid = int(b.get("attach_pid") or 0)
-            if not pid or pid_ppid(pid) != wrapper:
-                continue
-            # 바인딩 읽고-고쳐-쓰기는 락 안에서 (이 저장소의 규약) — 훅이
-            # 같은 파일을 쓰는 중이면 우리 쓰기가 그것을 삼킨다. 락을 못 잡으면
-            # 이번 폴은 건너뛴다: 잇는 일은 멱등이라 다음 폴이 다시 한다.
-            try:
-                acquire_lock(timeout=2.0)
-            except SystemExit:
-                break
-            try:
-                nb = read_binding(machine, sid) or b
-                ob = read_binding(machine, old)
-                dirty = False
-                if nb.get("resumed_from") != old:
-                    nb["resumed_from"] = old
-                    dirty = True
-                # 클레임도 함께 건넌다 — 같은 대화가 이어졌는데 잡고 있던
-                # 일이 미클레임으로 보이면, 워처가 그 REQ 에 무인 작업자를
-                # 겹쳐 스폰한다 (REQ-20260823-083 의 그 엣지). 새 세션이 이미
-                # 제 클레임을 가졌으면 건드리지 않는다.
-                if ob and not nb.get("active_reqs") and ob.get("active_reqs"):
-                    nb["active_reqs"] = list(ob.get("active_reqs") or [])
-                    if ob.get("claim_at"):
-                        nb["claim_at"] = dict(ob.get("claim_at") or {})
-                    dirty = True
-                if dirty:
-                    write_binding(nb)
-                if ob and ob.get("resumed_to") != sid:
-                    ob["resumed_to"] = sid
-                    write_binding(ob)
-            finally:
-                release_lock()
-            linked.append((old, sid))
-            try:
-                os.remove(lp)
-            except OSError:
-                pass
-            break
+            rec["done"] = "expired"             # 잇지 않는다 (재시작이 실패했다)
+            changed = True
+        else:
+            why = _lineage_apply(rec, linked)
+            if why:
+                rec["done"] = why
+                changed = True
+        if changed:
+            _lineage_rewrite(lp, recs)
     return linked
+
+
+def _lineage_rewrite(path, recs):
+    """이력을 통째로 다시 쓴다 (줄은 줄지 않는다 — `done` 만 붙는다).
+
+    갈아쓰기는 원자적으로 한다: 이 파일은 폴 경로에서 읽히므로, 쓰는 중간을
+    남이 읽으면 이력이 찢어진 채 판정된다."""
+    # 임시 이름은 `lineage-` 로 시작하지 않는다 — 훑는 glob 에 걸리면 반쯤
+    # 쓰인 파일이 또 하나의 이력으로 읽힌다.
+    tmp = os.path.join(os.path.dirname(path),
+                       ".ltmp-" + os.path.basename(path))
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            for r in recs:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        os.replace(tmp, path)         # 같은 파일시스템 — 원자적이다
+    except (OSError, ValueError):
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+def _lineage_apply(rec, linked):
+    """기록 하나를 잇는다. 반환은 닫는 사유("linked"·"same-sid"·"no-key") 또는
+    "" (아직 이을 것이 안 나타났다 — 다음 폴이 다시 본다)."""
+    import glob as _glob
+    wrapper = int(rec.get("wrapper_pid") or 0)
+    old = str(rec.get("from") or "")
+    from_pid = int(rec.get("from_pid") or 0)
+    if not wrapper or not old:
+        return "no-key"                         # 열쇠 없는 기록은 쓸 데가 없다
+    machine = current_machine()
+    for bp in _glob.glob(os.path.join(
+            STATE, f"{safe_name(machine)}__*.json")):
+        try:
+            with open(bp, encoding="utf-8") as f:
+                b = _norm_binding(json.load(f))
+        except (OSError, ValueError):
+            continue
+        sid = b.get("session") or ""
+        if not sid or b.get("ended"):
+            continue
+        pid = int(b.get("attach_pid") or 0)
+        if sid == old:
+            # 같은 sid 로 돌아왔는가 — attach 프로세스가 갈렸으면 그렇다
+            if (from_pid and pid and pid != from_pid
+                    and pid_ppid(pid) == wrapper and pid_alive(pid)):
+                return "same-sid"               # 이을 것이 없다: 이미 그 세션이다
+            continue
+        if not pid or pid_ppid(pid) != wrapper:
+            continue
+        # 바인딩 읽고-고쳐-쓰기는 락 안에서 (이 저장소의 규약) — 훅이
+        # 같은 파일을 쓰는 중이면 우리 쓰기가 그것을 삼킨다. 락을 못 잡으면
+        # 이번 폴은 건너뛴다: 잇는 일은 멱등이라 다음 폴이 다시 한다.
+        try:
+            acquire_lock(timeout=2.0)
+        except SystemExit:
+            return ""
+        try:
+            nb = read_binding(machine, sid) or b
+            ob = read_binding(machine, old)
+            dirty = False
+            if nb.get("resumed_from") != old:
+                nb["resumed_from"] = old
+                dirty = True
+            # 클레임도 함께 건넌다 — 같은 대화가 이어졌는데 잡고 있던
+            # 일이 미클레임으로 보이면, 워처가 그 REQ 에 무인 작업자를
+            # 겹쳐 스폰한다 (REQ-20260823-083 의 그 엣지). 새 세션이 이미
+            # 제 클레임을 가졌으면 건드리지 않는다.
+            if ob and not nb.get("active_reqs") and ob.get("active_reqs"):
+                nb["active_reqs"] = list(ob.get("active_reqs") or [])
+                if ob.get("claim_at"):
+                    nb["claim_at"] = dict(ob.get("claim_at") or {})
+                dirty = True
+            if dirty:
+                write_binding(nb)
+            if ob and ob.get("resumed_to") != sid:
+                ob["resumed_to"] = sid
+                write_binding(ob)
+        finally:
+            release_lock()
+        linked.append((old, sid))
+        return "linked"
+    return ""
 
 
 def _profile_dir(account):
     """계정 키 → 그 계정의 설정 디렉토리(=대화 기록이 사는 곳)."""
     if not account or account == ACCOUNT_HOME_KEY:
-        return os.path.abspath(claude_home())
+        # 래퍼의 `@home` 갈래와 같은 뜻으로 못 박는다 (REQ-20260901-017 R6)
+        return os.path.abspath(account_home_dir())
     return os.path.abspath(os.path.join(profiles_base(), safe_name(account)))
 
 
@@ -5773,7 +5979,13 @@ def session_model(b):
 
 def _consume_restart_marker():
     """s9 code 래퍼용: 내 pid를 지목한 신선한 재시작 마커를 소비(반환+삭제).
-    낡은 마커는 정리. 없으면 None — 래퍼는 정상 종료한다."""
+    낡은 마커는 정리. 없으면 None — 래퍼는 정상 종료한다.
+
+    **재시작 마커만** 잡는다 (REQ-20260901-017): 마커는 `wrapper_pid` 를 가진
+    파일이다. 이 자리가 `restart-*.json` 을 통째로 훑으며 낡은 것을 지우던
+    탓에, 같은 접두사를 쓰던 회차 기록(`restart-try-*`)이 60초마다 함께
+    지워져 "같은 벽 몇 번째" 카운터가 조용히 1 로 돌아갔다. 이름도 갈랐고
+    (`rtry-`), 내용으로도 확인한다 — 남의 파일은 읽지도 지우지도 않는다."""
     import glob as _glob
     import time as _time
     me = os.getpid()
@@ -5784,6 +5996,8 @@ def _consume_restart_marker():
                 m = json.load(f)
         except (OSError, ValueError):
             continue
+        if not isinstance(m, dict) or "wrapper_pid" not in m:
+            continue                      # 재시작 마커가 아니다 — 손대지 않는다
         fresh = _time.time() - float(m.get("ts") or 0) <= RESTART_FRESH_SEC
         if not fresh:
             try:
@@ -5931,7 +6145,7 @@ def session_rows(limit=12):
             "worker": bool(b.get("worker")),
             "entry": b.get("entry") or "",
             "model": (session_model(b) or "").replace("claude-", ""),
-            "account": account_of(session_cfg_dir(b) or claude_home()),
+            "account": account_of(session_cfg_dir(b) or account_home_dir()),
             "reqs": list(b.get("active_reqs") or [])[:3],
             "last": (datetime.datetime.fromtimestamp(ts).astimezone().isoformat()
                      if ts else ""),
@@ -6010,6 +6224,32 @@ def restart_session(sid8, model="", effort="", account="", stop_workers=False,
                     "reason": f"effort '{effort}' 무효 (low|medium|high|xhigh|max)"}
         if not (model or effort or account):
             return {"ok": False, "reason": "변경할 항목이 없다"}
+        # 한도로 굳을 자리로 **보내지 않는다** (REQ-20260901-017 R4).
+        # 실사고의 피해가 여기였다: 대상 계정(claude02)의 fable 한도가 이미
+        # 100% 인데 서버도 화면도 그 사실을 몰라, 전환은 성공하고 그 세션은
+        # 뜨자마자 합성 한도 응답 두 줄만 받고 굳었다. 사람은 아무것도 안 되는
+        # 창 앞에 남았다. 대상 계정의 사용량은 R1(cfg_dir 인자화) 이 서면서
+        # 비로소 물을 수 있게 됐다.
+        # 묻는 것은 계정·모델이 실제로 바뀔 때뿐이다 — effort 만 고치는 길에
+        # 업스트림 조회를 끼워 넣지 않는다.
+        tgt_cfg = _profile_dir(account) if account \
+            else (session_cfg_dir(b) or account_home_dir())
+        out_model = model or session_model(b)     # 「유지」면 지금 그 모델이다
+        # 조회는 계정 창을 열 때 미리 돌았다 (`/api/accounts` 가 데운다) —
+        # 여기서는 아는 것만 본다. 모르면 막지 않는다.
+        blocked = usage_limit_hit(
+            claude_usage(tgt_cfg, ttl=USAGE_DECIDE_TTL, offline=True),
+            out_model) if (account or model) else None
+        if blocked and not force:
+            r = refuse("limit_target",
+                       "대상 계정의 한도가 소진돼 있다 — 옮겨 가도 그 자리에서 "
+                       "다시 멈춘다 (모델을 바꿔 가거나 「그래도 가기」)")
+            r["limit"] = {"model": blocked.get("scope_name") or out_model,
+                          "resets_at": blocked.get("resets_at") or "",
+                          "percent": blocked.get("percent"),
+                          "account": account_of(tgt_cfg) or account
+                          or ACCOUNT_HOME_KEY}
+            return r
         # 이어받을 수 있는지 **SIGTERM 전에** 확인한다 (REQ-20260901-011 F·E).
         # 종전에는 세션부터 내리고 나중에 실패를 알렸다 — 계정 전환 재시작이
         # `No conversation found` 로 죽고, 화면은 90초를 기다리다 「돌아온 것을
@@ -6061,6 +6301,13 @@ def restart_session(sid8, model="", effort="", account="", stop_workers=False,
         if "s9" not in wcmd or "code" not in wcmd:
             wrapper = 0
         _restart_attempt_clear(sid)
+        # 이 재시작을 실행할 래퍼가 낡은 코드·설정을 들고 있으면 그 사실을
+        # 응답이 말한다 (REQ-20260901-017 R3) — 고친 것이 안 실리는 재시작을
+        # 화면이 "됐다"로 그리지 않게. 판정 근거가 없으면 아무 말도 안 한다.
+        _wa = wrapper_code_age(wrapper) if wrapper else {}
+        if _wa:
+            out["stale_wrapper"] = bool(_wa.get("stale"))
+            out["stale_wrapper_parts"] = _wa.get("parts", [])
         if not wrapper:
             out["mode"] = "manual"
             out["reason"] = ("재시작 루프(s9 code 신버전) 밖의 세션 — "
@@ -6074,8 +6321,9 @@ def restart_session(sid8, model="", effort="", account="", stop_workers=False,
                        "model": model, "effort": effort, "account": account,
                        "ts": _time.time()}, f, ensure_ascii=False)
         # 새 sid 로 갈릴 것을 미리 잇는다 (REQ-20260901-011 G)
-        _lineage_write(wrapper, sid, account=account, model=model,
-                       effort=effort)
+        # from_pid: 같은 sid 로 돌아오는 재시작을 알아볼 근거 (REQ-20260901-017)
+        _lineage_write(wrapper, sid, from_pid=pid, account=account,
+                       model=model, effort=effort)
         os.kill(pid, _signal.SIGTERM)
         out["mode"] = "wrapper"
         return out
@@ -6368,74 +6616,108 @@ def chat_audit(text, sender, sid8, doc="", anchor="", as_type=""):
 
 
 # ------------------------------------------- claude usage (REQ-20260824-043)
-_usage_cache = {"ts": 0.0, "data": None, "cred_mtime": 0.0, "fail_ts": 0.0}
+# 계정(=설정 디렉토리)마다 따로 산다 (REQ-20260901-017 R1). 종전에는 칸이 하나
+# 였고 그 칸이 언제나 홈 계정이었다 — 프로필로 떠 있는 세션의 헤더가 남의 계정
+# 사용량을 찍었고, 사람은 화면이 "계정이 안 바뀌었다"고 말하는 것을 보고 방금
+# 성공한 전환을 되돌렸다 (2026-09-01 16:03~16:05 실사고).
+_usage_cache = {}
+
+
+def _usage_slot(cfg_dir):
+    return _usage_cache.setdefault(
+        cfg_dir, {"ts": 0.0, "data": None, "cred_mtime": 0.0, "fail_ts": 0.0})
+
+
 # 머신 공유 파일 캐시 (REQ-20260824-062): 여러 워크스페이스의 serve가 각자
-# 폴링하면 업스트림 429 — 계정은 머신 단위(HOME)이므로 캐시도 머신 공유가 맞다.
-_USAGE_FILE = os.path.join(os.path.expanduser("~"), ".cache", "s9",
-                           "usage.json")
+# 폴링하면 업스트림 429 — 계정은 머신 단위이므로 캐시도 머신 공유가 맞다.
+# 파일도 계정마다 하나다: 한 파일을 돌려쓰면 계정 A 의 사용량이 B 로 새어 나간다.
+_USAGE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "s9")
+# 판정(재시작 거부)이 받아들이는 사용량의 나이 (REQ-20260901-017 R4). 헤더의
+# 60초보다 길다: 100% 로 굳은 한도는 분 단위로 풀리지 않고, 판정은 조회를
+# 기다리지 않아야 한다. 그래도 틀릴 수 있으니 「그래도 가기」가 늘 열려 있다.
+USAGE_DECIDE_TTL = 900
 
 
-def _usage_file_read():
+def _usage_file(cfg_dir):
+    import hashlib
+    key = hashlib.sha1(cfg_dir.encode("utf-8", "replace")).hexdigest()[:12]
+    return os.path.join(_USAGE_DIR, f"usage-{key}.json")
+
+
+def _usage_file_read(cfg_dir):
     try:
-        with open(_USAGE_FILE, encoding="utf-8") as f:
+        with open(_usage_file(cfg_dir), encoding="utf-8") as f:
             return json.load(f)
     except (OSError, ValueError):
         return None
 
 
-def _usage_file_write(ts, cred_mtime, data):
+def _usage_file_write(cfg_dir, ts, cred_mtime, data):
     try:
-        os.makedirs(os.path.dirname(_USAGE_FILE), exist_ok=True)
-        with open(_USAGE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"ts": ts, "cred_mtime": cred_mtime, "data": data}, f,
-                      ensure_ascii=False)
+        os.makedirs(_USAGE_DIR, exist_ok=True)
+        with open(_usage_file(cfg_dir), "w", encoding="utf-8") as f:
+            json.dump({"ts": ts, "cred_mtime": cred_mtime, "data": data,
+                       "cfg_dir": cfg_dir}, f, ensure_ascii=False)
     except OSError:
         pass
 
 
-def claude_usage(ttl=60):
-    """로그인 계정·사용량 조회 (60s 캐시). 토큰은 응답에 절대 싣지 않는다.
-    자격증명은 ~/.claude/.credentials.json (CC OAuth), 계정은 ~/.claude.json.
-    계정 전환(/login)·토큰 갱신은 파일 mtime 변화로 감지해 캐시를 즉시 버린다."""
+def claude_usage(cfg_dir=None, ttl=60, offline=False):
+    """그 **설정 디렉토리(=계정)** 의 로그인 계정·사용량 (60s 캐시).
+    토큰은 응답에 절대 싣지 않는다.
+
+    자격증명은 `<cfg>/.credentials.json`, 계정은 `<cfg>/.claude.json` 이다
+    (기본 자리 `~/.claude` 만은 `.claude.json` 이 바깥에 있다 — `account_of`
+    가 아는 그 규칙을 여기서 다시 쓰지 않고 그 함수에 맡긴다).
+
+    `cfg_dir` 이 없으면 `@home`(=`~/.claude`). 종전에는 인자가 아예 없었고 경로
+    가 홈으로 하드코딩돼 있어서, 프로필로 뜬 세션도 헤더는 홈 계정을 찍었다
+    (REQ-20260901-017 R1). 캐시 열쇠도 홈 자격증명의 mtime 이라 **프로필을
+    바꿔도 캐시가 갱신조차 되지 않았다** — 열쇠는 이제 `(cfg_dir, cred_mtime)`.
+
+    계정 전환(/login)·토큰 갱신은 파일 mtime 변화로 감지해 캐시를 즉시 버린다.
+
+    `offline=True` 는 **업스트림을 때리지 않는다** — 캐시에 있으면 그것, 없으면
+    "모른다"(ok=false, error). 판정 경로(재시작 거부)가 이 모양을 쓴다: 사람이
+    단추를 누른 자리에서 10초 타임아웃을 기다리게 하지 않고, 조회는 계정 창을
+    연 순간(`/api/accounts`)에 미리 돌려 둔다.
+    """
     import time as _time
     import urllib.request as _rq
     now = _time.time()
+    cfg = os.path.abspath(os.path.expanduser(cfg_dir)) if cfg_dir \
+        else os.path.abspath(account_home_dir())
+    slot = _usage_slot(cfg)
     try:
-        cred_mtime = os.path.getmtime(
-            os.path.join(os.path.expanduser("~"), ".claude",
-                         ".credentials.json"))
+        cred_mtime = os.path.getmtime(os.path.join(cfg, ".credentials.json"))
     except OSError:
         cred_mtime = 0.0
-    if (_usage_cache["data"] and now - _usage_cache["ts"] < ttl
-            and cred_mtime == _usage_cache["cred_mtime"]):
-        return _usage_cache["data"]
+    if (slot["data"] and now - slot["ts"] < ttl
+            and cred_mtime == slot["cred_mtime"]):
+        return slot["data"]
     # 머신 공유 캐시: 다른 serve 프로세스가 방금 조회했다면 재사용 (429 방지)
-    fc = _usage_file_read()
+    fc = _usage_file_read(cfg)
     if (fc and fc.get("data") and now - fc.get("ts", 0) < ttl
             and fc.get("cred_mtime") == cred_mtime):
-        _usage_cache.update({"ts": fc["ts"], "data": fc["data"],
-                             "cred_mtime": cred_mtime})
+        slot.update({"ts": fc["ts"], "data": fc["data"],
+                     "cred_mtime": cred_mtime})
         return fc["data"]
+    if offline:
+        return {"ok": False, "cfg_dir": cfg, "email": account_of(cfg),
+                "error": "사용량 미조회 (캐시 없음)"}
     # 실패 백오프: 직전 실패 후 120s 내엔 업스트림을 다시 때리지 않는다
-    if now - _usage_cache["fail_ts"] < 120:
-        stale = _usage_cache["data"] or (fc or {}).get("data")
+    if now - slot["fail_ts"] < 120:
+        stale = slot["data"] or (fc or {}).get("data")
         if stale:
             return {**stale, "stale": True}
-    _usage_cache["cred_mtime"] = cred_mtime
-    home = os.path.expanduser("~")
-    out = {"ok": False}
+    slot["cred_mtime"] = cred_mtime
+    out = {"ok": False, "cfg_dir": cfg, "email": account_of(cfg)}
     try:
-        with open(os.path.join(home, ".claude.json"), encoding="utf-8") as f:
-            oa = (json.load(f).get("oauthAccount") or {})
-        out["email"] = oa.get("emailAddress", "")
-    except (OSError, ValueError):
-        out["email"] = ""
-    try:
-        with open(os.path.join(home, ".claude", ".credentials.json"),
+        with open(os.path.join(cfg, ".credentials.json"),
                   encoding="utf-8") as f:
             cred = json.load(f).get("claudeAiOauth") or {}
     except (OSError, ValueError):
-        out["error"] = "자격증명 없음 (~/.claude/.credentials.json)"
+        out["error"] = f"자격증명 없음 ({os.path.join(cfg, '.credentials.json')})"
         return out
     out["subscription"] = cred.get("subscriptionType", "")
     token = cred.get("accessToken", "")
@@ -6460,15 +6742,48 @@ def claude_usage(ttl=60):
                            "severity": L.get("severity", ""),
                            "resets_at": L.get("resets_at", "")})
         out.update({"ok": True, "limits": limits, "fetched_at": now_iso()})
-        _usage_cache.update({"ts": now, "data": out, "fail_ts": 0.0})
-        _usage_file_write(now, cred_mtime, out)
+        slot.update({"ts": now, "data": out, "fail_ts": 0.0})
+        _usage_file_write(cfg, now, cred_mtime, out)
     except Exception as e:
-        _usage_cache["fail_ts"] = now
-        stale = _usage_cache["data"] or (_usage_file_read() or {}).get("data")
+        slot["fail_ts"] = now
+        stale = slot["data"] or (_usage_file_read(cfg) or {}).get("data")
         if stale:
             return {**stale, "stale": True}
         out["error"] = f"usage 조회 실패: {type(e).__name__}"
     return out
+
+
+def _model_key(name):
+    """모델 이름 비교용 열쇠 — `claude-fable-5` 와 `Fable 5` 를 같은 것으로 본다."""
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower()).replace("claude", "")
+
+
+def usage_limit_hit(usage, model=""):
+    """그 계정이 **지금 이 모델로 일할 수 없는** 한도 줄 (없으면 None).
+
+    두 가지가 여기 해당한다.
+      · 모델 한정 한도(`scope_name`)가 100% — 그 모델로만 막힌다.
+      · 범위 없는 한도(session·weekly_all)가 100% — 계정 자체가 막혔다.
+
+    **모르면 막지 않는다**: 조회가 실패했거나(ok=false) 퍼센트를 못 읽으면
+    None 이다. 근거 없는 차단은 사람을 세우기만 하고 이유를 못 댄다.
+    """
+    if not usage or not usage.get("ok"):
+        return None
+    want = _model_key(model)
+    for L in usage.get("limits") or []:
+        try:
+            pct = float(L.get("percent"))
+        except (TypeError, ValueError):
+            continue
+        if pct < 100:
+            continue
+        scope = _model_key(L.get("scope_name") or "")
+        if not scope:
+            return L                      # 계정 전체가 막혔다
+        if want and (scope in want or want in scope):
+            return L
+    return None
 
 
 UNACKED = os.path.join(ROOT, "state", "unacked-transitions.jsonl")
@@ -11014,6 +11329,102 @@ def stamp_is_stale(started, current):
     return bool(stale_parts(started, current))
 
 
+# ---- 래퍼(`s9 code`)도 장수 프로세스다 (REQ-20260901-017 R3) ----------------
+# 이 하네스는 그 함정을 서버에서 한 번 배웠다(code_stamp 주석: "12시간 갔다").
+# 그런데 지문을 남기는 대상은 서버뿐이었고, 재시작 계약의 나머지 절반인 `s9 code`
+# 래퍼는 코드도 **설정도** 얼린 채 돌았다 — 12:45 에 뜬 래퍼가 14:12 의 정책
+# 복구도 15:20 의 코드 수정도 모르는 채 16:05 의 재시작을 fable 로 띄웠다.
+# 화면의 "서버 재기동 필요" 칩에 대응하는 "**창 다시 열기 필요**"가 없었다.
+
+def _wrapper_stamp_path(pid):
+    return _terminal_state_path(f"code-{int(pid)}.json")
+
+
+def wrapper_stamp_write(pid=None):
+    """래퍼가 기동 시점 코드 지문을 남긴다 (자기 pid 로)."""
+    import time as _time
+    pid = int(pid or os.getpid())
+    try:
+        with open(_wrapper_stamp_path(pid), "w", encoding="utf-8") as f:
+            json.dump({"pid": pid, "ts": _time.time(),
+                       "started": running_code_stamp()}, f, ensure_ascii=False)
+    except (OSError, ValueError):
+        pass                      # 지문 못 남기는 것이 기동을 막지는 않는다
+
+
+def wrapper_stamp_sweep(alive=None):
+    """죽은 래퍼가 남긴 것을 치운다 — 지문과 재시작 이력.
+
+    pid 를 열쇠로 쓰는 파일들이라 재사용된 pid 가 남의 기록을 물면 안 된다.
+    계보 이력(lineage-*)은 살아 있는 동안에는 지우지 않는다(그 파일이 곧
+    조사 자료다) — 래퍼가 죽고 나서야 치운다.
+    """
+    import glob as _glob
+    live = alive or pid_alive
+    for pat, rx in (("code-*.json", r"code-(\d+)\.json"),
+                    ("lineage-*.json*", r"lineage-(\d+)\.jsonl?")):
+        for p in _glob.glob(os.path.join(ROOT, "state", "terminal", pat)):
+            m = re.fullmatch(rx, os.path.basename(p))
+            if not m or live(int(m.group(1))):
+                continue
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
+def wrapper_code_age(pid):
+    """그 래퍼가 든 코드가 지금 디스크와 어긋나는가.
+
+    반환 {"pid", "stale", "parts", "basis"} — 판정할 근거가 없으면 **빈 딕트**다.
+    없는 근거로 낡음을 단정하지 않는 규율은 `code_is_stale` 과 같다: 근거 없는
+    경고는 곧 무시되고, 한 번 무시되기 시작하면 진짜일 때도 안 읽힌다.
+
+    근거는 둘이고 정확한 쪽이 먼저다.
+      · `stamp`   — 래퍼가 남긴 기동 시점 지문 vs 지금 디스크 (파일 단위로 안다)
+      · `started` — 지문이 없는 옛 래퍼: 프로세스 기동 시각 vs 파일 mtime.
+                    지문 기능 자체가 없던 시절에 뜬 래퍼가 곧 가장 낡은 래퍼라,
+                    여기서 침묵하면 이 고침이 겨냥한 그 자리가 빈다.
+    """
+    try:
+        pid = int(pid or 0)
+    except (TypeError, ValueError):
+        return {}
+    if pid <= 0:
+        return {}
+    cur = running_code_stamp()
+    try:
+        with open(_wrapper_stamp_path(pid), encoding="utf-8") as f:
+            started = (json.load(f) or {}).get("started") or {}
+    except (OSError, ValueError):
+        started = {}
+    if started:
+        parts = stale_parts(started, cur)
+        return {"pid": pid, "stale": bool(parts), "parts": parts,
+                "basis": "stamp"}
+    born = pid_start_time(pid)
+    if not born:
+        return {}
+    parts = [name for key, name in RUNNING_FILES.items()
+             if (cur.get(key) or {}).get("mtime", 0) > born]
+    return {"pid": pid, "stale": bool(parts), "parts": parts,
+            "basis": "started"}
+
+
+def session_wrapper_pid(b):
+    """이 세션을 든 `s9 code` 래퍼의 pid (아니면 0).
+
+    판정은 `restart_session` 의 그것과 같다 — claude 의 부모 명령줄에 s9 와
+    code 가 있으면 재시작 루프를 든 래퍼다.
+    """
+    pid = int((b or {}).get("attach_pid") or 0)
+    if not pid:
+        return 0
+    w = pid_ppid(pid) or 0
+    cmd = pid_cmdline(w) if w else ""
+    return w if ("s9" in cmd and "code" in cmd) else 0
+
+
 def _port_owner_pid(port):
     """지금 그 포트를 물고 있는 프로세스 pid (모르면 0).
 
@@ -13999,6 +14410,36 @@ CODE_BOOTSTRAP = (
 )
 
 
+def code_base_cmd(claude_args):
+    """지금 정책으로 만든 claude 기동 인자 (REQ-20260901-017 R2a).
+
+    계정 기본 인자(user config s9code_args) 뒤에 명령행 인자 — 뒤가 우선
+    적용되므로 명령행이 계정 기본값을 덮는다 (REQ-20260824-036).
+
+    함수인 이유가 재시작에 있다: 이 값은 **부를 때마다 다시** 계산돼야 한다.
+    래퍼는 몇 시간을 도는 프로세스라, 기동 시점에 한 번 만든 인자를 재시작마다
+    재사용하면 그 사이의 정책 변경이 영영 안 실린다 (아래 cmd_code 참조)."""
+    args = list(claude_args or [])
+    cmd = ["claude"] + code_launch_args() + args
+    # 세션을 스스로 깨운다 (REQ-20260827-025) — CODE_BOOTSTRAP 주석 참조.
+    # 사람이 자기 프롬프트를 줬으면 붙이지 않는다: 위치 인자가 둘이면
+    # claude 가 받지 않고, 무엇보다 사람의 말이 우선이다.
+    if not _has_user_prompt(args):
+        cmd.append(CODE_BOOTSTRAP)
+    return cmd
+
+
+def code_restart_cmd(claude_args, m):
+    """재시작 인자 = **지금** 정책 + 마커 (REQ-20260901-017 R2a).
+
+    실사고 2026-09-01: 12:45 에 뜬 래퍼가 그때의 `s9code_args`(--model fable)를
+    들고 있었고, 14:12 의 정책 복구(opus)도 15:20 의 코드 수정도 모른 채 16:05
+    의 재시작을 fable 로 띄웠다. 마커의 모델이 빈 값(「유지」)이면 base 를
+    손대지 않으므로 **얼어붙은 값이 그대로 나간다** — 「유지」가 뜻해야 하는
+    것은 "그때 그 인자"가 아니라 "지금 정책"이다."""
+    return _restart_cmd(code_base_cmd(claude_args), m)
+
+
 def _has_user_prompt(argv):
     """사용자가 claude 에 자기 프롬프트를 줬는가.
 
@@ -14035,8 +14476,14 @@ def cmd_code(args):
         # 알아보지 못한다. 이미 감시 중이면 그 프로세스가 곧바로 물러난다.
         os.makedirs(os.path.join(ROOT, "state"), exist_ok=True)
         lf = open(os.path.join(ROOT, "state", "serve.log"), "a")
+        # 감시자·서버는 **계정 중립**으로 띄운다 (REQ-20260901-017 R6):
+        # 프로필 계정으로 연 세션이 대시보드를 처음 띄우면 그 환경이 상속돼,
+        # 서버가 아는 `@home` 이 그 프로필로 조용히 옮겨 간다 — 그러면 서버는
+        # 대화를 프로필 X 로 복사하고 래퍼는 ~/.claude 로 띄운다.
         subprocess.Popen([os.path.abspath(__file__), "serve", "--supervise",
                           "--port", str(port)],
+                         env={k: v for k, v in os.environ.items()
+                              if k != "CLAUDE_CONFIG_DIR"},
                          stdin=subprocess.DEVNULL, stdout=lf, stderr=lf,
                          start_new_session=True)
         print(f"대시보드 기동: http://127.0.0.1:{port}/")
@@ -14074,21 +14521,18 @@ def cmd_code(args):
               "로그인하면 그대로 세션이 시작된다 (별도 선행 절차 없음).")
     try:
         os.chdir(ROOT)  # 규약·스킬이 이 디렉토리 기준으로 로드된다
-        # 계정 기본 인자(user config s9code_args) 뒤에 명령행 인자 — 뒤가 우선
-        # 적용되므로 명령행이 계정 기본값을 덮는다 (REQ-20260824-036)
-        extra = code_launch_args()
-        base_cmd = ["claude"] + extra + (args.claude_args or [])
-        # 세션을 스스로 깨운다 (REQ-20260827-025) — 위 CODE_BOOTSTRAP 주석 참조.
-        # 사람이 자기 프롬프트를 줬으면 붙이지 않는다: 위치 인자가 둘이면
-        # claude 가 받지 않고, 무엇보다 사람의 말이 우선이다.
-        if not _has_user_prompt(args.claude_args or []):
-            base_cmd.append(CODE_BOOTSTRAP)
+        cargs = list(args.claude_args or [])
+        base_cmd = code_base_cmd(cargs)
         # 정식 진입 마커 (REQ-032): 훅이 바인딩에 entry=code 기록 → 채팅 자동
         # 대상 선택에서 이 세션이 최우선이 된다
         os.environ["S9_ENTRY"] = "code"
         if os.environ.get("S9_CODE_DRYRUN"):
             print(json.dumps(base_cmd, ensure_ascii=False))  # 테스트 시임
             return
+        # 이 래퍼가 든 코드의 나이를 남긴다 (REQ-20260901-017 R3) — 서버가
+        # 그 지문으로 「창 다시 열기 필요」를 화면에 실을 수 있다.
+        wrapper_stamp_sweep()
+        wrapper_stamp_write()
         _maybe_update_claude()  # claude 자동 업그레이드 (REQ-025) — 실패 무해
         # 재시작 루프 (REQ-20260825-037): exec 대신 자식 실행 — TTY를 이 래퍼가
         # 계속 소유하므로, 대시보드가 재시작 마커+SIGTERM으로 유휴 세션을 내리면
@@ -14103,7 +14547,10 @@ def cmd_code(args):
             m = _consume_restart_marker()
             if not m:
                 return
-            cmd = _restart_cmd(base_cmd, m)
+            # 인자는 **여기서 다시** 만든다 (REQ-20260901-017 R2a) — 루프 밖의
+            # base_cmd 를 재사용하면 래퍼가 기동 시점에 얼린 정책으로 재시작해,
+            # 그 사이 사람이 되돌린 모델 정책이 영영 안 실린다.
+            cmd = code_restart_cmd(cargs, m)
             # 고른 계정은 이 한 번으로 끝나지 않는다 (REQ-20260827-079).
             # 예전에는 마커가 계정을 말할 때만 프로필을 걸어서, 계정을 바꾼 뒤
             # **모델만 바꾸면** 계정이 조용히 원래대로 돌아갔다 — 아무도 그러라고
@@ -16745,8 +17192,12 @@ def cmd_serve(args):
                             "live": time.time() - os.path.getmtime(apath) < 180,
                             **d})
             elif parsed.path == "/api/claude/usage":
-                # 계정·사용량 (REQ-043): 60s 캐시, 토큰 비노출, 로컬 전용
-                self._json(claude_usage())
+                # 계정·사용량 (REQ-043): 60s 캐시, 토큰 비노출, 로컬 전용.
+                # **그 세션이 실제로 붙은 계정**을 묻는다 (REQ-20260901-017 R1)
+                # — 종전에는 언제나 홈 계정이라, 계정을 바꾼 사람에게 화면이
+                # "안 바뀌었다"고 말했다.
+                _b = chat_target(qs.get("sid", [""])[0] or None)
+                self._json(claude_usage(session_cfg_dir(_b)))
             elif parsed.path == "/api/chat/commands":
                 # / 팔레트 (REQ-040): 사용자 스킬 + 프로젝트 커맨드 목록
                 cmds = []
@@ -16882,6 +17333,7 @@ def cmd_serve(args):
                     # 실가동 여부 — live여도 tail이 없으면 세션이 유휴라
                     # 메시지가 큐잉만 된다는 사실을 프런트가 표시해야 한다.
                     _acct = account_rows(session_cfg_dir(b), settle=False)
+                    _wrap = wrapper_code_age(session_wrapper_pid(b))
                     self._json({"sid": b.get("session"),
                                 "user": b.get("user")
                                 or whoami_info().get("user", ""),
@@ -16893,6 +17345,9 @@ def cmd_serve(args):
                                 "compacting": chat_compacting(b),
                                 "listening": _inbox_watch_alive(
                                     b.get("session", "")),
+                                # 떠 있다 ≠ 듣고 있다 (REQ-20260901-017 R5 —
+                                # 사유는 chat_alive 의 docstring 에)
+                                "alive": chat_alive(b),
                                 "model": session_model(b),
                                 "profiles": claude_profiles(),
                                 # 폴은 읽기 전용이다 (REQ-20260827-079 라운드1)
@@ -16904,12 +17359,21 @@ def cmd_serve(args):
                                 # 준다(화면은 이 값으로 대상을 옮긴다).
                                 "resumed_from": b.get("resumed_from") or "",
                                 "resumed_to": b.get("resumed_to") or "",
+                                # 래퍼가 든 코드의 나이 (REQ-20260901-017 R3 —
+                                # 사유는 wrapper_code_age 의 docstring 에)
+                                "wrapper_pid": _wrap.get("pid", 0),
+                                "stale_wrapper": bool(_wrap.get("stale")),
+                                "stale_wrapper_parts": _wrap.get("parts", []),
                                 "switchable": account_switchable(_acct)})
             elif parsed.path == "/api/accounts":
                 # 고를 수 있는 계정들 (REQ-20260827-079) — 자리 이름이 아니라
                 # 계정으로, 지금 붙어 있는 줄에 표식을 달아서.
                 b = chat_target(qs.get("sid", [""])[0] or None)
                 rows = account_rows(session_cfg_dir(b))
+                # 창이 열린 이 순간 각 계정의 사용량을 뒤에서 데운다
+                # (REQ-20260901-017 R4) — 사람이 줄을 고를 때쯤 답이 와 있어야
+                # 전환 판정이 업스트림을 기다리지 않는다.
+                accounts_warm_usage(rows)
                 # switchable: 실제로 **옮겨 갈 수 있는** 줄의 수. 0이면 창은
                 # 막다른 길이라 화면이 그 사실을 말해야 한다 (라운드1).
                 self._json({"accounts": rows,

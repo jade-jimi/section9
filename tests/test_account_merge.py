@@ -74,6 +74,11 @@ class Base(unittest.TestCase):
         _login(self.home, "first@ex.com")
         self.m.profiles_base = lambda: self.base
         self.m.claude_home = lambda: self.home
+        # `@home` 의 자리는 이제 `account_home_dir` 이 정한다
+        # (REQ-20260901-017 R6): 서버가 물려받은 CLAUDE_CONFIG_DIR 에 흔들리던
+        # 뜻을 래퍼와 같게(언제나 ~/.claude) 못 박은 자리라, 무대의 '집'도
+        # 그쪽으로 세운다.
+        self.m.account_home_dir = lambda: self.home
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def prof(self, name):

@@ -40,7 +40,11 @@ function restartWatch(T, sid, d){
     svModelSeen(nt);                                  // 한도 갈래를 가를 기준
     if (!nt || !nt.sid) return;                       // 아직 안 돌아왔다
     if (w.sid && nt.sid !== w.sid) return;            // 다른 세션 이야기다
-    if (nt.listening && Date.now() - w.t0 > RESTART_SETTLE_MS)
+    /* 돌아옴의 근거는 **생존**이다 (REQ-20260901-017 R5) — 한도에 막힌 세션은
+       살아 돌아와도 수신 대기(Monitor)를 영영 못 켠다. listening 에만 묶으면
+       그 복귀를 화면이 끝까지 못 보고 「돌아왔는지 모름」으로 마감한다(실사고
+       16:03 claude02). 수신이 없는 처지는 done 뒤 상태 낱말(idle)이 말한다. */
+    if ((nt.listening || nt.alive) && Date.now() - w.t0 > RESTART_SETTLE_MS)
       restartSettle("done", nt.model || "");
   }, RESTART_POLL_MS);
 }

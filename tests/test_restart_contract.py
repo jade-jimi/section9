@@ -104,6 +104,11 @@ class RestartCase(unittest.TestCase):
             # 진짜 호스트 이름으로 가므로 여기서 무대 이름으로 못 박는다
             mock.patch.object(mod, "current_machine", lambda: "testbox"),
             mock.patch.object(mod, "claude_home", lambda: HOME_PROFILE),
+            # `@home` 의 자리 (REQ-20260901-017 R6)
+            mock.patch.object(mod, "account_home_dir", lambda: HOME_PROFILE),
+            # 사용량은 이 무대의 관심사가 아니다 (REQ-20260901-017 R4) —
+            # 실기계의 계정 상태가 이 시험의 판정에 새어 들어오면 안 된다.
+            mock.patch.object(mod, "claude_usage", lambda *a, **k: {}),
             mock.patch.object(mod, "profiles_base", lambda: PROFILES),
             mock.patch.object(mod, "user_config", lambda n: {}),
             mock.patch.object(mod, "do_user_config_set",
@@ -281,11 +286,12 @@ class TheSessionKeepsItsLineage(RestartCase):
     """G — `--resume` 은 새 sid 를 만든다. 옛↔새를 잇는 실은 서버가 준다."""
 
     # S17. 재시작이 계보 기록을 남긴다
+    #      (REQ-20260901-017: 파일은 이제 래퍼당 **이력**이다 — 덮어쓰기가
+    #       아니라 append 라, 마지막 줄이 방금 그 재시작이다)
     def test_s17_a_restart_leaves_a_thread(self):
         self.session("s17sess", [asst("end_turn")])
         self.assertTrue(self.restart("s17sess", model="opus")["ok"])
-        with open(mod._lineage_path(WRAPPER), encoding="utf-8") as f:
-            rec = json.load(f)
+        rec = mod._lineage_read(mod._lineage_path(WRAPPER))[-1]
         self.assertEqual(rec["from"], "s17sess")
         self.assertEqual(rec["wrapper_pid"], WRAPPER)
 
@@ -335,28 +341,33 @@ class TheSessionKeepsItsLineage(RestartCase):
             mod.lineage_link()
         self.assertEqual(read_binding("s18cnew")["active_reqs"], ["REQ-B"])
 
-    # S20. 낡은 기록은 잇지 않고 정리한다 — 엉뚱한 세션이 남의 계보를 물지 않는다
+    # S20. 낡은 기록은 잇지 않고 닫는다 — 엉뚱한 세션이 남의 계보를 물지 않는다
+    #      (REQ-20260901-017: 파일을 지우는 대신 그 줄을 `done` 으로 닫는다 —
+    #       이력은 남고, 다시 후보가 되지는 않는다. 파일 자체는 래퍼가 죽을 때
+    #       `wrapper_stamp_sweep` 이 치운다.)
     def test_s20_a_stale_thread_is_cut(self):
         import time as _t
-        mod._lineage_write(WRAPPER, "s20old")
         p = mod._lineage_path(WRAPPER)
-        with open(p, encoding="utf-8") as f:
-            rec = json.load(f)
-        rec["ts"] = _t.time() - mod.LINEAGE_FRESH_SEC - 10
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(rec, f)
+        mod._lineage_write(WRAPPER, "s20old")
+        recs = mod._lineage_read(p)
+        recs[-1]["ts"] = _t.time() - mod.LINEAGE_FRESH_SEC - 10
+        mod._lineage_rewrite(p, recs)
         make_binding("s20new", attach_pid="778", transcript_path="")
         with mock.patch.object(mod, "pid_ppid",
                                lambda p: WRAPPER if p == 778 else 1):
             self.assertEqual(mod.lineage_link(), [])
-        self.assertFalse(os.path.exists(p))
+        self.assertEqual(mod._lineage_read(p)[-1]["done"], "expired")
         self.assertNotIn("resumed_from", read_binding("s20new"))
+        # 닫힌 기록은 다시 후보가 되지 않는다 (다음 폴이 물지 않는다)
+        with mock.patch.object(mod, "pid_ppid",
+                               lambda p: WRAPPER if p == 778 else 1):
+            self.assertEqual(mod.lineage_link(), [])
 
     # S19. 폴이 그 실을 실어 준다 (화면의 sid 못박기를 풀 재료)
     def test_s19_the_poll_carries_the_thread(self):
         with open(S9, encoding="utf-8") as f:
             src = f.read()
-        head = src.split('elif parsed.path == "/api/chat/target"', 1)[1][:2400]
+        head = src.split('elif parsed.path == "/api/chat/target"', 1)[1][:4200]
         self.assertIn("lineage_link()", head,
                       "폴이 계보를 잇지 않으면 옛 sid 에 못 박힌 화면이 "
                       "성공한 재시작을 「돌아오지 않음」으로 센다")

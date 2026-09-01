@@ -549,6 +549,12 @@ const RESTART_WHY = {
     + (lim.until ? ` 한도는 ${lim.until} 풀립니다.` : "")
     + ` 세션이 떠 있는 터미널 창에서 /model 로 모델을 바꾼 뒤 다시 눌러 주세요.`,
   no_resume: w => `넘어갈 계정에 이 대화 기록이 없어 ${w} 바꾸지 않았습니다 — 그대로 옮기면 하던 대화가 이어지지 않습니다.`,
+  /* 넘어갈 자리의 한도는 서버가 계정별 사용량(R1)으로 먼저 본다
+     (REQ-20260901-017 R4) — 옮기고 나서 첫 답에서 굳는 것보다, 문 앞에서
+     사실과 남은 길을 말하는 쪽이 싸다. */
+  limit_target: (w, lim) => `넘어갈 계정은 ${lim && lim.name ? lim.name + " " : ""}모델 한도를 다 써서 ${w} 바꾸지 않았습니다`
+    + (lim && lim.until ? ` — 한도는 ${lim.until} 풀립니다.` : ` — 지금 옮기면 그 계정에서 답을 받지 못합니다.`)
+    + ` 다른 모델을 골라 함께 바꾸면 옮길 수 있습니다.`,
   /* 화면이 스스로 세우는 사유 둘. 여기 이름이 있어야 폴백으로 안 떨어진다. */
   nostop: w => `멈춰 달라고 보냈지만 15초 동안 답이 없어 ${w} 바꾸지 않았습니다 — 세션은 도구 하나를 끝낸 뒤에야 멈춤을 읽습니다.`,
   nosend: w => `멈춰 달라는 말을 보내지 못해 ${w} 바꾸지 않았습니다 — 세션이 떠 있는 터미널 창을 확인한 뒤 다시 눌러 주세요.`,
@@ -598,7 +604,8 @@ function restartWhat(model, effort, account){
 function restartSay(d, what){
   const a = typeof d === "string" ? {reason: d} : (d || {});
   const why = restartWhy(a);
-  if (why) return RESTART_WHY[why](what, why === "limit" ? restartLimit(a) : null);
+  if (why) return RESTART_WHY[why](what,
+    (why === "limit" || why === "limit_target") ? restartLimit(a) : null);
   /* 모르는 사유는 지어내지 않는다 — 그렇다고 기계 토막을 문장에 잇지도 않는다
      (REQ-20260901-014 V1). 원문은 버리지 않고 마우스를 올린 사람에게만 준다:
      화면은 사람 말을, 손이 얹힌 자리에는 기계 말을. */

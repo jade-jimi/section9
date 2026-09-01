@@ -68,6 +68,8 @@ class Rows(unittest.TestCase):
         _login(self.home, "first@ex.com")
         self.m.profiles_base = lambda: self.base
         self.m.claude_home = lambda: self.home
+        # `@home` 의 자리는 `account_home_dir` 이 정한다 (REQ-20260901-017 R6)
+        self.m.account_home_dir = lambda: self.home
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def rows(self, **kw):

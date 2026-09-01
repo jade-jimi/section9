@@ -314,8 +314,16 @@ function termStatus(T, nt, why){
      살아 있는 세션이 여럿이거나 붙잡은 것이 죽었을 때 사람이 다른 세션을 지목할
      수단이 없었다 — "세션 변경이 안된다"가 그것이다. 모델 라벨과 같은 얼굴을
      준다: 밑줄 점선 = 눌러서 고르는 자리. */
+  /* 래퍼가 낡았으면 그 사실을 붙박이로 말한다 (REQ-20260901-017 R3) — 재시작
+     인자를 만드는 것은 대시보드가 아니라 세션을 띄운 창이라, 그 창이 옛 코드
+     ·옛 설정을 들고 있으면 재시작을 몇 번 눌러도 고침이 안 실린다(실사고:
+     12:45 창이 얼려 둔 --model fable). 서버 배너(옛 코드)와 같은 계열의 말. */
+  const staleW = nt.stale_wrapper
+    ? ` · <span class="ccwarn" title="이 세션을 띄운 터미널 창이 옛 코드·옛 설정으로 돌고 있습니다 — 여기서 다시 시작해도 새 코드가 실리지 않습니다. 그 창을 닫고 cd ~/section9 && bin/s9 code 로 새로 열어 주세요">창이 옛 코드</span>`
+    : "";
   if (tg) tg.innerHTML = ` · target <span class="ccsidbtn cccyan" title="이 화면이 붙어 있는 세션 — 누르면 다른 세션을 고를 수 있습니다" style="cursor:pointer;text-decoration:underline dotted">${esc(nt.sid)}</span> <span class="cccyan">@${esc(nt.user || "?")}</span>`
-    + ` · <span class="ccmodelbtn" title="지금 쓰는 모델 — 누르면 모델과 생각의 깊이를 고를 수 있습니다. 고른 뒤 다시 시작을 눌러야 적용됩니다" style="cursor:pointer;text-decoration:underline dotted">${esc(mdl)}</span>`;
+    + ` · <span class="ccmodelbtn" title="지금 쓰는 모델 — 누르면 모델과 생각의 깊이를 고를 수 있습니다. 고른 뒤 다시 시작을 눌러야 적용됩니다" style="cursor:pointer;text-decoration:underline dotted">${esc(mdl)}</span>`
+    + staleW;
 }
 
 function termWaitingGuide(T){
