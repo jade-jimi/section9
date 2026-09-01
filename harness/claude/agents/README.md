@@ -1,4 +1,4 @@
-# 공용 에이전트 로스터 (26종)
+# 공용 에이전트 로스터 (29종)
 
 `s9-install`이 이 디렉토리의 `*.md`(README 제외)를 `~/.claude/agents/`로 심링크한다.
 section9 사용자 전원이 동일한 에이전트를 쓰며, git으로 동기화된다.
@@ -41,6 +41,7 @@ section9 사용자 전원이 동일한 에이전트를 쓰며, git으로 동기�
 | | code-executor | s9-protocol + testing-discipline |
 | | test-executor | s9-protocol + testing-discipline + **browser-verify** |
 | **조사** | deep-diver | s9-protocol + research-method + testing-discipline |
+| | web-surfer | s9-protocol + research-method |
 
 ## 스킬 (11종) — 사용 에이전트 수
 
