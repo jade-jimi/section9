@@ -61,7 +61,9 @@ function sessShape(d, cur){
     cancel: "닫기"};
 }
 async function termSessionPick(T){
-  const d = await ccFetch("/api/sessions", 5000);
+  // 한 번 끊긴 것을 「세션이 없다」로 옮기지 않는다 (REQ-20260901-013) —
+  // 계정 창과 같은 결함이 이 옆자리에도 있었다.
+  const d = await ccFetchTry("/api/sessions", 2500, "sessions");
   const picked = await s9dlg(sessShape(d, T.sid));
   if (!picked) return;
   if (picked.act === "wake"){ await sessionWake("", null, "세션"); return; }
@@ -69,7 +71,8 @@ async function termSessionPick(T){
   /* 고른 세션의 지금 상태를 **서버에게 다시 묻고** 붙인다 — 목록은 창을 연
      시점의 사진이라, 그 사이 끝났을 수 있다. 화면이 사진을 믿고 붙으면 이
      요청이 고친 그 결함(죽은 세션에 붙어 있기)을 손으로 다시 만드는 셈이다. */
-  const nt = await ccFetch("/api/chat/target?sid=" + encodeURIComponent(picked.key), 5000);
+  const nt = await ccFetchTry("/api/chat/target?sid="
+    + encodeURIComponent(picked.key), 2500, "target");
   if (nt && nt.sid) termAttach(T, nt);
 }
 
@@ -207,7 +210,18 @@ const ACCOUNT_ADD = `<div class="dlgsub">그 밖에</div>`
    로그인이 끝난 자리에는 손잡이를 달지 않는다 — 서버가 어차피 거부한다
    (`logged-in`), 그리고 자격증명을 지우는 일은 이 창의 몫이 아니다. */
 const ACCOUNT_GONE_MAX = 3;      // 넘으면 그 사실만 적는다 — 목록 밖은 목록이 아니다
-function acctFoot(rows){
+/* 끝내 못 받은 창에도 **나가는 문**을 준다 (REQ-20260901-013).
+   여태 이 처지의 창은 줄도 없고 할 수 있는 일도 없었다 — 닫는 것 말고는.
+
+   `＋ 계정 추가` 는 여기 세우지 않는다: 서버가 답하지 않는 판에서는 그것도
+   눌러야 안 되는 일이라, 권하는 순간 창이 두 번 거짓말을 한다. 「그 밖에」 도
+   설명 문단도 달지 않는다 — 목록이 없으니 그 밖이랄 것이 없고, 왜 막혔는지는
+   desc 가 이미 한 번 말했다(이 파일이 세워 둔 규칙: 한 창이 같은 사실을 세 번
+   말하면 사람은 셋 다 흘려 읽는다). 여기 남는 것은 할 수 있는 일 하나뿐이다. */
+const ACCOUNT_AGAIN = `<button type="button" class="dlgact" data-act="again">`
+  + `↻ 계정 목록 다시 받기</button>`;
+function acctFoot(rows, st){
+  if (st === "lost") return ACCOUNT_AGAIN;
   const gone = (rows || []).filter(r => !r.ready && r.key !== ACCOUNT_HOME);
   if (!gone.length) return ACCOUNT_ADD;
   const shown = gone.slice(0, ACCOUNT_GONE_MAX);
@@ -247,10 +261,12 @@ const ACCT_DESC = {
      사용자가 그 고리에 갇혔다: "세션 깨우기를해도 기존 계정으로 연결된다."
      이제 이 창에서 곧장 그 계정으로 세션을 시작한다. */
   nosession: "지금은 붙어 있는 세션이 없습니다 — 고른 계정으로 여기서 새 세션을 시작할 수 있습니다.",
-  lost: "계정 목록을 받지 못했습니다."};
+  // 세 번 걸었다는 사실까지가 desc 의 몫이다 (REQ-20260901-013) — 아래 줄과
+  // 손잡이가 각각 '언제 되나'와 '무엇을 누르나'를 말하므로 여기서는 안 겹친다.
+  lost: "계정 목록을 받지 못했습니다 — 세 번 걸어 봤지만 답이 오지 않았습니다."};
 /* 목록이 아예 비는 것은 **못 받았을 때뿐**이다(기본 계정은 늘 한 줄이다).
    그러니 이 자리는 "없다"가 아니라 **다음 걸음**을 적는다. */
-const ACCT_EMPTY = "대시보드 서버가 다시 뜨는 중일 수 있습니다 — 잠시 뒤 다시 열어 주세요.";
+const ACCT_EMPTY = "대시보드 서버가 다시 뜨는 중일 수 있습니다 — 바쁘면 몇 초 뒤에 옵니다.";
 /* **막힌 이유는 desc 한 곳에서만 말한다.** 아래 한 줄(dlgsay)은 "누르면 무슨
    일이 일어나는가"를 적는 자리라, 누를 수 없는 처지에서는 위와 같은 말을 다른
    낱말로 되풀이하게 된다 — 한 창이 같은 사실을 세 번 말하면 사람은 셋 다
@@ -276,7 +292,7 @@ function acctShape(d){
     pickNote: wake ? "시작할 것" : "바꿀 것",
     items: acctItems(rows, live, wake),
     empty: ACCT_EMPTY,
-    foot: acctFoot(rows),
+    foot: acctFoot(rows, st),
     /* 모델 창과 **같은 규칙**을 쓴다 (REQ-20260829-017). 계정 전환도 같은
        `/api/session/restart` 로 대화를 끊었다 다시 여는 일이고, 잘못 누르면
        모델보다 나쁘다 — 다른 사람의 자격으로 붙고 그쪽 사용량이 깎인다.
@@ -290,10 +306,16 @@ function acctShape(d){
     cancel: "닫기"};
 }
 async function claudeAccountSwitch(){
-  const d = await ccFetch("/api/accounts", 5000);
+  /* **한 발이 아니라 세 발이다** (REQ-20260901-013). 여태 여기는 맨 `ccFetch`
+     한 번이라, 이 환경의 루프백이 요청을 끊는 그 순간(실측 6.7%)에 걸린 사람은
+     계정이 0줄인 창을 봤다 — 다음에 열면 멀쩡한 그것이 "계정이 없다가
+     나타나거나 있는데 사라지거나" 의 정체다. 목록이 흔들린 적은 없다. */
+  const d = await ccFetchTry("/api/accounts", 2500, "accounts");
   const rows = (d && d.accounts) || [];
   const picked = await s9dlg(acctShape(d));
   if (!picked) return;
+  // 끝내 못 받았을 때의 나가는 문 — 사람이 누른 것도 한 번의 시도다
+  if (picked.act === "again"){ claudeAccountSwitch(); return; }
   if (picked.act === "add"){ claudeAccountAdd(); return; }
   if (String(picked.act || "").startsWith("rm:")){
     await acctRemove(picked.act.slice(3), rows);

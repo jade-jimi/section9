@@ -10,6 +10,46 @@ function ccFetch(url, ms){
       .catch(() => { clearTimeout(to); res(null); });
   });
 }
+/* ---- 한 번 끊긴 것을 「없다」로 옮기지 않는다 (REQ-20260901-013) ----
+
+   사용자: "계정이 없다가 나타나거나 있는데 사라지거나 한다."
+
+   흔들린 것은 목록이 아니라 **연결**이었다. 실측(실서버 9909): `/api/accounts`
+   60회 중 4회가 ConnectionResetError 였고, 성공한 56회는 모양이 완전히 같았다.
+   그런데 창은 열 때 한 발만 쏘므로, 그 4회에 걸린 사람은 **계정이 0줄인 창**을
+   본다 — 다음에 열면 멀쩡하다. 그것이 깜빡임의 정체다.
+
+   이 벼랑은 이 저장소가 이미 재서 처방해 두었다(DOC-20260827-004 ·
+   REQ-20260829-019): 상한(큐)은 듣지 않고 **재시도만** 듣는다. 그림(attImg)과
+   부트 보급(loadSupply)은 그 처방을 받고 있었는데 고르는 창들만 밖에 있었다.
+
+   폴(5초 termTargetLoop)은 여기를 안 지난다 — 폴의 재시도는 다음 tick 이고,
+   못 받은 한 번은 `offline` 이라는 설계된 얼굴이 있다. 여기는 **사람이 눌러
+   기다리는 자리**라 얼굴이 없다: 다시 거는 값이 그만큼 크다. */
+const CC_TRY_BACKOFF = [120, 320];   // ms — attach.js 가 실측으로 정한 그 자
+/* 손 없이 이 상황을 만드는 스위치 — `?apifail=accounts[:once|:N]`. 끊긴 연결은
+   같은 순간에 열 개가 도착해야 나므로 손으로는 재현할 수 없다. 새 스위치를
+   짓지 않고 boot.js 의 `?apifail` 어휘를 그대로 쓴다 — 배울 것을 늘리지 않는다.
+   `:once` 면 재시도가 메워 주는 것이, 값이 없으면 끝내 못 받은 창이 보인다. */
+const ccTryHits = new Map();
+function ccTryFail(key){
+  const m = key ? API_FAIL.get(key) : undefined;
+  if (m === undefined) return false;
+  const n = (ccTryHits.get(key) || 0) + 1;
+  ccTryHits.set(key, n);
+  return n <= m;
+}
+async function ccFetchTry(url, ms, key){
+  for (let i = 0; i <= CC_TRY_BACKOFF.length; i++){
+    const d = ccTryFail(key) ? null : await ccFetch(url, ms);
+    if (d != null) return d;
+    // 지터를 섞는다 — 실패한 것들이 한꺼번에 다시 출발하면 같은 벼랑을 또 만난다
+    if (i < CC_TRY_BACKOFF.length)
+      await new Promise(r => setTimeout(r,
+        CC_TRY_BACKOFF[i] + Math.random() * 90));
+  }
+  return null;
+}
 function renderTerminal(){
   // 셸 1회 생성(L0). 살아있는 셸은 render()의 조기 반환 가드가 지키므로
   // 여기 도달 = 탭 새 진입. 이후 이 DOM은 탭을 떠날 때까지 재생성되지 않는다.
