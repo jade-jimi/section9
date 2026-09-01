@@ -158,12 +158,26 @@ async function loadStream(s){
   if (!d){ term.textContent = "stream not found: " + s; return; }
   const q = $("#q").value.trim().toLowerCase();
   let offset = d.offset, total = d.count;
+  /* 죽은 세션의 로그는 일하던 모습 그대로 멈춰 있어 실행 중처럼 읽힌다
+     (REQ-20260901-006 실사고: 보드는 멈춤이라는데 스트림은 바빠 보였다).
+     머리에 종료 사실을, 꼬리에 끝난 자리를 — 읽는 눈이 어디서 시작하든
+     한쪽은 만난다. 사유는 서버가 기록에서 판별한 것만 온다(짐작 없음). */
+  const endBit = d.ended
+    ? ` · <span style="color:var(--c-blocked,#b91c1c)">■ 세션 종료${
+        d.ended_at ? " " + esc(d.ended_at.slice(11, 16)) : ""}${
+        d.end_why ? " — " + esc(d.end_why) : ""}</span>`
+    : "";
   const liveTag = d.live
     ? ' · <span style="color:#34d399">● live</span> <label style="cursor:pointer;color:#94a3b8"><input type="checkbox" id="follow" checked> follow</label>'
-    : ' · mirror(턴 종료 시점)';
+    : (endBit || ' · mirror(턴 종료 시점)');
+  const endLine = d.ended
+    ? `<div class="meta">■ 세션이 여기서 끝났습니다${
+        d.ended_at ? " (" + esc(d.ended_at.slice(11, 16)) + ")" : ""}${
+        d.end_why ? " — " + esc(d.end_why) : ""} — 이 아래로는 아무것도 돌지 않습니다</div>`
+    : "";
   term.innerHTML =
     `<div class="meta">session ${esc(s)} · <span id="evcount">${total}</span> events${q ? " · filtered" : ""}${liveTag}</div>` +
-    renderEvents(d.events, q);
+    renderEvents(d.events, q) + endLine;
   term.scrollTop = d.live ? term.scrollHeight : 0;
   if (!d.live) return;
   // 증분 tail: 서버는 offset 이후의 새 라인만 파싱해 반환 — 폴링 부하 최소화.

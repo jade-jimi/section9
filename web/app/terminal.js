@@ -246,9 +246,16 @@ function termStatus(T, nt, why){
   // live인데 미가동이면 idle — 메시지는 큐잉+REQ 기록만 되고 즉답이 없다
   // (REQ-20260825-001: 유휴 세션이 live로 보여 무응답이 침묵으로 빠지던 결함)
   const listen = nt.listening !== false;
-  lv.textContent = !T.live ? "stale" : (listen ? "live" : "idle");
-  lv.className = (T.live && listen) ? "ccok" : "ccwarn";
-  lv.title = (T.live && !listen)
+  /* 끝난 것과 조용한 것은 다른 일이다 (REQ-20260901-006 — 서버는 이미
+     ended 를 주고 있었는데 화면이 stale 로 뭉뚱그렸다). 죽은 세션의 마지막
+     출력이 위 판에 일하던 모습 그대로 남아 있으므로, 이 낱말이 그 착시를
+     끊는 유일한 자리다. */
+  lv.textContent = nt.ended ? "세션 종료"
+    : !T.live ? "stale" : (listen ? "live" : "idle");
+  lv.className = (T.live && listen && !nt.ended) ? "ccok" : "ccwarn";
+  lv.title = nt.ended
+    ? "이 세션은 끝났습니다 — 위 출력은 마지막 기록이고, 보낸 메시지는 닿지 않습니다. target 을 눌러 살아 있는 세션을 고르세요"
+    : (T.live && !listen)
     ? "세션이 유휴 상태(수신 대기 미가동) — 보낸 메시지는 요청 문서로 즉시 기록되고, 세션 터미널에서 아무 입력이나 하면 밀린 메시지를 소화합니다"
     : "";
   // 모델 표시·변경 (REQ-20260825-037): 클릭 = 같은 대화를 새 설정으로 재개.
