@@ -1,6 +1,9 @@
 /* app.js — 탭 라우팅 · 카탈로그/프로젝트 새로고침 · 필터 · 판 그리기 */
 "use strict";
-const TABS = ["board","docs","graph","audit","stream","terminal","settings"];
+/* 탭은 여덟이다 (REQ-20260831-026 G0′) — 문서 뷰 다섯 · 창 하나 · **그릇 하나** ·
+   환경 하나. 껍데기(index.html)의 단추 순서와 이 목록은 같은 자리를 말해야 한다:
+   갈리면 주소로 들어온 사람만 다른 화면을 본다(`#projects` 가 Board 로 튕긴다). */
+const TABS = ["board","docs","graph","audit","stream","terminal","projects","settings"];
 
 // URL 해시 ↔ 상태. 형태: #<tab> 또는 #docs/REQ-.. 또는 #settings/account
 function applyRoute(hash, doRender){
@@ -20,7 +23,10 @@ function applyRoute(hash, doRender){
     try{ history.replaceState(null, "", canon); }catch(e){}
   }
   tab = t;
+  // 고른 문서를 싣는 탭이 둘이다 — Docs 와 Projects 는 같은 자리(selectedDoc)를
+  // 쓴다. 우측 판이 같은 문서 판 하나이기 때문이고, 그래서 주소도 한 모양이다.
   if (t === "docs" && parts[1]) selectedDoc = parts[1];
+  if (t === "projects" && parts[1]) selectedDoc = parts[1];
   if (t === "stream" && parts[1]) selectedStream = parts[1];
   if (t === "settings" && parts[1]) settingsSection = parts[1];
   dlgCheckNav();   // 뒤로가기로 화면이 바뀌었으면 열려 있던 창을 닫는다
@@ -47,6 +53,7 @@ function pushRoute(){
   dlgCheckNav();   // 화면을 옮기는 모든 손이 지나는 자리 (REQ-20260828-007)
   let h = "#" + tab;
   if (tab === "docs" && selectedDoc) h += "/" + selectedDoc;
+  else if (tab === "projects" && selectedDoc) h += "/" + selectedDoc;
   else if (tab === "stream" && selectedStream) h += "/" + selectedStream;
   else if (tab === "settings") h += "/" + settingsSection;
   if (location.hash !== h){ history.pushState(null, "", h); }
@@ -297,6 +304,13 @@ function render(){
   if (tab === "stream"){ renderStream(); return; }
   if (tab === "terminal"){ renderTerminal(); return; }
   if (tab === "settings"){ renderSettings(); return; }
+  /* 그릇을 다루는 자리 (REQ-20260831-026 G0′). 문서 더미를 훑는 판들보다 **앞에**
+     선다: 이 판은 catalog 가 아니라 프로젝트 목록을 그리므로, 문서 목록을 못 받은
+     상태(아래 공급 줄)에 걸려 통째로 멈출 이유가 없다 — 수(열린 요청·마지막
+     활동)는 catalog 에서 파생하되 없으면 0 으로 서고, 못 받은 사실은 그 화면이
+     제 자리에서 말한다. 문맥 띠·MY PROJECTS 스트립은 여기 서지 않는다: 지금 보는
+     범위는 목록 자신이 「◂ 보는 중」으로 말하므로 같은 말을 두 번 하지 않는다. */
+  if (tab === "projects"){ renderProjects(); return; }
   /* **목록을 못 받은 판과 정말 빈 판은 다른 화면이다** (REQ-20260828-039).
      예전엔 목록 요청이 끊기면 열 다섯이 "…없음" 으로 서서 "할 일이 없다" 로
      읽혔다 — 없는 것과 안 온 것이 같아 보이던 REQ-027 과 같은 결함이다. */

@@ -268,12 +268,23 @@ class TheTwoRulebooksBecameOne(unittest.TestCase):
                              "app.js 가 아직 멤버 표를 짓는다: %s" % dead)
 
     def test_the_row_grammar_is_one(self):
-        """Docs 목록의 프로젝트 줄은 `prjRowHTML` 하나가 짓는다 — 목록 안에서
-        프로젝트만 다른 문법이면 그 줄이 남의 것처럼 보인다."""
+        """프로젝트 줄·목록·패널은 각각 한 곳이 짓는다.
+
+        **어느 화면이 그것을 부르는가는 바뀌었다** (REQ-20260831-026 G0′): 목록은
+        Docs 좌측이 아니라 Projects 탭이 부른다 — 그릇을 문서 종류와 나란히 세운
+        배치가 두 번째 반려의 내용이었다. Docs 에 남는 것은 **문서 판**뿐이다:
+        PRJ 문서는 여전히 문서이므로 주소·doclink·백링크로 열리면 그 판이 선다.
+        고정할 성질은 "짓는 자리가 하나"이지 "누가 부르는가"가 아니다."""
         docs = strip_comments(read(os.path.join(WEB, "app", "docs.js")))
-        self.assertIn("prjRowHTML(", docs, "Docs 가 프로젝트 줄을 안 빌린다")
-        self.assertIn("prjListHTML(", docs, "Docs 가 프로젝트 목록을 안 빌린다")
         self.assertIn("prjPanelHTML(", docs, "PRJ 문서 뷰에 패널이 없다")
+        for gone in ("prjRowHTML(", "prjListHTML("):
+            self.assertNotIn(gone, docs,
+                             "Docs 가 아직 프로젝트 목록을 그린다 — 문이 둘이다: %s"
+                             % gone)
+        prj = strip_comments(read(JS))
+        for fn in ("function prjRowHTML", "function prjListHTML",
+                   "function renderProjects"):
+            self.assertIn(fn, prj, "프로젝트 화면 조각이 흩어졌다: %s" % fn)
 
     def test_the_projects_list_is_off_the_polling_belt(self):
         """`/api/projects` 는 벨트 밖이다 (REQ-20260831-026 G0 폴링 계약).
@@ -296,7 +307,11 @@ class TheTwoRulebooksBecameOne(unittest.TestCase):
         m = re.search(r"if \(selectedDoc && [^\n]*prjEditing[^\n]*\)\s*\n?"
                       r"\s*loadDoc\(selectedDoc, !fresh\);", docs)
         self.assertTrue(m, "배경 재로드에 편집 가드가 없다")
-        wire = js[js.index("function prjWire"):]
+        # 가드가 서는 자리는 **배경 갱신**뿐이다 — 배선(prjWire) 안에 들이면
+        # 변이 뒤의 되읽기까지 물린다. 창은 그 함수 하나로 자른다: 파일 끝까지
+        # 자르면 뒤에 선 판(renderProjects)의 정당한 가드를 되읽기로 오해한다.
+        i = js.index("function prjWire")
+        wire = js[i:js.index("\n}", i)]
         self.assertIn("o.reload", js, "되읽기 손을 부르는 쪽에서 받지 않는다")
         self.assertNotIn("prjEditing", wire, "되읽기까지 가드에 물렸다")
 

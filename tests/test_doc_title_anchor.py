@@ -129,7 +129,9 @@ class DocTitleAnchor(unittest.TestCase):
         self.assertNotIn("recentOrder(rows)", rd,
                          "옛 정렬이 남아 있다 — 15초마다 다시 섞인다")
         # 다시 어는 조건: 사람이 한 일뿐 (조건 서명 + Docs 화면 재진입)
-        self.assertRegex(rd, r"const refreeze = !\(\$\(\"#view \.docs \.doclist\"\)",
+        # 판을 찾는 셀렉터에 주인 이름이 붙었다 (REQ-20260831-026 — 같은 셸을 쓰는
+        # 탭이 하나 더 섰다). 묻는 것은 여전히 "판이 이미 서 있나" 하나다.
+        self.assertRegex(rd, r"const refreeze = !\(\$\('#view \.docs\[data-pane=",
                          "배경 갱신에도 순서가 다시 언다")
         for k in ("#f-user", "#f-project", "#f-tag", "mineActive()"):
             self.assertIn(k, rd[rd.index("const okey"):rd.index("const ordered")],

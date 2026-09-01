@@ -66,6 +66,22 @@ select.pjc{padding-right:4px}
 /* 보관 묶음은 펴면 접을 수 있어야 한다 — `.more::before` 의 "+ " 는 여는 손짓이라
    접는 자리에서는 반대 부호가 선다(목록의 다른 「더 보기」와 같은 층). */
 .pjlist .more[aria-expanded="true"]::before{content:"− "}
+/* ── ④ Projects 탭의 판 ─────────────────────────────────────
+   **판은 화면을 채운다.** 2단 셸(.docs)은 내용만큼만 자라는데, 프로젝트는 한둘인
+   것이 보통이라 그대로 두면 넓은 흰 쪽 한가운데 300px 상자가 떠 있는 화면이 된다
+   (문서 목록은 수백 줄이라 이 자리가 드러난 적이 없다). 높이 값은 renderProjects
+   가 실측해 넣는 --docsh 그대로 — 새 상수를 세우지 않는다.
+   `align-items:stretch` 는 두 칸을 함께 늘려 세로 구분선이 중간에 끊기지 않게 한다
+   (베이스의 flex-start 는 짧은 쪽에서 선이 끊긴다). */
+.docs[data-pane="projects"]{min-height:var(--docsh,420px);align-items:stretch}
+
+/* 「◂ 보는 중」 — 헤더 필터가 지금 이 그릇을 보고 있다는 **내 화면의 사실**.
+   `.st`(보관됨 — 그 프로젝트의 사실)보다 바깥에 서므로 DOM 에서 먼저 나온다
+   (오른쪽으로 띄운 것들은 먼저 나온 것이 더 바깥이다). 잉크는 --muted: 이 줄의
+   주인공은 프로젝트 이름이고 이것은 짚는 손가락이다. 기하는 글자뿐 — 상자도
+   테두리도 없어 배율 1·1.25·1.5 에서 갈릴 자리를 만들지 않는다. */
+.pjrow .pjnow{float:right;font-family:var(--mono);font-size:10px;color:var(--muted);
+  letter-spacing:.04em;margin-left:8px}
 /* 행의 셋째 줄 — 이 목록의 값(관리 정보의 요약)이 여기 산다. */
 .pjmeta{font-family:var(--mono);font-size:10.5px;color:var(--faint);
   letter-spacing:.02em;margin-top:2px}

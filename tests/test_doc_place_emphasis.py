@@ -58,18 +58,31 @@ class DocPlaceEmphasis(unittest.TestCase):
         self.assertNotIn("pinhead", self.src, "뽑은 줄의 머리글이 남아 있다")
 
     def test_every_row_goes_into_its_group(self):
-        """무리 나누기에 예외가 없어야 자리가 사람의 선택과 무관해진다."""
-        self.assertRegex(
-            self.rd,
-            r"ordered\.forEach\(r => \(groups\[r\.type\] \|\| \(groups\[r\.type\]=\[\]\)\)\.push\(r\)\);",
-            "무리 나누기가 선택을 예외로 두고 있다")
+        """무리 나누기에 예외가 없어야 자리가 사람의 선택과 무관해진다.
+
+        고정할 성질은 **"고른 줄을 예외로 두지 않는다"** 하나다 — 어느 무리가
+        서는지(선언한 다섯인지, 만나는 대로 만드는지)는 다른 축의 결정이고,
+        REQ-20260831-026 이 프로젝트를 제 탭으로 보내면서 그 축이 바뀌었다."""
+        m = re.search(r"ordered\.forEach\(([\s\S]{0,160}?)\);\n", self.rd)
+        self.assertTrue(m, "무리 나누기 한 줄을 못 찾았다")
+        body = m.group(1)
+        self.assertIn("groups[r.type]", body, "무리로 나누지 않는다")
+        for word in ("selectedDoc", "sel", "pin"):
+            self.assertNotIn(word, body,
+                             "무리 나누기가 선택을 예외로 두고 있다: %s" % word)
 
     def test_the_freeze_rule_is_untouched(self):
         """순서 얼림은 이번 개편이 건드리지 않는다 — 15초마다 순서가 뒤섞이면
-        REQ-20260828-009 가 고친 결함이 돌아온다."""
-        self.assertIn(
-            'const refreeze = !($("#view .docs .doclist") && $("#viewer"));',
-            self.src, "얼음 조건이 바뀌었다")
+        REQ-20260828-009 가 고친 결함이 돌아온다.
+
+        묻는 것은 "**판이 이미 서 있나**" 하나다. 판을 찾는 셀렉터에 주인 이름이
+        붙은 것은 REQ-20260831-026 이 같은 셸을 쓰는 탭을 하나 더 세웠기 때문이고
+        (그 이름이 없으면 남의 판을 제 것으로 착각한다), 얼음의 뜻은 그대로다."""
+        self.assertRegex(
+            self.src,
+            r'const refreeze = !\(\$\(\'#view \.docs\[data-pane="docs"\] \.doclist\'\)'
+            r' && \$\("#viewer"\)\);',
+            "얼음 조건이 바뀌었다")
 
     # --- ② 제자리에서 살짝 ---
 

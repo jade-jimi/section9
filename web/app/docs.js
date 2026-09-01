@@ -39,11 +39,16 @@ async function renderDocs(rows){
     rows = rows.filter(r => matchMap[r.id]);
     $("#count").textContent = `${rows.length} matches (body search)`;
   }
+  /* 목록의 무리는 **선언한 다섯**이다 (REQ-20260831-026 G0′).
+     한때 모르는 종류를 만나면 그 자리에서 무리를 만들어 목록 **끝**에 붙였다 —
+     프로젝트 줄이 SESSION 142건 뒤 맨 바닥에 놓여 "안 보인다"로 반려당한 자리가
+     바로 그 동적 삽입이다. 이제 프로젝트는 제 탭에 살고, 선언하지 않은 종류는
+     여기 서지 않는다: 목록에 무엇이 서는지는 이 한 줄이 다 말한다. */
   const groups = {request:[],article:[],knowledge:[],question:[],session:[]};
   /* 얼음을 깨는 두 조건 (REQ-20260828-009): 사람이 조건을 바꿨거나, Docs 화면에
      새로 들어왔거나. 배경 갱신(15초)은 목록만 갈아 끼우므로 판이 이미 서 있다 —
      그때는 얼린 순서를 그대로 쓴다. */
-  const refreeze = !($("#view .docs .doclist") && $("#viewer"));
+  const refreeze = !($('#view .docs[data-pane="docs"] .doclist') && $("#viewer"));
   const okey = [q, $("#q-body").checked, $("#f-user").value, $("#f-project").value,
     $("#f-tag").value, curType0(), mineActive()].join("|");
   const ordered = stableOrder(rows, okey, refreeze);
@@ -66,7 +71,7 @@ async function renderDocs(rows){
      조건에 걸러져 목록에 없는 문서는 줄을 세우지 않는다 — 없는 자리에 세우면
      "이것도 조건에 맞는다"는 거짓말이 되고, 그 거짓말을 피하려고 그룹 밖에
      세운 것이 바로 지금 걷어내는 그 줄이다. 오른쪽 판이 그 문서를 그린다. */
-  ordered.forEach(r => (groups[r.type] || (groups[r.type]=[])).push(r));
+  ordered.forEach(r => { if (groups[r.type]) groups[r.type].push(r); });
   /* 한 번 편 만큼은 **줄지 않는다**. 한도 밖 문서를 열어 무리를 폈다가 다음
      선택에서 도로 짧아지면, 뽑아 올리기를 걷어내고도 목록이 다시 흔들린다.
      조건이 바뀌거나 판을 새로 세울 때만 초기화한다(얼음과 같은 시점). */
@@ -108,19 +113,13 @@ async function renderDocs(rows){
     return `<button class="tb${curType===t?" on":""}" data-typef="${t}"
       title="${tip}" aria-label="${tip}">${t}${num}</button>`;
   }).join("");
-  /* 프로젝트 줄의 재료도 **한 곳**이다 (REQ-20260831-028). 프로젝트는 상태 축이
-     달라(active/archived) 요청의 상태색을 못 쓰고, 셋째 줄(멤버·열린 요청·마지막
-     활동)이 이 목록에서 그 문서의 값이다 — 그 줄을 여기서 다시 지으면 문법이 두
-     벌이 되므로 project.js 의 `prjRowHTML` 을 그대로 부른다. 수는 들고 있지 않고
-     그때 센다(catalog 파생). */
-  const prjBy = prjStatsBy(catalog, projects);
-  const prjById = Object.fromEntries(projects.map(p => [p.id, p]));
-  const prjOpt = () => ({statsBy: prjBy, selected: selectedDoc});
   /* 목록 행은 한 곳에서 짓는다 — 줄이 어떤 상태든 **같은 재료**여야 한다
-     (REQ-20260828-009). 두 벌로 만들면 한 벌만 고쳐진다. */
+     (REQ-20260828-009). 두 벌로 만들면 한 벌만 고쳐진다.
+     프로젝트 줄은 여기서 짓지 않는다 (REQ-20260831-026 G0′) — 그 줄의 문법과
+     목록의 머리·꼬리(만들기·보관 접힘)를 함께 아는 것은 `prjListHTML` 하나이고,
+     그 목록이 사는 자리는 이제 Projects 탭이다. 문이 둘이면 어느 쪽이 맞는지
+     묻게 된다. */
   const rowHTML = r => {
-      if (r.type === "project" && prjById[r.id])
-        return prjRowHTML(prjById[r.id], prjOpt());
       // 첨부에서 온 줄이면 어느 파일인지 밝힌다 (REQ-20260827-005) — 파일
       // 이름 없이 줄 번호만 보이면 문서 본문의 그 줄로 읽힌다.
       const snips = matchMap?.[r.id] ? matchMap[r.id].slice(0, 3).map(m =>
@@ -151,24 +150,7 @@ async function renderDocs(rows){
         <div class="id">${esc(shortId(r.id))}${prioHTML(r)}${off}</div><div>${esc(r.title)}</div>${snips}</div>`;
   };
   let list = `<div class="typebar">${bar}</div>`;
-  /* PROJECT 를 골라 보는 중이면 목록은 **한 장**이다 (REQ-20260831-028).
-     여기에 그룹 루프를 태우면 만드는 손잡이·보관 접힘이 갈 곳이 없어 화면 밖에
-     새 자리를 만들게 된다 — 목록의 머리와 꼬리를 함께 아는 것은 prjListHTML
-     하나뿐이다. 머리 낱말은 바로 위 타입바가 이미 말했으므로 겹쳐 쓰지 않는다
-     (`.grp` 머리글을 접는 그 규칙). */
-  if (curType === "project"){
-    const ids = new Set(ordered.filter(r => r.type === "project").map(r => r.id));
-    const plist = projects.filter(p => ids.has(p.id));
-    const narrowed = plist.length < projects.length;
-    list += prjListHTML(plist, {...prjOpt(), headLabel: false,
-      // 만드는 권한은 등록 사용자면 누구나 — 판정은 서버가 다시 한다
-      canCreate: !!viewMe() && (window.__users || []).some(u => u.name === viewMe()),
-      expanded: expanded.has("prj:more"), arcOpen: expanded.has("prj:arc"),
-      // 조건이 걸러 낸 빈 목록과 정말 하나도 없는 목록은 **다른 화면**이다 —
-      // 같은 문장을 쓰면 "하나도 안 만들었나" 하고 만들러 간다
-      noneText: narrowed ? PRJ_TEXT.noneFiltered : PRJ_TEXT.none});
-  }
-  else for (const [g, grp] of Object.entries(groups)){
+  for (const [g, grp] of Object.entries(groups)){
     if (!grp.length) continue;
     const open = expanded.has("grp:"+g) || !!matchMap;
     // session은 직접 열어보는 일이 드물다 — 목록에서 자리는 지키되 기본 노출은 짧게.
@@ -188,7 +170,11 @@ async function renderDocs(rows){
   }
   // 백그라운드 catalog 갱신(15s 폴링)이 뷰어를 파괴하지 않도록 doclist만 교체 —
   // 열려 있는 reqstream 터미널·스크롤·live 폴링이 그대로 산다 (REQ-20260823-071)
-  const wrap = $("#view .docs .doclist");
+  /* 판에는 **주인 이름**이 붙는다 (REQ-20260831-026 G0′). Projects 탭이 같은 2단
+     셸(.docs > .doclist + #viewer)을 쓰므로, 주인을 안 밝히면 탭을 옮겨도 "판이
+     이미 서 있다"에 걸려 남의 판에 이쪽 목록만 갈아 끼운다 — 오른쪽에는 아까 보던
+     문서가 그대로 남는다. Settings 는 오른쪽 판 id 가 달라 우연히 비껴갔을 뿐이다. */
+  const wrap = $('#view .docs[data-pane="docs"] .doclist');
   if (wrap && $("#viewer")){
     // 15초 폴링이 목록을 통째로 갈아끼운다 — 키보드로 짚어 둔 자리를 여기서
     // 놓치면 방향키로 훑던 일이 15초마다 처음으로 돌아간다 (REQ-20260827-013).
@@ -200,7 +186,7 @@ async function renderDocs(rows){
       if (t){ t.tabIndex = 0; t.focus({preventScroll: true}); }
     }
   }
-  else $("#view").innerHTML = `<div class="docs"><div class="doclist" data-rove
+  else $("#view").innerHTML = `<div class="docs" data-pane="docs"><div class="doclist" data-rove
       role="group" aria-label="문서 목록 — 방향키로 이동, Enter 로 열기">${list}</div>
     <div class="viewer" id="viewer"><p class="empty">← 문서를 선택하세요</p></div></div>`;
   roveSync();

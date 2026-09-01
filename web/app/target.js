@@ -146,11 +146,17 @@ let docFresh = false;
    설명을 함수 **밖**에 둔 이유: 화면을 옮기는 손이 tabSync() 를 지나는지 보는
    계약(tests/test_tab_active_sync.py)이 함수 머리에서 짧은 창으로 찾는다 —
    안에 긴 주석을 넣으면 계약이 눈멀고, 그 계약은 상단 알약이 화면을 못 따라온
-   실사고(REQ-20260829-007)가 세운 것이다. */
+   실사고(REQ-20260829-007)가 세운 것이다.
+
+   **목적지는 문서의 종류가 정한다** (REQ-20260831-026 G0′). 여는 손잡이는 여전히
+   하나지만, 프로젝트 문서의 자리는 이제 Projects 탭이다 — 문맥 띠의 「열기」도,
+   Graph 노드도, 본문의 doclink 도 같은 문으로 들어와 제 자리에서 열린다. 손잡이를
+   종류마다 하나씩 만들면 언젠가 한쪽만 고쳐진다. */
 function docOpen(id){
   selectedDoc = id;
   docFresh = true;
-  if (tab !== "docs"){ tab = "docs"; tabSync(); }
+  const to = (projects || []).some(p => p.id === id) ? "projects" : "docs";
+  if (tab !== to){ tab = to; tabSync(); }
   pushRoute();
   render();
 }

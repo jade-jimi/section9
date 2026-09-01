@@ -133,7 +133,12 @@ SERIAL = ("test_jobfile.py", "test_runner_patterns.py", "test_tmp_hygiene.py",
           "test_doctor_system.py",
           # 계정 전환 live 시험 — 계정 전역 상태를 만져 병렬에서만 흔들린다
           # (2026-08-30 19:26 실측: 단독 4회 green, --jobs 에서 1회 red).
-          "test_claude_usage.py")
+          "test_claude_usage.py",
+          # 실서버(이 저장소 뿌리) + 실브라우저를 함께 띄운다 — 실제 repo state/
+          # 를 만지고 루프백에 짐을 얹는 쪽이라 본대와 나눠 돈다
+          # (REQ-20260831-026). 이웃이 무너지던 건은 그 시험이 연결 오류를
+          # 다시 걸게 고쳤다 — 이 줄은 그 대증요법이 아니라 위 규칙의 적용이다.
+          "test_project_tab.py")
 
 
 def shard(files, n):

@@ -130,6 +130,11 @@ if (want("list")) parts.push(box("① 목록 — N개 · 보관 접힘 · 만들
       docs(prjListHTML([P_MAIN, P_OLD], {...base, canCreate: false})), true)
   + box("목록 — 보관 펼침",
       docs(prjListHTML([P_MAIN, P_OLD], {...base, canCreate: true, arcOpen: true})), true)
+  // 렌즈와 집은 다른 것이다 (REQ-20260831-026 G0′) — 헤더 필터는 이 목록을 좁히지
+  // 않고, 지금 그 범위인 행만 짚는다. 정적 캡처로 확인할 새 얼굴은 이 하나다.
+  + box("목록 — 지금 보는 중(헤더 필터 = section9)",
+      docs(prjListHTML([P_MAIN, P_PORTAL], {...base, canCreate: true,
+        viewing: "section9"})), true)
   + `</div>`);
 
 // 창은 **진짜 창**이다 — dialog.js 를 그대로 불러 띄우고 이 자리로 옮겨 놓는다.

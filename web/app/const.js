@@ -88,7 +88,11 @@ function prioHTML(r, full){
 // session은 목록에서 자리만 지키는 축이라 그 앞에 둔다 (REQ-20260826-017).
 // 아티클(ART-)은 **읽으려고 여는 문서**다 (REQ-20260827-073). 목록에서 찾을
 // 길이 없으면 만든 글이 어디에도 없는 것과 같아 타입바에 자리를 준다.
-const TYPE_ORDER = ["request", "article", "knowledge", "question", "session", "project"];
+// project 는 이 목록에 없다 (REQ-20260831-026 G0′). 프로젝트는 문서를 담는
+// **그릇**이라 문서 종류와 동급으로 세울 수 없다 — 그 배치가 두 번째 반려의
+// 내용이었고, 지금 그 자리는 Projects 탭이다. PRJ 문서는 여전히 문서라서
+// 주소·doclink·Graph·백링크로 열리지만, 종류 목록의 한 줄로 서지는 않는다.
+const TYPE_ORDER = ["request", "article", "knowledge", "question", "session"];
 // 그래프가 그리는 타입. 목록이 흩어지면 타입을 늘릴 때 한 곳이 빠진다 —
 // 범례와 색 해석이 같은 배열을 읽는다.
 const GRAPH_TYPES = ["request", "article", "knowledge", "question", "session"];

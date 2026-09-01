@@ -1,11 +1,20 @@
-/* project.js — 프로젝트 화면의 로직 한 벌 (REQ-20260831-028 · 설계 REQ-20260831-026)
+/* project.js — 프로젝트 화면의 로직 한 벌 (REQ-20260831-026 G0′ · -028)
 
-   프로젝트는 새 탭도 새 화면도 갖지 않는다. 집은 **문서**고, 이 조각은 세 자리에
-   얹힐 조각을 짓는다:
+   프로젝트는 **전용 탭**을 갖는다(`Projects`, Terminal 다음·Settings 앞).
+   두 번의 반려가 그 자리를 정했다: 문서 종류의 한 줄로 세웠더니 ① 목록 맨 바닥에
+   묻혀 "안 보인다" ② 보이게 했더니 "docs 보다 상위 개념인데 같은 수준에 있는 것이
+   어불성설". 프로젝트는 헤더 필터가 전 탭의 범위를 정하는 **전역 축**이라, 그 축을
+   만들고 고치는 자리도 전역 탐색 층(탭 줄)에 있어야 앞뒤가 맞는다.
 
-     ① Docs 좌측 `PROJECT` 목록 — 머리의 「프로젝트 만들기」와 행의 셋째 줄
+   새 탭이 새 얼굴을 뜻하지는 않는다 — 이 조각이 짓는 것은 여전히 넷이고, 탭은
+   앞의 둘을 Docs 와 같은 2단 셸에 나란히 세울 뿐이다:
+
+     ① 좌측 목록 — 머리의 「프로젝트 만들기」와 행의 셋째 줄 · 보관 접힘
      ② PRJ 문서 뷰의 프로젝트 패널 — 설정 인라인 · 멤버 표 · 관리 요약
+        (탭 우측이 **그 문서 판을 그대로** 부른다 — 관리 판을 따로 짓지 않는다.
+         따로 지으면 같은 프로젝트가 두 얼굴을 갖고 한쪽만 고쳐진다.)
      ③ Board/Graph 위 문맥 띠 — 244px 표를 대신하는 32px 한 줄
+     ④ 탭의 판 자체 — `renderProjects`(좌 = ①, 우 = ②를 부르는 문서 판)
 
    ── 규율 넷 (어기면 이 파일이 아니라 화면이 갈라진다)
 
@@ -57,6 +66,17 @@ const PRJ_TEXT = {
   /* 세 자리(목록 줄 · 문맥 띠 · 관리 요약)가 같은 수를 센다 — 낱말이 자리마다
      다르면 사용자는 어느 쪽이 맞는지 알 수 없다(ux-writer 판정 7). */
   metaLine: (mem, open, when) => `멤버 ${mem} · 열린 요청 ${open} · 마지막 활동 ${when}`,
+  /* 렌즈와 집은 다른 것이다 (REQ-20260831-026 G0′ ④). 헤더의 「프로젝트」 필터는
+     "지금 보는 범위"를 정하는 렌즈이고 이 탭은 그릇 자체를 다루는 집이라, 필터가
+     이 목록을 좁히지 않는다 — 그릇을 고르는 자리에서 그릇 필터가 걸리면 한 줄만
+     남는다. 대신 지금 그 범위인 행이 그 사실을 한 마디로 말한다. 화살표는 왼쪽의
+     그 필터를 가리킨다(목록이 아니라 헤더 쪽). */
+  viewing: "◂ 보는 중",
+  viewingTip: slug => `헤더의 프로젝트 필터가 지금 ${slug} 만 보고 있습니다`,
+  // 탭 우측 — 아직 아무것도 안 고른 자리. 문서 목록이 쓰는 그 말투 그대로다
+  // (「← 문서를 선택하세요」): 한 화면 안에서 같은 뜻에 두 문형을 쓰지 않는다.
+  pick: "← 프로젝트를 선택하세요",
+  listAria: "프로젝트 목록 — 방향키로 이동, Enter 로 열기",
   /* 문서의 관리 요약에서는 **멤버를 빼고 센다** — 바로 위 표의 캡션이 이미
      「멤버 5명 — 활성 4 · 만료 1」로 말했고, 그 줄에서 다시 「멤버 4」(활성만)를
      세면 한 화면에서 같은 낱말이 다른 수를 말한다(실캡처에서 4와 5가 나란히
@@ -274,6 +294,15 @@ function prjSort(list, statsBy){
     return String(a.title || a.slug).localeCompare(String(b.title || b.slug));
   });
 }
+/* 걸리는 조건은 **검색어 하나**다 (REQ-20260831-026 G0′ ④) — 사용자·태그·종류·
+   프로젝트 필터는 문서 더미를 좁히는 렌즈이지 그릇을 고르는 자를 좁히는 것이
+   아니다. 잣대는 문서 목록의 그것과 같다: 낱말 전부가 어딘가에 있어야 한다. */
+function prjMatch(p, q){
+  if (!q) return true;
+  const hay = [p.id, p.title, p.slug, p.summary, p.customer]
+    .filter(Boolean).join(" ").toLowerCase();
+  return q.split(/\s+/).every(t => hay.includes(t));
+}
 function prjRowHTML(p, o){
   const st = prjStats0(o, p.slug);
   const off = p.status === PRJ_ARCHIVED;
@@ -281,10 +310,17 @@ function prjRowHTML(p, o){
   /* **정상은 말하지 않는다** (REQ-20260830-040). `active` 는 점과 컬럼이 이미
      한 말이라 글자를 받지 않고, 보관만 받는다 — 색을 못 보는 조건에서도
      「archived」 넉 자가 그대로 말한다. */
+  /* 지금 헤더 필터가 보고 있는 그릇에만 선다 — 목록을 좁히는 대신 **짚는다**.
+     오른쪽 끝에서 `.st`(보관됨)보다 바깥에 서는 것은, 보관은 그 프로젝트의
+     사실이고 이쪽은 **내 화면의 사실**이라 층이 다르기 때문이다. */
+  const now = o && o.viewing && o.viewing === p.slug
+    ? `<span class="pjnow" title="${esc(PRJ_TEXT.viewingTip(p.slug))}">`
+      + `${esc(PRJ_TEXT.viewing)}</span>` : "";
   return `<div class="row pjrow${off ? " off" : ""}${sel ? " sel" : ""}"`
     + ` data-doc="${esc(p.id)}" role="button" tabindex="-1" data-rove-item`
     + `${sel ? ' aria-current="true"' : ""}`
     + ` style="--sc:${prjInk(p)}">`
+    + now
     + `<span class="st">${off ? esc(p.status) : ""}</span>`
     + `<div class="id">${esc(p.id)} · ${esc(p.slug)}</div>`
     + `<div>${esc(p.title || p.slug)}</div>`
@@ -595,7 +631,10 @@ function prjStripHTML(p, o){
     // 무엇인가"가 아니다. 보관만 글자를 받고, 얼굴은 목록 행의 `.st` 와 같다.
     + (off ? `<span class="pjs-st">${esc(p.status)}</span>` : "")
     + `<span class="pjs-m">${esc(PRJ_TEXT.stripMeta(p.member_active ?? 0, st.open))}</span>`
-    + `<a class="doclink pjs-open" href="#docs/${esc(p.id)}" data-doc="${esc(p.id)}">`
+    // 프로젝트 문서의 자리는 이제 Projects 탭이다 (G0′) — 주소도 그 자리를 가리켜야
+    // 새 탭으로 열거나 북마크했을 때 같은 화면이 선다. 여는 손잡이는 `docOpen`
+    // 하나이고, 목적지는 문서의 종류가 정한다.
+    + `<a class="doclink pjs-open" href="#projects/${esc(p.id)}" data-doc="${esc(p.id)}">`
       + `${esc(PRJ_TEXT.stripOpen)}</a></div>`;
 }
 
@@ -750,4 +789,85 @@ function prjWire(root, p, o){
     post("/api/project/member", {member: v("user"), role: v("role"),
       position: v("position"), until: v("until")}, PRJ_TEXT.errMem);
   });
+}
+
+/* ── ④ Projects 탭 — 판을 세우는 자리 (REQ-20260831-026 G0′) ─────────────
+
+   셸은 **Docs 의 그것**이다(`.docs > .doclist + .viewer#viewer`). 새 셸도 새
+   컴포넌트도 짓지 않는다: 좌측은 이미 있는 목록(prjListHTML), 우측은 이미 있는
+   **문서 판**이다 — `loadDoc` 이 그 자리에 PRJ 문서를 그리고, 그 문서가
+   `prjPanelHTML`(설정·멤버·관리 요약)을 이미 품고 있다. 여기서 패널을 다시
+   그리면 같은 프로젝트가 두 얼굴을 갖고, 다음부터는 한쪽만 고쳐진다.
+
+   판에는 주인 이름(`data-pane`)을 붙인다 — Docs 와 모양이 같아서, 안 붙이면
+   탭을 옮겨도 "판이 이미 서 있다"에 걸려 목록만 갈아 끼우고 오른쪽에는 아까 보던
+   문서가 남는다.
+
+   폴링 계약은 그대로다: `/api/projects` 는 벨트 밖이고(부트 1회 · 탭 진입 ·
+   변이 직후), 이 함수는 손에 있는 목록을 그릴 뿐 스스로 받지 않는다. */
+const prjPickHTML = () => `<p class="empty">${esc(PRJ_TEXT.pick)}</p>`;
+
+function renderProjects(){
+  const all = projects || [];
+  /* 사람이 방금 고른 것인지를 **맨 위에서** 읽고 즉시 끈다 — 아래에서 부르는
+     loadDoc 이 비동기라 두 렌더가 겹칠 수 있고, 그때 표시가 새면 배경 갱신이
+     읽던 자리를 되감는다 (renderDocs 가 같은 이유로 같은 자리에서 읽는다). */
+  const fresh = docFresh; docFresh = false;
+  const q = $("#q").value.trim().toLowerCase();
+  const shown = all.filter(p => prjMatch(p, q));
+  // 세는 자리는 목록 머리(PROJECT n) 하나다 — 같은 수를 위에서 또 세지 않는다
+  $("#count").textContent = "";
+  const opt = {...prjViewOpt(),
+    selected: selectedDoc,
+    // 지금 보는 범위를 **짚기만** 한다 — 좁히지 않는다(렌즈 ≠ 집)
+    viewing: $("#f-project").value,
+    // 만드는 권한은 등록 사용자면 누구나 — 판정은 서버가 다시 한다
+    canCreate: !!viewMe() && (window.__users || []).some(u => u.name === viewMe()),
+    expanded: expanded.has("prj:more"), arcOpen: expanded.has("prj:arc"),
+    // 조건이 걸러 낸 빈 목록과 정말 하나도 없는 목록은 **다른 화면**이다 —
+    // 같은 문장을 쓰면 "하나도 안 만들었나" 하고 만들러 간다
+    noneText: shown.length < all.length ? PRJ_TEXT.noneFiltered : PRJ_TEXT.none};
+  /* 못 받은 목록을 "하나도 없다"로 그리지 않는다 (REQ-20260828-039) — 없는 것과
+     안 온 것은 다른 화면이고, 다시 받는 손잡이가 그 자리에 있어야 한다. */
+  const list = (!all.length && supplyState("projects") !== "ok")
+    ? supplyLine("projects")
+    : prjListHTML(shown, opt);
+  const wrap = $('#view .docs[data-pane="projects"] .doclist');
+  if (wrap && $("#viewer")){
+    // 배경 갱신이 목록을 통째로 갈아끼운다 — 방향키로 짚어 둔 자리를 지킨다
+    const af = document.activeElement;
+    const keepRow = af && af.closest && af.closest(ROVE_ITEM) ? af.dataset.doc : null;
+    wrap.innerHTML = list;
+    if (keepRow){
+      const t = wrap.querySelector(`[data-doc="${cssq(keepRow)}"]`);
+      if (t){ t.tabIndex = 0; t.focus({preventScroll: true}); }
+    }
+  }
+  else $("#view").innerHTML = `<div class="docs" data-pane="projects">`
+    + `<div class="doclist" data-rove role="group"`
+    + ` aria-label="${esc(PRJ_TEXT.listAria)}">${list}</div>`
+    + `<div class="viewer" id="viewer">${prjPickHTML()}</div></div>`;
+  roveSync();
+  sizeDocs();
+  requestAnimationFrame(sizeDocs);   // 헤더가 자란 뒤(사용량 줄 등) 다시 잰다
+  const viewer = $("#viewer");
+  const mine = !!selectedDoc && all.some(p => p.id === selectedDoc);
+  /* 다른 탭에서 읽던 문서를 들고 왔으면 오른쪽은 **빈 자리**다 — 요청 문서를
+     프로젝트 판에 그대로 두면 이 탭이 무엇을 다루는 자리인지 흐려진다. */
+  if (!mine){
+    if (viewer && viewer.dataset.showing){
+      viewer.innerHTML = prjPickHTML();
+      viewer.dataset.showing = ""; viewer.dataset.updated = "";
+    }
+    return;
+  }
+  if (fresh){
+    const el = document.querySelector(
+      `#view .doclist .row[data-doc="${cssq(selectedDoc)}"]`);
+    if (el) el.scrollIntoView({block: "nearest"});
+  }
+  /* **적고 있는 손은 배경 갱신이 밀어내지 않는다** (renderDocs 와 같은 판단).
+     막는 것은 배경 갱신뿐이다 — 변이 뒤의 되읽기는 prjWire 의 reload 가
+     loadDoc 을 직접 부르므로 이 문을 지나지 않는다. */
+  if (!(!fresh && prjEditing(viewer))) loadDoc(selectedDoc, !fresh);
 }
