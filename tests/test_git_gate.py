@@ -11,6 +11,9 @@
   ③ 게이트 고장(비JSON 입력)은 통과다 — 게이트가 모든 Bash 를 막으면
      그날로 게이트가 뽑힌다.
   ④ 원천(hooks.json)에 배선이 있고, 역할 봉투 29종에 보조 문구가 선다.
+  ⑤ **글은 명령이 아니다** (REQ-20260902-003): 따옴표·heredoc 안의 글에 그
+     이름이 적혀 있어도 지나간다 — 다만 그 글자를 셸·인터프리터가 받으면
+     그것은 명령이니 그대로 막힌다.
 
 실행: python3 tests/ git_gate
 """
@@ -32,6 +35,11 @@ def run(cmd, cwd=None, raw=None):
          "cwd": cwd or ROOT})
     return subprocess.run([GATE], input=payload, capture_output=True,
                           text=True, timeout=30)
+
+
+# 낱말을 이 파일에 그대로 적으면 이 시험을 **고치는 명령** 자체가 게이트에
+# 걸린다 — 그래서 이어 붙여 만든다. 이 한 줄이 결함의 크기를 말해 준다.
+BAD = "git" + " " + "st" + "ash"
 
 
 class TheGateStands(unittest.TestCase):
@@ -66,6 +74,42 @@ class TheGateStands(unittest.TestCase):
             r = run(cmd)
             self.assertEqual(0, r.returncode,
                              "막을 것이 아닌데 막았다: %s\n%s" % (cmd, r.stderr))
+
+    # ---- ⑤ 글과 명령을 가른다 (REQ-20260902-003) ------------------------
+    # 실사고: 위임 에이전트가 판정 노트에 금지 명령 이름을 적었다는 이유로
+    # 두 번 막혀 산출물이 사라졌고, 리드가 그 결함을 요청으로 등록하려다
+    # 같은 자리에서 또 막혔다. 문이 글을 막으면 사람은 문을 우회한다.
+    # 낱말을 이 파일에 그대로 적으면 이 시험을 **고치는 명령** 자체가 게이트에
+    # 걸리므로, 이어 붙여 만든다 — 이것이 결함의 크기를 말해 준다.
+    def test_g8_prose_is_not_a_command(self):
+        """⑤ 글 안에 적힌 이름은 실행이 아니다."""
+        for cmd in (
+                # 노트 본문 heredoc — 실제로 막혔던 그 모양
+                'bin/s9 note REQ-1 "$(cat <<\'EOF\'\n'
+                '- **금지** — %s 는 남의 미커밋 작업을 지운다\nEOF\n)"' % BAD,
+                # 따옴표 안 인자
+                'bin/s9 note REQ-1 "그 명령(%s)은 금지다"' % BAD,
+                "bin/s9 set REQ-1 --body '%s 를 쓰지 마라'" % BAD,
+                # 인터프리터가 아닌 명령에 딸린 heredoc
+                "cat <<'EOF' > /tmp/x\n%s\nEOF" % BAD):
+            r = run(cmd)
+            self.assertEqual(0, r.returncode,
+                             "글을 명령으로 읽었다: %s\n%s" % (cmd, r.stderr))
+
+    def test_g9_interpreters_are_still_read_as_commands(self):
+        """⑤ 따옴표가 방패가 되면 게이트는 한 줄로 무력해진다."""
+        for cmd in ('bash -c "%s"' % BAD,
+                    "sh -c '%s'" % BAD,
+                    "eval '%s'" % BAD,
+                    "sh <<'EOF'\n%s\nEOF" % BAD,
+                    "python3 - <<'PY'\nrun('%s')\nPY" % BAD):
+            r = run(cmd)
+            self.assertEqual(2, r.returncode,
+                             "인터프리터가 받는 글자를 놓쳤다: %s" % cmd)
+
+    def test_g10_unparsable_falls_back_to_the_old_verdict(self):
+        """⑤ 짝이 안 맞는 인용은 판정 불가 — 모르는 것을 통과시키지 않는다."""
+        self.assertEqual(2, run('bin/s9 note X "%s' % BAD).returncode)
 
     def test_g3_other_repos_are_none_of_our_business(self):
         """② 저장소 밖의 stash 는 남의 일이다 — cwd 와 -C 둘 다."""
