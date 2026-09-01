@@ -5602,42 +5602,42 @@ def account_remove(name):
     safe = safe_name(raw)
     if bad or not safe or safe in (".", ".."):
         return {"ok": False, "action": "bad-name", "name": raw,
-                "message": "그런 이름의 계정 자리는 지울 수 없다 — "
-                           "목록에 보이는 이름 그대로 넘겨라."}
+                "message": "그런 이름의 계정 자리는 지울 수 없습니다 — "
+                           "목록에 보이는 이름 그대로 눌러 주세요."}
     target = os.path.join(base, safe)
     if os.path.islink(target):
         return {"ok": False, "action": "outside", "name": safe,
-                "message": f"{safe} 는 다른 자리를 가리키는 링크다 — "
-                           f"링크 너머는 지우지 않는다."}
+                "message": f"{safe} 는 다른 자리를 가리키는 링크입니다 — "
+                           f"링크 너머는 지우지 않습니다."}
     try:
         real, rbase = os.path.realpath(target), os.path.realpath(base)
     except OSError:
         return {"ok": False, "action": "outside", "name": safe,
-                "message": f"{safe} 의 실제 자리를 확인하지 못했다."}
+                "message": f"{safe} 의 실제 자리를 확인하지 못했습니다."}
     if real == rbase or os.path.dirname(real) != rbase \
             or real == os.path.realpath(claude_home()):
         return {"ok": False, "action": "outside", "name": safe,
-                "message": f"{safe} 는 계정 프로필 자리 안이 아니다 — "
-                           f"그 밖은 건드리지 않는다."}
+                "message": f"{safe} 는 계정 프로필 자리 안이 아닙니다 — "
+                           f"그 밖은 건드리지 않습니다."}
     if not os.path.isdir(real):
         return {"ok": False, "action": "not-found", "name": safe,
-                "message": f"그런 계정 자리가 없다: {safe}"}
+                "message": f"그런 계정 자리가 없습니다: {safe}"}
     if account_of(real) or os.path.exists(
             os.path.join(real, ".credentials.json")):
         return {"ok": False, "action": "logged-in", "name": safe,
-                "message": f"{safe} 에는 로그인이 들어 있다 — 지우면 되돌릴 수 "
-                           f"없다. 로그인 전 자리만 지운다."}
+                "message": f"{safe} 에는 로그인이 들어 있습니다 — 지우면 되돌릴 "
+                           f"수 없어 로그인 전 자리만 지웁니다."}
     if profile_in_use(real):
         return {"ok": False, "action": "in-use", "name": safe,
-                "message": f"{safe} 로 떠 있는 세션이 있다 — 발밑의 설정 "
-                           f"디렉토리를 빼지 않는다. 그 창을 닫고 다시 눌러라."}
+                "message": f"{safe} 로 떠 있는 세션이 있습니다 — 쓰는 중인 자리는 "
+                           f"지우지 않습니다. 그 창을 닫고 다시 눌러 주세요."}
     try:
         shutil.rmtree(real)
     except OSError as e:
         return {"ok": False, "action": "error", "name": safe,
-                "message": f"지우지 못했다: {e}"}
+                "message": f"지우지 못했습니다: {e}"}
     return {"ok": True, "action": "removed", "name": safe,
-            "message": f"로그인 전 자리를 지웠다: {safe}"}
+            "message": f"로그인 전 자리를 지웠습니다: {safe}"}
 
 
 def account_add_terminal():

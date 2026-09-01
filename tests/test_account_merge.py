@@ -261,5 +261,31 @@ class GoingHomeClearsTheEnv(unittest.TestCase):
                       "상속된다 — 기본 계정 복귀가 조용히 무효가 된다")
 
 
+class TheServerSpeaksPolitelyHere(unittest.TestCase):
+    """계정 지우기의 message 는 그대로 팝업이 된다 — 반말이 새면 화면이 반말을
+    한다 (REQ-20260901-018 실사고: 「새 계정을 삭제할 때 팝업에서 갑자기 반말을
+    한다」). 화면은 이유를 짓지 않는 계약이라, 존대는 서버 문장의 몫이다.
+
+    갈래를 다 띄우기엔 무대가 비싸니 **원문**에서 잰다: account_remove 함수 안의
+    모든 message 문장이 존대 어미로 끝난다."""
+
+    def test_every_remove_message_ends_politely(self):
+        s9 = os.path.join(HERE, "..", "bin", "s9")
+        with open(s9, encoding="utf-8") as f:
+            src = f.read()
+        i = src.index("def account_remove(")
+        body = src[i:src.index("\ndef ", i + 10)]
+        import re as _re
+        msgs = _re.findall(r'"message":\s*f?"([\s\S]*?)"\}', body)
+        self.assertGreaterEqual(len(msgs), 8, "message 갈래를 못 읽었다")
+        for m in msgs:
+            sent = m.replace('"\n                           f"', "") \
+                    .replace('"\n                           "', "")
+            tailbit = sent.split("—")[-1].strip().rstrip(".").split(":")[0]
+            self.assertRegex(
+                tailbit, r"(습니다|입니다|니다|세요|\{e\}|\{safe\})\s*$",
+                "반말이 팝업으로 샌다: %r" % sent)
+
+
 if __name__ == "__main__":
     unittest.main()
