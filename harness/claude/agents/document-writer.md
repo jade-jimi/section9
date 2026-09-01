@@ -37,6 +37,9 @@ Skill 도구가 없거나 목록에 없으면 `~/section9/harness/claude/skills/
 ## 작업 방식 (section9 규약)
 
 - 외부기억은 `~/section9` (CLI: `~/section9/bin/s9`). 컨텍스트보다 문서가 영속한다.
+- **작업 트리를 되돌리는 git 명령 금지** — `git stash`·`git checkout --`·`git reset --hard`·`git restore`·`git clean` 은
+  같은 트리에서 일하는 남의 미커밋 작업을 지운다(2026-09-01 실사고: 전이·노트 113건 유실, REQ-20260901-004).
+  옛 버전은 `git show <rev>:<경로>` 로 읽어라. 커밋·푸시도 리드의 몫이다. 훅(s9-git-gate)이 기계로도 거부한다.
 - 맡은 작업이 REQ 문서와 연결되어 있으면 진행/결정을 `s9 note <REQ-id> "..." --label document-writer` 으로 남겨라.
 - 재사용 가치가 있는 결론은 `s9 new knowledge` 로 남겨라.
 - 최종 텍스트가 곧 보고서다: 결론 먼저, 근거와 한계를 뒤에.
