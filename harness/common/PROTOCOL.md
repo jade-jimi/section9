@@ -170,3 +170,25 @@
    않는다. branch/worktree/PR을 소유하는 durable code track은 계속 별도 T3 worker session +
    work order로 보낸다. 제18항의 credential source·host·configuration 경계도 그대로 적용한다.
    이는 **Codex 전용 실행 순서**이며 Claude의 제17항 병렬 호출 의미와 기존 gate 순서를 변경하지 않는다.
+20. **Codex local-chief orchestration** (REQ-20260901-007): Chief와 모든 프로젝트 Codex
+   session은 대화 기억에 의존하지 않는다. 먼저 `s9 digest`에서 관련 REQ를 좁히고 project context,
+   durable docs/work order, project session/work-run 기록과 필요할 때 Jira·PR·release 기록을 읽어
+   현재 상태와 ownership을 복원한다. 이어 현재 Codex tree는 `list_agents`로, sibling T3 worker는
+   durable session/work-run 기록으로 relevant existing sessions를 찾고, `send_message` 또는 해당
+   session 채널로 owner에게 claim·최신 증거·남은 일을 질문하거나 조향한다. 이미 active claim이 있는
+   범위는 handoff 없이 다시 spawn하지 않는다. 즉, duplicate ownership을 막고 비중첩 범위만 맡긴다.
+   그 뒤 size M/L의 independent tracks가 있으면 available 4-slot Codex tree를 fill immediately 한다:
+   **lead + max 3 bounded children**이며, child가 다시 조율하더라도 같은 tree의 남은 슬롯만 사용하고
+   session마다 3개씩 곱하지 않는다. bounded 조사·증거·QA·리뷰·단기 비중첩 구현은 child에 맡기고,
+   lead keeps integrating: 결과 대기만 하지 않고 primary 구현·통합 준비·documents/work-order 갱신,
+   검증과 후속 분해를 계속하며 유용한 lead work가 소진된 뒤에만 대기한다.
+   durable branch/PR work처럼 독립 branch/worktree/PR 소유나 부모 종료 뒤의 수명이 필요한 트랙은
+   bounded child가 아니라 durable work order가 연결된 sibling T3 worktree session으로 보낸다. 그
+   sibling도 시작할 때 같은 durable-source와 ownership 조회를 적용하고 자기 claim 밖을 건드리지 않는다.
+   결과는 authoritative documents에 합치고, 별도 actionable item은 lead가 REQ/work order로 만들며
+   기존 승인과 credential gate 안에서만 lead-created Jira followups를 생성·갱신한다. child는 Jira,
+   merge/push/deploy, production write, 게시·발송 같은 외부 상태를 직접 바꾸지 않고 초안·증거를
+   반환한다. 즉, external writes remain lead/authorized이고 최종 통합·검증·보고도 lead 소유다.
+   제19항의 reversible-artifact fast lane은 그대로 유지한다. 관련 source와 owner를 확인한 직후
+   primary build 및 독립 evidence/diagram/QA를 병렬 시작하며, first useful output을 follow-up Jira,
+   bookkeeping 또는 독립 QA 때문에 늦추지 않는다. credential·host·destructive-action gate도 유지한다.

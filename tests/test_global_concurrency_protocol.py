@@ -104,6 +104,35 @@ class GlobalConcurrencyProtocolTests(unittest.TestCase):
             self.assertIn(phrase, protocol)
             self.assertIn(phrase, adapter)
 
+    def test_codex_local_chief_runs_document_and_session_first_orchestration(self):
+        protocol = read("harness", "common", "PROTOCOL.md")
+        adapter = read("harness", "codex", "README.md")
+        for phrase in (
+            "Codex local-chief orchestration",
+            "durable docs/work order",
+            "relevant existing sessions",
+            "list_agents",
+            "send_message",
+            "available 4-slot Codex tree",
+            "lead + max 3 bounded children",
+            "fill immediately",
+            "independent tracks",
+            "lead keeps integrating",
+            "sibling T3 worktree session",
+            "durable branch/PR work",
+            "documents",
+            "lead-created Jira followups",
+            "duplicate ownership",
+            "external writes remain lead/authorized",
+        ):
+            self.assertIn(phrase, protocol)
+            self.assertIn(phrase, adapter)
+
+        self.assertLess(protocol.index("durable docs/work order"),
+                        protocol.index("available 4-slot Codex tree"))
+        self.assertLess(adapter.index("durable docs/work order"),
+                        adapter.index("available 4-slot Codex tree"))
+
     def test_installer_manages_global_codex_agents_from_common_protocol(self):
         installer = read("bin", "s9-install")
         self.assertIn('os.path.expanduser("~/.codex/AGENTS.md")', installer)
