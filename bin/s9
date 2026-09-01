@@ -3691,6 +3691,54 @@ def iso_epoch(ts):
 PROC_TTL = 1.0          # ps 는 fork 다 — 폴 한 바퀴 안에서는 한 번만 본다
 _PROC_CACHE = {"how": "", "t": -1.0, "v": {}}
 
+# **한 요청 = 한 번의 훑기** (REQ-20260901-024). `/proc` 갈래는 TTL 캐시를
+# 안 쓴다 — 그 낡음이 「tail 을 죽였는데 화면이 아직 live」를 만들기 때문이다
+# (proc_table 의 docstring). 그래서 낡음이 아니라 **범위**로 접는다: 요청
+# 하나가 도는 동안만 표를 나눠 쓰고, 요청이 끝나면 버린다. 표는 언제나 그
+# 요청이 시작된 뒤에 뜬 것이므로 신선도 계약은 그대로 산다.
+_PROC_SCOPE = threading.local()
+
+# 겹친 훑기를 하나로 접는다 (같은 REQ). 스코프는 한 요청 안의 중복만 지운다 —
+# 동시 요청 K개는 여전히 K번 훑는다. 실측(2026-09-01)에서 스레드 32개가 동시에
+# `/proc` 을 훑고 16개가 그 뒤에 줄 서 있었다. 뒤에 온 스레드는 앞선 훑기의
+# 결과를 받아 간다: 그 표는 대기자가 도착하기 **직전**에 뜬 것이라 낡음의
+# 상한이 훑기 한 번의 소요(수 ms)다.
+_PROC_FLIGHT = {"busy": False, "seq": 0, "how": "", "v": None}
+_PROC_FLIGHT_COND = threading.Condition()
+
+# 계기 (같은 REQ) — 이 병목의 재발은 스택 덤프가 아니라 숫자로 잡는다.
+# `/api/serveinfo` 의 `proc` 이 이 값을 그대로 낸다 (020 의 conns 와 같은 자리).
+_PROC_STAT = {"reads": 0, "inflight": 0, "max_inflight": 0, "shared": 0}
+
+
+class proc_scope:
+    """이 블록 안에서 `proc_table()` 은 표를 한 번만 뜬다 (REQ-20260901-024).
+
+    서버는 요청 하나마다 이 문을 지난다(`Handler.handle_one_request`) — 그래서
+    `/api/chat/target` 한 요청이 바인딩 수만큼 `/proc` 을 훑던 것이 1회가 된다
+    (실측 76 → 1). CLI·백그라운드 스레드는 이 문 밖이라 종전대로 매 호출
+    신선하다.
+
+    **오래 사는 요청(SSE)은 반드시 `proc_scope_reset()` 으로 바퀴마다 버려라** —
+    스코프는 요청의 수명을 따르므로, 5분짜리 응답 안에서는 5분 낡은 표가 된다.
+    """
+
+    def __enter__(self):
+        self._prev = getattr(_PROC_SCOPE, "v", None)
+        _PROC_SCOPE.v = {}
+        return self
+
+    def __exit__(self, *exc):
+        _PROC_SCOPE.v = self._prev
+        return False
+
+
+def proc_scope_reset():
+    """스코프 안이라도 표를 버린다 — 다음 조회가 다시 뜬다."""
+    v = getattr(_PROC_SCOPE, "v", None)
+    if v is not None:
+        v.clear()
+
 
 def proc_backend():
     """이 기계에서 프로세스를 보는 길.
@@ -3838,9 +3886,52 @@ def _proc_table_read(how):
     return {}
 
 
+def _proc_table_shared(how):
+    """겹친 훑기를 하나로 접은 실조회 — 계기도 여기 한 곳에서 센다.
+
+    앞선 훑기가 도는 중이면 그것을 기다려 결과를 나눠 받는다. 훑기가 예외로
+    죽으면(`v is None`) 대기자는 갇히지 않고 스스로 뜬다 — 한 번의 실패가
+    표를 영구히 비워 두면 생존 판정이 전부 거짓으로 떨어진다.
+    """
+    with _PROC_FLIGHT_COND:
+        if _PROC_FLIGHT["busy"] and _PROC_FLIGHT["how"] == how:
+            seq = _PROC_FLIGHT["seq"]
+            while _PROC_FLIGHT["busy"] and _PROC_FLIGHT["seq"] == seq:
+                # 상한은 훑는 스레드가 죽었을 때의 탈출구 — 평시엔 notify 로 깬다
+                if not _PROC_FLIGHT_COND.wait(timeout=30):
+                    break
+            if _PROC_FLIGHT["seq"] != seq and _PROC_FLIGHT["how"] == how \
+                    and _PROC_FLIGHT["v"] is not None:
+                _PROC_STAT["shared"] += 1
+                return _PROC_FLIGHT["v"]
+        _PROC_FLIGHT.update({"busy": True, "how": how})
+        _PROC_STAT["reads"] += 1
+        _PROC_STAT["inflight"] += 1
+        _PROC_STAT["max_inflight"] = max(_PROC_STAT["max_inflight"],
+                                         _PROC_STAT["inflight"])
+    v = None
+    try:
+        v = _proc_table_read(how)
+        return v
+    finally:
+        with _PROC_FLIGHT_COND:
+            _PROC_FLIGHT.update({"busy": False, "v": v,
+                                 "seq": _PROC_FLIGHT["seq"] + 1})
+            _PROC_STAT["inflight"] -= 1
+            _PROC_FLIGHT_COND.notify_all()
+
+
+def proc_stat():
+    """계기 사본 — 훑기 총횟수·동시 진입 최고치 (REQ-20260901-024)."""
+    return {"backend": proc_backend(), "reads": _PROC_STAT["reads"],
+            "shared": _PROC_STAT["shared"],
+            "max_inflight": _PROC_STAT["max_inflight"]}
+
+
 def proc_cache_clear():
     """다음 조회를 강제로 다시 뜬다 (시험·진단용)."""
     _PROC_CACHE.update({"how": "", "t": -1.0, "v": {}})
+    proc_scope_reset()      # 스코프도 캐시다 — 한쪽만 지우면 '다시 뜬다'가 거짓
 
 
 def proc_table(ttl=PROC_TTL, now=None):
@@ -3857,15 +3948,34 @@ def proc_table(ttl=PROC_TTL, now=None):
     `chat_live` 와 `_inbox_watch_alive` 를 각각 부른다). 수백 번 포크하는 것과
     판정이 1초 낡는 것 중 후자가 싸다 — 수신 대기는 초 단위로 뒤집히는 값이
     아니다. 이 1초가 맥에서 치르는 값이고, 그것이 이 설계의 유일한 값이다.
+
+    **그 대신 `/proc` 갈래는 범위로 접는다** (REQ-20260901-024). "싸다"는
+    전제가 틀렸다: 폴 한 바퀴가 세션 수만큼 훑고(실측 `session_rows` 228회 ·
+    `/api/chat/target` 76회) 그것이 동시 요청 수만큼 곱해져, 요청이 90~180초씩
+    걸렸다. 낡음을 사지 않고 중복만 지우는 두 겹이 답이다 — 요청 스코프
+    (`proc_scope`) 로 한 요청 안의 중복을 지우고, 단일비행
+    (`_proc_table_shared`) 으로 동시에 겹친 훑기를 하나로 접는다. 둘 다
+    "요청이 시작된 뒤에 뜬 표"라는 성질을 깨지 않으므로 C9/C18 은 그대로다.
     """
-    import time as _t
     how = proc_backend()
+    scope = getattr(_PROC_SCOPE, "v", None)
+    if scope is not None:
+        v = scope.get(how)
+        if v is None:
+            v = scope[how] = _proc_table_uncached(how, ttl, now)
+        return v
+    return _proc_table_uncached(how, ttl, now)
+
+
+def _proc_table_uncached(how, ttl, now):
+    """스코프 밖의 본체 — `ps`/`win` 만 TTL 캐시를 지난다 (사유는 위 docstring)."""
+    import time as _t
     if how == "proc":
-        return _proc_table_read(how)
+        return _proc_table_shared(how)
     nowt = _t.time() if now is None else now
     if _PROC_CACHE["how"] == how and nowt - _PROC_CACHE["t"] < ttl:
         return _PROC_CACHE["v"]
-    v = _proc_table_read(how)
+    v = _proc_table_shared(how)
     _PROC_CACHE.update({"how": how, "t": nowt, "v": v})
     return v
 
@@ -16891,13 +17001,19 @@ def cmd_serve(args):
             읽힌다 — select 로 원시 소켓만 보면 그 요청을 잃는다.
             시간이 다하면 stdlib 이 TimeoutError 를 잡아 close_connection 을
             세운다(로그는 log_message 가 이미 조용하다).
+
+            **프로세스 표의 범위도 여기다** (REQ-20260901-024). 요청 하나가
+            `/proc` 을 한 번만 훑게 하는 문은 메서드(do_GET·do_POST…)가 아니라
+            이 한 곳이어야 한다 — 나중에 붙는 메서드도 자동으로 지나야
+            병목이 옆문으로 되돌아오지 않는다. 상한 판정과 같은 이유다.
             """
             if self.idle_timeout and self.idle_timeout > 0:
                 try:
                     self.connection.settimeout(self.idle_timeout)
                 except OSError:
                     pass
-            super().handle_one_request()
+            with proc_scope():
+                super().handle_one_request()
 
         def parse_request(self):
             """요청이 다 왔으면 상한을 푼다 — 처리 시간은 재지 않는다.
@@ -17164,7 +17280,13 @@ def cmd_serve(args):
                                 "sse": len(_SSE_LIVE),
                                 "threads": threading.active_count(),
                                 "idle_timeout": KEEPALIVE_IDLE,
-                                "backlog": SERVE_BACKLOG}})
+                                "backlog": SERVE_BACKLOG},
+                            # 프로세스 표 계기 (REQ-20260901-024) — 폴 한
+                            # 바퀴가 `/proc` 을 몇 번 훑었나(reads), 겹친 것을
+                            # 몇 번 접었나(shared), 동시에 몇이 들어갔나
+                            # (max_inflight). 이 병목의 재발은 스택 덤프를
+                            # 뜨지 않고 이 세 숫자로 잡는다.
+                            "proc": proc_stat()})
             elif parsed.path == "/api/serveguard":
                 # 대시보드가 왜 죽었는지를 대시보드 안에서 답한다
                 # (REQ-20260826-018). 명세는 그 문서의 decision 노트 —
@@ -17313,6 +17435,10 @@ def cmd_serve(args):
                         # ② 은퇴했다: 같은 세션에 새 스트림이 열렸다. WSL2
                         #    프록시 뒤에서는 ①의 FIN 이 아예 안 와서, 세대가
                         #    유일하게 믿을 수 있는 신호다.
+                        # 이 응답은 5분을 산다 — 요청 스코프의 프로세스 표를
+                        # 바퀴마다 버린다 (REQ-20260901-024). 안 버리면 긴
+                        # 연결 하나가 5분 낡은 생존 판정을 들고 앉는다.
+                        proc_scope_reset()
                         if sse_retired(tok) or self._peer_gone():
                             break
                         d = stream_events(sid, after)
