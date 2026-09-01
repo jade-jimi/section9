@@ -365,9 +365,7 @@ class GraphEmpty(unittest.TestCase):
         return m.group(0)
 
     def _css(self):
-        m = re.search(r"/\* -+ 그래프 빈 화면[\s\S]*?\*/([\s\S]*?)\n\n", self.src)
-        self.assertIsNotNone(m, "빈 상태 CSS 블록을 찾지 못했다")
-        return m.group(1)
+        return websrc.css_section(self, self.src, r"/\* -+ 그래프 빈 화면")
 
 
 if __name__ == "__main__":

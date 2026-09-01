@@ -353,9 +353,7 @@ class AnchorNote(unittest.TestCase):
         return re.sub(r"(?m)^\s*//.*$", "", js)
 
     def _css(self):
-        m = re.search(r"/\* -+ 구간에 메모 달기[\s\S]*?\*/([\s\S]*?)\n\n", self.src)
-        self.assertIsNotNone(m, "구간 메모 CSS 블록을 찾지 못했다")
-        return m.group(1)
+        return websrc.css_section(self, self.src, r"/\* -+ 구간에 메모 달기")
 
 
 if __name__ == "__main__":

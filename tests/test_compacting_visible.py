@@ -120,9 +120,7 @@ class CompactingVisible(unittest.TestCase):
         return websrc.fn(self, self.src, name)
 
     def _css(self):
-        m = re.search(r"/\* -+ 컨텍스트 압축 중[\s\S]*?\*/([\s\S]*?)\n\n", self.src)
-        self.assertIsNotNone(m, "압축 표시 CSS 블록을 찾지 못했다")
-        return m.group(1)
+        return websrc.css_section(self, self.src, r"/\* -+ 컨텍스트 압축 중")
 
 
 if __name__ == "__main__":

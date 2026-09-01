@@ -207,9 +207,7 @@ class AccountAndModel(unittest.TestCase):
         return websrc.fn(self, self.src, name)
 
     def _css(self):
-        m = re.search(r"/\* -+ 고르는 변형[\s\S]*?\*/([\s\S]*?)\n\n", self.src)
-        self.assertIsNotNone(m, "고르는 변형 CSS 블록을 찾지 못했다")
-        return m.group(1)
+        return websrc.css_section(self, self.src, r"/\* -+ 고르는 변형")
 
     def _css_chip(self):
         m = re.search(r"\.usagechip\{cursor:[^}]*\}", self.src)

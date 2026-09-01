@@ -174,10 +174,7 @@ class HeaderNoticeArea(unittest.TestCase):
         return websrc.fn(self, self.src, name)
 
     def _css(self):
-        m = re.search(r"/\* ── 서버 자동 복구 기록[\s\S]*?\*/([\s\S]*?)\n\n",
-                      self.src)
-        self.assertIsNotNone(m, "자동 복구 CSS 블록을 찾지 못했다")
-        return m.group(1)
+        return websrc.css_section(self, self.src, r"/\* ── 서버 자동 복구 기록")
 
 
 if __name__ == "__main__":

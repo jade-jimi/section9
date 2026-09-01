@@ -537,9 +537,7 @@ class JudgeDialog(unittest.TestCase):
         return ";".join(blks)
 
     def _css(self):
-        m = re.search(r"/\* -+ 판정 대화상자[\s\S]*?\*/([\s\S]*?)\n\n", self.src)
-        self.assertIsNotNone(m, "판정 대화상자 CSS 블록을 찾지 못했다")
-        return m.group(1)
+        return websrc.css_section(self, self.src, r"/\* -+ 판정 대화상자")
 
 
 class JudgeNoteContract(unittest.TestCase):

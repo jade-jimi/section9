@@ -136,9 +136,8 @@ class JumpToBottom(unittest.TestCase):
         return websrc.fn(self, self.src, name)
 
     def _css(self):
-        m = re.search(r"/\* -+ 바닥으로 내려가는 손잡이[\s\S]*?\*/([\s\S]*?)\n\n", self.src)
-        self.assertIsNotNone(m, "손잡이 CSS 블록을 찾지 못했다")
-        return m.group(1)
+        return websrc.css_section(
+            self, self.src, r"/\* -+ 바닥으로 내려가는 손잡이")
 
     def _markup(self):
         m = re.search(r'<button class="ccjump"[^>]*>', self.src)

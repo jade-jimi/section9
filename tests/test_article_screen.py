@@ -136,9 +136,8 @@ class ArticleScreen(unittest.TestCase):
         return websrc.fn(self, self.src, name)
 
     def _css(self):
-        m = re.search(r"/\* -+ 아티클 \(REQ-20260827-073\)[\s\S]*?\*/([\s\S]*?)\n\n", self.src)
-        self.assertIsNotNone(m, "아티클 CSS 블록을 찾지 못했다")
-        return m.group(1)
+        return websrc.css_section(
+            self, self.src, r"/\* -+ 아티클 \(REQ-20260827-073\)")
 
 
 if __name__ == "__main__":
