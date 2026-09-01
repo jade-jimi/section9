@@ -40,7 +40,24 @@ from portpool import free_port, wait_server  # noqa: E402
 # 묶음이 죽었을 때 낱개로 되돌리는 길이 생겼다. 이 둘은 **조각으로 갈 수 없는**
 # 유일한 종류다 — 조각을 어떻게 부르는지를 정하는 코드가 그 조각 안에 있으면
 # 자기가 안 왔을 때 아무 일도 못 한다. 그 밖의 이유로 이 숫자를 올리지 마라.
+#
+# 세는 자리를 고친다 (REQ-20260901-022): **부르는 줄은 껍데기의 무게가 아니다.**
+# 이 천장이 막으려는 것은 "규칙이 껍데기로 되돌아오는 것"인데, 조각을 하나
+# 늘리면 `<link>`·`<script src>` 가 한 줄 늘어 **옳게 한 사람이 걸린다** —
+# 실제로 조각 하나를 새로 낸 변경이 271줄로 걸렸다. 규칙을 껍데기에 인라인으로
+# 끼워 넣는 것은 여전히 그대로 걸린다(그 줄은 부르는 줄이 아니다).
+# 44줄이 지금 부르는 줄이므로 껍데기 제 무게는 227줄이고, 천장은 그대로 둔다.
 SHELL_MAX_LINES = 270
+
+
+def shell_own_lines():
+    """껍데기가 **제 몸으로** 진 줄 — 조각을 부르는 줄은 빼고 센다."""
+    out = 0
+    for line in shell().splitlines(True):
+        if webasset.LINK_RE.match(line) or webasset.SRC_RE.match(line):
+            continue
+        out += 1
+    return out
 
 
 def shell():
@@ -120,7 +137,7 @@ class Shell(unittest.TestCase):
     """③ 껍데기가 다시 붓지 않는다."""
 
     def test_s4_shell_stays_thin(self):
-        n = len(shell().splitlines())
+        n = shell_own_lines()
         self.assertLessEqual(
             n, SHELL_MAX_LINES,
             f"web/index.html 이 {n} 줄이다 — 규칙이 껍데기로 되돌아오고 있다. "

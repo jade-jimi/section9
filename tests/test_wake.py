@@ -209,8 +209,15 @@ class WakeDecision(unittest.TestCase):
         res = self.wake(self.rid, actor="alice", win=0)
         self.assertFalse(res["ok"])
         self.assertEqual(res["action"], "off")
-        self.assertIn("auto_resume", res["message"],
-                      "무엇을 켜야 하는지가 응답에 없다")
+        # 「무엇을 켜야 하는지」를 재되 **원시 키가 아니라 화면의 낱말**로 잰다
+        # (REQ-20260901-022). 종전엔 `auto_resume` 이 들어 있는지를 물었는데,
+        # 그 자를 대면 서버가 사용자에게 기계 키를 외우게 하는 것이 곧 통과
+        # 조건이 된다 — 화면에 그 스위치의 이름과 자리가 생긴 지금은 거꾸로다.
+        # 이름과 갈 곳, 둘 다 말해야 사람이 실제로 켤 수 있다.
+        self.assertIn("무인 작업 맡기기", res["message"],
+                      "무엇을 켜야 하는지가 화면의 이름으로 안 적혀 있다")
+        self.assertIn("Settings", res["message"],
+                      "어디서 켜는지가 응답에 없다")
 
     # ---- W6. in-progress 가 아니면 거부 ----------------------------------
     def test_w6_only_in_progress(self):

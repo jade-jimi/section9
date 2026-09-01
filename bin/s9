@@ -6979,9 +6979,14 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
     owner = meta.get("user", "")
     cfg = user_config(owner)
     if not cfg.get("auto_resume"):
-        return block("off", f"{owner or '이'} 계정은 자동 이어가기가 꺼져 "
-                            f"있습니다 — Settings 의 계정 설정에서 auto_resume "
-                            f"을 켜야 이어갈 수 있습니다")
+        # 화면과 **같은 낱말**로 말한다 (REQ-20260901-022). 종전 문구는 두 번
+        # 틀렸다: ① 「자동 이어가기」는 화면 어디에도 없는 세 번째 이름이었고
+        # (카드의 「자동 이어받기 끄기」는 요청 하나만 막는 다른 정책이다)
+        # ② 사용자에게 원시 키 `auto_resume` 을 외우게 했다 — 이 요청이 없애려는
+        # 바로 그 증상이 서버 문장에 남아 있었다. 자리도 그때와 다르다:
+        # 스위치는 이제 Settings 의 「무인 작업」 판에 산다.
+        return block("off", f"{owner or '이'} 계정은 무인 작업 맡기기가 꺼져 "
+                            f"있습니다 — Settings 의 「무인 작업」에서 켜 주세요")
     if meta.get("machine") != current_machine():
         return block("elsewhere",
                      f"이 요청은 다른 컴퓨터({meta.get('machine') or '미상'})의 "
@@ -17696,7 +17701,11 @@ def cmd_serve(args):
                 elif parsed.path == "/api/user/config":
                     name = str(req.get("name") or "")
                     if actor != name and not is_admin:
-                        raise ValueError("본인 또는 admin만 설정 변경 가능")
+                        # 화면이 이 문장을 그대로 띄운다 (REQ-20260901-018 ·
+                        # REQ-20260901-022) — 명사 나열이 아니라 문장이어야 한다.
+                        raise ValueError(
+                            f"@{name} 본인이나 admin 만 이 설정을 바꿀 수 "
+                            f"있습니다.")
                     do_user_config_set(name, str(req.get("key") or ""),
                                        str(req.get("value") or ""),
                                        actor=f"{actor} via dashboard")

@@ -6,7 +6,7 @@ role: admin
 emails: ["claude01.pfe@example.invalid"]
 github: nicehugepark
 os_accounts: ["sjpark1"]
-machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-09-01T16:05:35+09:00"}]
+machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-09-01T18:06:46+09:00"}]
 ---
 
 ## Notes
@@ -132,3 +132,12 @@ machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpar
 - 2026-09-01T10:21:53+09:00 config ui_skin=calm (by nicehugepark via dashboard)
 - 2026-09-01T14:12:57+09:00 config auto_resume_model=opus (by nicehugepark)
 - 2026-09-01T14:12:57+09:00 config s9code_args=--permission-mode auto --model opus (by nicehugepark)
+- 2026-09-01T18:24:21+09:00 config ui_skin=glass (by nicehugepark via dashboard)
+- 2026-09-01T18:24:35+09:00 config ui_skin=terminal (by nicehugepark via dashboard)
+- 2026-09-01T18:24:50+09:00 config ui_skin=grid (by nicehugepark via dashboard)
+- 2026-09-01T18:25:20+09:00 config ui_skin=slate (by nicehugepark via dashboard)
+- 2026-09-01T18:25:38+09:00 config ui_skin=calm (by nicehugepark via dashboard)
+- 2026-09-01T19:55:23+09:00 config auto_resume_gh=off (by nicehugepark via dashboard)
+- 2026-09-01T19:55:25+09:00 config auto_resume_gh=on (by nicehugepark via dashboard)
+- 2026-09-01T19:55:43+09:00 config auto_resume_gh=off (by nicehugepark via dashboard)
+- 2026-09-01T19:55:46+09:00 config auto_resume_gh=on (by nicehugepark via dashboard)

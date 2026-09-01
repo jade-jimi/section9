@@ -198,3 +198,47 @@ tr.rowoff td{opacity:.45}
   font-size:11px;font-family:var(--mono);text-align:left}
 .em-add:hover{color:var(--text);text-decoration:underline}
 
+
+/* ------- 무인 작업 설정 (REQ-20260901-022) -------
+   새 부품을 만들지 않는다 — `.metatbl` 과 `.uf` 와 `.more` 를 그대로 쓰고,
+   이 블록은 **두 가지만** 얹는다: 첫 칸을 이름 두 줄로 세우는 것, 그리고
+   뜻 줄과 결과 줄을 **한 칸에 겹쳐** 두는 것.
+
+   겹치는 이유는 흔들림이다. 따로 줄을 내면 열 행이 저장할 때마다 아래가
+   밀린다 — 칸 높이는 둘 중 큰 쪽으로 고정되고, 서는 쪽만 바뀐다.
+
+   색이 쓰이는 자리는 사실 줄의 **글자** 하나뿐이다. 색면도, 좌측 세로 띠도,
+   상시 경고 마크도 없다 — 마크를 안 쓰니 홀수 px 기하가 없고, 그래서
+   125/150% 배율에서 반올림이 갈릴 자리 자체가 생기지 않는다. */
+.wtbl td:first-child{width:190px;white-space:normal;color:var(--text);
+  font-family:inherit;font-size:12.5px;text-transform:none;letter-spacing:0;
+  padding-top:8px;line-height:1.4}
+.wlab{display:block;font-weight:600;cursor:pointer}
+.wkey{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);
+  letter-spacing:.02em;margin-top:2px;line-height:1.4}
+.wkeyonly{padding-top:2px}
+.wctl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:11px;color:var(--muted)}
+/* 뜻과 결과는 한 칸을 나눠 쓴다 — 자는 같아야 한다(같은 글꼴·크기·행간·폭). */
+.wsay{display:grid;margin-top:5px}
+.wsay>*{grid-area:1/1;font-family:var(--mono);font-size:11px;line-height:1.55;
+  color:var(--muted);max-width:62ch}
+.wsay>.hid{visibility:hidden}
+/* 뜻이 없는 행(모르는 값)도 칸 높이를 미리 잡아 둔다 — 안 그러면 결과 한 줄이
+   설 때 그 행만 밀린다. 빈 뜻에 공백 한 칸을 세워 자를 맞춘다. */
+.wmean:empty::before{content:"\00a0"}
+.wmsg.bad{color:var(--c-blocked)}
+/* 사실 줄 — **켜져 있는 동안에만** 선다. 면이 아니라 글자색이다. */
+.wfact{font-family:var(--mono);font-size:10.5px;color:var(--c-blocked);
+  max-width:62ch;line-height:1.55;margin-top:5px}
+.wfact:empty{display:none}
+/* 윗스위치가 꺼진 줄은 한 급 물러난다(색이 아니라 명도). 사실 줄만은
+   물러나지 않는다 — "권한을 준 적 있다"가 화면에서 사라지면 안 된다. */
+tr.woff .wlab,tr.woff .wkey,tr.woff .wctl,tr.woff .wsay{opacity:.45}
+.wnote{margin:6px 0 0}
+/* 「더 보기」 부품 그대로 쓰되 앞머리 기호는 내가 적는다 — 펴기(+)와
+   접기(−)가 한 단추를 나눠 쓰므로 `+` 를 CSS 로 붙이면 접기에도 붙는다. */
+.wmore{display:inline-block;width:auto;padding:6px 0 0;text-align:left;
+  font-family:var(--mono);font-size:11px}
+.wmore::before{content:none}
+

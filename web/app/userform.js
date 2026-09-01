@@ -4,10 +4,17 @@ function showUserForm(u, host, isAdminEdit){
   if (!host) return;
   const cfg = u.config || {};
   const prefs = Object.entries(cfg).filter(([k]) => k.startsWith("pref_"));
+  /* 자리를 얻지 못한 값만 남긴다 (REQ-20260901-022).
+     **자리를 얻은 키는 반드시 여기서 빠져야 한다** — 안 빼면 같은 값이 제 행과
+     이 목록에 두 번 서고, 어느 쪽이 참인지 화면이 말하지 못한다. 그래서 목록을
+     손으로 늘리지 않고 `WCFG_KEYS`(무인 작업 판이 세우는 행의 키)와
+     `wcfgMine`(그 판이 데려가는 접두사)에서 받아 온다: 그 판에 행이 늘면 이
+     제외도 저절로 는다. */
   const extraCfg = Object.entries(cfg).filter(([k]) =>
     !["timezone","digest_budget","ui_skin","ui_tone","ui_density",
       "stream_mirror","stream_keep_days",
-      "external_secrets_path"].includes(k) && !k.startsWith("pref_"));
+      "external_secrets_path"].includes(k) && !k.startsWith("pref_")
+    && !WCFG_KEYS.includes(k) && !wcfgMine(k));
   // 비밀은 **내 계정 판에서만** 다룬다. 서버의 /api/secrets 는 admin 대리(as)를
   // 받지 않아 내 키를 주는데, 넣고 지우는 쪽은 대리를 받는다 — 남의 이름표를 달고
   // 내 키 목록을 보여 주면 그 화면은 거짓말이다. 그럴 바엔 자리를 내지 않는다.
@@ -115,8 +122,21 @@ function showUserForm(u, host, isAdminEdit){
     </table>
     <div class="acts"><button id="pf-save">선호 저장</button></div>
     ${prefs.length ? "" : `<div class="path" style="margin-top:6px">아직 없음 — 프롬프트에서 말해도 되고("앞으로 반말로 해줘") 여기서 직접 추가해도 된다.</div>`}
-    ${extraCfg.length ? `<div class="path" style="margin-top:12px">기타: ${esc(JSON.stringify(Object.fromEntries(extraCfg)))}</div>` : ""}
+    ${extraCfg.length ? `<div class="cfg-h">그 밖의 값</div>
+    <div class="path secnote">화면이 아직 뜻을 모르는 값입니다 — 이름과 값은 그대로 쓰이고 있습니다. <b>빈 값으로 저장하면 지워집니다.</b></div>
+    <table class="metatbl" id="xc-table">
+      ${extraCfg.map(([k, val]) => `<tr data-xc="${esc(k)}">
+        <td>${esc(k)}</td>
+        <td><input class="uf xc-val" value="${esc(String(val))}" placeholder="비우고 저장 = 삭제"></td>
+      </tr>`).join("")}
+    </table>
+    <div class="acts"><button id="xc-save">값 저장</button></div>` : ""}
+    ${isAdminEdit ? `<div class="cfg-h">무인 작업</div>${workerCfgHTML(u)}` : ""}
     <div class="path" style="margin-top:16px">변경은 profile.md Notes에 audit + git 동기화. 본인 또는 admin만 수정.</div>`;
+  /* admin 이 남의 무인 작업 설정을 만지는 자리 (REQ-20260901-022) — 내 판과
+     **같은 부품 한 벌**이다. 서버가 대리를 받으므로(POST /api/user/config)
+     가능하고, 확인 창과 사실 줄은 그 계정 이름을 말한다(REQ-20260901-017). */
+  if (isAdminEdit) wireWorkerCfg(host, u);
   // 이메일 행 추가/삭제 — DOM만 조작(재렌더 없음 → 다른 입력값 보존)
   host.querySelector("#uf-emails").addEventListener("click", e => {
     // 지우기 단추의 **글자**를 누르면 target 이 텍스트 노드다 — 거기엔
@@ -667,6 +687,21 @@ function showUserForm(u, host, isAdminEdit){
     const nk = host.querySelector("#pf-key").value.trim();
     if (nk) sets.push(["pref_" + nk.replace(/^pref_/, ""),
                        host.querySelector("#pf-new").value.trim()]);
+    let ok = true;
+    for (const [k, val] of sets)
+      ok = (await postJSON("/api/user/config", {name: u.name, key: k, value: val})) && ok;
+    if (ok && sets.length) renderSettings();
+  });
+  /* 그 밖의 값 (REQ-20260901-022) — 개인 선호 표와 **같은 부품·같은 손버릇**이다.
+     JSON 한 줄을 행으로 편 것이 전부고, 새로 만든 것은 없다. 아는 키가 늘면
+     이 목록에서 조용히 빠져 제 자리로 올라간다. */
+  const xcSave = host.querySelector("#xc-save");
+  if (xcSave) xcSave.addEventListener("click", async () => {
+    const sets = [];
+    host.querySelectorAll("#xc-table tr[data-xc]").forEach(tr => {
+      const k = tr.dataset.xc, val = tr.querySelector(".xc-val").value.trim();
+      if (val !== String(cfg[k] ?? "")) sets.push([k, val]);   // 빈 값 = 서버가 삭제
+    });
     let ok = true;
     for (const [k, val] of sets)
       ok = (await postJSON("/api/user/config", {name: u.name, key: k, value: val})) && ok;

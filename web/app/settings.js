@@ -31,7 +31,7 @@ async function postJSON(url, body){
   return res.ok;
 }
 
-let settingsSection = "display";  // display | account | users
+let settingsSection = "display";  // display | account | worker | users | about
 
 async function renderSettings(){
   // 같은 값은 같은 문을 지난다 (REQ-20260828-039) — 여기서만 조용히 빈 목록으로
@@ -47,6 +47,13 @@ async function renderSettings(){
     ["account", "내 계정", me
       ? `@${me} 프로필·개인화${myMiss.length ? ` ⚠ 미기재 ${myMiss.length}` : ""}`
       : "미등록 계정"],
+    /* 「무인 작업」은 나 → 나 → 남 → 전체 순서의 둘째 자리다 (REQ-20260901-022).
+       「내 계정」 안에 아홉째 덩이로 얹지 않는 이유는 캡처가 근거다: 그 판은
+       이미 덩이 여덟에 세로 1,400px 를 넘고, 「내가 누구인가」와 「내가 없을 때
+       무엇이 일어나는가」를 한 스크롤에 섞게 된다.
+       부제는 상태를 겸한다 — 목록만 봐도 열려 있는 문이 보인다. */
+    ["worker", "무인 작업", workerNavSub(
+      me ? (data.users || []).find(x => x.name === me) : null)],
     ["users", "사용자 관리", meAdmin ? "등록·역할·시점 미리보기 (admin)" : "admin 전용"],
     ["about", "시스템", "저장소·통계·문서 안내"],
   ];
@@ -96,6 +103,15 @@ function renderSettingsSection(meAdmin){
       <button class="gefix" type="button" id="uf-retry">다시 불러오기</button></p>`;
     const rt = $("#uf-retry");
     if (rt) rt.addEventListener("click", () => renderSettings());
+  } else if (settingsSection === "worker"){
+    if (!me){ v.innerHTML = `<p class="empty">이 OS 계정(${esc((window.__whoami||{}).user||"?")})은 미등록입니다 — 터미널에서 <code>s9 user add ${esc((window.__whoami||{}).user||"&lt;이름&gt;")}</code> 으로 등록하세요.</p>`; return; }
+    const wu = (window.__users||[]).find(x => x.name === me);
+    // 못 받아 온 것과 계정이 없는 것은 다른 일이다 (「내 계정」과 같은 손잡이).
+    if (wu) showWorkerCfg(wu, v);
+    else v.innerHTML = `<p class="empty">계정 정보를 받아오지 못했습니다.
+      <button class="gefix" type="button" id="uf-retry">다시 불러오기</button></p>`;
+    const wrt = $("#uf-retry");
+    if (wrt) wrt.addEventListener("click", () => renderSettings());
   } else if (settingsSection === "users"){
     if (!meAdmin){ v.innerHTML = `<p class="empty">사용자 관리는 admin만 가능합니다. (whoami=${esc((window.__whoami||{}).user||"?")})</p>`; return; }
     const list = (window.__users||[]).map(u => `<div class="urow" data-uname="${esc(u.name)}">
