@@ -178,14 +178,14 @@ class WorkspaceChip(unittest.TestCase):
                             json.dumps(self.row(workspace={
                                 "kind": "worktree", "reason": "fresh",
                                 "wt": "w-829-030-62x6"}))))
-        self.assertIn("커밋하면", r["dirty"], "커밋하면 풀린다는 말이 없다")
+        self.assertIn("commit 하면", r["dirty"], "commit 하면 풀린다는 말이 없다")
         # worktree-pile 문장은 화면에서 내렸다 (REQ-20260830-001) — 옮기면
         # 첫 줄의 되풀이가 된다. 운영 사유는 s9 doctor 의 몫이다.
         self.assertNotIn("거두면", r["pile"],
                          "내리기로 판정된 pile 문장이 화면에 되살아났다")
         # 풀 것이 없는 자리에 할 일을 지어내지 않는다 — 매번 참인 문장은 안 읽힌다
-        self.assertNotIn("커밋하면", r["self"])
-        self.assertNotIn("커밋하면", r["wt"])
+        self.assertNotIn("commit 하면", r["self"])
+        self.assertNotIn("commit 하면", r["wt"])
         # 워크트리 이름(w-xxxx)은 화면에서 내렸다 — cd 할 사람의 값이고,
         # 그 자리는 s9 worktree ls 다 (REQ-20260830-001 tech-writer 판정).
         self.assertNotIn("w-829-030-62x6", r["wt"])
@@ -278,7 +278,7 @@ class WorkspaceChip(unittest.TestCase):
             self.assertNotIn(word, code_only(self.card_html),
                              f"보드 카드가 다시 '{word}' 를 말한다")
         notice = code_only(part("app/notice.js"))
-        for word in ("본 저장소", "워크트리", "커밋하면"):
+        for word in ("본 저장소", "워크트리", "commit 하면"):
             self.assertNotIn(word, notice,
                              f"헤더가 다시 '{word}' 를 말한다")
 
@@ -392,8 +392,8 @@ class WorkspaceChip(unittest.TestCase):
         # 사유와 푸는 법이 **창 안 문장**으로 있다 (귀띔에만 있으면 못 찾은 사람에게 답이 아니다)
         # 말결은 창의 것이다 — 한 창 안에서 존댓말과 반말이 갈리지 않는다
         # (REQ-20260830-007).
-        self.assertIn("커밋되지 않았습니다", r["a"]["descHtml"])
-        self.assertIn("커밋하면", r["a"]["descHtml"])
+        self.assertIn("commit 되지 않았습니다", r["a"]["descHtml"])
+        self.assertIn("commit 하면", r["a"]["descHtml"])
         # 그래서 나에게 무슨 뜻인가 — 자리가 다르면 답도 달라야 한다
         # (낱말은 REQ-20260830-048 판정 — 「바로 보임 / 끝나면 보임」의 결)
         self.assertIn("바로 보입니다", r["a"]["descHtml"])
@@ -404,7 +404,7 @@ class WorkspaceChip(unittest.TestCase):
         self.assertNotIn("w-829-030-62x6", r["b"]["title"])
         self.assertIn("끝난 뒤에 이 화면에 보입니다", r["b"]["descHtml"])
         # 풀 것이 없는 자리에 할 일을 지어내지 않는다
-        self.assertNotIn("커밋하면", r["b"]["descHtml"])
+        self.assertNotIn("commit 하면", r["b"]["descHtml"])
         # 대기·자리는 고장이 아니다 — 붉은 눈썹을 달지 않는다
         self.assertIs(r["a"]["stop"], False)
 

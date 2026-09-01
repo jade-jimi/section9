@@ -141,8 +141,12 @@ class WorkerSettings(unittest.TestCase):
 
     # ---- ④ 낱말 ---------------------------------------------------------
     def test_labels_are_the_lead_verdict(self):
+        # 「worktree 쓰게 하기」 — 한때 「따로 떼어 놓고 일하기」였다.
+        # 사용자가 반려했다(REQ-20260902-002): 남의 도구가 지은 이름은
+        # 우리가 별명을 지어 주지 않는다. 별명은 두 사람 다 잃게 한다 —
+        # git 을 모르는 사람은 여전히 못 읽고, 아는 사람은 잇지 못한다.
         for label in ("무인 작업 맡기기", "파일 직접 고치기",
-                      "내 GitHub 계정 쓰게 하기", "따로 떼어 놓고 일하기"):
+                      "내 GitHub 계정 쓰게 하기", "worktree 쓰게 하기"):
             self.assertIn(label, self.words, "확정 낱말이 아니다: " + label)
         self.assertNotIn("자동 이어받기", self.words,
                          "계정 스위치는 카드의 요청별 정책과 다른 이름을 쓴다")
@@ -150,13 +154,20 @@ class WorkerSettings(unittest.TestCase):
     def test_no_word_that_was_taken_off_the_screen(self):
         for w in BANNED:
             self.assertNotIn(w, self.words, "화면에서 내려진 낱말: " + w)
-        # 「사본」은 worktree 의 기각된 번역어 — 낱말로 서면 안 된다.
+        # 「사본」은 worktree 의 기각된 **별명** — 낱말로 서면 안 된다.
+        # (worktree 자체는 이제 원어로 선다. 내려간 것은 우리가 지은
+        #  별명이지 git 이 지은 이름이 아니었다 — REQ-20260902-002.)
         self.assertNotRegex(self.words, r"저장소 사본|따로 떼어 둔 사본")
 
     def test_push_is_called_by_the_screen_name(self):
-        # 023 이 같은 판에 「올리기」 단추를 세운다 — 한 개념에 두 이름 금지.
-        self.assertNotIn("푸시", self.words, "「푸시」 대신 「올리는 것」으로 쓴다")
-        self.assertIn("저장소에 올리는 것도 그중 하나입니다", self.words)
+        # 023 이 같은 판에 `push` 단추를 세운다 — 한 개념에 두 이름 금지.
+        # 음차(「푸시」)도 옮김(「올리는 것」)도 아니고 **원어**다
+        # (REQ-20260902-002): 화면을 닫고 그 일을 하려면 사람이 치는 글자가
+        # `git push` 라, 그 글자가 곧 화면의 낱말이다.
+        self.assertNotIn("푸시", self.words, "음차는 원어로 — `push`")
+        self.assertNotIn("저장소에 올리는 것도", self.words,
+                         "옮김도 반려됐다 — 남의 도구 이름은 그대로 세운다")
+        self.assertIn("저장소에 push 하는 것도 그중 하나입니다", self.words)
 
     def test_on_off_words_carry_the_state(self):
         # 색 없이 상태가 읽힌다 — 옵션 글자가 무슨 일이 일어나는지 말한다.

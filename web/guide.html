@@ -175,12 +175,12 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
 <!-- ═══════════════ 2 ═══════════════ -->
 <section id="install">
 <h2><span class="no">2</span>최초 설치</h2>
-<p>출발점은 <b>관리자가 알려 준 팀 저장소(인스턴스 리포) URL</b>입니다 —
+<p>출발점은 <b>관리자가 알려 준 팀 저장소(인스턴스 저장소) URL</b>입니다 —
 예: <code>git@github.com:your-org/your-org-work.git</code>. 필요한 코드는 그 안에 전부 들어 있으므로,
 그 하나만 받으면 됩니다. 새 머신(또는 새 계정)에서 다섯 단계면 끝납니다.
 관리자가 이미 설치해 둔 환경이라면 4·5단계만 확인하시면 됩니다.</p>
-<p class="dim">이 가이드의 예시는 클론 위치를 <code>~/your-org-work</code> 로 통일합니다.
-실제로는 아무 경로나 됩니다 — 클론한 그 디렉토리가 곧 여러분 팀의 작업 공간이 됩니다.</p>
+<p class="dim">이 가이드의 예시는 clone 위치를 <code>~/your-org-work</code> 로 통일합니다.
+실제로는 아무 경로나 됩니다 — clone 한 그 디렉토리가 곧 여러분 팀의 작업 공간이 됩니다.</p>
 
 <div class="step"><div class="num">0</div><div class="body">
   <b>선행 조건 — Claude Code CLI</b>
@@ -191,7 +191,7 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
 </div></div>
 <div class="step"><div class="num">1</div><div class="body">
   <b>팀 저장소를 받습니다</b>
-  <p>관리자에게 받은 인스턴스 리포 URL을 클론합니다. 위치는 자유입니다(예시는 <code>~/your-org-work</code>).</p>
+  <p>관리자에게 받은 인스턴스 저장소 URL을 clone 합니다. 위치는 자유입니다(예시는 <code>~/your-org-work</code>).</p>
   <pre><code>git clone git@github.com:your-org/your-org-work.git ~/your-org-work</code></pre>
 </div></div>
 <div class="step"><div class="num">2</div><div class="body">
@@ -579,30 +579,30 @@ AI가 카드를 기록하면서 그 프로젝트로 귀속시킵니다. 직접 �
 <h2><span class="no">8</span>운영(관리자) — 인스턴스 만들기와 배포</h2>
 <p class="lead">이 장의 독자는 <b>팀 저장소를 만들고 관리하는 사람</b>입니다.
 1~7장으로 충분한 일반 팀원은 읽지 않아도 됩니다.</p>
-<p>section9은 두 종류의 리포로 운영합니다. 팀원에게는 인스턴스 하나만 알려 주면 됩니다 —
+<p>section9은 두 종류의 저장소로 운영합니다. 팀원에게는 인스턴스 하나만 알려 주면 됩니다 —
 코드는 이미 그 안에 들어 있습니다.</p>
 <div class="tblwrap"><table>
-  <tr><th style="width:190px">리포</th><th>무엇인가</th><th>누가 아는가</th></tr>
-  <tr><td><b>업스트림</b> = section9</td><td>프레임워크(하네스 코드만: bin·web·harness·docs). 개선은 여기서만 일어납니다</td><td>관리자·하네스 개발자</td></tr>
-  <tr><td><b>인스턴스</b> = 팀 저장소</td><td>작업 공간(사설). 데이터(vault·users·projects·streams)를 track하고, 코드는 업스트림에서 머지로 받습니다</td><td>모든 팀원</td></tr>
+  <tr><th style="width:190px">저장소</th><th>무엇인가</th><th>누가 아는가</th></tr>
+  <tr><td><b>upstream</b> = section9</td><td>프레임워크(하네스 코드만: bin·web·harness·docs). 개선은 여기서만 일어납니다</td><td>관리자·하네스 개발자</td></tr>
+  <tr><td><b>인스턴스</b> = 팀 저장소</td><td>작업 공간(사설). 데이터(vault·users·projects·streams)를 track하고, 코드는 upstream에서 merge 로 받습니다</td><td>모든 팀원</td></tr>
 </table></div>
-<p class="dim">인스턴스는 리모트를 둘 가집니다: <code>origin</code>(팀 사설 리포, push/pull 대상) +
+<p class="dim">인스턴스는 remote 를 둘 가집니다: <code>origin</code>(팀 사설 저장소, push/pull 대상) +
 <code>upstream</code>(section9, 하네스 업그레이드 수신용).</p>
 
 <h3>인스턴스 만들기 — <code>s9 instance init</code> 한 번</h3>
 <p>관리자 머신의 section9 카피(예: <code>~/section9</code>)에서 실행합니다.
-사설 리포 URL 하나만 주면 클론 → 리모트 구성 → 데이터 track 전환 → 초기 커밋 → 푸시까지 자동입니다.</p>
+사설 저장소 URL 하나만 주면 clone → remote 구성 → 데이터 track 전환 → 초기 commit → push 까지 자동입니다.</p>
 <pre><code>cd ~/section9 &amp;&amp; bin/s9 instance init git@github.com:your-org/your-org-work.git</code></pre>
 <p>실제 출력입니다 (경로·URL은 각자 환경에 따라 다르게 표시됩니다):</p>
-<pre><code>① 베이스 클론: /home/admin/section9 → /home/admin/your-org-work
-② 리모트: upstream=git@github.com:your-org/section9.git  origin=git@github.com:your-org/your-org-work.git
-③ 데이터 track 전환 + 초기 커밋 완료
-⑤ 푸시 실패 — 원격 리포가 아직 없을 가능성이 크다. 절차:
-  1. https://github.com/new 에서 리포 생성 — 이름 your-org-work, Private,
+<pre><code>① 베이스 clone: /home/admin/section9 → /home/admin/your-org-work
+② remote: upstream=git@github.com:your-org/section9.git  origin=git@github.com:your-org/your-org-work.git
+③ 데이터 track 전환 + 초기 commit 완료
+⑤ push 실패 — 원격 저장소가 아직 없을 가능성이 크다. 절차:
+  1. https://github.com/new 에서 저장소 생성 — 이름 your-org-work, Private,
      'Add a README/.gitignore/license' 전부 체크하지 말 것
   2. 서버측 보호(코어 경로): Settings &gt; Branches &gt; main 보호 규칙 +
      .github/CODEOWNERS 의 @OWNER 를 admin 계정으로 교체
-  3. 다시 푸시: cd /home/admin/your-org-work &amp;&amp; git push -u origin main
+  3. 다시 push: cd /home/admin/your-org-work &amp;&amp; git push -u origin main
 
 다음 단계(사용 시작):
   cd /home/admin/your-org-work &amp;&amp; bin/s9-install    # 이 머신의 훅·스킬 설치(멱등)
@@ -610,20 +610,20 @@ AI가 카드를 기록하면서 그 프로젝트로 귀속시킵니다. 직접 �
 팀원 합류: git clone git@github.com:your-org/your-org-work.git 후 위 두 줄과 동일.
 업그레이드(관리자): cd /home/admin/your-org-work &amp;&amp; git fetch upstream &amp;&amp; git merge upstream/main &amp;&amp; git push</code></pre>
 <ul>
-  <li>⑤의 "푸시 실패"는 원격 사설 리포를 아직 안 만든 첫 실행의 정상 경로입니다 — 출력이 알려 주는 세 단계대로 리포를 만들고 다시 푸시하면 끝.</li>
-  <li><code>gh</code> CLI가 설치돼 있다면 <code>--create</code> 를 붙여 사설 리포 생성까지 한 번에 할 수 있습니다.</li>
-  <li>클론 위치를 바꾸려면 <code>--dir &lt;경로&gt;</code> (기본은 <code>~/&lt;리포이름&gt;</code>).</li>
+  <li>⑤의 "push 실패"는 원격 사설 저장소를 아직 안 만든 첫 실행의 정상 경로입니다 — 출력이 알려 주는 세 단계대로 저장소를 만들고 다시 push하면 끝.</li>
+  <li><code>gh</code> CLI가 설치돼 있다면 <code>--create</code> 를 붙여 사설 저장소 생성까지 한 번에 할 수 있습니다.</li>
+  <li>clone 위치를 바꾸려면 <code>--dir &lt;경로&gt;</code> (기본은 <code>~/&lt;저장소이름&gt;</code>).</li>
 </ul>
 
 <h3>팀원 초대</h3>
-<p>인스턴스 리포 URL과 아래 세 줄만 전달하면 됩니다 (<a href="#install">2장</a>과 같은 내용입니다):</p>
+<p>인스턴스 저장소 URL과 아래 세 줄만 전달하면 됩니다 (<a href="#install">2장</a>과 같은 내용입니다):</p>
 <pre><code>git clone git@github.com:your-org/your-org-work.git ~/your-org-work
 cd ~/your-org-work &amp;&amp; bin/s9-install
 bin/s9 code</code></pre>
-<p class="dim">팀원이 사설 리포에 접근할 수 있도록 GitHub에서 collaborator(또는 팀)로 추가하는 것을 잊지 마세요.</p>
+<p class="dim">팀원이 사설 저장소에 접근할 수 있도록 GitHub에서 collaborator(또는 팀)로 추가하는 것을 잊지 마세요.</p>
 
 <h3>하네스 업그레이드 배포</h3>
-<p>업스트림(section9)에 개선이 올라오면, 관리자가 인스턴스에서 세 명령으로 배포합니다:</p>
+<p>upstream(section9)에 개선이 올라오면, 관리자가 인스턴스에서 세 명령으로 배포합니다:</p>
 <pre><code>cd ~/your-org-work
 git fetch upstream &amp;&amp; git merge upstream/main
 git push</code></pre>
@@ -633,21 +633,21 @@ git push</code></pre>
 
 <h3>보호 설정 — 코어 경로를 팀원이 못 고치게</h3>
 <p>인스턴스에서 하네스 코드(<code>bin/</code>·<code>web/</code>·<code>harness/</code>·<code>.github/</code>·<code>.gitignore</code>)가
-수정되면 업스트림 머지가 깨끗하지 않게 됩니다. 두 겹으로 막습니다:</p>
+수정되면 upstream merge 가 깨끗하지 않게 됩니다. 두 겹으로 막습니다:</p>
 <ul>
-  <li><b>로컬 1차 — pre-commit 가드</b>: <code>s9-install</code> 이 설치하는 pre-commit 훅(s9-guard)이 admin이 아닌 커밋의 코어 경로 변경을 차단합니다.</li>
-  <li><b>서버측 최종 — CODEOWNERS + branch protection</b>: 리포의 <code>.github/CODEOWNERS</code> 에서 <code>@OWNER</code> 를 실제 admin GitHub 계정(또는 팀)으로 교체하고, Settings › Branches › main 에 보호 규칙을 추가합니다 — "Require a pull request before merging" + "Require review from Code Owners". 이러면 코어 경로 변경은 admin 승인 없이 main에 들어갈 수 없습니다.</li>
+  <li><b>로컬 1차 — pre-commit 가드</b>: <code>s9-install</code> 이 설치하는 pre-commit 훅(s9-guard)이 admin이 아닌 commit의 코어 경로 변경을 차단합니다.</li>
+  <li><b>서버측 최종 — CODEOWNERS + branch protection</b>: 저장소의 <code>.github/CODEOWNERS</code> 에서 <code>@OWNER</code> 를 실제 admin GitHub 계정(또는 팀)으로 교체하고, Settings › Branches › main 에 보호 규칙을 추가합니다 — "Require a pull request before merging" + "Require review from Code Owners". 이러면 코어 경로 변경은 admin 승인 없이 main에 들어갈 수 없습니다.</li>
 </ul>
 
-<h3>충돌 시 대처 — 업스트림 cherry-pick 원칙</h3>
-<p>업스트림 머지가 늘 깨끗한 이유는 교집합이 없기 때문입니다: 데이터 파일은 업스트림에 없고,
+<h3>충돌 시 대처 — upstream cherry-pick 원칙</h3>
+<p>upstream merge 가 늘 깨끗한 이유는 교집합이 없기 때문입니다: 데이터 파일은 upstream에 없고,
 코어 파일은 인스턴스에서 수정하지 않습니다. 이 원칙이 깨졌을 때의 대처는 하나입니다:</p>
 <ul>
-  <li><b>하네스 결함을 발견하면</b> 인스턴스에서 고치지 마세요. 업스트림(section9 카피)에서 수정·테스트·푸시하고, 각 인스턴스는 다음 <code>merge upstream/main</code> 으로 수령합니다.</li>
-  <li><b>실수로 인스턴스에서 코어를 고쳤다면</b> — 비admin은 가드가 커밋을 차단하니 그 자리에서 되돌리면 됩니다. admin 커밋이 들어갔다면 그 커밋을 <b>업스트림에 cherry-pick</b>한 뒤, 인스턴스는 merge로 다시 정렬합니다.</li>
+  <li><b>하네스 결함을 발견하면</b> 인스턴스에서 고치지 마세요. upstream(section9 카피)에서 수정·테스트·push 하고, 각 인스턴스는 다음 <code>merge upstream/main</code> 으로 수령합니다.</li>
+  <li><b>실수로 인스턴스에서 코어를 고쳤다면</b> — 비admin은 가드가 commit 을 차단하니 그 자리에서 되돌리면 됩니다. admin commit 이 들어갔다면 그 commit 을 <b>upstream에 cherry-pick</b>한 뒤, 인스턴스는 merge로 다시 정렬합니다.</li>
 </ul>
-<div class="callout"><b>하네스 자체를 개발하는 사람만</b> section9 업스트림 카피(<code>~/section9</code>)에서 작업합니다.
-한 머신에서 업스트림 카피와 인스턴스를 병행해도 됩니다 — 훅은 세션의 현재 디렉토리 기준으로
+<div class="callout"><b>하네스 자체를 개발하는 사람만</b> section9 upstream 카피(<code>~/section9</code>)에서 작업합니다.
+한 머신에서 upstream 카피와 인스턴스를 병행해도 됩니다 — 훅은 세션의 현재 디렉토리 기준으로
 해당 인스턴스의 vault에 기록합니다.</div>
 </section>
 

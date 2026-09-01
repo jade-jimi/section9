@@ -10,5 +10,6 @@
  "stream_mirror": "on",
  "auto_resume_gh": "on",
  "worker_worktree": "on",
- "timezone": "Asia/Seoul"
+ "timezone": "Asia/Seoul",
+ "pref_용어": "pull·push·commit·worktree 처럼 외부 도구(git·GitHub·CLI)의 고유 기능·명령·설정 키 이름은 화면에서도 문서에서도 번역하지 않는다 — 원어 그대로 세운다. 억지 한국어 옮김(「받기」·「올리기」·「따로 떼어 놓고 일하기」)은 반려 사유다. 사용자 지적 2026-09-02"
 }

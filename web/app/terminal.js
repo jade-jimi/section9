@@ -54,7 +54,7 @@ function renderTerminal(){
   // 셸 1회 생성(L0). 살아있는 셸은 render()의 조기 반환 가드가 지키므로
   // 여기 도달 = 탭 새 진입. 이후 이 DOM은 탭을 떠날 때까지 재생성되지 않는다.
   stopChat();
-  $("#count").textContent = "라이브 클로드 세션 터미널 (전송 = 수신함 append → Monitor가 깨움 · 수신 = SSE 푸시 tail)";
+  $("#count").textContent = "라이브 클로드 세션 터미널 (전송 = 수신함 append → Monitor가 깨움 · 수신 = SSE push tail)";
   const T = TERM = {
     sid: null, live: false, offset: 0, evCount: 0, chatCount: 0,
     es: null, esFails: 0, esRetryT: null, poll: false, pollT: null,

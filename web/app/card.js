@@ -1008,8 +1008,8 @@ const WS_MARK = "◇";
 /* 말결은 창의 것이다 (REQ-20260830-007). 이 문장들이 서는 자리는 손 위의 글과
    창 하나뿐인데, 창의 다른 줄(WS_MEANS)은 존댓말이라 여기만 반말이면 한 창
    안에서 말이 두 결로 갈린다 — 사용자가 깨우기 창에서 지적한 그 어긋남이다. */
-const WS_FIX_COMMIT = "커밋하면 다음 작업부터 다시 워크트리로 갑니다";
-const WS_FIX_SWEEP = "다 쓴 워크트리를 거두면 다시 워크트리로 갑니다";
+const WS_FIX_COMMIT = "commit 하면 다음 작업부터 다시 worktree 로 갑니다";
+const WS_FIX_SWEEP = "다 쓴 worktree 를 거두면 다시 worktree 로 갑니다";
 /* 자리가 **나에게 무슨 뜻인가** — 자리 이름·사유보다 이것이 먼저 궁금하다.
    사유는 왜 저기 앉았는지를 말할 뿐, 내가 지금 보고 있는 화면에서 그 작업을
    확인할 수 있는지는 말하지 않는다. 그게 이 요청이 애초에 세우려던 사실이다.
@@ -1021,10 +1021,10 @@ const WS_MEANS = {main: "고친 내용은 이 화면에 바로 보입니다",
    fresh·fresh-outside·worktree-exists 는 옮기면 "그래서 나중에 보입니다"로
    수렴한다 — translator 판정 + ux-writer 동의). 운영자는 s9 doctor 로 본다. */
 const WS_WHY = {
-  "dirty-spine": ["모두가 쓰는 파일이 아직 커밋되지 않아, 따로 떼어 놓고 하면 "
+  "dirty-spine": ["모두가 쓰는 파일이 아직 commit 되지 않아, worktree 로 떼어 놓으면 "
                   + "그 코드가 빠진 낡은 사본에서 일하게 됩니다", WS_FIX_COMMIT],
-  "dirty-overlap": ["이 요청이 고칠 파일이 아직 커밋되지 않았습니다", WS_FIX_COMMIT],
-  "dirty-unknown": ["아직 커밋되지 않은 코드가 있고, 이 요청이 어느 파일을 "
+  "dirty-overlap": ["이 요청이 고칠 파일이 아직 commit 되지 않았습니다", WS_FIX_COMMIT],
+  "dirty-unknown": ["아직 commit 되지 않은 코드가 있고, 이 요청이 어느 파일을 "
                     + "고칠지는 문서에 적혀 있지 않습니다", WS_FIX_COMMIT],
   // 문장 안에 줄표를 넣지 않는다 — 손 위의 문장이 이미 줄표로 사유를 잇는다.
   "live-verify": ["살아 있는 서버로 확인해야 하는 작업이라서입니다", ""],
