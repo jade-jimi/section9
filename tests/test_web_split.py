@@ -18,6 +18,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -256,13 +257,29 @@ class Served(unittest.TestCase):
         cls.srv.terminate()
         cls.srv.wait(timeout=5)
 
-    def get(self, path):
+    def get(self, path, tries=3):
+        """**연결이 안 선 것과 서버가 아니라고 한 것은 다르다.**
+
+        이 스위트가 묻는 것은 "서버가 그 조각을 내주는가"이고, 답은 상태 코드로
+        온다 — 404·400 은 그대로 실패다. 그런데 WSL2 루프백은 동시 도착에서
+        **연결 자체가 무너진다**: `ConnectionResetError [Errno 104]` 가
+        `/app/<조각>` 42회 왕복 중 한 번씩 튀어나와, 서버가 멀쩡한데도 스위트가
+        빨개졌다(2026-09-01 실측 — 단독 3/4 green, 전체 --jobs 에서도 같은 자리).
+        화면 쪽은 이 사실을 이미 알고 껍데기에 되찾기 그물을 두고 있다
+        (REQ-20260829-039: "404 가 아니라 연결이 안 선다"). 시험만 그 사실을
+        모른 채 한 번 만에 판정하고 있었다.
+        그래서 **연결 오류만** 짧게 다시 건다 — 상태 코드는 손대지 않는다."""
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}")
-        try:
-            with urllib.request.urlopen(req, timeout=10) as r:
-                return r.status, r.headers.get("Content-Type", ""), r.read()
-        except urllib.error.HTTPError as e:
-            return e.code, e.headers.get("Content-Type", ""), e.read()
+        for i in range(tries):
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return r.status, r.headers.get("Content-Type", ""), r.read()
+            except urllib.error.HTTPError as e:
+                return e.code, e.headers.get("Content-Type", ""), e.read()
+            except (ConnectionError, urllib.error.URLError, OSError):
+                if i == tries - 1:
+                    raise
+                time.sleep(0.12 * (i + 1))
 
     def test_s6_style_parts_are_served_as_css(self):
         css, _ = webasset.parts()
