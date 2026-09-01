@@ -185,11 +185,17 @@ class TestWorkerModel(unittest.TestCase):
 
 
 class TestModelPersistence(unittest.TestCase):
-    """모델 선택 지속 (REQ-20260825-080).
+    """모델 선택 지속 (REQ-20260825-080 → REQ-20260901-012 로 개정).
 
     대시보드 모델 변경은 재시작 마커의 --model 뿐이라 그 재개 1회에만 붙었다.
     세션이 새로 뜨거나(s9 code) 무인 워커가 스폰되면 계정 기본값으로 돌아가
-    사용자가 고른 모델이 '제멋대로 되돌아가는' 것처럼 보였다."""
+    사용자가 고른 모델이 '제멋대로 되돌아가는' 것처럼 보였다 — 그래서 그
+    선택을 사용자 설정 두 칸에 **승격**시켰다.
+
+    그 승격이 반대편 사고를 만들었다: 확인차 한 번 눌러 본 fable 이 그대로
+    선언된 정책이 되어(8/30 13:36 실기록) 계정 전환으로 뜬 새 창과 무인
+    워커까지 fable 로 세웠고, 그 한도 소진이 2026-09-01 전환 교착의 무대가
+    됐다. 이제 칸이 갈린다 — 정책은 사람만 쓰고, 1회 선택은 제 칸에 산다."""
 
     def _idle_binding(self, sid, user="tester"):
         tp = write_jsonl([asst("end_turn")], f"{sid}-full-session-id.jsonl")
@@ -225,9 +231,14 @@ class TestModelPersistence(unittest.TestCase):
         cmd2 = mod._restart_cmd(base, {"resume": "S1", "effort": "high"})
         self.assertEqual(cmd2[:5], base)
 
-    # M1+M6. 대시보드 변경이 두 저장처를 같은 값으로 맞춘다
-    def test_m1_persist_both_places(self):
-        cfg = {"s9code_args": "--permission-mode auto --model fable"}
+    # T1+T2+T3 (구 M1+M6 개정, REQ-20260901-012). 종전 계약은 "대시보드 변경이
+    #     두 저장처(auto_resume_model·s9code_args)를 같은 값으로 맞춘다" 였다.
+    #     그 계약이 곧 결함이었다 — 정책 칸을 대시보드가 쓰면 사용자의 선언이
+    #     클릭 한 번에 지워진다. 새 계약: **정책 두 칸은 그대로, 최근 선택
+    #     칸만 바뀐다.**
+    def test_m1_choice_records_without_touching_policy(self):
+        cfg = {"s9code_args": "--permission-mode auto --model fable",
+               "auto_resume_model": "claude-opus-5[1m]"}
         writes = {}
 
         def fake_set(name, key, value, actor=""):
@@ -235,19 +246,23 @@ class TestModelPersistence(unittest.TestCase):
             cfg[key] = value
         with mock.patch.object(mod, "user_config", lambda n: dict(cfg)), \
                 mock.patch.object(mod, "do_user_config_set", fake_set):
-            done = mod._persist_model_choice("tester", "claude-opus-5[1m]")
-        self.assertEqual(writes.get("auto_resume_model"), "claude-opus-5[1m]")
-        self.assertEqual(writes.get("s9code_args"),
-                         "--permission-mode auto --model claude-opus-5[1m]")
-        self.assertEqual(sorted(done), ["auto_resume_model", "s9code_args"])
+            done = mod._record_model_choice("tester", "fable")
+        self.assertEqual(writes.get("last_model_choice"), "fable")
+        self.assertEqual(done, ["last_model_choice"])
+        # 정책은 사람만 쓴다 — 대시보드가 지나간 자리에 자국이 없어야 한다
+        self.assertNotIn("auto_resume_model", writes,
+                         "대시보드 선택이 정책 칸을 다시 덮는다 (8/30 재발)")
+        self.assertNotIn("s9code_args", writes,
+                         "대시보드 선택이 기동 인자를 다시 덮는다")
+        self.assertEqual(cfg["auto_resume_model"], "claude-opus-5[1m]")
 
     # M3. 모델 없이 effort/account 만 바꾸면 config 를 건드리지 않는다
     def test_m3_no_model_no_write(self):
         called = []
         with mock.patch.object(mod, "do_user_config_set",
                                lambda *a, **k: called.append(a)):
-            self.assertEqual(mod._persist_model_choice("tester", ""), [])
-            self.assertEqual(mod._persist_model_choice("", "opus"), [])
+            self.assertEqual(mod._record_model_choice("tester", ""), [])
+            self.assertEqual(mod._record_model_choice("", "opus"), [])
         self.assertEqual(called, [])
 
     # M4. config 쓰기 실패가 재시작을 깨뜨리지 않는다 (best-effort)
@@ -260,8 +275,8 @@ class TestModelPersistence(unittest.TestCase):
         self.assertTrue(r["ok"], r)
         self.assertEqual(r.get("saved"), [])
 
-    # M1(경로). restart_session 성공이 실제로 저장을 호출한다
-    def test_m1b_restart_persists(self):
+    # M1(경로). restart_session 성공이 실제로 기록을 호출한다 — 최근 선택 칸에
+    def test_m1b_restart_records_choice(self):
         self._idle_binding("persistok")
         writes = {}
         with mock.patch.object(mod, "_pid_is_claude", lambda p: True), \
@@ -271,8 +286,78 @@ class TestModelPersistence(unittest.TestCase):
                     lambda n, k, v, actor="": writes.__setitem__(k, v)):
             r = mod.restart_session("persistok", model="claude-opus-5[1m]")
         self.assertTrue(r["ok"], r)
-        self.assertEqual(writes.get("auto_resume_model"), "claude-opus-5[1m]")
-        self.assertEqual(writes.get("s9code_args"), "--model claude-opus-5[1m]")
+        self.assertEqual(writes, {"last_model_choice": "claude-opus-5[1m]"})
+
+
+class TestModelPolicyWins(unittest.TestCase):
+    """선언과 최근 선택을 가른다 (REQ-20260901-012 P2+P4).
+
+    "기본 모델로 fable 은 절대 안 된다" 는 사람의 선언이 시스템 어디에도
+    **정책으로** 남아 있지 않았다 — 이력 줄과 사람의 기억뿐이었다. 칸을
+    가르고 우선순위를 한 곳에 두면 그 문장을 기계가 지킨다."""
+
+    def _cfg(self, **kv):
+        return mock.patch.object(mod, "user_config", lambda n: dict(kv))
+
+    # T4. 정책이 있으면 정책이 이긴다 — 최근 선택이 fable 이어도
+    def test_t4_policy_beats_last_choice(self):
+        with self._cfg(auto_resume_model="claude-opus-5[1m]",
+                       last_model_choice="fable"):
+            self.assertEqual(mod.resolved_model("tester"),
+                             ("claude-opus-5[1m]", "policy"))
+            self.assertEqual(mod._spawn_model_args("tester"),
+                             ["--model", "claude-opus-5[1m]"])
+
+    # T5. 정책이 없으면 최근 선택이 쓰인다 (080 이 고친 '되돌아감' 보존)
+    def test_t5_last_choice_when_no_policy(self):
+        with self._cfg(last_model_choice="claude-opus-5[1m]"):
+            self.assertEqual(mod.resolved_model("tester"),
+                             ("claude-opus-5[1m]", "last"))
+        with self._cfg():
+            self.assertEqual(mod.resolved_model("tester"), ("", ""))
+            self.assertEqual(mod._spawn_model_args("tester"), [])
+
+    # T6. 선언된 기동 인자도 선언이다
+    def test_t6_declared_args_are_policy(self):
+        with self._cfg(s9code_args="--permission-mode auto --model opus",
+                       last_model_choice="fable"):
+            self.assertEqual(mod.resolved_model("tester"), ("opus", "policy"))
+
+    # T7. 8/25 취지 부활: 대시보드 클릭 하나가 워커 모델을 fable 로 못 바꾼다
+    def test_t7_worker_model_not_hijacked_by_a_click(self):
+        with self._cfg(auto_resume_model="claude-opus-5[1m]",
+                       s9code_args="--permission-mode auto",
+                       last_model_choice="fable"):
+            self.assertNotIn("fable", mod._spawn_model_args("tester"))
+
+    # T8. 명시 선언은 여전히 통한다 — 잠그는 것이 아니라 출처를 가르는 것
+    def test_t8_explicit_declaration_still_rules(self):
+        with self._cfg(auto_resume_model="fable"):
+            self.assertEqual(mod._spawn_model_args("tester"),
+                             ["--model", "fable"])
+
+    # T12. 기동 경로 실측: s9 code 의 계정 기본 인자가 정책 모델로 선다
+    def test_t12_code_launch_args_use_policy(self):
+        with self._cfg(s9code_args="--permission-mode auto --model fable",
+                       auto_resume_model="claude-opus-5[1m]"):
+            self.assertEqual(
+                mod.code_launch_args("tester"),
+                ["--permission-mode", "auto", "--model", "claude-opus-5[1m]"])
+        # 정책도 최근 선택도 없으면 선언된 인자를 그대로 쓴다
+        with self._cfg(s9code_args="--permission-mode auto"):
+            self.assertEqual(mod.code_launch_args("tester"),
+                             ["--permission-mode", "auto"])
+        with self._cfg():
+            self.assertEqual(mod.code_launch_args("tester"), [])
+
+    # 읽는 자리가 하나인지 감시 — 두 벌이 되면 한 벌만 고쳐진다
+    def test_the_read_sites_go_through_one_judgement(self):
+        with open(S9, encoding="utf-8") as f:
+            src = f.read()
+        self.assertEqual(src.count('get("auto_resume_model"'), 1,
+                         "정책 칸을 판정 밖에서 또 읽는다")
+        self.assertEqual(src.count('get("last_model_choice"'), 2,
+                         "최근 선택 칸을 판정·기록 밖에서 또 만진다")
 
 
 class TestRestartUiContract(unittest.TestCase):

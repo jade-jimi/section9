@@ -6,7 +6,7 @@ role: admin
 emails: ["claude01.pfe@example.invalid"]
 github: nicehugepark
 os_accounts: ["sjpark1"]
-machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-08-30T22:04:27+09:00"}]
+machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-09-01T12:45:57+09:00"}]
 ---
 
 ## Notes
@@ -128,3 +128,7 @@ machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpar
 - 2026-08-29T23:08:13+09:00 config pref_말투=칭찬, 아부성 발언 절대금지, 존댓말 사용 (by nicehugepark via dashboard)
 - 2026-08-30T13:36:02+09:00 config auto_resume_model=fable (by dashboard model change)
 - 2026-08-30T13:36:02+09:00 config s9code_args=--permission-mode auto --model fable (by dashboard model change)
+- 2026-09-01T10:21:50+09:00 config ui_skin=cork (by nicehugepark via dashboard)
+- 2026-09-01T10:21:53+09:00 config ui_skin=calm (by nicehugepark via dashboard)
+- 2026-09-01T14:12:57+09:00 config auto_resume_model=opus (by nicehugepark)
+- 2026-09-01T14:12:57+09:00 config s9code_args=--permission-mode auto --model opus (by nicehugepark)

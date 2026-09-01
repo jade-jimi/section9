@@ -138,7 +138,13 @@ class RestartReach(unittest.TestCase):
     def test_it_asks_before_it_stops(self):
         """말없이 끊지 않는다 — 하던 일을 끊는 것은 사람이 알고 눌러야 한다."""
         tell = self._code("restartTell")
-        self.assertIn("restartBusy", tell, "일하는 중인 것을 알아보지 못한다")
+        # 갈래를 알아보는 손이 `restartBusy` 하나에서 `restartWhy` 로 넓어졌다
+        # (REQ-20260901-014 ①) — 한도로 굳은 턴은 「일하는 중」이 아니라 제 이름을
+        # 가진 갈래라, 두 갈래를 가르는 판정이 여기 있어야 한다.
+        self.assertRegex(tell, r"restartWhy\(|restartBusy",
+                         "일하는 중인 것을 알아보지 못한다")
+        self.assertRegex(tell, r'why !== "busy"',
+                         "한도를 「일하는 중」과 같은 갈래로 다룬다")
         self.assertRegex(tell, r'kind: "confirm"', "묻지 않고 넘어간다")
         # 「멈추기」는 이제 **상태**의 낱말이라 행동에서 뺐다 (REQ-20260829-024
         # 라운드4 반려). 계약은 그대로다 — 버튼이 무엇을 하는지 이름이 말한다.
@@ -159,9 +165,15 @@ class RestartReach(unittest.TestCase):
         fn = self._code("restartAfterStop")
         self.assertRegex(fn, r'restartChip\("stopping"', "기다리는 사이를 말하지 않는다")
         self.assertIn("RESTART_STOP_TRIES", fn, "언제까지 기다릴지가 없다")
-        # 끝내 안 멈추면 지어내지 않고 있는 그대로 말한다
-        self.assertIn("s9dlg", fn.split("RESTART_STOP_TRIES")[-1],
-                      "안 멈췄을 때 아무 말이 없다")
+        # 끝내 안 멈추면 지어내지 않고 있는 그대로 말한다. 창을 여는 손이
+        # `s9dlg` 직접 호출에서 `restartDlgOpen` 으로 바뀌었다 —
+        # 한 사건에 문장 한 벌을 지키려면 창도 칩과 같은 표에서 받아야 한다
+        # (REQ-20260901-014 V2).
+        tail = fn.split("RESTART_STOP_TRIES")[-1]
+        self.assertRegex(tail, r"restartDlgOpen\(|s9dlg",
+                         "안 멈췄을 때 아무 말이 없다")
+        self.assertIn('why_kind: "nostop"', tail,
+                      "사유를 이름 없이 토막으로 넘긴다 — 내부 토큰이 창 제목이 된다")
 
     def test_it_retries_only_while_busy(self):
         """일하는 중이 아닌 다른 사유로 거부됐으면 계속 두드리지 않는다."""
@@ -173,13 +185,20 @@ class RestartReach(unittest.TestCase):
 
     def test_the_server_guard_is_untouched(self):
         """가드를 없애면 말없이 끊기는 일이 생긴다 — 화면이 먼저 멈추고 나서
-        다시 청하는 순서다. 화면에서 고쳤다고 서버를 손대지 않았는지 본다."""
+        다시 청하는 순서다. 화면에서 고쳤다고 서버를 손대지 않았는지 본다.
+
+        판정의 **출처**는 옮겼다 (REQ-20260901-011): 손으로 파싱하던 자리가
+        공유 판독기(`transcript_read`)로 갔다 — 한도로 굳은 턴을 「진행 중」
+        으로 읽어 전환이 통째로 막히던 결함의 근원이다. 가드 자체는 그대로다:
+        **진짜 도는 턴은 여전히 사람이 명시하지 않는 한 끊기지 않는다.**"""
         with open(S9, encoding="utf-8") as f:
             src = f.read()
         i = src.find("def restart_session(")
         self.assertGreater(i, 0)
-        blk = src[i:i + 1500]
-        self.assertIn("_transcript_busy(tp)", blk, "작업 보호 가드가 사라졌다")
+        blk = src[i:i + 3000]
+        self.assertIn("transcript_read(tp)", blk, "판정의 출처가 사라졌다")
+        self.assertIn('st.get("busy") and not force', blk,
+                      "작업 보호 가드가 사라졌다")
         self.assertIn("턴 진행 중", blk)
 
     # ---------- ⑧ 모델 창에도 같이 ----------

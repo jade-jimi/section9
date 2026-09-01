@@ -113,6 +113,36 @@ class TestAssets(unittest.TestCase):
             self.get(f"/api/asset?doc={rid}&f=../../../etc/passwd")[0], 404)
         self.assertEqual(self.get("/api/asset?doc=REQ-9999-999&f=a2.png")[0], 404)
 
+    # A2b. 글자 첨부는 charset 을 입고 나간다 (REQ-20260901-016) — charset 없는
+    # text/* 를 받은 브라우저는 인코딩을 추측하고, 새 탭으로 연 소스 파일의
+    # 한글 UTF-8 이 그 추측(레거시 인코딩)에서 전부 깨졌다(실캡처). 그림·이진은
+    # 그대로다 — charset 은 글자에만 뜻이 있다.
+    def test_a2b_text_asset_carries_charset(self):
+        d = os.path.join(self.tmp, "state", "terminal", "uploads", "tester")
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, "a2b.py")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write('print("한글")\n')
+        rid = self.cli("new", "request", "--title", "글자 첨부", "--summary", "s",
+                       "--size", "S", "--goal", "g",
+                       "--body", f"소스다\n[File: {p}]").split()[0]
+        self.cli("assets", "ingest", rid)
+        url = f"http://127.0.0.1:{self.port}/api/asset?doc={rid}&f=a2b.py"
+        with urllib.request.urlopen(url, timeout=5) as r:
+            self.assertEqual(r.status, 200)
+            ct = r.headers.get("Content-Type", "")
+            self.assertIn("charset=utf-8", ct,
+                          "글자 종류에 charset 이 없다: %r" % ct)
+            self.assertEqual(r.read().decode("utf-8"), 'print("한글")\n')
+        src = self.upload_tmp("a2c.png")
+        rid2 = self.new_req_with_image("그림 첨부", src)
+        self.cli("assets", "ingest", rid2)
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{self.port}/api/asset?doc={rid2}&f=a2c.png",
+                timeout=5) as r:
+            self.assertNotIn("charset", r.headers.get("Content-Type", ""),
+                             "그림에 charset 이 붙었다")
+
     # A3. rm: 첨부도 문서와 함께 tombstone(.trash)으로 — 고아 파일 없음
     def test_a3_rm_moves_assets(self):
         src = self.upload_tmp("a3.png")

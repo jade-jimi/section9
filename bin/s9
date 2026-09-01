@@ -2484,14 +2484,61 @@ def _auto_caps_ok(req_id, cfg, reason="", prio=None):
     return True
 
 
+def _args_get_model(args_str):
+    """인자 문자열이 지정한 `--model` 값 (없으면 빈 문자열)."""
+    import shlex
+    try:
+        toks = shlex.split(args_str or "")
+    except ValueError:
+        toks = (args_str or "").split()
+    for i, t in enumerate(toks):
+        if t == "--model" and i + 1 < len(toks):
+            return toks[i + 1]
+        if t.startswith("--model="):
+            return t.split("=", 1)[1]
+    return ""
+
+
+def resolved_model(owner=None):
+    """이 사용자로 claude 를 띄울 때 쓸 모델 — 판정은 여기 한 곳 (REQ-20260901-012).
+
+    우선순위: **사람이 선언한 정책** > **대시보드에서 방금 고른 값**.
+      auto_resume_model      `s9 user config` 로 사람이 쓴 정책
+      s9code_args --model    사람이 쓴 기동 인자도 선언이다
+      last_model_choice      대시보드 모델 창의 1회 선택 (창 하나의 성질)
+
+    칸이 하나였을 때는 마지막에 쓴 쪽이 이겼다 — 확인차 한 번 눌러 본 fable
+    이 영속 정책이 되어(8/30 13:36) 계정 전환으로 뜬 새 창과 무인 워커까지
+    fable 로 세웠고, 그 한도 소진이 2026-09-01 전환 교착의 무대가 됐다.
+    "기본 모델로 fable 은 절대 안 된다" 는 사람의 선언이 기계가 지키는 문장이
+    되려면, 선언과 최근 선택은 다른 칸에 살아야 한다.
+
+    반환: (모델, 출처) — 출처는 "policy" | "last" | "" (없음).
+    """
+    try:
+        cfg = user_config(owner or resolve_user(None)) or {}
+    except Exception:
+        return ("", "")
+    pol = str(cfg.get("auto_resume_model") or "").strip()
+    if pol:
+        return (pol, "policy")
+    declared = _args_get_model(str(cfg.get("s9code_args") or "")).strip()
+    if declared:
+        return (declared, "policy")
+    last = str(cfg.get("last_model_choice") or "").strip()
+    return (last, "last") if last else ("", "")
+
+
 def _spawn_model_args(owner=None):
     """무인 워커가 쓸 `--model` 인자 (REQ-20260825-080). 지정이 없으면 워커는
     계정 기본 모델로 뜨는데, 그 모델의 한도가 소진되면 스폰된 워커가 전부 즉시
     죽는다(2026-08-25 Fable 한도 소진 실사고 — 모델 변경조차 막혔다).
-    사용자 설정 auto_resume_model 로 못 박는다."""
+
+    값의 출처는 `resolved_model` 한 곳이다 (REQ-20260901-012). 종전에는 이
+    자리가 `auto_resume_model` 을 곧장 읽었는데, 대시보드 모델 변경이 그 칸을
+    덮어써서 **이 가드가 막으려던 바로 그 조건을 스스로 복원**하고 있었다."""
     try:
-        mdl = str(user_config(owner or resolve_user(None))
-                  .get("auto_resume_model", "") or "").strip()
+        mdl = resolved_model(owner)[0]
         return ["--model", mdl] if mdl else []
     except Exception:
         return []
@@ -2521,32 +2568,49 @@ def _args_set_model(args_str, model):
     return " ".join(out + (["--model", model] if model else []))
 
 
-def _persist_model_choice(owner, model):
-    """대시보드에서 고른 모델을 다음 기동에도 살아남게 못 박는다 (REQ-20260825-080).
+def code_launch_args(owner=None):
+    """`s9 code` 가 claude 에 넘길 계정 기본 인자 (REQ-20260901-012).
 
-    종전 모델 변경은 재시작 마커의 --model 뿐이라 그 재개 1회에만 붙었다.
-    세션이 새로 뜨거나(s9 code) 무인 워커가 스폰되면 계정 기본값으로 돌아가,
-    사용자가 고른 모델이 되돌아가는 것처럼 보였다. s9가 claude를 띄우는 모든
-    경로가 읽는 두 곳을 같은 값으로 맞춘다:
-      auto_resume_model   — 무인 워커 스폰 (_spawn_model_args)
-      s9code_args --model — s9 code 기동 기본 인자
-    ~/.claude/settings.json(계정 기본)은 s9 소유가 아니라 건드리지 않는다 —
-    s9 밖에서 맨 claude 로 띄우는 경로는 계속 그 값을 따른다.
+    모델은 인자 문자열이 아니라 **판정 한 곳**(`resolved_model`)에서 온다:
+    선언된 정책 > 대시보드의 최근 선택. 대시보드 선택이 `s9code_args` 를 직접
+    덮던 자리가, 계정 전환으로 뜨는 새 창을 fable 로 세운 통로였다."""
+    try:
+        who = owner or resolve_user(None)
+        cfgv = (user_config(who) or {}).get("s9code_args", "")
+        cfgv = cfgv if isinstance(cfgv, str) else ""
+        mdl = resolved_model(who)[0]
+        if mdl:
+            cfgv = _args_set_model(cfgv, mdl)
+        return cfgv.split() if cfgv.strip() else []
+    except Exception:
+        return []
+
+
+def _record_model_choice(owner, model):
+    """대시보드에서 고른 모델을 **최근 선택 칸**에 남긴다 (REQ-20260901-012).
+
+    종전 이름은 `_persist_model_choice` 였고, 하는 일은 사용자 정책 두 칸
+    (`auto_resume_model` · `s9code_args --model`)을 그 값으로 덮는 것이었다
+    (REQ-20260825-080). 의도는 "고른 모델이 다음 기동에서 되돌아가지 않게"
+    였는데, 부작용이 컸다 — 확인차 한 번 눌러 본 fable 이 그대로 **선언된
+    정책**이 되어 계정 전환으로 뜬 새 창과 무인 워커까지 fable 로 세웠다
+    (8/30 13:36 실기록 두 줄). 사용자가 "기본 모델로 fable 은 절대 안 된다"
+    고 정한 사실은 시스템 어디에도 정책으로 남아 있지 않았다.
+
+    그래서 칸을 가른다: 정책 칸은 사람의 명시 선언(`s9 user config`)만 쓰고,
+    창 하나의 1회 선택은 여기 `last_model_choice` 에 산다. 읽는 쪽 우선순위는
+    `resolved_model` 한 곳이 정한다 — 정책이 있으면 정책이 이긴다.
+    ~/.claude/settings.json(계정 기본)은 s9 소유가 아니라 건드리지 않는다.
     best-effort: 여기서 실패해도 재시작 자체는 진행한다(반환값으로만 보고)."""
     if not model or not owner:
         return []
     done = []
     try:
         cur = user_config(owner) or {}
-        if str(cur.get("auto_resume_model") or "") != model:
-            do_user_config_set(owner, "auto_resume_model", model,
+        if str(cur.get("last_model_choice") or "") != model:
+            do_user_config_set(owner, "last_model_choice", model,
                                actor="dashboard model change")
-            done.append("auto_resume_model")
-        want = _args_set_model(str(cur.get("s9code_args") or ""), model)
-        if str(cur.get("s9code_args") or "") != want:
-            do_user_config_set(owner, "s9code_args", want,
-                               actor="dashboard model change")
-            done.append("s9code_args")
+            done.append("last_model_choice")
     except Exception:
         return done
     return done
@@ -2572,7 +2636,11 @@ def _restart_cmd(base_cmd, m):
             out.append(t)
             i += 1
         cmd = out
-    cmd += ["--resume", m["resume"]]
+    # 이어받을 대화가 없으면 `--resume` 을 붙이지 않는다 (REQ-20260901-011):
+    # 「그래도 바꾸기」로 대화 없이 계정만 옮기는 갈래에서, 못 찾는 sid 를
+    # 그대로 넘기면 claude 가 뜨자마자 죽는다.
+    if m.get("resume"):
+        cmd += ["--resume", m["resume"]]
     if m.get("model"):
         cmd += ["--model", m["model"]]
     if m.get("effort"):
@@ -4179,12 +4247,79 @@ def _pid_is_claude(pid):
     return "claude" in pid_cmdline(pid)
 
 
-def _transcript_busy(path):
-    """턴 진행 중 판정 — 마지막 메시지 이벤트(type user/assistant)가
-    assistant stop_reason=end_turn 이면 idle. [Request interrupted…] 사용자
-    턴(직전 중단 직후)도 idle. 그 외(user/tool_use/thinking 등)는 busy.
-    판정 불가(파일 부재·메시지 없음)는 False — 신호를 안 보내는 쪽으로."""
-    last = None
+# ---- 트랜스크립트 한 판독기 (REQ-20260901-011) -----------------------------
+#
+# 한 파일에 대해 "이 세션이 지금 무엇을 하고 있나"를 세 함수가 각자 손으로
+# 파싱하고 있었다: `_transcript_busy`(전환 게이트) · `session_model`(상태줄) ·
+# `stream_end_info`(끝난 사유). 이웃 둘은 합성 이벤트를 알았는데 **게이트만
+# 몰랐다** — 한도로 굳은 턴이 「진행 중」으로 읽혀 모델·계정 전환이 통째로
+# 막혔다(2026-09-01 12:37~12:41 실사고). 게다가 유일한 탈출구인 「중단하고
+# 바꾸기」는 소진된 그 모델이 한 턴을 돌아야 소화되는 지시라, 시도할 때마다
+# 합성 한도 응답이 한 줄 더 쌓여 busy 도장이 갱신됐다 — 원리상 수렴 불가.
+#
+# 그래서 판독은 **여기 하나**다. 다음에 모르는 모양이 와도 고칠 자리가 하나다.
+
+LIMIT_MODEL_RE = re.compile(r"reached your\s+(.{1,40}?)\s+limit", re.I)
+LIMIT_RESET_RE = re.compile(
+    r"(?:resets?|resetting|try again|available again)\s*"
+    r"(?:at|after|in|on)\s+([^.\n]{1,40})", re.I)
+TRANSCRIPT_TAIL_EVENTS = 12    # 「끝난 사유」를 찾아 볼 꼬리 폭(이벤트 수)
+_transcript_cache = {}
+
+
+def _msg_text(msg):
+    """메시지 본문의 텍스트만 한 문자열로 — content 가 str 이든 블록 목록이든."""
+    c = (msg or {}).get("content")
+    if isinstance(c, str):
+        return c
+    if not isinstance(c, list):
+        return ""
+    return " ".join(str(blk.get("text", "")) for blk in c
+                    if isinstance(blk, dict) and blk.get("type") == "text")
+
+
+def _limit_event(d, text=None):
+    """이 이벤트가 「사용 한도 소진」으로 끝난 자리인가.
+
+    서명을 셋 둔다 — 문구 하나에만 기대면 문구가 바뀌는 날 눈이 먼다.
+    실측 원문(a8186437, 2026-09-01): model="<synthetic>" ·
+    stop_reason="stop_sequence" · error="rate_limit" · apiErrorStatus=429 ·
+    "You've reached your Fable 5 limit. Run /usage-credits to continue…"
+    """
+    if str(d.get("error") or "") == "rate_limit":
+        return True
+    if str(d.get("apiErrorStatus") or "") in ("429", "rate_limit"):
+        return True
+    t = text if text is not None else _msg_text(d.get("message") or {})
+    return "reached your" in t and "limit" in t
+
+
+def transcript_read(path):
+    """트랜스크립트(또는 그 미러) 한 번 읽고 셋을 답한다 — 판독의 유일한 자리.
+
+        busy        턴이 **실제로** 도는 중인가 (전환 게이트가 보는 값)
+        limit       마지막 응답이 한도 소진으로 끝났는가 (제 이름의 갈래)
+        limit_seen  꼬리 어딘가에 한도 서명이 있었는가 (끝난 사유 표기용)
+        limit_model·resets_at   말할 수 있으면 (없으면 빈 문자열, 짐작 금지)
+        model       마지막 **실제** 모델 (합성 표기는 모델이 아니다)
+
+    판정 불가(파일 부재·메시지 없음·깨진 줄)는 busy=False — 신호를 안 보내는
+    쪽으로. mtime+size 캐시: 대시보드 폴이 5초마다 이 파일을 지난다.
+    """
+    blank = {"ok": False, "busy": False, "limit": False, "limit_seen": False,
+             "limit_model": "", "resets_at": "", "model": ""}
+    if not path:
+        return dict(blank)
+    try:
+        stt = os.stat(path)
+    except OSError:
+        return dict(blank)
+    key = (stt.st_mtime, stt.st_size)
+    hit = _transcript_cache.get(path)
+    if hit and hit[0] == key:
+        return dict(hit[1])
+    out = dict(blank, ok=True)
+    tail = []
     try:
         with open(path, encoding="utf-8") as f:
             for ln in f:
@@ -4194,24 +4329,70 @@ def _transcript_busy(path):
                     d = json.loads(ln)
                 except ValueError:
                     continue
-                if d.get("type") in ("user", "assistant"):
-                    last = d
+                if d.get("type") not in ("user", "assistant"):
+                    continue
+                if d.get("type") == "assistant":
+                    m = (d.get("message") or {}).get("model")
+                    # <synthetic> 같은 합성 표기는 실제 모델이 아니다 —
+                    # 상태줄에 그대로 나오면 사용자가 오해한다 (REQ-082)
+                    if m and not str(m).startswith("<"):
+                        out["model"] = m
+                tail.append(d)
+                if len(tail) > TRANSCRIPT_TAIL_EVENTS:
+                    tail.pop(0)
     except OSError:
-        return False
-    if not last:
-        return False
-    m = last.get("message") or {}
-    if last.get("type") == "assistant":
-        return m.get("stop_reason") != "end_turn"
-    content = m.get("content")
-    if isinstance(content, str) and "Request interrupted" in content:
-        return False
-    if isinstance(content, list):
-        for blk in content:
-            if isinstance(blk, dict) and blk.get("type") == "text" \
-                    and "Request interrupted" in str(blk.get("text", "")):
-                return False
-    return True   # user 턴이 마지막 = 모델 응답 예정/생성 중
+        return dict(blank)
+    for d in reversed(tail):
+        if d.get("type") != "assistant":
+            continue
+        t = _msg_text(d.get("message") or {})
+        if not _limit_event(d, t):
+            continue
+        out["limit_seen"] = True
+        mm = LIMIT_MODEL_RE.search(t)
+        out["limit_model"] = mm.group(1).strip() if mm else ""
+        rr = LIMIT_RESET_RE.search(t)
+        out["resets_at"] = rr.group(1).strip() if rr else ""
+        break
+    last = tail[-1] if tail else None
+    if last is not None:
+        m = last.get("message") or {}
+        t = _msg_text(m)
+        if last.get("type") == "assistant":
+            if _limit_event(last, t):
+                # 한도로 굳은 턴은 **도는 턴이 아니다.** 멈출 것이 없는데
+                # 멈추라고 하면 사람이 빠져나갈 문이 없어진다.
+                out["limit"] = True
+            elif str(m.get("model") or "").startswith("<"):
+                # 합성 응답은 모델이 낸 말이 아니라 턴을 끝내려고 끼워진 줄이다
+                pass
+            else:
+                out["busy"] = m.get("stop_reason") != "end_turn"
+        else:
+            # 사용자 턴이 마지막 = 모델 응답 예정/생성 중. 단, 직전 중단 직후는
+            # 아무도 응답하지 않는다.
+            out["busy"] = "Request interrupted" not in t
+    if not out["limit_seen"]:
+        # 미러 파일 등 우리가 모르는 모양이어도 끝난 사유는 말할 수 있어야
+        # 한다 — 종전 `stream_end_info` 의 꼬리 서명 검사를 그대로 남긴다.
+        try:
+            with open(path, "rb") as f:
+                f.seek(max(0, stt.st_size - 8192))
+                raw = f.read().decode("utf-8", "ignore")
+            if "reached your" in raw and "limit" in raw:
+                out["limit_seen"] = True
+        except OSError:
+            pass
+    _transcript_cache[path] = (key, dict(out))
+    return out
+
+
+def _transcript_busy(path):
+    """턴 진행 중 판정 — 판독은 `transcript_read` 하나가 한다.
+
+    한도로 굳은 턴은 여기서 busy 가 아니다(REQ-20260901-011): 그 갈래는
+    `restart_session` 이 제 이름(`why_kind="limit"`)으로 따로 다룬다."""
+    return bool(transcript_read(path).get("busy"))
 
 
 # ---- 세션 모델 제어 (REQ-20260825-037) ------------------------------------
@@ -4221,7 +4402,8 @@ def _transcript_busy(path):
 # 재개한다: 대시보드 → 마커 기록 + SIGTERM(유휴 확인 후) → 래퍼가 재기동.
 
 RESTART_FRESH_SEC = 60
-_model_cache = {}
+RESTART_ATTEMPT_WIN = 600      # 같은 사유의 '연속'으로 셀 시간 폭
+LINEAGE_FRESH_SEC = 900        # 계보 기록의 유효기간 (재시작이 실패하면 만료)
 
 
 def claude_home():
@@ -5390,39 +5572,203 @@ def _restart_marker_path(sid8):
                         f"restart-{safe_name(sid8)}.json")
 
 
+def _terminal_state_path(name):
+    p = os.path.join(ROOT, "state", "terminal", name)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    return p
+
+
+# ---- 거부의 회차·사유·계보 (REQ-20260901-011 서버↔화면 계약) ----------------
+
+def _restart_attempt(sid, why_kind):
+    """같은 사유로 **몇 번째** 막혔나 — 세는 것은 서버다.
+
+    화면이 세면 창을 새로 열 때마다 1 로 돌아간다. 사람이 네 번째 같은 벽을
+    보고 있다는 사실은 화면이 말을 바꿔야 할 근거인데(실사고 12:37~12:41 에
+    사람은 같은 거부를 네 번 봤다), 그 근거를 아는 것은 거부를 낸 쪽이다.
+    사유가 바뀌거나 시간 폭을 넘기면 1 부터 다시 센다."""
+    import time as _time
+    p = _terminal_state_path(f"restart-try-{safe_name(sid[:8])}.json")
+    n, now = 1, _time.time()
+    try:
+        with open(p, encoding="utf-8") as f:
+            d = json.load(f)
+        if d.get("why") == why_kind and now - float(d.get("ts") or 0) \
+                <= RESTART_ATTEMPT_WIN:
+            n = int(d.get("n") or 0) + 1
+    except (OSError, ValueError, TypeError):
+        pass
+    try:
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"why": why_kind, "n": n, "ts": now}, f)
+    except OSError:
+        pass
+    return n
+
+
+def _restart_attempt_clear(sid):
+    """한 번 지나갔으면 회차는 0 이다 — 다음 벽은 첫 번째 벽이다."""
+    try:
+        os.remove(_terminal_state_path(f"restart-try-{safe_name(sid[:8])}.json"))
+    except OSError:
+        pass
+
+
+def _lineage_path(wrapper_pid):
+    return os.path.join(ROOT, "state", "terminal",
+                        f"lineage-{int(wrapper_pid)}.json")
+
+
+def _lineage_write(wrapper_pid, old_sid, **kv):
+    """재시작이 낳을 새 세션을 옛 세션에 이을 실마리를 남긴다.
+
+    `claude --resume` 는 **새 sid** 를 만든다(실측 2026-09-01: a8186437 →
+    60e39ff2). 화면의 완료 판정도 s9 의 클레임·SES 승계도 전부 sid 를 열쇠로
+    써서, sid 가 갈리는 순간 성공한 재시작이 「돌아오지 않음」이 되고(사용자가
+    본 1m31s) 문서가 고아가 됐다. 열쇠는 **래퍼 pid** 다 — 재시작 루프를 든
+    `s9 code` 프로세스는 sid 가 갈려도 그대로다."""
+    import time as _time
+    try:
+        with open(_lineage_path(wrapper_pid), "w", encoding="utf-8") as f:
+            json.dump({"from": old_sid, "from8": old_sid[:8],
+                       "wrapper_pid": int(wrapper_pid),
+                       "ts": _time.time(), **kv}, f, ensure_ascii=False)
+    except (OSError, ValueError):
+        pass
+
+
+def lineage_link():
+    """옛 세션과 그 뒤를 이은 새 세션을 잇는다 (멱등 · 조회 경로에서 호출).
+
+    새 세션의 attach_pid 의 부모가 그 래퍼면 그 둘은 같은 계보다. 이으면
+    새 바인딩에 `resumed_from`, 옛 바인딩에 `resumed_to` 가 남고 계보 기록은
+    소비된다. 낡은 기록(재시작 실패)은 잇지 않고 정리한다 — 엉뚱한 세션이
+    남의 계보를 무는 것이 고아 문서보다 나쁘다."""
+    import glob as _glob
+    import time as _time
+    linked = []
+    for lp in _glob.glob(os.path.join(ROOT, "state", "terminal",
+                                      "lineage-*.json")):
+        try:
+            with open(lp, encoding="utf-8") as f:
+                rec = json.load(f)
+        except (OSError, ValueError):
+            try:
+                os.remove(lp)
+            except OSError:
+                pass
+            continue
+        if _time.time() - float(rec.get("ts") or 0) > LINEAGE_FRESH_SEC:
+            try:
+                os.remove(lp)
+            except OSError:
+                pass
+            continue
+        wrapper = int(rec.get("wrapper_pid") or 0)
+        old = str(rec.get("from") or "")
+        if not wrapper or not old:
+            continue
+        machine = current_machine()
+        for bp in _glob.glob(os.path.join(
+                STATE, f"{safe_name(machine)}__*.json")):
+            try:
+                with open(bp, encoding="utf-8") as f:
+                    b = _norm_binding(json.load(f))
+            except (OSError, ValueError):
+                continue
+            sid = b.get("session") or ""
+            if not sid or sid == old or b.get("ended"):
+                continue
+            pid = int(b.get("attach_pid") or 0)
+            if not pid or pid_ppid(pid) != wrapper:
+                continue
+            # 바인딩 읽고-고쳐-쓰기는 락 안에서 (이 저장소의 규약) — 훅이
+            # 같은 파일을 쓰는 중이면 우리 쓰기가 그것을 삼킨다. 락을 못 잡으면
+            # 이번 폴은 건너뛴다: 잇는 일은 멱등이라 다음 폴이 다시 한다.
+            try:
+                acquire_lock(timeout=2.0)
+            except SystemExit:
+                break
+            try:
+                nb = read_binding(machine, sid) or b
+                ob = read_binding(machine, old)
+                dirty = False
+                if nb.get("resumed_from") != old:
+                    nb["resumed_from"] = old
+                    dirty = True
+                # 클레임도 함께 건넌다 — 같은 대화가 이어졌는데 잡고 있던
+                # 일이 미클레임으로 보이면, 워처가 그 REQ 에 무인 작업자를
+                # 겹쳐 스폰한다 (REQ-20260823-083 의 그 엣지). 새 세션이 이미
+                # 제 클레임을 가졌으면 건드리지 않는다.
+                if ob and not nb.get("active_reqs") and ob.get("active_reqs"):
+                    nb["active_reqs"] = list(ob.get("active_reqs") or [])
+                    if ob.get("claim_at"):
+                        nb["claim_at"] = dict(ob.get("claim_at") or {})
+                    dirty = True
+                if dirty:
+                    write_binding(nb)
+                if ob and ob.get("resumed_to") != sid:
+                    ob["resumed_to"] = sid
+                    write_binding(ob)
+            finally:
+                release_lock()
+            linked.append((old, sid))
+            try:
+                os.remove(lp)
+            except OSError:
+                pass
+            break
+    return linked
+
+
+def _profile_dir(account):
+    """계정 키 → 그 계정의 설정 디렉토리(=대화 기록이 사는 곳)."""
+    if not account or account == ACCOUNT_HOME_KEY:
+        return os.path.abspath(claude_home())
+    return os.path.abspath(os.path.join(profiles_base(), safe_name(account)))
+
+
+def _ensure_resumable(transcript_path, full_sid, account):
+    """대상 계정이 이 대화를 **이어받을 수 있게** 한다 (REQ-20260901-011 E·F).
+
+    대화 기록은 설정 디렉토리마다 따로 산다
+    (`<CLAUDE_CONFIG_DIR>/projects/<cwd-key>/<sid>.jsonl`). 계정을 바꿔 띄운
+    `claude --resume <sid>` 가 `No conversation found` 로 죽던 이유가 이것이고,
+    **그 파일을 대상 프로필로 복사하면 찾는다**(2026-09-01 실행 증명). 같은
+    모양의 복사가 `s9 resume` 에 이미 있다 — 여기서 두 벌로 만들지 않으려고
+    규칙(cwd-key·덮어쓰기 금지)을 그대로 따른다.
+
+    반환 (ok, copied, why): ok=False 면 **SIGTERM 을 쏘기 전에** 거부해야 한다.
+    지금까지는 이어질 수 있는지 확인하지 않고 세션부터 내렸다."""
+    if not transcript_path or not full_sid:
+        return (False, False, "세션 전체 id 미상 — 트랜스크립트 없음")
+    dest_dir = os.path.join(_profile_dir(account), "projects",
+                            os.path.basename(os.path.dirname(transcript_path)))
+    dest = os.path.join(dest_dir, full_sid + ".jsonl")
+    if os.path.abspath(dest) == os.path.abspath(transcript_path):
+        return (True, False, "")          # 같은 자리 — 옮길 것이 없다
+    if os.path.exists(dest):
+        # 덮지 않는다: 대상 쪽 기록이 더 나중일 수 있다 (`s9 resume` 과 같은 규칙)
+        return (True, False, "")
+    if not os.path.isfile(transcript_path):
+        return (False, False,
+                "대상 계정에 이 대화의 기록이 없고, 옮길 원본도 없다")
+    try:
+        os.makedirs(dest_dir, exist_ok=True)
+        shutil.copyfile(transcript_path, dest)
+    except OSError as e:
+        return (False, False, f"대화 기록을 대상 계정으로 옮기지 못했다: {e}")
+    return (True, True, "")
+
+
 def session_model(b):
     """대상 세션의 현재 모델 — 트랜스크립트 마지막 assistant 이벤트의 model.
-    (effort는 트랜스크립트에 기록되지 않아 미표시.) mtime 캐시로 폴링 부담 차단."""
-    tp = b.get("transcript_path") or ""
-    if not tp or not os.path.exists(tp):
-        return ""
-    try:
-        mt = os.path.getmtime(tp)
-    except OSError:
-        return ""
-    hit = _model_cache.get(tp)
-    if hit and hit[0] == mt:
-        return hit[1]
-    model = ""
-    try:
-        with open(tp, encoding="utf-8") as f:
-            for ln in f:
-                if '"assistant"' not in ln or '"model"' not in ln:
-                    continue
-                try:
-                    d = json.loads(ln)
-                except ValueError:
-                    continue
-                if d.get("type") == "assistant":
-                    m = (d.get("message") or {}).get("model")
-                    # <synthetic> 같은 합성 표기는 실제 모델이 아니다 —
-                    # 상태줄에 그대로 나오면 사용자가 오해한다 (REQ-082)
-                    if m and not str(m).startswith("<"):
-                        model = m
-    except OSError:
-        return ""
-    _model_cache[tp] = (mt, model)
-    return model
+    (effort는 트랜스크립트에 기록되지 않아 미표시.)
+
+    판독·캐시는 `transcript_read` 한 곳이 한다 (REQ-20260901-011) — 여기서
+    손으로 다시 파싱하면 합성 표기를 아는 눈이 또 갈린다."""
+    return transcript_read((b or {}).get("transcript_path") or "").get(
+        "model") or ""
 
 
 def _consume_restart_marker():
@@ -5601,7 +5947,8 @@ def session_rows(limit=12):
     return rows[:limit]
 
 
-def restart_session(sid8, model="", effort="", account="", stop_workers=False):
+def restart_session(sid8, model="", effort="", account="", stop_workers=False,
+                    force=False):
     """유휴 세션을 같은 대화로 재기동 요청. 래퍼(s9 code 루프) 세션이면 마커+
     SIGTERM으로 자동(mode=wrapper), 아니면 사용자가 세션 터미널에서 실행할
     명령을 돌려준다(mode=manual). 모든 거부는 사유와 함께 ok=False.
@@ -5610,7 +5957,18 @@ def restart_session(sid8, model="", effort="", account="", stop_workers=False):
     (REQ-20260829-024). 재기동은 이 창 하나를 바꿀 뿐이라, 백그라운드의 무인
     작업자는 옛 계정·옛 모델로 계속 돈다 — 요금도 권한도 갈린다. 세우는 것은
     **모든 거부 갈래를 지난 뒤**다: 바꾸지도 못하면서 돌던 일만 죽이면 사람이
-    잃기만 한다."""
+    잃기만 한다.
+
+    `force=True` 는 「그래도 바꾸기」다 (REQ-20260901-011). 거부 하나가 교착이
+    되는 구조를 없앤다 — `--resume` 이 대화를 보존하므로 잃는 것은 진행 중이던
+    그 턴의 미기록 출력뿐이고, 응답이 그 사실을 말한다(`discarded_turn`).
+    기본값은 여전히 보호 쪽이다: 살아 있는 턴은 사람이 명시해야 끊긴다.
+
+    거부·진행 응답에는 화면이 소비할 계약 필드가 실린다:
+        why_kind    "busy" | "limit" | "no_resume"  (판정된 갈래)
+        limit       {"model", "resets_at"}          (한도 갈래에서 아는 만큼)
+        attempt     같은 사유로 연속 몇 번째인가    (서버가 세면 정확하다)
+    """
     import time as _time
     import signal as _signal
     try:
@@ -5628,26 +5986,65 @@ def restart_session(sid8, model="", effort="", account="", stop_workers=False):
         full = os.path.splitext(os.path.basename(tp))[0] if tp else ""
         if not full:
             return {"ok": False, "reason": "세션 전체 id 미상 — 트랜스크립트 없음"}
-        if _transcript_busy(tp):
-            return {"ok": False,
-                    "reason": "턴 진행 중 — 유휴 상태에서만 재기동(작업 보호)"}
+
+        st = transcript_read(tp)
+        lim = {"model": st.get("limit_model") or "",
+               "resets_at": st.get("resets_at") or ""}
+
+        def refuse(kind, why):
+            out = {"ok": False, "reason": why, "why_kind": kind,
+                   "attempt": _restart_attempt(sid, kind)}
+            if kind == "limit" or st.get("limit"):
+                out["limit"] = lim
+            return out
+
+        # 한도로 굳은 턴은 **busy 가 아니다** (REQ-20260901-011). 종전에는
+        # 한도 소진 합성 응답이 `stop_reason != end_turn` 이라는 이유로 「턴
+        # 진행 중」으로 읽혀, 그 세션에서 모델·계정 전환이 전부 막혔다 —
+        # 멈출 것이 없는데 멈추라고 하니 사람이 빠져나갈 문이 없었다.
+        if st.get("busy") and not force:
+            return refuse("busy", "턴 진행 중 — 유휴 상태에서만 재기동(작업 보호)")
+        discarded_turn = bool(st.get("busy") and force)
         if effort and effort not in ("low", "medium", "high", "xhigh", "max"):
             return {"ok": False,
                     "reason": f"effort '{effort}' 무효 (low|medium|high|xhigh|max)"}
         if not (model or effort or account):
             return {"ok": False, "reason": "변경할 항목이 없다"}
+        # 이어받을 수 있는지 **SIGTERM 전에** 확인한다 (REQ-20260901-011 F·E).
+        # 종전에는 세션부터 내리고 나중에 실패를 알렸다 — 계정 전환 재시작이
+        # `No conversation found` 로 죽고, 화면은 90초를 기다리다 「돌아온 것을
+        # 확인하지 못했습니다」를 냈다.
+        resumable, copied, why = _ensure_resumable(tp, full, account) \
+            if account else (True, False, "")
+        if not resumable and not force:
+            return refuse("no_resume", why)
         flags = (["--model", model] if model else []) \
             + (["--effort", effort] if effort else [])
-        # 고른 모델은 이 재개 1회로 끝나지 않게 저장한다 — 저장하지 않으면
-        # 다음 기동(s9 code·워커 스폰)이 계정 기본값으로 되돌린다
-        saved = _persist_model_choice(b.get("user") or resolve_user(None), model)
+        # 고른 모델은 **최근 선택 칸**에 남는다 (REQ-20260901-012) — 종전처럼
+        # 사용자 정책(auto_resume_model·s9code_args)을 덮지 않는다.
+        saved = _record_model_choice(b.get("user") or resolve_user(None), model)
         # 수동 명령도 s9 code 래퍼 경유 — 이 1회 이후로는 재시작 루프가 생겨
         # 대시보드 자동 재시작이 가능해진다 (claude 직접 실행이면 다음에도 수동)
-        manual = f"{os.path.join(ROOT, 'bin', 's9')} code --resume " + full \
+        resume_flag = f" --resume {full}" if resumable else ""
+        manual = f"{os.path.join(ROOT, 'bin', 's9')} code" + resume_flag \
             + ((" " + " ".join(flags)) if flags else "")
         if account and account != ACCOUNT_HOME_KEY:
             manual = (f"CLAUDE_CONFIG_DIR=~/.claude-profiles/"
                       f"{safe_name(account)} " + manual)
+        out = {"ok": True, "cmd": manual, "saved": saved,
+               "resume_copied": copied, "resumed_conversation": resumable}
+        if st.get("limit"):
+            # 거부가 아니라 **진행**이다 — 그래도 갈래 이름은 말한다. 화면이
+            # "한도로 멈춰 있어 멈출 것이 없으니 그대로 바꿉니다" 를 쓸 근거다.
+            out["why_kind"] = "limit"
+            out["limit"] = lim
+        if force:
+            out["forced"] = True
+            out["discarded_turn"] = discarded_turn
+            if not resumable:
+                out["why_kind"] = "no_resume"
+                out["discarded_conversation"] = True
+                out["reason_forced"] = why
         # 여기서부터는 바꾸는 것이 확정이다 — 그러니 옛 계정·옛 모델로 도는
         # 무인 작업자를 여기서 세운다 (REQ-20260829-024). 거부 갈래를 다 지난
         # 뒤인 이유는 하나다: 못 바꾸면서 돌던 일만 죽이면 잃기만 한다.
@@ -5657,25 +6054,31 @@ def restart_session(sid8, model="", effort="", account="", stop_workers=False):
                 actor=(b.get("user") or ""),
                 why=f"계정·모델 변경으로 세운다 "
                     f"({model or effort or account})")
+        out["stopped"] = stopped.get("count", 0)
         # 래퍼 감지: claude의 부모 cmdline에 s9 + code (재시작 루프 보유 여부)
         wrapper = pid_ppid(pid)
         wcmd = pid_cmdline(wrapper) if wrapper else ""
         if "s9" not in wcmd or "code" not in wcmd:
             wrapper = 0
+        _restart_attempt_clear(sid)
         if not wrapper:
-            return {"ok": True, "mode": "manual", "cmd": manual,
-                    "saved": saved, "stopped": stopped.get("count", 0),
-                    "reason":
-                    "재시작 루프(s9 code 신버전) 밖의 세션 — 세션 터미널에서 위 명령 실행"}
+            out["mode"] = "manual"
+            out["reason"] = ("재시작 루프(s9 code 신버전) 밖의 세션 — "
+                             "세션 터미널에서 위 명령 실행")
+            return out
         mp = _restart_marker_path(sid)
         os.makedirs(os.path.dirname(mp), exist_ok=True)
         with open(mp, "w", encoding="utf-8") as f:
-            json.dump({"wrapper_pid": wrapper, "resume": full, "model": model,
-                       "effort": effort, "account": account,
+            json.dump({"wrapper_pid": wrapper,
+                       "resume": full if resumable else "",
+                       "model": model, "effort": effort, "account": account,
                        "ts": _time.time()}, f, ensure_ascii=False)
+        # 새 sid 로 갈릴 것을 미리 잇는다 (REQ-20260901-011 G)
+        _lineage_write(wrapper, sid, account=account, model=model,
+                       effort=effort)
         os.kill(pid, _signal.SIGTERM)
-        return {"ok": True, "mode": "wrapper", "cmd": manual, "saved": saved,
-                "stopped": stopped.get("count", 0)}
+        out["mode"] = "wrapper"
+        return out
     except Exception as ex:
         return {"ok": False, "reason": f"오류: {ex}"}
 
@@ -13673,12 +14076,7 @@ def cmd_code(args):
         os.chdir(ROOT)  # 규약·스킬이 이 디렉토리 기준으로 로드된다
         # 계정 기본 인자(user config s9code_args) 뒤에 명령행 인자 — 뒤가 우선
         # 적용되므로 명령행이 계정 기본값을 덮는다 (REQ-20260824-036)
-        extra = []
-        try:
-            cfgv = (user_config(resolve_user(None)) or {}).get("s9code_args", "")
-            extra = cfgv.split() if isinstance(cfgv, str) and cfgv.strip() else []
-        except Exception:
-            extra = []
+        extra = code_launch_args()
         base_cmd = ["claude"] + extra + (args.claude_args or [])
         # 세션을 스스로 깨운다 (REQ-20260827-025) — 위 CODE_BOOTSTRAP 주석 참조.
         # 사람이 자기 프롬프트를 줬으면 붙이지 않는다: 위치 인자가 둘이면
@@ -15602,14 +16000,10 @@ def cmd_serve(args):
                     "%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(path)))
             except OSError:
                 pass
-            try:
-                with open(path, "rb") as f:
-                    f.seek(max(0, os.path.getsize(path) - 8192))
-                    tail = f.read().decode("utf-8", "ignore")
-                if "reached your" in tail and "limit" in tail:
-                    out["end_why"] = "사용 한도 소진"
-            except OSError:
-                pass
+            # 서명 판독은 `transcript_read` 한 곳이 한다 (REQ-20260901-011) —
+            # 게이트가 같은 눈을 못 쓰고 낡은 채로 남았던 자리다.
+            if transcript_read(path).get("limit_seen"):
+                out["end_why"] = "사용 한도 소진"
             return out
         return {}
 
@@ -15995,6 +16389,15 @@ def cmd_serve(args):
             판·목록·상태는 여전히 `no-store` 다(`_send`). 그것들은 사람이 옮긴
             결과를 곧바로 보여야 하고, 첨부와는 성질이 다르다.
             """
+            # 글자 파일은 새 탭에서도 읽혀야 한다 (REQ-20260901-016). charset
+            # 없는 text/* 를 받은 브라우저는 인코딩을 추측하고, 한글 UTF-8 은
+            # 그 추측(레거시 인코딩)에서 전부 깨진다 — 소스 파일 첨부를 새
+            # 탭으로 연 실캡처가 그것이다. 판정은 관문 한 곳(여기): 글자로
+            # 읽히는 종류에만 charset 을 붙이고 그림·이진은 그대로 둔다.
+            if (ctype.startswith("text/") or ctype in (
+                    "application/json", "application/javascript",
+                    "application/xml")) and "charset" not in ctype:
+                ctype += "; charset=utf-8"
             tag = asset_etag(full)
             if tag and self.headers.get("If-None-Match") == tag:
                 self.send_response(304)
@@ -16465,6 +16868,10 @@ def cmd_serve(args):
                 self._json({"users": out, "machine": machine})
             elif parsed.path == "/api/chat/target":
                 # 채팅 자동 대상 (REQ-032): 살아있는 attach 중 최근 활동 세션
+                # 재시작이 낳은 새 sid 를 옛 sid 에 먼저 잇는다
+                # (REQ-20260901-011 G) — 폴이 이 계보를 실어야 화면이 옛 sid
+                # 에 못 박힌 채 「돌아오지 않음」을 세지 않는다.
+                lineage_link()
                 b = chat_target(qs.get("sid", [""])[0] or None)
                 if not b:
                     self._json({"sid": None, "hint":
@@ -16492,6 +16899,11 @@ def cmd_serve(args):
                                 # — 5초마다 도는 조회가 프로필을 옮기거나
                                 # 지우면 그건 조회가 아니라 사고다.
                                 "accounts": _acct,
+                                # 세션 계보 (REQ-20260901-011 G): `--resume` 는
+                                # 새 sid 를 만든다 — 옛↔새를 잇는 실은 서버가
+                                # 준다(화면은 이 값으로 대상을 옮긴다).
+                                "resumed_from": b.get("resumed_from") or "",
+                                "resumed_to": b.get("resumed_to") or "",
                                 "switchable": account_switchable(_acct)})
             elif parsed.path == "/api/accounts":
                 # 고를 수 있는 계정들 (REQ-20260827-079) — 자리 이름이 아니라
@@ -16981,7 +17393,10 @@ def cmd_serve(args):
                         account=str(req.get("account") or "").strip(),
                         # 바꾸며 세운다 (REQ-20260829-024) — 화면이 이 갈래를
                         # 보내면 옛 계정으로 도는 작업자를 남기지 않는다.
-                        stop_workers=bool(req.get("stop_workers")))
+                        stop_workers=bool(req.get("stop_workers")),
+                        # 「그래도 바꾸기」 (REQ-20260901-011) — 거부 하나가
+                        # 교착이 되지 않게 사람이 명시로 지나갈 문.
+                        force=bool(req.get("force")))
                     self._json(res, 200 if res.get("ok") else 409)
                 elif parsed.path == "/api/chat/upload":
                     # 이미지/파일 첨부 (REQ-040): base64 저장 → 절대경로 반환.
