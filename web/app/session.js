@@ -512,36 +512,105 @@ function acctAddShape(d){
    **왜 · 무엇이 안 바뀌었나 · 이제 무엇을 하면 되나.** 무엇이 안 바뀌었는지가
    가장 먼저 궁금한 것이라 주절에 둔다. 원문은 버리지 않고 줄의 title 로 남긴다:
    화면은 사람 말을, 마우스를 올린 사람에게는 기계 말을. */
-const RESTART_SAY = [
+/* 사유를 먼저 **이름으로** 세운다 (REQ-20260901-014 V1·V2).
+
+   여태 이 표는 서버가 보낸 기계 사유를 곧장 문장으로 옮겼다. 그래서 두 가지가
+   샜다. ① 화면이 스스로 지어낸 사유(`안 끝남`·`중단 요청 실패`)는 표의 어느
+   갈래에도 안 걸려 폴백으로 떨어졌고, 내부 토막이 그대로 창 제목이 됐다
+   (사용자 캡처: 「계정을 바꾸지 못했습니다 — 안 끝남」). ② 같은 사건을 창은
+   「하던 일이 아직 안 끝났습니다」로, 칩은 「안 끝남」으로 불렀다 — 한 사건에
+   문장 두 벌이다(livedot 툴팁에서 이미 금지한 그 패턴).
+
+   그래서 층을 하나 넣는다: **사유 → 이름 → 문장.** 이름은 서버가 실어 주면
+   그 말이 이기고(`why_kind`), 없으면 여기서 기계 사유를 이름으로 옮긴다.
+   문장은 이름마다 한 벌뿐이라 칩·창·줄이 같은 이름을 물어 같은 문장을 받는다. */
+const RESTART_WHY_OF = [
+  [/턴 진행 중/, "busy"],
+  [/서버 연결 실패/, "offline"],
+  [/재시작 API 없음|구버전/, "oldserver"],
+  [/세션 없음|종료됨/, "nosession"],
+  [/미생존|claude 프로세스가 아님/, "noproc"],
+  [/이어받을 대화|대화 기록이 없|resume 불가/, "no_resume"],
+  [/트랜스크립트 없음|id 미상/, "notrans"],
+  [/effort .* 무효|무효/, "badeffort"],
+  [/변경할 항목이 없다/, "nochange"],
+];
+const RESTART_WHY = {
   // 이제 "끝날 때까지 기다려라"가 아니다 — 멈추고 바꾸는 길이 생겼다
   // (REQ-20260827-079 반려). 로그 줄로도, 칩의 귀띔으로도, 사람이 "그대로 두기"를
   // 고른 뒤에도 참인 문장이라야 한다.
-  [/턴 진행 중/, w => `지금 이 세션이 일하는 중이라 ${w} 바꾸지 않았습니다 — 하던 일을 멈추고 바꿀 수 있습니다.`],
-  [/서버 연결 실패/, w => `대시보드에 닿지 못해 ${w} 바꾸지 않았습니다 — 세션과 대화는 그대로입니다. 잠시 뒤 다시 눌러 주세요.`],
-  [/재시작 API 없음|구버전/, w => `대시보드가 옛 코드로 돌고 있어 ${w} 바꾸지 않았습니다 — 세션 터미널에서 bin/s9 serve --restart 를 돌린 뒤 다시 눌러 주세요.`],
-  [/세션 없음|종료됨/, w => `붙어 있는 세션이 없어 ${w} 바꾸지 않았습니다 — 세션을 깨운 뒤 다시 눌러 주세요.`],
-  [/미생존|claude 프로세스가 아님/, w => `세션 프로세스를 찾지 못해 ${w} 바꾸지 않았습니다 — 세션 터미널이 살아 있는지 확인해 주세요.`],
-  [/트랜스크립트 없음|id 미상/, w => `이 세션의 대화 기록을 찾지 못해 ${w} 바꾸지 않았습니다 — 어디서부터 다시 열지 알 수 없습니다.`],
-  [/effort .* 무효|무효/, w => `고른 생각의 깊이가 올바르지 않아 ${w} 바꾸지 않았습니다.`],
-  [/변경할 항목이 없다/, () => `바꿀 것이 없어 그대로 두었습니다.`],
-];
+  busy: w => `지금 이 세션이 일하는 중이라 ${w} 바꾸지 않았습니다 — 하던 일을 멈추고 바꿀 수 있습니다.`,
+  /* 한도로 굳은 턴은 「일하는 중」이 아니다 (REQ-20260901-014). 사용자가 같은
+     문구를 네 번 본 것은 문장이 나빠서가 아니라 네 번째에도 첫 번째와 같은
+     문장이었기 때문이고, 그 문장이 거짓이었다. 화면은 그 순간 우상단에
+     `fable 100%` 를 붉게 띄우고 있었다 — 이미 아는 사실을 문구가 쓴다. */
+  limit: (w, lim) => `${lim.name} 모델 한도를 다 써서 이 세션이 답을 못 합니다`
+    + ` — ${w} 바꾸지 않았습니다.`
+    + (lim.until ? ` 한도는 ${lim.until} 풀립니다.` : "")
+    + ` 세션이 떠 있는 터미널 창에서 /model 로 모델을 바꾼 뒤 다시 눌러 주세요.`,
+  no_resume: w => `넘어갈 계정에 이 대화 기록이 없어 ${w} 바꾸지 않았습니다 — 그대로 옮기면 하던 대화가 이어지지 않습니다.`,
+  /* 화면이 스스로 세우는 사유 둘. 여기 이름이 있어야 폴백으로 안 떨어진다. */
+  nostop: w => `멈춰 달라고 보냈지만 15초 동안 답이 없어 ${w} 바꾸지 않았습니다 — 세션은 도구 하나를 끝낸 뒤에야 멈춤을 읽습니다.`,
+  nosend: w => `멈춰 달라는 말을 보내지 못해 ${w} 바꾸지 않았습니다 — 세션이 떠 있는 터미널 창을 확인한 뒤 다시 눌러 주세요.`,
+  offline: w => `대시보드에 닿지 못해 ${w} 바꾸지 않았습니다 — 세션과 대화는 그대로입니다. 잠시 뒤 다시 눌러 주세요.`,
+  oldserver: w => `대시보드가 옛 코드로 돌고 있어 ${w} 바꾸지 않았습니다 — 세션 터미널에서 bin/s9 serve --restart 를 돌린 뒤 다시 눌러 주세요.`,
+  nosession: w => `붙어 있는 세션이 없어 ${w} 바꾸지 않았습니다 — 세션을 깨운 뒤 다시 눌러 주세요.`,
+  noproc: w => `세션 프로세스를 찾지 못해 ${w} 바꾸지 않았습니다 — 세션 터미널이 살아 있는지 확인해 주세요.`,
+  notrans: w => `이 세션의 대화 기록을 찾지 못해 ${w} 바꾸지 않았습니다 — 어디서부터 다시 열지 알 수 없습니다.`,
+  badeffort: w => `고른 생각의 깊이가 올바르지 않아 ${w} 바꾸지 않았습니다.`,
+  nochange: () => `바꿀 것이 없어 그대로 두었습니다.`,
+};
+/* 한도를 다 썼나 — **화면이 이미 아는 사실로** 판정한다 (REQ-20260901-014 ①).
+
+   서버가 갈래를 실어 주면(`why_kind:"limit"` + `limit{model,resets_at}`) 그 말이
+   이긴다. 아직 안 실어 주는 서버에서도 화면은 판정할 수 있다: 우상단 사용량 칩이
+   쓰는 그 값(`usageLast.limits`)에 100% 인 모델 한도가 있고 그 모델이 이 세션이
+   쓰는 모델이면, 「일하는 중」이 아니라 「한도로 굳었다」다.
+
+   모르면 말하지 않는다 — 이 세션의 모델을 모르는 채로 아무 100% 한도나 집어
+   「한도」라 부르면, 「일하는 중」이라 부른 이번 사고를 반대편에서 다시 낸다. */
+function restartLimit(d){
+  const srv = d && d.limit;
+  if (srv && srv.model)
+    return {name: modelAlias(srv.model), until: srv.resets_at ? fmtUntil(srv.resets_at) : "",
+            resets_at: srv.resets_at || ""};
+  const mine = modelAlias((TERM && TERM.model) || svModel);
+  if (!mine) return null;
+  const x = ((usageLast || {}).limits || []).find(l =>
+    l && l.percent >= 100 && l.scope_name && modelAlias(l.scope_name) === mine);
+  return x ? {name: mine, until: x.resets_at ? fmtUntil(x.resets_at) : "",
+              resets_at: x.resets_at || ""} : null;
+}
+function restartWhy(d){
+  const named = d && d.why_kind;
+  if (named && RESTART_WHY[named])
+    return named === "busy" && restartLimit(d) ? "limit" : named;
+  const r = String((d && d.reason) || "");
+  for (const [re, name] of RESTART_WHY_OF) if (re.test(r))
+    return name === "busy" && restartLimit(d) ? "limit" : name;
+  return "";
+}
 /* 조사는 낱말에 붙여 둔다 — `모델을`·`계정을`·`생각의 깊이를` 는 받침이 달라
    한 자리에 끼워 넣을 수 없다. 문장을 짓는 쪽이 완성된 토막을 준다. */
 function restartWhat(model, effort, account){
   return account ? "계정을" : model ? "모델을" : "생각의 깊이를";
 }
-function restartSay(reason, what){
-  const r = String(reason || "");
-  for (const [re, f] of RESTART_SAY) if (re.test(r)) return f(what);
-  // 모르는 사유는 지어내지 않는다 — 무엇이 안 바뀌었는지만 앞에 세우고 원문을 잇는다
-  return `${what} 바꾸지 못했습니다 — ${r || "까닭을 알 수 없습니다"}`;
+function restartSay(d, what){
+  const a = typeof d === "string" ? {reason: d} : (d || {});
+  const why = restartWhy(a);
+  if (why) return RESTART_WHY[why](what, why === "limit" ? restartLimit(a) : null);
+  /* 모르는 사유는 지어내지 않는다 — 그렇다고 기계 토막을 문장에 잇지도 않는다
+     (REQ-20260901-014 V1). 원문은 버리지 않고 마우스를 올린 사람에게만 준다:
+     화면은 사람 말을, 손이 얹힌 자리에는 기계 말을. */
+  return `${what} 바꾸지 못했습니다 — 까닭을 알 수 없습니다.`
+    + ` 세션이 떠 있는 터미널 창을 봐 주세요.`;
 }
 /* 결과 한 줄을 짓는다. **진단 창(?ccsay=)도 이 함수를 쓴다** — 그림과 실제가
    갈리면 보고 고친 것이 화면이 아니게 된다. */
 function restartLine(d, what){
   if (!d.ok)
     return `<span style="color:var(--cc-red)"`
-      + ` title="${esc(d.reason || "")}">✗ ${esc(restartSay(d.reason, what))}</span>`;
+      + ` title="${esc(d.reason || "")}">✗ ${esc(restartSay(d, what))}</span>`;
   if (d.mode === "wrapper")
     /* 세션 쪽의 낱말은 **`다시 시작`** 이다 — 대시보드 쪽은 `연결`만 쓴다
        (아래 termStatus·TERM_CONN). 주어를 반드시 밝힌다: 사용자가 겪은 혼동은
@@ -605,38 +674,114 @@ function restartLog(T, d, what, model){
     ccLine("↻", "var(--cc-dim)", restartLine(d, what)));
   const ln = w.previousElementSibling;
   if (d.ok && d.mode === "wrapper" && ln){
-    // 진행 감시 (REQ-20260825-047): 경과초를 돌려 "멈춘 듯" 보이지 않게 하고,
-    // 새 설정으로 복귀(모델 변경 또는 재수신 대기)하면 완료 줄로 교체한다.
+    /* 진행 감시 (REQ-20260825-047): 경과를 돌려 "멈춘 듯" 보이지 않게 한다.
+       **판정은 여기서 하지 않는다** (REQ-20260901-014 D5) — 이 타이머는 판이
+       사라지면 함께 죽는데, 그때까지 여기서 90초를 세고 있었다. 못 돌아왔다는
+       판정은 탭 밖의 눈이 내리고 이 줄은 그 결과를 받아 적는다. 이 줄이 저 혼자
+       세던 90초를 없앤 것이 「시계 세 벌(95/90/90)」을 한 벌로 묶은 그 걸음이다. */
     ln.id = "cc-restart";
     T.restart = {t0: Date.now(), from: T.model || "", want: model || "",
                  el: ln, timer: setInterval(() => {
-      if (TERM !== T || !ln.isConnected){ termRestartDone(T); return; }
+      // 마감이 먼저 왔으면(restartSettle) 여기 셀 것이 없다 — 줄은 이미 결과다
+      if (!T.restart){ return; }
+      if (TERM !== T || !ln.isConnected){ clearInterval(T.restart.timer); return; }
       const el = ln.querySelector(".ccrse");
-      const secs = Math.round((Date.now() - T.restart.t0) / 1000);
-      if (el) el.textContent = ` (${secs}s)`;
-      if (secs > 90) termRestartDone(T, "timeout");
+      if (el) el.textContent = ` (${fmtSpoken(Date.now() - T.restart.t0)})`;
     }, 1000)};
     T.timers.push(T.restart.timer);
   }
   out.scrollTop = out.scrollHeight;
 }
+/* 마지막으로 청한 것 (REQ-20260901-014). 칩을 눌렀을 때 같은 창을 다시 열려면,
+   그리고 그 실패가 **아직도 참인지** 되물으려면, 무엇을 청했는지 알아야 한다. */
+let svAsked = null;      // {sid, req, what}
+/* 되풀이는 **사유로** 센다 (REQ-20260901-014 ②). 사용자가 겪은 것은 "계정 한 번,
+   모델 한 번, 또 계정"이었고 그때 새 정보는 대상이 아니라 **같은 벽**이었다.
+   서버가 회차를 실어 주면(`attempt`) 그 말이 이긴다 — 화면과 서버가 각자 세면
+   두 수가 갈린다. */
+let svTries = {};
+function restartAgain(d, why){
+  if (d && +d.attempt > 0) return +d.attempt;
+  const k = why || "other";
+  return (svTries[k] = (svTries[k] || 0) + 1);
+}
+/* 같은 사건, 같은 문장 (REQ-20260901-014 V2). 창을 여는 자리는 둘이다 —
+   거부를 받은 그 순간(restartTell)과 나중에 칩을 누른 때. 둘이 각자 문장을
+   지으면 한 사건이 두 이름을 얻는다(「하던 일이 아직 안 끝났습니다」와
+   「안 끝남」이 그랬다). 창의 모양은 여기서만 짓는다. */
+function restartDlgShape(what, d, n, cap){
+  const why = restartWhy(d), lim = restartLimit(d);
+  cap = cap || "다시 시작";
+  if (!lim){
+    /* 15초를 기다려도 안 멈춘 자리. 「하던 일이 아직 안 끝났습니다」는 무엇이
+       안 끝났는지 지목하지 못했고(사용자는 하던 일이 없다고 믿고 있었다),
+       「잠시 뒤 다시 눌러 주세요」는 벽이 그대로면 몇 번을 눌러도 같다.
+       지목할 수 없으면 **우리가 한 일의 결과**를 말한다 (ux-writer 판정 B). */
+    if (why === "nostop")
+      return {kind: "alert", cap, title: "아직 멈추지 않았습니다",
+        desc: "멈춰 달라고 보냈지만 15초 동안 답이 없었습니다. 세션은 도구 하나를"
+          + ` 끝낸 뒤에야 멈춤을 읽습니다 — 긴 작업이면 더 걸립니다. ${what} 그대로 두었습니다.`,
+        ok: "닫기"};
+    return {kind: "alert", cap, title: restartSay(d, what), ok: "닫기"};
+  }
+  /* 한도 갈래에는 **되돌아갈 길을 나란히 둘** 세운다 (s9-design 3절 「에러는
+     지금 무엇을 하면 되는지」). ① 다른 모델로 바꾸기 — 한도는 모델별이라 이
+     길은 대시보드 안에서 열린다(기본 초점). ② 세션이 떠 있는 터미널 창에서
+     한 줄 — 사용자가 실제로 탈출한 길이 이것인데 화면은 끝까지 그 길을 말하지
+     않았다. 「중단하고 바꾸기」는 여기 세우지 않는다: 중단 신호도 그 세션이 한
+     턴을 돌아야 읽는데 그 모델이 한도라, 누를 수는 있지만 닿지 않는 약속이다 —
+     그 약속이 이번 사고의 절반이다. */
+  const when = lim.resets_at ? fmtWhen(lim.resets_at) : "";
+  const three = n >= 3;
+  return {kind: "confirm", cap, stop: false,
+    title: why === "nostop" ? "중단하라는 말이 이 세션에 닿지 않습니다"
+      : three ? `이 화면에서는 ${what} 바꿀 수 없습니다`
+      : `${lim.name} 모델 한도를 다 써서 이 세션이 답을 못 합니다`,
+    descHtml: esc((why === "nostop"
+        ? `${lim.name} 모델 한도를 다 써서 이 세션이 아무 것도 처리하지 못합니다`
+          + ` — 중단하라는 신호도 그중 하나입니다. ${what} 그대로 두었습니다.`
+        : three
+        ? `${lim.name} 모델 한도를 다 써서 ${n}번 다 같은 자리에서 멈췄습니다.`
+        : `${what} 바꾸지 않았습니다.`)
+      /* 남은 시간을 앞, 절대 시각을 괄호로 (usage.js fmtUntil 이 세운 어순) —
+         남은 시간이 "지금 기다릴까, 다른 길로 갈까"를 정하고, 절대 시각은
+         일정에 맞추는 값이다. */
+      + (lim.until ? ` 한도는 ${lim.until} 풀립니다${when ? ` (${when})` : ""}.` : "")
+      + " 남은 길은 둘입니다 — 다른 모델로 바꾸거나, 세션이 떠 있는 터미널 창에서"
+      + " 아래를 실행하는 것입니다.")
+      + `<code class="dlgcmd">/model opus</code>`,
+    ok: "다른 모델로 바꾸기", cancel: "닫기"};
+}
+async function restartDlgOpen(what, d, n, cap){
+  const shape = restartDlgShape(what, d, n, cap);
+  const go = await s9dlg(shape);
+  if (!go || shape.kind !== "confirm") return;
+  // 창이 약속한 그 길로 데려간다 — 모델을 고르는 창은 이미 있는 그것이다.
+  const sid = (svAsked && svAsked.sid) || (TERM && TERM.sid) || "";
+  if (sid) termModelChange(TERM && TERM.sid === sid
+    ? TERM : {sid, model: svModel || ""});
+}
 /* 헤더 칩 — **어느 탭에서 눌렀든** 여기서 답을 본다. 낱말은 상태마다 하나로
    고정한다(aria-live 영역이라 매초 바뀌면 화면 낭독이 되풀이된다). 흐르는
-   시간은 마크가 돌아서 말한다. */
+   시간은 마크가 돌아서 말한다.
+
+   **진행 얼굴에는 스스로 사라지는 시계를 달지 않는다** (REQ-20260901-014 D5):
+   기다림을 마감하는 손(restartSettle)이 반드시 done 이나 lost 로 갈아 끼우므로,
+   칩이 감시보다 오래 살아 결과 없이 사라질 자리가 없다. */
 function restartChip(kind, what, d){
   if (kind === "going")
-    return svRestartSet({tone: "sv-warn", mark: "↻", spin: true,
+    return svRestartSet({tone: "sv-warn", mark: "↻", spin: true, keep: true,
       label: "세션 다시 시작 중",
       title: "같은 대화가 새 설정으로 이어집니다 — 눌러서 터미널에서 보기",
-      act: () => goTab("terminal")}, 95000);
+      act: () => goTab("terminal")});
   if (kind === "stopping")
-    return svRestartSet({tone: "sv-warn", mark: "↻", spin: true,
+    return svRestartSet({tone: "sv-warn", mark: "↻", spin: true, keep: true,
       label: "하던 일을 멈추는 중",
       title: "멈추면 곧바로 다시 시작합니다 — 눌러서 터미널에서 보기",
-      act: () => goTab("terminal")}, 60000);
+      act: () => goTab("terminal")});
   if (kind === "hand")
     // 실패가 아니다 — 사람 손이 한 번 필요할 뿐이라 붉히지 않는다
-    return svRestartSet({tone: "sv-warn", mark: "▲",
+    return svRestartSet({tone: "sv-warn", mark: "▲", keep: true,
       label: "세션 터미널에서 한 번",
       title: "이 세션은 처음 한 번만 손으로 다시 시작해야 합니다 — 눌러서 명령 보기",
       act: () => s9dlg({kind: "alert", cap: "다시 시작", stop: false,
@@ -645,22 +790,41 @@ function restartChip(kind, what, d){
           + " 이후로는 대시보드에서 바로 됩니다."
           + `<code class="dlgcmd">${esc((d && d.cmd) || "")}</code>`,
         ok: "닫기"})});
-  if (kind === "done")
+  if (kind === "done"){
+    svTries = {};      // 벽을 넘었다 — 되풀이를 처음부터 다시 센다
     // 끝난 일은 스스로 물러난다 — 잘된 일에 닫는 손을 요구하지 않는다
-    return svRestartSet({tone: "sv-ok", mark: "✓",
+    return svRestartSet({tone: "sv-ok", mark: "✓", keep: true,
       label: "새 설정으로 이어짐",
       title: "세션이 새 설정으로 다시 열렸습니다",
       act: () => goTab("terminal")}, 8000);
+  }
   /* 돌아온 것을 확인하지 못했다. 여태 이 얼굴은 termRestartDone 안에서 따로
-     지어졌다 — 같은 칩의 얼굴이 두 곳에 있으면 한 곳만 고쳐진다. */
-  if (kind === "lost")
-    return svRestartSet({tone: "sv-bad", mark: "▲", label: "세션이 안 돌아옴",
+     지어졌다 — 같은 칩의 얼굴이 두 곳에 있으면 한 곳만 고쳐진다.
+     **단정하지 않는다** (REQ-20260901-014 V2): 줄은 「확인하지 못했습니다」인데
+     칩만 「안 돌아옴」이었고, 실제로는 돌아와 있었다(같은 화면 푸터가 이미 새
+     모델을 찍고 있었다). 확인 실패를 사실 실패로 옮겨 적지 않는다 — 「모름」은
+     livedot 일곱 얼굴이 이미 쓰는 확립어다. */
+  if (kind === "lost"){
+    svTruthWatch();    // 사실이 아니게 되면 스스로 물러난다
+    return svRestartSet({tone: "sv-bad", mark: "▲", keep: true,
+      label: "세션이 돌아왔는지 모름",
       title: "다시 시작했는데 세션이 돌아온 것을 확인하지 못했습니다 — 눌러서 터미널에서 보기",
       act: () => goTab("terminal")});
+  }
   // 못 바꾼 것은 손이 필요한 사실이라 스스로 안 사라진다 — 누르면 사유가 다시 뜬다
-  return svRestartSet({tone: "sv-bad", mark: "▲",
-    label: what.replace(/를$|을$/, "") + " 그대로",
-    title: restartSay(d && d.reason, what),
-    act: () => s9dlg({kind: "alert", cap: "다시 시작",
-      title: restartSay(d && d.reason, what), ok: "닫기"})});
+  const why = restartWhy(d), lim = why === "limit" ? restartLimit(d) : null;
+  const n = (d && +d.again) || 1;
+  const say = restartSay(d, what);
+  svTruthWatch();
+  return svRestartSet({tone: "sv-bad", mark: "▲", keep: true,
+    /* 되풀이가 사람에게 보이게 한다 (REQ-20260901-014 ②). 네 번을 눌러도 여섯
+       글자가 그대로여서 화면이 내 손을 받았는지조차 안 보였다 — 사용자가
+       "아무런 반응이 없다"고 쓴 자리가 여기다. 회차는 가장 싼 진전이라 먼저 준다. */
+    label: what.replace(/를$|을$/, "") + " 그대로" + (n >= 2 ? ` ${n}번째` : ""),
+    title: n >= 3 ? `${n}번 다 같은 까닭입니다 — 눌러서 남은 길 보기`
+      : n === 2 ? "이번에도 같은 까닭입니다 — "
+          + (lim && lim.resets_at
+             ? `${lim.name} 한도는 ${fmtWhen(lim.resets_at)} 에 풀립니다` : say)
+      : say,
+    act: () => restartDlgOpen(what, d, n)});
 }

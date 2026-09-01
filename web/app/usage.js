@@ -61,6 +61,24 @@ function fmtWhen(iso){
   return `${t.getMonth() + 1}월 ${t.getDate()}일 ${hm}`;
 }
 let usageLast = null;   // 마지막 응답 — 카드를 열 때 남은 시간을 다시 센다
+/* 이 세션이 무엇으로 생각하고 있나 (REQ-20260901-014). 터미널 판이 열려 있으면
+   `TERM.model` 이 그것을 알지만, 계정 칩은 화면 맨 위라 **대개 Board 에서**
+   눌린다 — 그때는 판이 없어 화면이 제 세션의 모델을 모른다. 모르면 한도 갈래를
+   판정할 수 없고(어느 모델의 한도가 100% 인지 견줄 기준이 없다), 모르는 것을
+   아는 척 「한도」라 부르면 「일하는 중」이라 부른 이번 사고를 반대편에서 다시
+   낸다. 그래서 `/api/chat/target` 을 지나는 길목마다 이 한 칸에 적어 둔다. */
+let svModel = "";
+function svModelSeen(nt){
+  if (nt && nt.model) svModel = String(nt.model);
+  return svModel;
+}
+/* 별칭 하나로 줄인다 — 세션은 `claude-fable-5` 라 말하고 사용량은 `Fable` 이라
+   말한다. 별칭 넷(opus·sonnet·haiku·fable) 중 어느 것도 다른 것의 앞머리가
+   아니라 앞토막 비교로 충분하다(모델 창의 `isCur` 이 쓰는 그 판단). */
+function modelAlias(name){
+  return String(name || "").replace(/^claude-/, "")
+    .replace(/[-_\s[(].*$/, "").toLowerCase();
+}
 // 칩에 실린 한도 셋을 [칩 토큰 + 한국어 이름] 순서대로 편다. 이름이 칩에 찍힌
 // 글자와 같아야 어느 줄이 칩의 어느 조각인지 옮겨 적지 않아도 된다.
 function usageRows(){

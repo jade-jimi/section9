@@ -4,21 +4,25 @@ function goTab(name){
   const b = document.querySelector(`header [data-tab="${name}"]`);
   if (b) b.click(); else location.hash = "#" + name;
 }
-/* 다시 시작을 **어느 탭에서 눌렀든 마감한다** (REQ-20260827-079 재작업).
+/* 다시 시작을 **어느 탭에서 눌렀든 마감한다** (REQ-20260827-079 재작업 →
+   REQ-20260901-014 D5 로 한 걸음 더).
 
    사용자가 겪은 화면: Board 에서 계정을 바꾸면 헤더 칩이 "세션 다시 시작 중"
    으로 95초 돌다가 **아무 말 없이 사라진다.** 됐는지 안 됐는지 알 길이 없다.
 
-   원인은 자리다 — 완료를 지켜보는 눈이 터미널 판을 그리는 함수(restartLog)
-   안에 있었고, 그 함수는 판이 없으면 첫 줄에서 되돌아간다. 눈이 안 서니
-   마감하는 손(termRestartDone)도 불릴 일이 없었다.
+   079 는 눈을 밖으로 냈지만 **판이 있으면 판에 넘겼다**("그쪽이 빠르고 줄까지
+   고친다"). 그 최적화가 유일한 눈을 판 안에 가뒀다: 터미널 탭에서 누르고
+   Board 로 옮기면 `stopChat()` 이 판의 타이머를 전량 걷어 가는데 밖의 눈은
+   이미 물러난 뒤라 **아무도 안 본다** — 실측 91.3초 뒤 칩이 ✓도 ✗도 없이
+   사라졌다(designer D5). 079 가 고친 것은 「판이 처음부터 없을 때」였고,
+   「있다가 떠날 때」는 안 덮였다. 90초를 터미널에 붙어 기다리는 사람은 드무니
+   이쪽이 오히려 흔한 길이다.
 
-   그래서 눈을 밖으로 낸다. 판이 있으면 터미널 폴이 맡고(그쪽이 빠르고 줄까지
-   고친다), **없을 때만** 여기서 같은 답을 직접 받아 본다 — 같은 신호,
-   같은 문턱(8초 뒤 수신 대기가 살아 있으면 완료 · 90초면 못 돌아옴)이라
-   두 길이 다른 말을 하지 않는다. 새 컴포넌트는 만들지 않는다: 결과가 서는
-   자리는 이미 있는 그 칩이다. */
-let svWatch = null;            // {t0, sid, timer} · 터미널 판이 없을 때만
+   그래서 **눈은 언제나 탭 밖에 하나만** 둔다. 터미널 줄은 기록만 맡는다 —
+   빠른 신호(모델이 바뀐 것을 폴이 먼저 본다)는 여전히 줄이 물어다 주지만,
+   판정은 이 눈이 내리고 마감도 한 손(restartSettle)이 한다. 시계는 상수
+   한 벌(RESTART_WAIT_MS·RESTART_SETTLE_MS)이라 칩이 감시보다 오래 살 수 없다. */
+let svWatch = null;            // {mode, t0, sid, timer} — 하나뿐인 눈
 function svWatchStop(){
   if (!svWatch) return;
   clearInterval(svWatch.timer);
@@ -26,24 +30,70 @@ function svWatchStop(){
 }
 function restartWatch(T, sid, d){
   if (!(d && d.ok && d.mode === "wrapper")) return;   // 감시할 것이 없다
-  if (T && TERM === T && T.restart) return;           // 터미널 폴이 맡았다
   svWatchStop();
-  const w = svWatch = {t0: Date.now(), sid: sid, timer: 0};
+  const w = svWatch = {mode: "return", t0: Date.now(), sid: sid, timer: 0};
   w.timer = setInterval(async () => {
     if (svWatch !== w) return;
-    const secs = (Date.now() - w.t0) / 1000;
-    if (secs > 90){ svWatchStop(); restartChip("lost"); return; }
-    // 터미널 판이 그 사이 열려 감시를 넘겨받았으면 물러난다 — 두 눈이 같은
-    // 것을 보며 각자 칩을 고치면 순서에 따라 답이 달라진다.
-    if (TERM && TERM.restart){ svWatchStop(); return; }
+    if (Date.now() - w.t0 > RESTART_WAIT_MS){ restartSettle("lost"); return; }
     const nt = await ccFetch("/api/chat/target", 4000);
     if (svWatch !== w) return;
+    svModelSeen(nt);                                  // 한도 갈래를 가를 기준
     if (!nt || !nt.sid) return;                       // 아직 안 돌아왔다
     if (w.sid && nt.sid !== w.sid) return;            // 다른 세션 이야기다
-    if (nt.listening && (Date.now() - w.t0) / 1000 > 8){
-      svWatchStop(); restartChip("done");
-    }
-  }, 2000);
+    if (nt.listening && Date.now() - w.t0 > RESTART_SETTLE_MS)
+      restartSettle("done", nt.model || "");
+  }, RESTART_POLL_MS);
+}
+/* 마감은 **한 손이** 한다 (REQ-20260901-014 D5·V2). 여태 칩과 줄이 각자
+   마감해서, 하나만 끝나면 남은 쪽이 거짓말이 됐다. 줄은 기록이고 판정은
+   칩이다 — 순서에 따라 답이 달라질 자리를 없앤다. */
+function restartSettle(kind, model){
+  svWatchStop();
+  termRestartDone(TERM, kind === "done" ? "ok" : "timeout", model);
+  restartChip(kind === "done" ? "done" : "lost");
+}
+/* 못 바꾼 사실이 **아직도 참인지** 되묻는다 (REQ-20260901-014 D7).
+
+   실패 칩은 손이 필요한 사실이라 스스로 사라지지 않는 것이 옳다. 그런데
+   사용자가 로컬 터미널에서 문제를 풀고 돌아와도 「계정 그대로」가 계속 섰다 —
+   같은 화면 푸터는 이미 새 모델을 찍고 있었는데(사용자 캡처 account7) 칩만
+   거짓말을 한 것이다. 스스로 사라지는 것과, 사실이 아니게 되어 물러나는 것은
+   다르다. 되묻는 눈도 위와 **같은 자리 하나**를 쓴다. */
+function svTruthWatch(){
+  svWatchStop();
+  const want = svAsked && svAsked.req;
+  if (!want) return;
+  const w = svWatch = {mode: "truth", t0: Date.now(), want: want, timer: 0};
+  w.timer = setInterval(async () => {
+    if (svWatch !== w) return;
+    if (Date.now() - w.t0 > RESTART_TRUTH_MAX_MS){ svWatchStop(); return; }
+    if (document.hidden) return;      // 안 보이는 화면에 물을 것은 없다
+    if (svTruthGone(w.want, null)){ svWatchStop(); svRestartSet(null); return; }
+    const nt = await ccFetch("/api/chat/target", 4000);
+    if (svWatch !== w) return;
+    svModelSeen(nt);
+    if (svTruthGone(w.want, nt)){ svWatchStop(); svRestartSet(null); }
+  }, RESTART_TRUTH_MS);
+}
+/* 무엇이 「사실이 아니게 됨」인가 — **화면이 증명할 수 있는 것만** 센다.
+   ① 청한 모델이 지금 세션의 모델이다(푸터 target 이 찍는 그 값).
+   ② 청한 계정이 지금 그 계정이다. ③ 막고 있던 한도가 풀렸다.
+   증명 못 하는 것은 그대로 둔다 — 「일하는 중」을 아는 척했다가 난 사고가
+   이번 것이라, 반대편에서 같은 잘못을 하지 않는다. */
+function svTruthGone(want, nt){
+  const lim = svAsked && svAsked.lim;
+  if (lim){
+    const t = lim.resets_at ? Date.parse(lim.resets_at) : NaN;
+    if (!isNaN(t) && Date.now() > t) return true;
+    if (!lim.resets_at && !restartLimit({})) return true;
+  }
+  if (!nt) return false;
+  if (want.model && nt.model && modelAlias(nt.model) === modelAlias(want.model))
+    return true;
+  if (want.account && (nt.accounts || []).some(a => a && a.current
+      && (a.key === want.account || a.email === want.account)))
+    return true;
+  return false;
 }
 /* 거부·수락을 사람에게 말하고, 필요하면 **멈출지 묻는다.** */
 async function restartTell(T, sid, req, d, what, cap){
@@ -62,10 +112,23 @@ async function restartTell(T, sid, req, d, what, cap){
         ok: "닫기"});
     return;
   }
-  if (!restartBusy(d)){
-    svWatchStop();
+  /* 갈래를 여기서 가른다 (REQ-20260901-014 ①). 서버가 이름을 실어 주면
+     그 말이 이기고, 아직 안 실어 주는 서버에서는 화면이 이미 아는 사실
+     (우상단 사용량의 100%)로 같은 갈래를 세운다. 한도는 「일하는 중」이 아니다.
+
+     그 판정에는 이 세션의 모델이 필요한데, 계정 칩은 대개 Board 에서 눌려
+     터미널 판이 없다 — 그때는 화면이 제 세션의 모델을 모른다. 거부를 받은
+     **그 순간에 한 번** 물어본다(폴이 아니다). 못 받으면 한도라고 말하지
+     않는다: 모르는 것을 아는 척한 것이 이번 사고의 뿌리다. */
+  if (!svModel && !(TERM && TERM.model))
+    svModelSeen(await ccFetch("/api/chat/target", 3000));
+  const why = restartWhy(d);
+  d = Object.assign({}, d, {again: restartAgain(d, why)});
+  if (svAsked) svAsked.lim = restartLimit(d);
+  if (why !== "busy"){
     restartChip("fail", what, d);
-    await s9dlg({kind: "alert", cap, title: restartSay(d.reason, what), ok: "닫기"});
+    // 창은 칩과 같은 표에서 문장을 받는다 — 한 사건에 문장 두 벌 금지
+    await restartDlgOpen(what, d, d.again, cap);
     return;
   }
   /* 일하는 중이다 — **여기서 묻는다.** 확인 단계에서 미리 겁주지 않는 이유는
@@ -96,10 +159,12 @@ async function restartAfterStop(T, sid, req, what, cap){
     const di = await r.json();
     if (!di.ok) throw new Error(di.error || "중단 요청 실패");
   }catch(ex){
-    restartChip("fail", what, {reason: "중단 요청 실패"});
-    await s9dlg({kind: "alert", cap, title: "하던 일을 중단하지 못했습니다",
-      desc: "설정은 그대로 두었습니다 — 세션 터미널을 확인한 뒤 다시 눌러 주세요.",
-      ok: "닫기"});
+    /* 사유를 **이름으로** 넘긴다 (REQ-20260901-014 V1) — 기계 토막(`중단 요청
+       실패`)을 그대로 던지면 표의 어느 갈래에도 안 걸려 창 제목이 된다. */
+    const d = {ok: false, why_kind: "nosend", reason: "중단 요청 실패"};
+    d.again = restartAgain(d, "nosend");
+    restartChip("fail", what, d);
+    await restartDlgOpen(what, d, d.again, cap);
     return;
   }
   for (let i = 0; i < RESTART_STOP_TRIES; i++){
@@ -109,14 +174,21 @@ async function restartAfterStop(T, sid, req, what, cap){
     await restartTell(T, sid, req, d, what, cap);
     return;
   }
-  // 15초를 기다려도 안 멈췄다 — 지어내지 않고 있는 그대로 말한다
-  // `멈춤` 은 이제 **상태**의 낱말이다 (REQ-20260829-024 라운드4) — 저절로
-  // 조용해진 것을 가리킨다. 사람이 끝내는 행동은 `중단` 이라, 여기 사유는
-  // 상태 낱말을 피해 무엇이 안 됐는지만 말한다.
-  restartChip("fail", what, {reason: "안 끝남"});
-  await s9dlg({kind: "alert", cap, title: "하던 일이 아직 안 끝났습니다",
-    desc: "멈춰 달라고는 했지만 15초 안에 끝나지 않았습니다 — 설정은 그대로"
-      + " 둡니다. 잠시 뒤 다시 눌러 주세요.", ok: "닫기"});
+  /* 15초를 기다려도 안 멈췄다 — 지어내지 않고 있는 그대로 말한다.
+     `멈춤` 은 이제 **상태**의 낱말이다 (REQ-20260829-024 라운드4) — 저절로
+     조용해진 것을 가리킨다. 사람이 끝내는 행동은 `중단` 이라, 여기 사유는
+     상태 낱말을 피해 무엇이 안 됐는지만 말한다.
+
+     사유를 **이름으로** 넘기는 것이 REQ-20260901-014 V1 의 고침이다: 여태
+     `"안 끝남"` 이라는 화면제 토막을 던졌고, 그 토막이 `RESTART_SAY` 의 어느
+     갈래에도 안 걸려 「계정을 바꾸지 못했습니다 — 안 끝남」이 창 제목이 됐다.
+     같은 사건을 창은 「하던 일이 아직 안 끝났습니다」로 부르고 있었으니 한
+     사건에 문장 두 벌이기도 했다. 이제 이름 하나가 문장 한 벌을 부른다. */
+  const d = {ok: false, why_kind: "nostop", reason: "안 끝남"};
+  d.again = restartAgain(d, "nostop");
+  if (svAsked) svAsked.lim = restartLimit(d);
+  restartChip("fail", what, d);
+  await restartDlgOpen(what, d, d.again, cap);
 }
 /* 부르는 자리는 둘(계정 창·모델 창)이고 들어오는 것은 세션 id 하나다.
    터미널 판(T)은 있으면 기록을 남기고 없으면 없는 대로 간다 — 예전에는 그것이
@@ -160,31 +232,40 @@ async function sessionRestart(sid, req, T, cap){
     if (!go) return;
     req = Object.assign({}, req, {stopWorkers: true});
   }
+  /* 무엇을 청했는지 적어 둔다 (REQ-20260901-014) — 칩을 눌렀을 때 같은 창을
+     다시 열고, 그 실패가 아직 참인지 되묻는 데 쓴다. */
+  svAsked = {sid: sid, req: req, what: what};
   const d = await restartPost(sid, req);
   await restartTell(T, sid, req, d, what, cap || "다시 시작");
 }
 
-/* 재시작 완료·실패 마감 (REQ-20260825-047) — 진행 줄을 결과로 교체 */
+/* 재시작 진행 줄의 마감 (REQ-20260825-047) — 진행 줄을 결과로 교체.
+
+   **줄은 기록만 맡는다** (REQ-20260901-014 D5). 여태 이 손이 헤더 칩까지 함께
+   세웠는데, 그러면 판정하는 자리가 둘이 되고 판이 사라진 순간(탭 이동) 한쪽만
+   남아 거짓말이 된다. 판정은 탭 밖의 눈(svWatch)이 내리고, 마감은 그 눈이 부르는
+   한 손(restartSettle)이 두 자리를 함께 닫는다.
+
+   시간은 **사람 말로** 쓴다 (REQ-20260901-014 어휘): `fmtElapsed` 의 라틴
+   축약(`1m 31s`)은 모노 메타데이터의 어휘라 문장 한복판에 섞지 않는다. */
 function termRestartDone(T, kind, model){
   const r = T && T.restart;
   if (!r) return;
   clearInterval(r.timer);
   T.restart = null;
-  const secs = fmtElapsed(new Date(r.t0).toISOString());
+  const took = fmtSpoken(Date.now() - r.t0);
   if (r.el && r.el.isConnected){
     const b = r.el.querySelector(".b");
     // 실패해도 "재시작"이라는 낱말로 겁주지 않는다 — 무슨 일이 안 일어났는지를
     // 말한다. 세션은 끊긴 것이 아니라 **돌아오는 것이 확인되지 않은** 것이다.
+    // 「세션 터미널」은 지시 대상이 둘이라(이 판 / 세션이 실제로 떠 있는 OS 창)
+    // 가리키는 말을 바꿨다 — 이 판을 보고 있는 사람에게 이 판을 보라고 했었다.
     if (b) b.innerHTML = kind === "timeout"
-      ? `<span style="color:var(--cc-red)">✗ 세션이 돌아온 것을 확인하지 못했습니다 (${secs}) — 세션 터미널을 봐 주세요</span>`
-      : `<span style="color:var(--cc-green)">✓ 세션 재시작 완료 (${secs}) — ${esc((model || "").replace(/^claude-/, "") || "새 설정")}으로 이어집니다</span>`;
+      ? `<span style="color:var(--cc-red)">✗ 다시 시작했지만 세션이 돌아온 것을 ${esc(took)} 동안 확인하지 못했습니다 — 세션이 떠 있는 터미널 창을 봐 주세요</span>`
+      : `<span style="color:var(--cc-green)">✓ 세션 재시작 완료 (${esc(took)}) — ${esc((model || "").replace(/^claude-/, "") || "새 설정")}으로 이어집니다</span>`;
     const g = r.el.querySelector(".g");
     if (g) g.textContent = kind === "timeout" ? "✗" : "✓";
   }
-  /* 헤더 칩도 함께 마감한다 (REQ-20260827-079 반려) — 두 자리가 같은 일을
-     말하는데 하나만 끝나면, 남은 쪽이 거짓말이 된다. */
-  if (kind === "timeout") restartChip("lost");
-  else if (kind) restartChip("done");
 }
 
 /* Esc 중단 (REQ-20260825-001): 대시보드는 CC 프로세스에 키를 보낼 수 없다 —

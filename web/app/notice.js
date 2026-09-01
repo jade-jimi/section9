@@ -325,10 +325,22 @@ let svSig = "";
    준다." 다시 시작하는 중인 것은 읽고 나서 할 일이 없는 사실이라 줄이 아니라
    **칩**이다(헤더 높이 증가 0). 손을 요구하는 것은 거부뿐이고, 그것은 이미
    창으로 묻는다 — 칩은 그 창을 되짚는 자리다. */
-let svRestart = null;      // {tone, mark, label, title, act, spin} · 없으면 null
+let svRestart = null;      // {tone, mark, label, title, act, spin, keep} · 없으면 null
 let svRestartT = null;
+/* **사건마다 한 번은 다시 그린다** (REQ-20260901-014 D2).
+
+   아래 `svSig` 는 같은 내용을 다시 쓰지 않으려는 장치다(aria-live 영역이라
+   다시 쓰면 낭독이 되풀이된다). 그런데 한도 소진처럼 **같은 거부가 되풀이될
+   때** 그 장치가 정반대로 일했다: 실측으로 `restartChip("fail")` 을 두 번
+   불러도 DOM 노드가 그대로였고(재렌더 없음), 화면은 문자 그대로 「아무 반응이
+   없음」이 됐다 — 사용자가 네 번 누르고 "아무런 반응이 없다"고 쓴 자리가 여기다.
+
+   그래서 사건에 일련번호를 붙여 sig 에 섞는다. 새 사건이면 반드시 다시 그려
+   낭독까지 되고, 카탈로그 갱신 같은 **같은 사실의 재그리기**는 여전히 조용하다
+   (번호가 그때는 안 바뀐다). */
+let svSeq = 0;
 function svRestartSet(v, clearAfter){
-  svRestart = v;
+  svRestart = v && Object.assign({}, v, {seq: ++svSeq});
   if (svRestartT){ clearTimeout(svRestartT); svRestartT = null; }
   if (v && clearAfter)
     svRestartT = setTimeout(() => { svRestart = null; renderSvChip(); }, clearAfter);
@@ -432,13 +444,14 @@ function renderSvChip(){
 
      진행이 실제로 막히는 경우는 이것과 다르다 — 그때는 카드가 「차례를 기다리는
      중」으로 말한다(REQ-20260829-036). 그건 깃을 몰라도 읽힌다. */
-  // 같은 내용 재작성 금지 — aria-live 영역을 다시 쓰면 화면 낭독이 되풀이된다
-  const sig = items.map(it => it.tone + it.label).join("|");
+  // 같은 내용 재작성 금지 — aria-live 영역을 다시 쓰면 화면 낭독이 되풀이된다.
+  // 다만 **새 사건**은 내용이 같아도 다시 그린다 (seq · REQ-20260901-014 D2).
+  const sig = items.map(it => it.tone + it.label + (it.seq || "")).join("|");
   if (sig === svSig) return;
   svSig = sig;
   if (!items.length){ el.innerHTML = ""; return; }
   el.innerHTML = items.map((it, i) =>
-    `<button class="${it.tone}" data-svi="${i}"`
+    `<button class="${it.tone}${it.keep ? " sv-keep" : ""}" data-svi="${i}"`
     + (it.key ? ` data-svk="${esc(it.key)}"` : "")
     + ` title="${esc(it.title)}">`
     + `<span class="sv-m${it.spin ? " sv-spin" : ""}" aria-hidden="true">`

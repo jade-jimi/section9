@@ -266,17 +266,40 @@ class DeadEnd(unittest.TestCase):
     # ---------- 다시 시작의 마감 ----------
 
     def test_w6_restart_closes_without_a_terminal_panel(self):
-        """Board 에서 눌러도 칩이 결과로 마감된다 — 조용히 사라지지 않는다."""
+        """Board 에서 눌러도 칩이 결과로 마감된다 — 조용히 사라지지 않는다.
+
+        **개정 (REQ-20260901-014 D5).** 여태 이 계약은 "터미널 판이 맡았으면
+        밖의 눈은 물러난다"였다. 그 인계가 유일한 눈을 판 안에 가뒀다: 터미널
+        탭에서 누르고 Board 로 옮기면 `stopChat()` 이 판의 타이머를 걷어 가는데
+        밖의 눈은 이미 물러난 뒤라 **아무도 안 본다** — 실측 91.3초 뒤 칩이
+        ✓도 ✗도 없이 사라졌다. 이제 눈은 언제나 탭 밖 하나뿐이고, 줄은 기록만
+        맡는다. 마감도 한 손(restartSettle)이 두 자리를 함께 닫는다."""
         self.assertIn("restartWatch(T, sid, d)", self.tell)
-        self.assertIn('restartChip("done")', self.watch)
-        self.assertIn('restartChip("lost")', self.watch)
-        # 터미널 판이 맡았으면 물러난다 — 두 눈이 각자 칩을 고치지 않는다
-        self.assertIn("TERM === T && T.restart", self.watch)
+        self.assertIn('restartSettle("done"', self.watch)
+        self.assertIn('restartSettle("lost")', self.watch)
+        self.assertNotIn("TERM === T && T.restart", self.watch,
+                         "감시를 터미널 판에 넘긴다 — 탭을 떠나면 눈이 사라진다")
+        settle = grab(self.src, "restartSettle")
+        self.assertIn("restartChip(", settle, "마감이 칩을 안 고친다")
+        self.assertIn("termRestartDone(", settle, "마감이 줄을 안 닫는다")
+        # 줄을 닫는 손은 판정하지 않는다 — 판정 자리가 둘이면 한쪽이 거짓말한다
+        line = grab(self.src, "termRestartDone")
+        self.assertNotIn("restartChip(", line,
+                         "줄이 칩까지 세운다 — 판정 자리가 둘이다")
+        # 시계는 한 벌이다 (95/90/90 이 따로 살면 칩이 감시보다 오래 산다)
+        for name in ("RESTART_WAIT_MS", "RESTART_SETTLE_MS"):
+            self.assertIn(name, self.watch, "%s 를 안 쓴다" % name)
 
     def test_w7_lost_chip_has_one_face(self):
-        """같은 칩의 얼굴이 두 곳에 있으면 한 곳만 고쳐진다."""
+        """같은 칩의 얼굴이 두 곳에 있으면 한 곳만 고쳐진다.
+
+        낱말도 개정됐다 (REQ-20260901-014 V2): 줄은 「확인하지 못했습니다」인데
+        칩만 「안 돌아옴」이라 단정했고, 실제로는 돌아와 있었다 — 같은 화면 푸터가
+        이미 새 모델을 찍고 있었다. 확인 실패를 사실 실패로 옮겨 적지 않는다."""
         self.assertIn('kind === "lost"', self.chip)
-        self.assertEqual(self.src.count("세션이 안 돌아옴"), 1)
+        self.assertEqual(self.src.count("세션이 돌아왔는지 모름"), 1)
+        self.assertNotIn("세션이 안 돌아옴", self.src,
+                         "칩이 화면이 아는 것보다 단정적으로 말한다")
 
 
 if __name__ == "__main__":

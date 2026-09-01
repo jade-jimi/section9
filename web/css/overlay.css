@@ -129,10 +129,17 @@
    다른 곳에 다른 크기로** 떴다. 근접성으로 얻으려던 것(무엇을 판정하는지)은
    창 안의 제목이 이미 한다. 위 모서리를 고정해 두면 내용이 길어져도 창의
    시작점은 그대로다 — 세로 가운데 정렬이면 승인/반려의 윗변이 어긋난다. */
+/* 키는 위 모서리에서 시작해 **바닥 여유까지** 잰다 (REQ-20260901-016 이웃
+   실사고, REQ-20260901-015): 종전 max-height 는 100vh-96px 인데 top 이 최대
+   180px 라, 내용이 길어지면(계정 4줄) 창 바닥이 뷰포트 밖으로 나가 닫기·다시
+   시작 단추가 잘렸다 — 스크롤은 내용이 max-height 를 넘을 때만 생기므로 아무
+   손잡이도 없었다. 같은 값(--dlgtop)으로 시작점과 최대 키를 함께 재면 줄 수와
+   무관하게 바닥 24px 이 남는다. */
 .dlgbox{position:fixed;pointer-events:auto;opacity:1;z-index:80;padding:0;
-  left:50%;transform:translateX(-50%);top:clamp(48px,18vh,180px);
+  --dlgtop:clamp(48px,18vh,180px);
+  left:50%;transform:translateX(-50%);top:var(--dlgtop);
   width:min(432px,calc(100vw - 32px));max-width:none;
-  max-height:calc(100vh - 96px);overflow:auto}
+  max-height:calc(100vh - var(--dlgtop) - 24px);overflow:auto}
 .dlgbox[hidden]{display:none}
 /* 부양은 스킨 그림자를 덮는다 — 스킨마다 카드 그림자가 다르면 판의 무게도
    달라져서, "이건 판이다"가 어떤 스킨에선 서지 않는다. 링은 검정 그림자가

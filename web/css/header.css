@@ -120,7 +120,13 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
 .svchip button{border:0;background:none;cursor:pointer;font:inherit;font-size:11.5px;
   color:var(--muted);padding:3px 2px;white-space:nowrap;max-width:34ch;
   overflow:hidden;text-overflow:ellipsis}
+/* 전환 결과는 **줄지 않는다** (REQ-20260901-014 D1). 폭 훑기 실측에서 1024px
+   까지는 온전했으나 900px 에서 「▲ ⋯」만 남았다 — 계정이 안 바뀐 사실이 화면에서
+   지워진 것이다(표시폭 31px / 필요폭 74px). 방금 누른 것의 결과와 배경 잡음
+   (자동 복구·도는 일)이 같은 자격으로 줄어들면 안 된다: 줄어야 하는 것은 옆의
+   배경 칩이고, 이 칩은 여섯 글자를 끝까지 지킨다. */
 .svchip button:hover{color:var(--text);text-decoration:underline}
+.svchip .sv-keep{flex:none;max-width:none;overflow:visible;text-overflow:clip}
 .svchip button:focus-visible{outline:2px solid var(--text);outline-offset:1px}
 .svchip .sv-m{font-size:11px;line-height:1}          /* 마크: 색 없이도 읽히게 */
 .svchip .sv-ok .sv-m{color:var(--c-done)}

@@ -37,12 +37,23 @@
   setTimeout(() => wakeDoc(m[1]), 1200);
 })();
 
+/* `&again=<회차>` · `&svlimit` 을 함께 받는다 (REQ-20260901-014). 되풀이 얼굴과
+   한도 얼굴은 **같은 벽에 두 번 이상 부딪혀야** 생기는데, 그 순간은 모델 한도가
+   실제로 소진돼 있어야 해서 캡처로 세울 수 없다 — 칩 얼굴이 캡처로 못 서던
+   그 이유가 여기도 그대로다. */
 (function svChipPreview(){
   const m = /[?&]svchip=([a-z]+)/.exec(location.search);
   if (!m) return;
-  setTimeout(() => restartChip(m[1], "계정을",
-    {reason: "턴 진행 중 — 유휴 상태에서만 재기동(작업 보호)",
-     cmd: "bin/s9 code --resume 01c62d83"}), 900);
+  const d = {reason: "턴 진행 중 — 유휴 상태에서만 재기동(작업 보호)",
+             cmd: "bin/s9 code --resume 01c62d83"};
+  const n = +((/[?&]again=(\d+)/.exec(location.search) || [])[1] || 0);
+  if (n) d.again = n;
+  if (/[?&]svlimit\b/.test(location.search)){
+    d.why_kind = "limit";
+    d.limit = {model: "fable",
+               resets_at: new Date(Date.now() + 42 * 60000).toISOString()};
+  }
+  setTimeout(() => restartChip(m[1], "계정을", d), 900);
 })();
 
 (function ccSayPreview(){
@@ -56,8 +67,9 @@
     ["↻", {ok: true, mode: "wrapper"}, "모델을"],
     ["↻", {ok: true, mode: "manual", cmd: "bin/s9 code --resume 01c62d83 --model sonnet"}, "모델을"],
   ];
-  const fin = `<span style="color:var(--cc-green)">✓ 세션 재시작 완료 (12s) — sonnet 으로 이어집니다</span>`;
-  const to = `<span style="color:var(--cc-red)">✗ 세션이 돌아온 것을 확인하지 못했습니다 (1m 30s) — 세션 터미널을 봐 주세요</span>`;
+  // 문장 속 시간은 사람 말로 — 라틴 축약은 모노 메타의 어휘다 (REQ-20260901-014)
+  const fin = `<span style="color:var(--cc-green)">✓ 세션 재시작 완료 (12초) — sonnet 으로 이어집니다</span>`;
+  const to = `<span style="color:var(--cc-red)">✗ 다시 시작했지만 세션이 돌아온 것을 1분 30초 동안 확인하지 못했습니다 — 세션이 떠 있는 터미널 창을 봐 주세요</span>`;
   const draw = () => {
     const w = $("#cc-wait"), out = $("#ccout");
     if (!w || !out) return false;
@@ -91,6 +103,9 @@
      ready:true, current:false},
     {key:"새-계정", email:"", ready:false, current:false},
     {key:"새-계정-2", email:"", ready:false, current:false}];
+  // 한도가 풀리는 시각은 **지금으로부터** 재야 남은 시간이 늘 그럴듯하다 —
+  // 박아 둔 절대 시각은 하루만 지나도 "이미 풀렸어야 할 한도"가 된다.
+  const DIAG_LIMIT_AT = new Date(Date.now() + 42 * 60000).toISOString();
   const shapes = {
     reject: {kind:"prompt", cap:"판정", doc:"REQ-20260827-071", attach:true,
       titleHtml:'「판정 대화상자」를 반려해 <span class="dlgst">in-progress</span> 상태로 돌려보냅니다',
@@ -173,12 +188,20 @@
        하고, 서버가 거부해야 하고, 래퍼 밖 세션이어야 한다. */
     busy: {kind:"confirm", cap:"계정", stop:false, safe:true,
       title:"지금 이 세션이 일하는 중입니다",
-      desc:"하던 일을 멈추고 바꿀까요? 대화는 그대로 이어지므로, 다시 시작한 뒤"
-        + " 하던 말을 이어서 하면 됩니다. 멈추지 않으면 지금 설정 그대로 둡니다.",
+      desc:"하던 일을 중단하고 바꿀까요? 대화는 그대로 이어지므로, 다시 시작한 뒤"
+        + " 하던 말을 이어서 하면 됩니다. 중단하지 않으면 지금 설정 그대로 둡니다.",
       ok:"중단하고 바꾸기", cancel:"그대로 두기"},
-    nostop: {kind:"alert", cap:"계정", title:"하던 일이 아직 안 끝났습니다",
-      desc:"멈춰 달라고는 했지만 15초 안에 끝나지 않았습니다 — 설정은 그대로"
-        + " 둡니다. 잠시 뒤 다시 눌러 주세요.", ok:"닫기"},
+    /* 못 멈춘 자리·한도 자리는 **진짜 짓는 함수**를 부른다 (REQ-20260901-014).
+       여기 문장을 손으로 베껴 두었더니 화면이 고쳐진 뒤에도 진단만 옛말을 했고,
+       그 옛말이 「보고 고친 것이 화면이 아니게 된다」의 실물이었다. */
+    nostop: restartDlgShape("계정을",
+      {ok:false, why_kind:"nostop", reason:"안 끝남"}, 1, "계정"),
+    limit: restartDlgShape("계정을", {ok:false, why_kind:"limit",
+      limit:{model:"fable", resets_at: DIAG_LIMIT_AT}}, 1, "계정"),
+    limitagain: restartDlgShape("계정을", {ok:false, why_kind:"limit",
+      limit:{model:"fable", resets_at: DIAG_LIMIT_AT}}, 3, "계정"),
+    limitstop: restartDlgShape("계정을", {ok:false, why_kind:"nostop",
+      reason:"안 끝남", limit:{model:"fable", resets_at: DIAG_LIMIT_AT}}, 2, "계정"),
     norestart: {kind:"alert", cap:"모델",
       title: restartSay("세션 없음/종료됨", "모델을"), ok:"닫기"},
     byhand: {kind:"alert", cap:"계정", stop:false,

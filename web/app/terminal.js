@@ -272,15 +272,22 @@ function termStatus(T, nt, why){
   }
   T.live = !!nt.live;
   T.profiles = nt.profiles || T.profiles || [];   // 계정 프로필 (패널용)
-  // 재시작 복귀 감지 (REQ-20260825-047): 모델이 바뀌었거나(요청대로) 수신
-  // 대기가 다시 살아나면 진행 줄을 완료로 마감한다
+  /* 재시작 복귀 감지 (REQ-20260825-047): 모델이 바뀌었거나(요청대로) 수신
+     대기가 다시 살아나면 마감한다.
+
+     판이 열려 있으면 **먼저 본다** — 모델이 바뀐 것은 이 폴이 가장 빨리 안다.
+     다만 마감은 저 혼자 하지 않고 한 손(restartSettle)에 넘긴다
+     (REQ-20260901-014 D5): 줄과 칩이 각자 마감하면 판이 사라진 순간 한쪽만
+     남아 거짓말이 되고, 탭을 옮기면 아무도 안 보는 90초가 생긴다. */
   if (T.restart && nt.model){
     const now = String(nt.model), want = T.restart.want;
     const changed = now !== T.restart.from;
     const matches = want && now.replace(/^claude-/, "").startsWith(want);
-    if (changed || matches || (nt.listening && Date.now() - T.restart.t0 > 8000))
-      termRestartDone(T, "ok", now);
+    if (changed || matches
+        || (nt.listening && Date.now() - T.restart.t0 > RESTART_SETTLE_MS))
+      restartSettle("done", now);
   }
+  svModelSeen(nt);          // 판 밖(Board)에서도 한도 갈래를 가를 수 있게
   T.model = nt.model || T.model || "";
   // listening = 세션이 수신함 tail(Monitor)을 실제로 돌리는 중.
   // live인데 미가동이면 idle — 메시지는 큐잉+REQ 기록만 되고 즉답이 없다

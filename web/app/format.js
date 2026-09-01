@@ -71,6 +71,20 @@ function fmtLast(iso){
   const w = fmtWhen(iso);
   return w.startsWith("오늘 ") ? w.slice(3) : w;
 }
+/* 문장 한복판에 서는 경과 시간 (REQ-20260901-014).
+
+   위 `fmtElapsed` 의 라틴 축약(`1m 31s`)은 **모노 메타데이터의 어휘**다 — 카드
+   구석의 칩처럼 눈이 훑고 지나가는 자리의 글자꼴이다. 그것이 문장 안으로 들어와
+   「세션이 돌아온 것을 확인하지 못했습니다 (1m 31s)」가 됐다. 이 저장소는
+   같은 선을 이미 그어 두었다(`usage.js` fmtUntil: "문장이므로 단위는 사람 말로
+   쓴다"). 문장은 문장의 어휘를 쓴다. */
+function fmtSpoken(ms){
+  const s = Math.max(0, Math.round(Number(ms) || 0) / 1000 | 0);
+  if (s < 60) return `${s}초`;
+  const m = Math.floor(s / 60), h = Math.floor(m / 60);
+  if (m < 60) return (s % 60) ? `${m}분 ${s % 60}초` : `${m}분`;
+  return (m % 60) ? `${h}시간 ${m % 60}분` : `${h}시간`;
+}
 let elapsedTimer = null;  // 카드 경과시간 1초 갱신 (화면 이탈 시 정리)
 function tickElapsed(){
   if (document.hidden) return;
