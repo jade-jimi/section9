@@ -36,6 +36,8 @@ class ChatTargetWorker(unittest.TestCase):
             "s9tgtmod", importlib.machinery.SourceFileLoader("s9tgtmod", S9))
         cls.mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.mod)
+        # 바인딩은 이 머신 것만 판정한다 (REQ-20260902-017) — 파일명이 testbox__
+        cls.mod.current_machine = lambda: "testbox"
         os.makedirs(cls.mod.STATE, exist_ok=True)
 
     def setUp(self):

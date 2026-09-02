@@ -135,6 +135,7 @@ class LiveAgents(unittest.TestCase):
             "s9live", importlib.machinery.SourceFileLoader("s9live", S9))
         cls.m = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.m)
+        cls.m.current_machine = lambda: "testbox"   # 바인딩은 이 머신 것만 (REQ-20260902-017)
         os.makedirs(cls.m.STATE, exist_ok=True)
 
     def _bind(self, sid, atp, **kw):

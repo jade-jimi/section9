@@ -129,6 +129,18 @@ class SyncClassify(unittest.TestCase):
             self.assertIn("ms", e)
             self.assertEqual(e["rc"], 0)
 
+    # C9. 보호 규칙 거부는 경합이 아니다 — 재시도도 백오프도 없이 표면화
+    def test_c9_protected_branch_is_not_retried(self):
+        PROT = ("remote: error: GH006: Protected branch update failed for refs/heads/main.\n"
+                "remote: - Changes must be made through a pull request.\n"
+                "! [remote rejected] main -> main (protected branch hook declined)\n")
+        r = self.run_sync({"push": [CP(1, PROT), CP(0)]})
+        self.assertEqual(r, "push-protected")
+        self.assertFalse(self.backoff())
+        self.assertEqual(sum(1 for c in self.calls if c[0] == "push"), 1)
+        with open(os.path.join(self.root, "state", "sync.log"), encoding="utf-8") as f:
+            self.assertIn("보호 규칙", f.read())
+
     # C7. 통계
     def test_c7_stats(self):
         self.run_sync({"push": [CP(1, self.REJ), CP(0)]})

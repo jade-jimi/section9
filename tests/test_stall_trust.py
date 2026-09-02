@@ -49,6 +49,7 @@ def _load(root):
         "s9trust", importlib.machinery.SourceFileLoader("s9trust", S9))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
+    m.current_machine = lambda: "testbox"   # 바인딩은 이 머신 것만 (REQ-20260902-017)
     return m
 
 

@@ -1603,6 +1603,17 @@ def cmd_show(args):
             print(f.read(), end="")
 
 
+def _local_binding_glob():
+    """**이 머신의** 바인딩만 훑는다 (REQ-20260902-017).
+
+    state/sessions 는 git 으로 다른 머신에도 간다. 남의 바인딩의 attach_pid·
+    transcript_path 는 그 머신에서만 뜻이 있어 여기서 읽으면 「죽은 세션」 또는
+    (번호가 우연히 겹치면) 「산 세션」으로 오판한다 — 실리포 159건 중 131건이
+    pid 를 가진다(deep-diver [f]). 고쳐 쓰면 두 머신이 같은 파일을 두고 충돌한다.
+    판정·쓰기 자리는 전부 이 glob 을 쓴다; 열람(session_rows)만 전부를 본다."""
+    return os.path.join(STATE, f"{safe_name(current_machine())}__*.json")
+
+
 def update_active_reqs(doc_id, new_status):
     """세션 바인딩의 active_reqs 유지 (REQ-20260823-080) — 대시보드 live 판정의
     직접 증거. in-progress 전이면 현 세션(S9_SESSION) 바인딩에 등록하고,
@@ -1651,7 +1662,7 @@ def update_active_reqs(doc_id, new_status):
     target = canon_id(doc_id, alias)
     acquire_lock()
     try:
-        for bp in _glob.glob(os.path.join(STATE, "*.json")):
+        for bp in _glob.glob(_local_binding_glob()):
             try:
                 with open(bp, encoding="utf-8") as f:
                     b = json.load(f)
@@ -2032,7 +2043,7 @@ def _release_binding_claim(doc_id, session):
     세션 식별자가 곧 그 바인딩의 이름이고, 남의 세션은 건드리지 않는다."""
     import glob as _glob
     mine = canon_id(doc_id)
-    for bp in _glob.glob(os.path.join(STATE, "*.json")):
+    for bp in _glob.glob(_local_binding_glob()):
         try:
             with open(bp, encoding="utf-8") as f:
                 b = json.load(f)
@@ -2965,7 +2976,7 @@ def live_agents(fresh=AGENT_FRESH_SEC):
     import glob as _glob
     import time as _t
     now, rows = _t.time(), []
-    for bp in sorted(_glob.glob(os.path.join(STATE, "*.json"))):
+    for bp in sorted(_glob.glob(_local_binding_glob())):
         try:
             with open(bp, encoding="utf-8") as f:
                 b = _norm_binding(json.load(f))
@@ -3679,7 +3690,7 @@ def rework_claimed(req_id, win=120):
     # (`s9 last --add`)에 기대지 않는다 — 프로세스가 도는 것이 더 단단한 증거다.
     if worker_running(req_id, alias=alias):
         return True
-    for bp in _glob.glob(os.path.join(STATE, "*.json")):
+    for bp in _glob.glob(_local_binding_glob()):
         try:
             with open(bp, encoding="utf-8") as f:
                 b = json.load(f)
@@ -4473,7 +4484,7 @@ def chat_target(sid8=None, user=None):
     user 를 주면 그 사용자의 세션만 후보다 (REQ-20260902-016 — 담당자 통지)."""
     import glob as _glob
     best, best_ts = None, (-1, -1, -1, -1.0)
-    for bp in _glob.glob(os.path.join(STATE, "*.json")):
+    for bp in _glob.glob(_local_binding_glob()):
         try:
             with open(bp, encoding="utf-8") as f:
                 b = _norm_binding(json.load(f))
@@ -5395,7 +5406,7 @@ def _active_stream_sids():
     일하는 도중에 그 대화가 사라지면 되살릴 것이 없어진다."""
     import glob as _glob
     out = set()
-    for bp in _glob.glob(os.path.join(STATE, "*.json")):
+    for bp in _glob.glob(_local_binding_glob()):
         try:
             with open(bp, encoding="utf-8") as f:
                 b = json.load(f)
@@ -7298,7 +7309,7 @@ def chat_notify_transition(doc_id, old, new, note, actor):
     now = _time.time()
     alias = id_alias()
     sent = []
-    for bp in sorted(_glob.glob(os.path.join(STATE, "*.json"))):
+    for bp in sorted(_glob.glob(_local_binding_glob())):
         try:
             with open(bp, encoding="utf-8") as f:
                 b = json.load(f)
@@ -7994,7 +8005,7 @@ def _stop_claim_map(alias=None):
     import glob as _glob
     alias = id_alias() if alias is None else alias
     out = {}
-    for bp in _glob.glob(os.path.join(STATE, "*.json")):
+    for bp in _glob.glob(_local_binding_glob()):
         try:
             with open(bp, encoding="utf-8") as f:
                 b = _norm_binding(json.load(f))
@@ -8709,6 +8720,12 @@ def _sync_fail_kind(stderr):
     종전에는 셋을 전부 '네트워크 장애'로 취급해 60초 침묵했다 — 5인 폭주에서
     즉시 성공률 56%, 진 쪽은 push·pull 을 모두 멈췄다(devops 실측)."""
     t = str(stderr or "")
+    # 보호 규칙 거부(GH006·protected branch hook declined)는 경합이 아니다 —
+    # 다시 당겨 밀어도 같은 답이라 재시도하지 않고 표면화한다 (REQ-20260902-042
+    # devops 실측: rejected 로 오분류되면 무한 재시도·미표면).
+    if re.search(r"GH006|protected branch hook declined|"
+                 r"Changes must be made through a pull request", t):
+        return "protected"
     if re.search(r"non-fast-forward|fetch first|\[rejected\]|"
                  r"failed to push some refs", t):
         return "rejected"
@@ -8888,6 +8905,11 @@ def sync_run(reason=""):
                 _sync_event(reason, "push", t0, ps, attempt=attempt, kind=kind)
                 if ps.returncode == 0:
                     break
+                if kind == "protected":
+                    _sync_log(f"⚠ push 가 보호 규칙에 막혔다({reason}): "
+                              f"{ps.stderr.strip()[:160]} — 이 브랜치는 직접 "
+                              f"push 할 수 없다(PR 필요). 재시도하지 않는다")
+                    return "push-protected"
                 if kind != "rejected":
                     _sync_net_backoff(True)
                     _sync_log(f"⚠ push 실패({reason}): {ps.stderr.strip()[:160]}")
@@ -11230,7 +11252,7 @@ def loose_requests(now=None):
     claims = {}
     try:
         import glob as _glob
-        for bp in _glob.glob(os.path.join(STATE, "*.json")):
+        for bp in _glob.glob(_local_binding_glob()):
             try:
                 with open(bp, encoding="utf-8") as f:
                     b = json.load(f)
@@ -16468,7 +16490,7 @@ def catalog_with_live(stall_win=None):
     sess_age = {}  # sid8   -> 최근성(초) — 문서 session 매칭 경로
     now = _time.time()
     worker_of = _worker_spawn_targets()   # 워커 pid -> 그 워커가 맡은 REQ
-    for bp in _glob.glob(os.path.join(STATE, "*.json")):
+    for bp in _glob.glob(_local_binding_glob()):
         try:
             with open(bp, encoding="utf-8") as f:
                 b = json.load(f)
@@ -17653,7 +17675,7 @@ def cmd_serve(args):
                 return b0, m
         if sid8:
             return b0, None   # 세션을 명시했으면 그 세션 밖은 보지 않는다
-        paths = sorted(_glob.glob(os.path.join(STATE, "*.json")),
+        paths = sorted(_glob.glob(_local_binding_glob()),
                        key=lambda q: -os.path.getmtime(q))
         for bp in paths:
             try:

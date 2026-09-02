@@ -234,7 +234,6 @@ class TestBindingCollisionAcrossMachines(unittest.TestCase):
     def tearDownClass(cls):
         cls.fx.close()
 
-    @unittest.expectedFailure   # 현행 결함 — 고치는 REQ 가 이 줄을 뗀다 (unexpected success 가 강제한다)
     def test_s7_chat_target_at_beta_ignores_alpha_binding(self):
         """(e) 빨강 — beta 의 `chat_target()` 이 alpha/aaaa1111 을 고른다.
 

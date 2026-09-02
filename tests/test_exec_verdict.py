@@ -151,5 +151,89 @@ class Verdict(unittest.TestCase):
             self.assertIsNone(m.chat_target(None, user="nobody"))
 
 
+class ForeignBindings(unittest.TestCase):
+    """B1~B4 (REQ-20260902-017) — 남의 머신 바인딩은 읽지도 쓰지도 않는다."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = tempfile.mkdtemp(prefix="s9fb-")
+        env = {**os.environ, "S9_ROOT": cls.root, "S9_MACHINE": "here"}
+        env.pop("S9_SESSION", None)
+        subprocess.run([S9, "init"], capture_output=True, env=env)
+        subprocess.run([S9, "user", "add", "me"], capture_output=True, env=env,
+                       stdin=subprocess.DEVNULL)
+        os.environ["S9_ROOT"] = cls.root
+        os.environ["S9_MACHINE"] = "here"
+        spec = importlib.util.spec_from_loader(
+            "s9_fb", importlib.machinery.SourceFileLoader("s9_fb", S9))
+        cls.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.m)
+        os.makedirs(cls.m.STATE, exist_ok=True)
+        out = subprocess.run([S9, "new", "request", "--title", "내 일",
+                              "--summary", "s", "--size", "S", "--goal", "g",
+                              "--body", "b", "--user", "me"],
+                             capture_output=True, text=True, env=env,
+                             stdin=subprocess.DEVNULL)
+        cls.rid = out.stdout.split()[0]
+
+    @classmethod
+    def tearDownClass(cls):
+        os.environ.pop("S9_ROOT", None)
+        os.environ.pop("S9_MACHINE", None)
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def binding(self, machine, sid, **kv):
+        b = {"machine": machine, "session": sid, "user": "me", "history": [],
+             "attach_pid": os.getpid(), "active_reqs": [self.rid]}
+        b.update(kv)
+        p = os.path.join(self.m.STATE, f"{machine}__{sid}.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(b, f)
+        return p
+
+    def read(self, p):
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+
+    # B1. 남의 바인딩은 채팅 대상이 아니다 (pid 가 내 것과 겹쳐도)
+    def test_b1_chat_target_skips_foreign(self):
+        self.binding("there", "ffff0001")
+        with mock.patch.object(self.m, "chat_live", lambda b, **k: True):
+            self.assertIsNone(self.m.chat_target(None))
+            self.binding("here", "hhhh0001")
+            self.assertEqual(self.m.chat_target(None)["session"], "hhhh0001")
+
+    # B2. 남의 바인딩은 클레임 생존 근거가 아니다
+    def test_b2_rework_claimed_ignores_foreign(self):
+        for p in os.listdir(self.m.STATE):
+            os.remove(os.path.join(self.m.STATE, p))
+        self.binding("there", "ffff0002")
+        with mock.patch.object(self.m, "chat_live", lambda b, **k: True), \
+                mock.patch.object(self.m, "delegated_live", lambda r: False), \
+                mock.patch.object(self.m, "worker_running", lambda r, **k: False):
+            self.assertFalse(self.m.rework_claimed(self.rid))
+            self.binding("here", "hhhh0002")
+            self.assertTrue(self.m.rework_claimed(self.rid))
+
+    # B3·B4. 떠나는 전이와 claim --release 가 남의 파일을 다시 쓰지 않는다
+    def test_b3_b4_leave_and_release_do_not_touch_foreign(self):
+        fp = self.binding("there", "ffff0003")
+        hp = self.binding("here", "hhhh0003")
+        before = os.path.getmtime(fp)
+        os.utime(fp, (before - 100, before - 100))
+        stamp = os.path.getmtime(fp)
+        self.m.update_active_reqs(self.rid, "review")
+        self.assertEqual(os.path.getmtime(fp), stamp, "떠나는 전이가 남의 바인딩을 썼다")
+        self.assertNotIn(self.rid, self.read(hp).get("active_reqs") or [])
+        self.assertIn(self.rid, self.read(fp).get("active_reqs") or [])
+        # release: 남의 세션 id 를 지목해도 그 파일은 그대로다
+        self.m.acquire_lock()
+        try:
+            self.m._release_binding_claim(self.rid, "ffff0003")
+        finally:
+            self.m.release_lock()
+        self.assertEqual(os.path.getmtime(fp), stamp, "release 가 남의 바인딩을 썼다")
+
+
 if __name__ == "__main__":
     unittest.main()
