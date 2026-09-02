@@ -19,7 +19,12 @@
 `answer`(또는 `response`) 라벨 노트 유무에서 파생하며, 미답은
 `s9 ls --type question --unanswered` 로 드러난다.
 
-ID: `{PREFIX}-{YYYYMMDD}-{NNN}` (일 단위 3자리 시퀀스, 예: `REQ-20260821-003`).
+ID: `{PREFIX}-{YYYYMMDD}-{NNN}-{fp}` (일 단위 3자리 시퀀스 + **머신 지문 4자**,
+예: `REQ-20260902-013-62x6`). 지문은 `sha1(hostname|$HOME)` 의 base36 앞 4자
+(`S9_ORIGIN` 으로 재정의)이고, 시퀀스는 **같은 지문의 파일만** 센다 — 다른 머신이
+같은 날 문서를 만들어도 파일명이 겹치지 않는다(REQ-20260825-006·031, docs/08 의
+옛 "ID 충돌 한계"는 이것으로 닫혔다). 2026-08-25 이전 문서 230건은 지문 없는
+`{PREFIX}-{YYYYMMDD}-{NNN}` 그대로이며 `resolve_id` 가 정확 일치를 우선한다.
 파일명 = `{ID}.md`, 경로 = `vault/{subdir}/{YYYY}/{MM}/{ID}.md`.
 ID 할당은 lockfile로 직렬화되어 멀티 세션에서도 충돌하지 않는다.
 
@@ -36,8 +41,8 @@ flat key만 사용(중첩 금지). 리스트는 JSON 배열 표기. 빈 값은 �
 | goal | string | 요청의 목표 |
 | status | string | 상태머신 상태 (docs/03 참조) |
 | size | S \| M \| L | 요청 크기 (소/중/대) |
-| user | string | 요청자/작성자 계정 |
-| machine | string | 작성된 머신 (hostname 또는 $S9_MACHINE) |
+| user | string | 요청자/작성자 계정. 코드는 이 값을 "이 일이 누구 몫인가"(담당자)로 읽는다 — `s9 next`·워커 오너·`--user` 필터. 생성자/담당자 분리와 `creator`·`origin` 필드는 DOC-20260902-001 결정(REQ-20260902-018)으로 진행 중 |
+| machine | string | 작성된 머신 (hostname 또는 $S9_MACHINE). 생성 뒤 갱신되지 않는다 — 실행 귀속의 근거로는 쓰지 않기로 결정(DOC-20260902-001 D1) |
 | session | string | 작성된 세션 식별자 ($S9_SESSION) |
 | project | string | 소속 프로젝트 |
 | parent | id | 상위 요청 (파생 요청의 원 요청) |

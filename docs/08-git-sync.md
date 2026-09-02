@@ -8,9 +8,9 @@ git이 머신 간 전송 계층이 된다.
 | 경로 | git | 이유 |
 |---|---|---|
 | vault/ | **track** | source of truth. 문서 1개 = 파일 1개라 충돌 면적 최소 |
-| streams/ | **track** | transcript 미러 — 이게 있어야 다른 머신/계정에서 스트림 로그 확인 가능 |
-| users/ | **track** | 사용자 레지스트리는 전 머신 공유 |
-| state/sessions/ | **track** | 바인딩 키에 machine이 포함되어 머신 간 같은 파일을 쓸 일이 없음. 인수인계 시 다른 머신의 현재 주체/진행 REQ를 볼 수 있어 유용 |
+| users/*/streams/ | **ignore** | transcript 미러. 2026-08-27 에 이력에서 걷어내고(REQ-20260827-047) 사용자별 자리로 옮겼으며(-078) `SYNC_DATA_PATHS` 에서도 뺐다(-077, DOC-20260826-002 결론 B: 동기화 대상의 96%가 미러였다). 다른 머신에서 남의 스트림은 보이지 않는다 — 공유할지는 열린 결정(REQ-20260902-039) |
+| users/ | **track** | 사용자 레지스트리는 전 머신 공유. 단 `config/local.json`(비밀 위치·자율 실행 설정)은 ignore — 이 머신의 주인만 정한다(REQ-20260902-031) |
+| state/sessions/ | **track → 해제 예정** | 바인딩 키에 machine 이 있어 같은 파일을 쓸 일이 없다고 봤으나 코드는 남의 바인딩도 고쳐 쓰고(update_active_reqs·claim release) pid·절대경로가 다른 머신에서 오판을 만든다. DOC-20260902-001 D7 로 track 해제 결정(REQ-20260902-026) — "누가 무엇을 맡았나"는 문서의 lease 로 간다 |
 | docs/, bin/, web/ | **track** | 설계 문서와 구현 자체 |
 | index/ | **ignore** | 파생물. 커밋하면 모든 머신의 모든 쓰기가 catalog.jsonl 한 파일에서 충돌 → pull 후 재생성 |
 | .s9.lock | **ignore** | 일시적 lock |
@@ -64,12 +64,15 @@ git clone <repo-url> ~/section9
 
 ## 알려진 한계 (설계상 트레이드오프)
 
-1. **ID 충돌**: 두 머신이 오프라인 상태로 같은 날 문서를 만들면
-   `REQ-YYYYMMDD-NNN` 시퀀스가 겹칠 수 있다 (같은 파일명, 다른 내용 → git 충돌).
-   git이 충돌로 잡아주므로 데이터는 유실되지 않지만 수동 해결(한쪽 시퀀스 rename)이
-   필요하다. 잦아지면 ID에 machine을 넣는 스킴(REQ-YYYYMMDD-m1-NNN)으로 전환.
-2. **streams 용량**: transcript는 세션당 수 MB까지 자란다. 매 턴 전체 복사라
-   git 히스토리가 커질 수 있다 — 오래된 스트림의 아카이브/정리 정책은 추후
-   (예: 90일 지난 streams는 별도 브랜치나 git-lfs).
-3. **세션 키 충돌**: streams 파일명은 세션 id 앞 8자(hex) — 충돌 확률은
-   무시 가능한 수준이지만 0은 아니다.
+1. **ID 충돌 — 닫힘**: ID 에 머신 지문 4자가 붙고 시퀀스는 같은 지문 안에서만
+   센다(docs/01). 남은 것은 지문 자체의 충돌(같은 hostname+HOME 의 이미지 배포 PC)을
+   감지할 등록부가 없다는 점 — REQ-20260902-027.
+2. **streams 용량**: 동기화에서 뺐다(위 표). 보관 기간은 `STREAM_KEEP_DAYS`(기본 7일).
+3. **같은 문서 동시 편집**: 두 머신이 같은 문서에 note 하나씩만 붙여도 `updated:`
+   한 줄과 삽입 지점이 겹쳐 `pull --rebase` 가 실패하고, sync 는 abort 후 로그만
+   남기고 멈춘다(복구 명령·화면 표시 없음). 문서 형식을 아는 merge driver 와
+   실패 표면화가 DOC-20260902-001 축3 의 결정이다(REQ-20260902-022~025).
+4. **수신 경로 부재**: pull 은 이 머신이 문서 이벤트를 낼 때만 돈다 — 쓰지 않는
+   머신은 남의 변경을 받지 못한다. 화면의 pull 손잡이(`pull --ff-only`)와
+   `sync_run` 의 `pull --rebase` 는 경로가 둘이다. 같은 결정에서 serve 의 수신
+   폴링으로 합친다(REQ-20260902-023).
