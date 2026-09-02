@@ -296,6 +296,7 @@ function render(){
   if (streamTimer){ clearInterval(streamTimer); streamTimer = null; }
   if (reqStreamTimer){ clearInterval(reqStreamTimer); reqStreamTimer = null; }
   if (elapsedTimer){ clearInterval(elapsedTimer); elapsedTimer = null; }
+  gitStopPoll();  // 저장소 판의 10초 되재기도 탭을 떠나면 걷는다
   stopChat();  // terminal 탭 폴링(target/log/tail)도 탭 이탈 시 전량 정리
   $("#proj-info").hidden = true;  // 기본 숨김 — board/docs/graph에서만 조건부 표시
   $("#my-strip").hidden = true;   // MY PROJECTS 스트립도 동일 조건

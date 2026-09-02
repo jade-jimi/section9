@@ -31,7 +31,7 @@ async function postJSON(url, body){
   return res.ok;
 }
 
-let settingsSection = "display";  // display | account | worker | users | about
+let settingsSection = "display";  // display | account | worker | users | repo | about
 
 async function renderSettings(){
   // 같은 값은 같은 문을 지난다 (REQ-20260828-039) — 여기서만 조용히 빈 목록으로
@@ -56,6 +56,12 @@ async function renderSettings(){
     ["worker", "백그라운드 작업", workerNavSub(
       me ? (data.users || []).find(x => x.name === me) : null)],
     ["users", "사용자 관리", meAdmin ? "등록·역할·시점 미리보기 (admin)" : "admin 전용"],
+    /* 「저장소」는 나 → 나 → 남 → **모두의 것** 자리다 (REQ-20260901-023).
+       이건 계정의 설정이 아니라 저장소의 상태와 행위라서, 「백그라운드 작업」
+       판(값이 전부 내 계정에 저장되는 내 설정)에 섞으면 축이 하나 몰래 는다.
+       「시스템」보다 앞인 이유는 하나다 — 시스템은 읽기만 하는 안내판이고
+       저장소는 손잡이가 있는 판이다. 부제는 여기서도 상태를 겸한다. */
+    ["repo", "저장소", repoNavSub()],
     ["about", "시스템", "저장소·통계·문서 안내"],
   ];
   $("#count").textContent = `Settings — ${me ? "@"+me : "미등록 계정"}`;
@@ -67,6 +73,7 @@ async function renderSettings(){
       <a class="row" href="/guide.html" target="_blank" style="display:block;text-decoration:none"><div>가이드 열기</div><div class="path">/guide.html — 사용자 안내서</div></a></div>
     <div class="viewer" id="sview"></div></div>`;
   renderSettingsSection(meAdmin);
+  repoNavRefresh();   // 「저장소」 부제는 판을 열지 않아도 거리를 말한다
 }
 
 function renderSettingsSection(meAdmin){
@@ -113,6 +120,11 @@ function renderSettingsSection(meAdmin){
       <button class="gefix" type="button" id="uf-retry">다시 불러오기</button></p>`;
     const wrt = $("#uf-retry");
     if (wrt) wrt.addEventListener("click", () => renderSettings());
+  } else if (settingsSection === "repo"){
+    /* 계정을 가리지 않는다 — **읽기는 자유**이고 저장소는 계정과 무관하다.
+       누를 자격은 서버가 응답의 `can` 으로 따로 말하고, 못 누르는 사람에게는
+       단추를 숨기지 않고 못 누르는 얼굴로 두고 이유를 말한다. */
+    showRepoPanel(v);
   } else if (settingsSection === "users"){
     if (!meAdmin){ v.innerHTML = `<p class="empty">사용자 관리는 admin만 가능합니다. (whoami=${esc((window.__whoami||{}).user||"?")})</p>`; return; }
     const list = (window.__users||[]).map(u => `<div class="urow" data-uname="${esc(u.name)}">
