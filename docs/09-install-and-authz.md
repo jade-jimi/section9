@@ -48,8 +48,13 @@ claude hook 정의가 바뀐 경우 실행 중 세션에는 `/hooks` 리로드 �
 `users/<name>/profile.md` 의 `role:` 필드가 저장소이며 `s9 user role <name> [role]` 로 관리.
 
 **A. 로컬 pre-commit guard (`bin/s9-guard`)** — 커밋에 보호 경로
-(`bin/ web/ harness/ .github/ .gitignore`)가 포함되면 현재 사용자
+(`bin/ web/ harness/ .github/ .gitignore` + **실행 권위를 갖는 텍스트**
+`projects/*/agents/ users/*/skills/ users/*/agents/`)가 포함되면 현재 사용자
 ($S9_USER > OS 계정)의 role을 확인, admin이 아니면 커밋 거부.
+`users/*/profile.md` 의 `role:` 줄을 바꾸는 커밋도 admin 만 (파일 전체가 아니라
+그 줄만 본다 — 프로필은 훅이 늘 고쳐 쓰는 데이터 파일이라). 커밋 내용에 토큰
+모양의 값(`ghp_` `github_pat_` `sk-ant-`)이나 자율 실행 설정 키가 추적 파일에
+들어 있으면 같은 자리에서 막는다 (REQ-20260902-031·032).
 오프라인에서도 동작하는 실수 방지 장치.
 
 **B. GitHub 서버측 (우회 불가능한 최종 게이트)** — `.github/CODEOWNERS` 의

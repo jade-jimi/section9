@@ -10,6 +10,7 @@ admin이 아니면 커밋을 거부한다.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -17,6 +18,47 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "bin"))
 
 PROTECTED = ("bin/", "web/", "harness/", ".github/", ".gitignore")
+# **실행 권위를 갖는 텍스트**도 코드다 (REQ-20260902-032, white-hacker 검토 시나리오
+# 4·5). `projects/<slug>/agents/*.md` 는 워커 프롬프트 서두에 그대로 주입되고
+# `.claude/agents` 로 미러돼 네이티브 서브에이전트 정의가 된다. `users/<u>/skills|agents`
+# 는 `~/.claude` 에 symlink 된다. 데이터 경로에 산다는 이유로 무보호였다 —
+# 공유 리포에서는 push 권한자가 남의 세션 에이전트 정의를 바꿔 쓸 수 있었다.
+PROTECTED_RE = (
+    re.compile(r"^projects/[^/]+/agents/"),
+    re.compile(r"^users/[^/]+/(skills|agents)/"),
+)
+
+
+def protected_hits(staged):
+    """보호 경로에 걸리는 스테이지 파일 — 접두 목록과 패턴 목록을 한 자리에서."""
+    out = []
+    for f in staged:
+        q = f.replace("\\", "/")
+        if q.startswith(PROTECTED) or any(r.search(q) for r in PROTECTED_RE):
+            out.append(f)
+    return out
+
+
+def role_change_hits(staged, diff_text):
+    """profile.md 의 `role:` 줄을 바꾸는 커밋 (REQ-20260902-032).
+
+    프로필은 훅이 늘 고쳐 쓰는 데이터 파일이라 통째로 보호할 수 없다 — 그러면
+    모든 사람의 모든 커밋이 막힌다. 그래서 **바뀐 줄**을 본다: 스테이지 diff 에
+    `+role:` 또는 `-role:` 이 있으면 그것은 역할 변경이고, admin 만 할 수 있다
+    (`s9 user role` 의 CLI 검사와 같은 규칙 — REQ-20260902-029)."""
+    files = [f for f in staged
+             if re.search(r"(^|/)users/[^/]+/profile\.md$", f.replace("\\", "/"))]
+    if not files or not diff_text:
+        return []
+    hits, cur = [], ""
+    for line in diff_text.splitlines():
+        if line.startswith("+++ b/"):
+            cur = line[6:]
+            continue
+        if cur in files and re.match(r"^[+-]role:", line):
+            if cur not in hits:
+                hits.append(cur)
+    return hits
 
 # 동시 작업 보호 (REQ-20260826-021). 2026-08-26 하루에 같은 뿌리의 사고가 넷 났다.
 # 21:42 에는 리드가 `git add web/index.html` 로 커밋하면서 같은 파일을 고치던
@@ -264,8 +306,17 @@ def main():
     concurrent_gate(staged)
     staged_tests_gate(staged)
     secret_gate(staged)
-    hits = [f for f in staged if f.startswith(PROTECTED)]
-    if not hits:
+    hits = protected_hits(staged)
+    # 역할 변경은 프로필 파일 전체가 아니라 그 줄만 본다 (REQ-20260902-032)
+    try:
+        diff_text = subprocess.run(["git", "diff", "--cached", "-U0", "--",
+                                    *[f for f in staged if f.endswith("profile.md")]],
+                                   capture_output=True, text=True, cwd=ROOT).stdout \
+            if any(f.endswith("profile.md") for f in staged) else ""
+    except Exception:
+        diff_text = ""
+    role_hits = role_change_hits(staged, diff_text)
+    if not hits and not role_hits:
         sys.exit(0)
 
     user = current_user()
@@ -273,7 +324,14 @@ def main():
     if role == "admin":
         sys.exit(0)
 
-    print("s9-guard: harness 보호 경로가 커밋에 포함되어 있습니다:", file=sys.stderr)
+    if role_hits:
+        print("s9-guard: 사용자 역할(role:)을 바꾸는 커밋입니다 — admin 만 할 수 있습니다:",
+              file=sys.stderr)
+        for f in role_hits[:10]:
+            print(f"  - {f}", file=sys.stderr)
+    if hits:
+        print("s9-guard: harness 보호 경로(실행 권위를 갖는 텍스트 포함)가 커밋에 "
+              "포함되어 있습니다:", file=sys.stderr)
     for f in hits[:10]:
         print(f"  - {f}", file=sys.stderr)
     who = f"{user} (role: {role or '미등록'})"

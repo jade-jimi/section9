@@ -10,3 +10,8 @@
 /harness/   @nicehugepark
 /.github/   @nicehugepark
 /.gitignore @nicehugepark
+# 실행 권위를 갖는 텍스트도 코드다 (REQ-20260902-032): 워커 프롬프트 서두 주입·
+# 네이티브 서브에이전트 정의·개인 스킬 symlink — 데이터 경로에 살지만 admin 게이트다.
+/projects/*/agents/ @nicehugepark
+/users/*/skills/    @nicehugepark
+/users/*/agents/    @nicehugepark

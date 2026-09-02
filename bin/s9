@@ -5014,6 +5014,13 @@ def secret_value(user, key, root=None):
         return None
 
 
+TOKEN_PATTERNS = (
+    (re.compile(r"\bghp_[A-Za-z0-9]{20,}"), "GitHub 개인 토큰(ghp_)"),
+    (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"), "GitHub 세분 토큰(github_pat_)"),
+    (re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}"), "Anthropic API 키(sk-ant-)"),
+)
+
+
 def secret_leak(staged_paths, blob, root=None, user=None):
     """커밋에 비밀이 섞였는가 — (사유 문자열) 목록. 없으면 빈 목록.
 
@@ -5041,6 +5048,14 @@ def secret_leak(staged_paths, blob, root=None, user=None):
                 hits.append(
                     f"{what}가 커밋에 들어 있다: {p} 의 {k} — "
                     f"이 값은 config/local.json(비추적)으로 가야 한다")
+    # 저장소에 등록되지 않은 토큰도 모양으로 잡는다 (REQ-20260902-032) — 값을
+    # 어딘가에 붙여 넣는 것이 실제 유출 경로이고, 우리 비밀 저장소에 없는
+    # 토큰(개인 PAT·API 키)은 위 대조로는 못 잡는다.
+    for pat, what in TOKEN_PATTERNS:
+        m = pat.search(blob or "")
+        if m:
+            hits.append(f"토큰 모양의 값이 커밋 내용에 들어 있다: {what} "
+                        f"({m.group(0)[:12]}…)")
     users = [user] if user else []
     if not users:
         base = os.path.join(root or ROOT, "users")
