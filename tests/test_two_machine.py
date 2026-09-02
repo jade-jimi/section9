@@ -104,7 +104,6 @@ class TestReworkWatcherAcrossMachines(unittest.TestCase):
         self.assertEqual(spawned, [], "beta 워처가 alpha 의 문서를 띄웠다")
         self.assertEqual(calls, [])
 
-    @unittest.expectedFailure   # 현행 결함 — 고치는 REQ 가 이 줄을 뗀다 (unexpected success 가 강제한다)
     def test_s4_alpha_watcher_respects_beta_claim(self):
         """(b) 빨강 — beta 세션이 `s9 claim` 으로 이어받았는데 alpha 워처가 겹쳐 띄운다.
 
@@ -116,7 +115,9 @@ class TestReworkWatcherAcrossMachines(unittest.TestCase):
         fx, X = self.fx, self.X
         fx.pull("beta")
         fx.cli("beta", "user", "switch", "alice", sess=B_SESS)
-        fx.cli("beta", "claim", X, sess=B_SESS)
+        # alpha 세션 A 의 리스가 아직 신선하다 — 다른 컴퓨터에서 이어가는 길은
+        # 명시 이관(--takeover)이다 (D1 조건, REQ-20260902-020)
+        fx.cli("beta", "claim", X, "--takeover", sess=B_SESS)
         b = fx.read_binding_file("beta", "beta", B_SESS)
         self.assertIn(X, b.get("active_reqs") or [])
         fx.sync("beta")
@@ -129,6 +130,40 @@ class TestReworkWatcherAcrossMachines(unittest.TestCase):
             spawned, [],
             f"beta 세션 {B_SESS} 가 클레임한 {X} 에 alpha 워처가 겹쳐 띄웠다 "
             f"(claude argv {len(calls)}건)")
+
+
+class TestLeaseCasAcrossMachines(unittest.TestCase):
+    """S8 (REQ-20260902-020) — 스폰은 리스를 push 한 뒤에만, 남은 쪽은 물러난다."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.fx = TwoMachine()
+        cls.X = seed_alpha_review(cls.fx)
+        cls.fx.sync("alpha")
+        cls.fx.pull("beta")
+        reject_on(cls.fx, "beta", cls.X)
+        cls.fx.sync("beta")
+        cls.fx.pull("alpha")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.fx.close()
+
+    def test_s8_first_spawner_holds_the_lease_and_the_other_yields(self):
+        fx, X = self.fx, self.X
+        fx.clear_spawn_marks("alpha")
+        spawned, calls = fx.tick("alpha", grace=0)
+        self.assertEqual(spawned, [X], f"alpha 워처가 담당자의 반려 문서를 띄우지 않았다: {calls}")
+        meta = fx.doc("alpha", X)[0]
+        lease = meta.get("lease") or {}
+        self.assertEqual(lease.get("machine"), "alpha")
+        self.assertEqual(lease.get("user"), "alice")
+        # 리스는 이미 origin 에 있다 — beta 가 당기면 물러난다
+        fx.pull("beta")
+        self.assertEqual((fx.doc("beta", X)[0].get("lease") or {}).get("machine"), "alpha")
+        fx.clear_spawn_marks("beta")
+        spawned, calls = fx.tick("beta", grace=0)
+        self.assertEqual(spawned, [], f"beta 워처가 alpha 의 리스를 무시하고 띄웠다: {calls}")
 
 
 class TestHookListsAcrossMachines(unittest.TestCase):

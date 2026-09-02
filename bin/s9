@@ -1299,6 +1299,7 @@ def catalog_row(meta, path, body=""):
         "assignee": meta.get("assignee", ""),
         # 생성 출처 (REQ-20260902-018) — 카드가 "만든 사람·맡은 사람·기원"을
         # 문서를 열지 않고 그린다. 옛 문서는 읽기 규칙(doc_creator)으로 같은 답.
+        "lease": doc_lease(meta),          # 리스 판정 원재료 (REQ-20260902-020)
         "creator": doc_creator(meta),
         "origin": doc_origin(meta),
         "origin_actor": meta.get("origin_actor", ""),
@@ -1795,6 +1796,10 @@ def update_active_reqs(doc_id, new_status):
                 write_binding(b)
         finally:
             release_lock()
+        try:
+            doc_lease_acquire(doc_id, "claim", session=sess)   # REQ-20260902-020
+        except Exception:
+            pass
         return
     alias = id_alias()          # 루프 밖에서 1회 — 바인딩마다 카탈로그를 다시 읽지 않는다
     target = canon_id(doc_id, alias)
@@ -1950,6 +1955,11 @@ def do_transition(doc_id, new_status, note="", user=None, force=False, auto=Fals
     meta["status"] = new_status
     meta["status_since"] = ts   # 현재 상태가 시작된 시각 (경과시간 표시용)
     meta["updated"] = ts
+    # 리스: 진전 쓰기가 곧 하트비트, 종결은 실행권의 끝 (REQ-20260902-020)
+    if new_status in TERMINAL_STATUSES:
+        meta.pop("lease", None)
+    else:
+        doc_lease_touch(meta)
     # 세션 승계: 다른(새) 세션이 REQ를 이어받아 착수하면 session 스탬프를 현재
     # 세션으로 갱신하고 이력은 sessions에 누적 — REQ가 여러 세션에 걸치는 경우
     # (재시작·이어받기)가 왕왕 있어, 스트림 터미널이 현재 작업 세션을 따라가야 한다.
@@ -3746,7 +3756,8 @@ def doc_owner(meta):
 def local_facts(user=None):
     """판정에 쓰는 이 자리의 사실: 누가, 어느 컴퓨터에서, 어떤 역할로."""
     u = user or resolve_user(None)
-    return {"user": u, "machine": current_machine(), "role": user_role(u)}
+    return {"user": u, "machine": current_machine(), "role": user_role(u),
+            "session": (os.environ.get("S9_SESSION") or "")[:8]}
 
 
 def is_mine(meta, local=None, want="list"):
@@ -3762,11 +3773,170 @@ def is_mine(meta, local=None, want="list"):
     # spawn 도 리스(담당자+머신)로 판정한다.
     if want != "spawn" and owner and local.get("user") and owner != local["user"]:
         return (False, "not-mine")
-    if want != "claim":
-        m = str((meta or {}).get("machine") or "")
-        if m and local.get("machine") and m != local["machine"]:
-            return (False, "elsewhere")
     return (True, "")
+
+
+# ---- 문서 리스 (REQ-20260902-020, D1) -------------------------------------
+# "담당자 + 처음 집은 머신". 리스는 **문서 frontmatter** 에 산다 — 바인딩은
+# 머신별 파일이라 두 머신이 둘 다 성공하지만, 문서의 같은 줄을 두 머신이 쓰면
+# rebase 충돌 → git push 의 non-fast-forward 가 곧 원자적 비교-교환(CAS)이다.
+# 다른 머신의 리스는 **벽시계만** 본다(pid·경로는 그 머신에서만 참). 만료
+# (DOC_LEASE_TTL)는 잡아만 놓은 클레임이 풀리는 CLAIM_GRACE 와 같은 시계다.
+# 옛 머신이 꺼진 뒤 다른 머신에서 이어가는 길은 둘: 만료를 기다리거나
+# `s9 claim <id> --takeover`(담당자 본인·admin).
+DOC_LEASE_TTL = CLAIM_GRACE
+LEASE_PULL_FRESH_SEC = 60
+_SYNC_PULL_TS = os.path.join(ROOT, "state", ".sync-pull.ts")
+
+
+def doc_lease(meta):
+    l = (meta or {}).get("lease")
+    return dict(l) if isinstance(l, dict) else {}
+
+
+def _iso_epoch(v):
+    try:
+        return datetime.datetime.fromisoformat(str(v)).timestamp()
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def doc_lease_fresh(lease, now=None):
+    import time as _time
+    t = max(_iso_epoch(lease.get("since")), _iso_epoch(lease.get("renewed")))
+    return bool(t) and ((now or _time.time()) - t) < DOC_LEASE_TTL
+
+
+def _session_alive_here(sid8):
+    b = read_binding(current_machine(), (sid8 or "")[:8]) if sid8 else None
+    return bool(b) and chat_live(b)
+
+
+def doc_lease_verdict(meta, local, want="list"):
+    """리스 단계 — (allow, code, why). 다른 머신은 벽시계만 본다."""
+    lease = doc_lease(meta)
+    if not lease or not doc_lease_fresh(lease):
+        return (True, "free", "")
+    if str(lease.get("machine") or "") != str(local.get("machine") or ""):
+        return (False, "busy-elsewhere",
+                f"{lease.get('user')}@{lease.get('machine')} 가 "
+                f"{str(lease.get('renewed') or lease.get('since') or '')[11:16]} 부터 쥐고 있다")
+    sid = str(lease.get("session") or "")[:8]
+    if sid and sid == str(local.get("session") or "")[:8]:
+        return (True, "renew", "")
+    # 같은 컴퓨터의 다른 세션: 사람의 자리(list·claim)는 그 세션의 생존을 본다.
+    # 워처(spawn)는 이미 rework_claimed 가 같은 판정을 마친 뒤에 오므로 여기서
+    # 다시 세우지 않는다 — 두 벌이면 한쪽이 성기거나 빡빡해진다.
+    if want != "spawn" and sid and _session_alive_here(sid):
+        return (False, "busy-local", f"이 컴퓨터의 세션 {sid} 가 쥐고 있다")
+    return (True, "takeover-local", "")
+
+
+def doc_lease_touch(meta, local=None):
+    """진전 쓰기(전이·노트)가 곧 하트비트다 — 내 리스면 renewed 를 올린다.
+    새 시계를 만들지 않는다. 반환: 바뀌었는가."""
+    lease = doc_lease(meta)
+    if not lease:
+        return False
+    local = local or local_facts()
+    if lease.get("user") != local.get("user") or \
+            lease.get("machine") != local.get("machine"):
+        return False
+    lease["renewed"] = now_iso()
+    meta["lease"] = lease
+    return True
+
+
+def _pull_if_stale():
+    """remote 모드에서 마지막 pull 이 오래됐으면 먼저 당긴다 — 조용한 머신의
+    판정이 낡은 문서 위에서 나지 않게 (REQ-20260902-020, 워처가 아니라 게이트가
+    당긴다)."""
+    import time as _time
+    if sync_mode() != "remote":
+        return
+    try:
+        if _time.time() - float(open(_SYNC_PULL_TS).read().strip()) < LEASE_PULL_FRESH_SEC:
+            return
+    except (OSError, ValueError):
+        pass
+    try:
+        r = _sync_git("pull", "--rebase", "--autostash", "-q", timeout=8)
+        if r.returncode != 0:
+            _sync_git("rebase", "--abort", timeout=6)
+        else:
+            _sync_pull_stamp()
+            rebuild_index(quiet=True)
+    except Exception:
+        pass
+
+
+def _sync_pull_stamp():
+    import time as _time
+    try:
+        os.makedirs(os.path.dirname(_SYNC_PULL_TS), exist_ok=True)
+        with open(_SYNC_PULL_TS, "w") as f:
+            f.write(str(_time.time()))
+    except OSError:
+        pass
+
+
+def doc_lease_acquire(doc_id, want="claim", session=None, takeover=False,
+                      local=None, actor=""):
+    """리스 획득 — 허용/거부가 실제 효력을 갖는 유일한 자리 (REQ-20260902-020).
+
+    pull(낡았으면) → exec_verdict(리스 단계 포함) → 문서에 기록 → remote 면 push
+    확인. 스폰(want="spawn")은 **비관**: push 가 확인되지 않으면 획득이 아니다
+    (lost-race·net-down). 사람의 claim 은 네트워크 실패 시 경고 후 허용.
+    반환 (ok, code, why)."""
+    local = dict(local or local_facts())
+    if session is not None:
+        local["session"] = (session or "")[:8]
+    _pull_if_stale()
+    path = locate(doc_id) or locate(canon_id(doc_id))
+    if not path:
+        return (False, "missing", f"document not found: {doc_id}")
+    meta, body = read_doc(path)
+    if meta.get("type") != "request":
+        return (True, "free", "")
+    ok, code, why = exec_verdict(meta, local, want)
+    old = doc_lease(meta)
+    if not ok:
+        if takeover and code == "busy-elsewhere" and (
+                local.get("user") == doc_owner(meta)
+                or user_role(local.get("user") or "") == "admin"):
+            pass                                   # 명시 이관 — 아래서 적는다
+        else:
+            return (False, code, why)
+    ts = now_iso()
+    lease = {"user": local.get("user") or "", "machine": local.get("machine") or "",
+             "session": local.get("session") or "",
+             "since": old.get("since") if code == "renew" and old else ts,
+             "renewed": ts}
+    meta["lease"] = lease                      # `updated` 는 건드리지 않는다
+    if takeover and old and old.get("machine") != lease["machine"]:
+        line = (f"- {ts} lease: takeover {old.get('user')}@{old.get('machine')} -> "
+                f"{lease['user']}@{lease['machine']} (by {actor or local.get('user')})\n")
+        body = body.rstrip("\n") + "\n" + line
+    acquire_lock()
+    try:
+        write_doc(path, meta, body)
+        rebuild_index(quiet=True)
+    finally:
+        release_lock()
+    if sync_mode() == "remote":
+        r = sync_run(f"lease {canon_id(doc_id)}")
+        if r not in ("ok", "local"):
+            meta2 = read_doc(path)[0]
+            l2 = doc_lease(meta2)
+            if l2 and (l2.get("machine") != lease["machine"]
+                       or l2.get("user") != lease["user"]):
+                return (False, "lost-race",
+                        f"{l2.get('user')}@{l2.get('machine')} 가 먼저 쥐었다")
+            if want == "spawn":
+                return (False, "net-down", f"push 미확인({r}) — 다음 틱에 다시")
+            print(f"◌ 리스를 밖으로 못 보냈다({r}) — 로컬에는 잡혔다",
+                  file=sys.stderr)
+    return (True, "takeover" if takeover else (code or "free"), "")
 
 
 def exec_verdict(meta, local=None, want="list"):
@@ -3785,17 +3955,17 @@ def exec_verdict(meta, local=None, want="list"):
     ok, code = is_mine(meta, local, want)
     if not ok:
         why = {"observer": "관찰 계정은 실행하지 않는다",
-               "not-mine": f"담당 {doc_owner(meta)}",
-               "elsewhere": f"다른 컴퓨터({meta.get('machine')})의 것"}[code]
+               "not-mine": f"담당 {doc_owner(meta)}"}[code]
         return (False, code, why)
-    return (True, "free", "")
+    return doc_lease_verdict(meta, local, want)
 
 
 def _mine_rows(rows, local=None, want="list"):
     """카탈로그 행 목록에서 내 것만 — 훅 목록·next 가 쓰는 한 필터.
     행에 user/machine 이 없으면(파생 목록) 카탈로그에서 채워 판정한다."""
     local = local or local_facts()
-    need = [r for r in rows if "machine" not in r or "user" not in r]
+    need = [r for r in rows if "machine" not in r or "user" not in r
+            or "lease" not in r]
     if need:
         by_id = {c["id"]: c for c in load_catalog()}
         for r in need:
@@ -3803,7 +3973,15 @@ def _mine_rows(rows, local=None, want="list"):
             r.setdefault("user", c.get("user", ""))
             r.setdefault("machine", c.get("machine", ""))
             r.setdefault("assignee", c.get("assignee", ""))
-    return [r for r in rows if is_mine(r, local, want)[0]]
+            r.setdefault("lease", c.get("lease", {}))
+    return [r for r in rows if _row_mine(r, local, want)]
+
+
+def _row_mine(row, local, want="list"):
+    """행 하나의 소유 + 리스 판정 — 목록 필터가 쓰는 한 술어 (REQ-20260902-020)."""
+    if not is_mine(row, local, want)[0]:
+        return False
+    return doc_lease_verdict(row, local, want)[0]
 
 
 def rework_claimed(req_id, win=120):
@@ -7740,6 +7918,15 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
             elif len(cand) >= 36:
                 _auto_log(f"NO-RESUME {doc_id} sid={cand[:8]} "
                           f"프로세스 생존 — 새 세션으로 띄운다")
+    # 리스 CAS (REQ-20260902-020) — push 가 확인되기 전에는 띄우지 않는다(비관).
+    # 담당자를 대신하는 자리라 local.user 는 owner 다.
+    _lk, _lc, _lw = doc_lease_acquire(
+        doc_id, "spawn", session=sid[:8] if sid else "",
+        local={"user": owner, "machine": current_machine(),
+               "role": user_role(owner), "session": sid[:8] if sid else ""})
+    if not _lk and _lc != "missing":
+        _auto_log(f"SKIP({_lc}) {doc_id} {reason} {_lw}")
+        return block(_lc, f"{_lw} — 여기서는 띄우지 않는다")
     try:
         lf = open(os.path.join(_auto_dir(), safe_name(doc_id) + ".log"), "a")
         argv = ["claude", "-p", prompt, *_spawn_model_args(owner), *perm]
@@ -9019,6 +9206,8 @@ def sync_run(reason=""):
                                timeout=8)
                 kind = "" if pl.returncode == 0 else _sync_fail_kind(pl.stderr)
                 _sync_event(reason, "pull", t0, pl, attempt=attempt, kind=kind)
+                if pl.returncode == 0:
+                    _sync_pull_stamp()
                 if pl.returncode != 0:
                     _sync_git("rebase", "--abort", timeout=6)
                     # 충돌은 장애가 아니다 — 물러나 봐야 같은 충돌이다. 병합
@@ -10966,7 +11155,7 @@ def reopened_requests(mine=False):
     for r in load_catalog():
         if r["type"] != "request" or r["status"] != "in-progress":
             continue
-        if mine and not is_mine(r, local)[0]:
+        if mine and not _row_mine(r, local):
             continue
         try:
             with open(os.path.join(ROOT, r["path"]), encoding="utf-8") as f:
@@ -11627,7 +11816,7 @@ def approvals_unseen(consume=False, days=2, mine=False):
             continue
         if r["id"] in seen:
             continue
-        if mine and not is_mine(r, local)[0]:
+        if mine and not is_mine(r, local)[0]:      # 승인 메모는 담당자 기준(끝난 문서라 리스 없음)
             continue
         try:
             ts = datetime.datetime.fromisoformat(r.get("updated", "")).timestamp()
@@ -12757,6 +12946,7 @@ def cmd_note(args):
     else:
         body = body.rstrip("\n") + "\n" + entry
     meta["updated"] = ts
+    doc_lease_touch(meta)                # 노트도 하트비트 (REQ-20260902-020)
 
     acquire_lock()
     try:
@@ -12835,7 +13025,7 @@ def doc_status_live(doc_id):
 
 
 def _claim_req(machine, session, doc_id, agent_transcript="",
-               agent_req_guess=False):
+               agent_req_guess=False, takeover=False):
     """세션 바인딩에 REQ 실행 등록(active_reqs) + 문서 세션 승계 스탬프.
 
     저장 id는 카탈로그 정식 id로 정규화한다 — 접미 없는 짧은 id로 저장돼
@@ -12920,6 +13110,19 @@ def _claim_req(machine, session, doc_id, agent_transcript="",
     finally:
         release_lock()
     stamp_doc_session(doc_id, session)
+    # 문서 리스 (REQ-20260902-020): 바인딩은 이 머신의 사실, 리스는 모든 머신이
+    # 보는 사실이다. 거부되면 말하되 사람의 클레임을 막지는 않는다.
+    if not doc_id_terminal:
+        try:
+            _ok, _code, _why = doc_lease_acquire(doc_id, "claim", session=session,
+                                                 takeover=takeover)
+            if not _ok:
+                print(f"◌ 리스 {_code}: {_why}"
+                      + (" — 이어받으려면 `s9 claim <id> --takeover`" if _code == "busy-elsewhere" else ""),
+                      file=sys.stderr)
+        except Exception:
+            pass
+
     return doc_id
 
 
@@ -12995,7 +13198,8 @@ def cmd_claim(args):
         print(f"hand {atp} (미상)")
         return
     rid = _claim_req(current_machine(), session, args.id, atp,
-                     agent_req_guess=guess)
+                     agent_req_guess=guess,
+                     takeover=bool(getattr(args, "takeover", False)))
     print(f"claim {rid}" + (f" + agent transcript {atp}" if atp else "")
           + (" (추정)" if atp and guess else ""))
 
@@ -20611,6 +20815,8 @@ def main():
                          "(죽은 세션이 남긴 클레임 정리)")
     cl.add_argument("--reason", metavar="TEXT",
                     help="--release 의 사유 (History 에 함께 남는다)")
+    cl.add_argument("--takeover", action="store_true",
+                    help="다른 컴퓨터가 쥔 리스를 이 컴퓨터로 옮긴다 (담당자 본인·admin, REQ-20260902-020)")
     cl.set_defaults(fn=cmd_claim)
 
     dt = sub.add_parser("delegate-target",

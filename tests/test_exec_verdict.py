@@ -67,13 +67,17 @@ class Verdict(unittest.TestCase):
         self.assertEqual(code, "not-mine")
         self.assertIn("other", why)
 
-    # V3. 같은 사용자·다른 머신 → elsewhere (list/spawn), claim 은 통과
+    # V3. 같은 사용자·다른 머신 — 만든 머신은 판정에 안 쓴다(D1): 리스가 없으면
+    # 어느 컴퓨터든 free, 다른 컴퓨터의 신선한 리스가 있으면 busy-elsewhere
     def test_v3_same_user_other_machine(self):
         d = self.doc(machine="there")
-        self.assertEqual(self.m.exec_verdict(d, self.local())[1], "elsewhere")
-        self.assertEqual(self.m.exec_verdict(d, self.local(), want="spawn")[1],
-                         "elsewhere")
-        self.assertTrue(self.m.exec_verdict(d, self.local(), want="claim")[0])
+        self.assertEqual(self.m.exec_verdict(d, self.local())[1], "free")
+        ts = self.m.now_iso()
+        d["lease"] = {"user": "me", "machine": "there", "session": "s1",
+                      "since": ts, "renewed": ts}
+        for want in ("list", "spawn", "claim"):
+            self.assertEqual(self.m.exec_verdict(d, self.local(), want=want)[1],
+                             "busy-elsewhere", want)
 
     # V3b. 워처(spawn)는 담당자를 대신하는 자리 — 서버 계정과 담당자가 달라도
     # 이 머신의 문서면 띄운다 (잠정, 020 이 리스로 바꾼다)
@@ -126,6 +130,11 @@ class Verdict(unittest.TestCase):
         subprocess.run([S9, "user", "config", "other", "auto_resume", "on"],
                        capture_output=True, env=env, stdin=subprocess.DEVNULL)
         meta, _ = m.read_doc(m.locate(rid))
+        # 다른 컴퓨터의 신선한 리스 — 워처는 벽시계만 보고 물러난다
+        ts = m.now_iso()
+        meta["lease"] = {"user": "other", "machine": "there", "session": "x1",
+                         "since": ts, "renewed": ts}
+        m.write_doc(m.locate(rid), meta, m.read_doc(m.locate(rid))[1])
         logs, out = [], {}
         with mock.patch.object(m, "resolve_user", lambda *a, **k: "me"), \
                 mock.patch.object(m, "_auto_log", lambda s: logs.append(s)), \
@@ -133,8 +142,8 @@ class Verdict(unittest.TestCase):
                 mock.patch.object(m, "doc_commit_drift", lambda d: False):
             r = m._spawn_worker(rid, meta, "p", "rework", out=out)
         self.assertFalse(r)
-        self.assertEqual(out.get("blocked"), "elsewhere")
-        self.assertTrue(any("SKIP(elsewhere)" in l for l in logs), logs)
+        self.assertEqual(out.get("blocked"), "busy-elsewhere")
+        self.assertTrue(any("SKIP(busy-elsewhere)" in l for l in logs), logs)
 
     # W4. 드래그 착수 통지는 담당자의 세션에만
     def test_w4_chat_target_by_user(self):
