@@ -8560,6 +8560,90 @@ def _sync_git(*argv, timeout=6):
 
 
 _SYNC_FAIL_TS = os.path.join(ROOT, "state", ".sync-fail.ts")
+_SYNC_EVENTS = os.path.join(ROOT, "state", "sync.jsonl")
+SYNC_PUSH_RETRIES = 3          # 거부(non-fast-forward)는 장애가 아니다 — 곧바로 다시 민다
+SYNC_RETRY_BASE_SEC = 0.5      # 0.5 · 1 · 2 초 + 지터
+SYNC_EVENTS_MAX_LINES = 4000   # 관측 파일 상한 (넘으면 앞을 버린다)
+
+
+def _sync_fail_kind(stderr):
+    """git 실패를 셋으로 가른다 (REQ-20260902-022):
+        rejected  남이 먼저 밀었다(non-fast-forward) — 다시 당겨 밀면 된다
+        conflict  같은 문서를 두 머신이 고쳤다 — 사람(또는 병합 드라이버)의 몫
+        net       네트워크·인증·타임아웃 — 잠시 물러난다(백오프)
+    종전에는 셋을 전부 '네트워크 장애'로 취급해 60초 침묵했다 — 5인 폭주에서
+    즉시 성공률 56%, 진 쪽은 push·pull 을 모두 멈췄다(devops 실측)."""
+    t = str(stderr or "")
+    if re.search(r"non-fast-forward|fetch first|\[rejected\]|"
+                 r"failed to push some refs", t):
+        return "rejected"
+    if re.search(r"CONFLICT|could not apply|Resolve all conflicts|"
+                 r"unmerged|needs merge", t):
+        return "conflict"
+    return "net"
+
+
+def _sync_event(reason, stage, t0, r, attempt=0, kind=""):
+    """단계 하나의 관측 한 줄 — state/sync.jsonl (REQ-20260902-022).
+    `s9 sync --stats` 가 p50/p95·거부율을 이것으로 낸다. 실패해도 조용하다."""
+    import time as _time
+    rec = {"ts": now_iso(), "reason": (reason or "")[:40], "stage": stage,
+           "ms": int((_time.time() - t0) * 1000),
+           "rc": getattr(r, "returncode", -1), "attempt": attempt}
+    if kind:
+        rec["kind"] = kind
+    try:
+        os.makedirs(os.path.dirname(_SYNC_EVENTS), exist_ok=True)
+        with open(_SYNC_EVENTS, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        if os.path.getsize(_SYNC_EVENTS) > SYNC_EVENTS_MAX_LINES * 120:
+            with open(_SYNC_EVENTS, encoding="utf-8") as f:
+                lines = f.readlines()[-SYNC_EVENTS_MAX_LINES // 2:]
+            with open(_SYNC_EVENTS, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+    except OSError:
+        pass
+
+
+def sync_stats(limit=2000):
+    """sync.jsonl 을 읽어 단계별 건수·p50/p95·거부율·마지막 성공을 낸다."""
+    recs = []
+    try:
+        with open(_SYNC_EVENTS, encoding="utf-8") as f:
+            for ln in f.readlines()[-limit:]:
+                try:
+                    recs.append(json.loads(ln))
+                except ValueError:
+                    continue
+    except OSError:
+        return {"events": 0, "stages": {}, "push_rejected_rate": None,
+                "last_ok": "", "last_fail": ""}
+
+    def pct(xs, q):
+        if not xs:
+            return 0
+        xs = sorted(xs)
+        return xs[min(len(xs) - 1, int(round((len(xs) - 1) * q)))]
+    stages = {}
+    for r in recs:
+        st = stages.setdefault(r.get("stage", "?"), {"n": 0, "fail": 0, "ms": []})
+        st["n"] += 1
+        st["ms"].append(int(r.get("ms") or 0))
+        if r.get("rc", 0) != 0:
+            st["fail"] += 1
+    out = {}
+    for k, st in stages.items():
+        out[k] = {"n": st["n"], "fail": st["fail"],
+                  "p50_ms": pct(st["ms"], 0.5), "p95_ms": pct(st["ms"], 0.95)}
+    pushes = [r for r in recs if r.get("stage") == "push"]
+    rejected = [r for r in pushes if r.get("kind") == "rejected"]
+    oks = [r for r in pushes if r.get("rc") == 0]
+    fails = [r for r in recs if r.get("rc", 0) != 0]
+    return {"events": len(recs), "stages": out,
+            "push_rejected_rate": (round(len(rejected) / len(pushes), 3)
+                                   if pushes else None),
+            "last_ok": oks[-1]["ts"] if oks else "",
+            "last_fail": fails[-1]["ts"] if fails else ""}
 
 
 def _sync_net_backoff(active):
@@ -8618,9 +8702,12 @@ def sync_run(reason=""):
                 "diff", "--cached", "--name-only", "--", *paths
             ).stdout.splitlines() if n.strip()]
             if names:
+                import time as _tm
+                _t0 = _tm.time()
                 r = _sync_git("commit", "-q", "--only", "-m",
                               f"s9 sync: {reason or 'update'}"[:72],
                               "--", *names)
+                _sync_event(reason, "commit", _t0, r)
                 if r.returncode != 0:
                     _sync_log(f"commit 실패: {r.stderr.strip()[:120]}")
                     return "error"
@@ -8633,24 +8720,63 @@ def sync_run(reason=""):
             # 깨끗하길 요구한다. 남이 stage 해둔 코드 하나 때문에 문서가 로컬에
             # 커밋된 채 origin 까지 못 가면, 결국 같은 무증상 미동기화다
             # (REQ-20260826-003). autostash 는 그 변경을 잠깐 치웠다 되돌린다.
-            pl = _sync_git("pull", "--rebase", "--autostash", "-q", timeout=8)
-            if pl.returncode != 0:
-                _sync_git("rebase", "--abort", timeout=6)
-                _sync_net_backoff(True)
-                _sync_log(f"⚠ pull 실패({reason}): {pl.stderr.strip()[:160]} "
-                          f"— 로컬 커밋은 보존, 수동 확인 필요 시 s9 sync")
-                return "pull-fail"
-            ps = _sync_git("push", "-q", timeout=8)
-            if ps.returncode != 0:
-                _sync_net_backoff(True)
-                _sync_log(f"⚠ push 실패({reason}): {ps.stderr.strip()[:160]}")
-                return "push-fail"
+            import random as _random
+            import time as _time
+
+            def _pull(attempt):
+                t0 = _time.time()
+                pl = _sync_git("pull", "--rebase", "--autostash", "-q",
+                               timeout=8)
+                kind = "" if pl.returncode == 0 else _sync_fail_kind(pl.stderr)
+                _sync_event(reason, "pull", t0, pl, attempt=attempt, kind=kind)
+                if pl.returncode != 0:
+                    _sync_git("rebase", "--abort", timeout=6)
+                    # 충돌은 장애가 아니다 — 물러나 봐야 같은 충돌이다. 병합
+                    # 드라이버(REQ-20260902-024)와 표면화(-025)의 몫이다.
+                    if kind == "net":
+                        _sync_net_backoff(True)
+                    _sync_log(f"⚠ pull {kind}({reason}): "
+                              f"{pl.stderr.strip()[:160]} — 로컬 커밋은 보존, "
+                              f"수동 확인 필요 시 s9 sync")
+                    return "pull-conflict" if kind == "conflict" else "pull-fail"
+                return ""
+            bad = _pull(0)
+            if bad:
+                return bad
+            # 거부(non-fast-forward)는 남이 먼저 밀었다는 뜻이다 — 장애가 아니라
+            # 경합이고, 답은 물러남이 아니라 **곧바로 다시 당겨 미는 것**이다
+            # (REQ-20260902-022). 네트워크·인증 실패만 백오프한다.
+            for attempt in range(SYNC_PUSH_RETRIES + 1):
+                t0 = _time.time()
+                ps = _sync_git("push", "-q", timeout=8)
+                kind = "" if ps.returncode == 0 else _sync_fail_kind(ps.stderr)
+                _sync_event(reason, "push", t0, ps, attempt=attempt, kind=kind)
+                if ps.returncode == 0:
+                    break
+                if kind != "rejected":
+                    _sync_net_backoff(True)
+                    _sync_log(f"⚠ push 실패({reason}): {ps.stderr.strip()[:160]}")
+                    return "push-fail"
+                if attempt >= SYNC_PUSH_RETRIES:
+                    _sync_log(f"⚠ push 거부 {attempt + 1}회({reason}) — "
+                              f"다음 이벤트가 다시 민다")
+                    return "push-rejected"
+                _time.sleep(SYNC_RETRY_BASE_SEC * (2 ** attempt)
+                            + _random.uniform(0, 0.3))
+                bad = _pull(attempt + 1)
+                if bad:
+                    return bad
             try:
                 os.remove(_SYNC_FAIL_TS)
             except OSError:
                 pass
             return "ok"
         except subprocess.TimeoutExpired:
+            # 도중에 죽은 rebase 잔재가 다음 모든 git 쓰기를 막는다 — 치운다
+            try:
+                _sync_git("rebase", "--abort", timeout=6)
+            except Exception:
+                pass
             _sync_net_backoff(True)
             _sync_log(f"⚠ 시간 초과({reason}) — 네트워크 백오프 60s")
             return "timeout"
@@ -8681,6 +8807,22 @@ def cmd_sync(args):
         print("바깥과 오갑니다 — 문서 이벤트마다 commit→pull→push (origin 필요)"
               if m == "remote" else
               "이 기계 안에만 둡니다 — 문서 이벤트마다 로컬 커밋만")
+        return
+    if getattr(args, "stats", False):
+        st = sync_stats()
+        if getattr(args, "json", False):
+            print(json.dumps(st, ensure_ascii=False, indent=1))
+            return
+        print(f"이벤트 {st['events']}건  마지막 성공 {st['last_ok'] or '—'}  "
+              f"마지막 실패 {st['last_fail'] or '—'}")
+        for k in ("commit", "pull", "push"):
+            v = st["stages"].get(k)
+            if v:
+                print(f"  {k:6s} {v['n']:5d}건  실패 {v['fail']:4d}  "
+                      f"p50 {v['p50_ms']:5d}ms  p95 {v['p95_ms']:5d}ms")
+        rr = st["push_rejected_rate"]
+        print(f"  push 거부율 {rr * 100:.0f}%" if rr is not None
+              else "  push 기록 없음")
         return
     if getattr(args, "status", False):
         mode = sync_mode()
@@ -20283,6 +20425,9 @@ def main():
     sy.add_argument("--off", action="store_true",
                     help="이 기계 안에만 둔다 (로컬 커밋만)")
     sy.add_argument("--status", action="store_true", help="활성 여부·최근 로그")
+    sy.add_argument("--stats", action="store_true",
+                    help="단계별 지연 p50/p95·거부율 (state/sync.jsonl)")
+    sy.add_argument("--json", action="store_true", help="--stats 를 JSON 으로")
     sy.set_defaults(fn=cmd_sync)
 
     ins = sub.add_parser("instance", help="인스턴스 리포 초기화 (업스트림-인스턴스 플로우, docs/08)")
