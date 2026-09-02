@@ -259,6 +259,20 @@ def registered_users():
 # 없지만, **다음 push 한 번이면 공개된다.** DOC-20260827-006 의 기준으로 이 키는
 # `permissions` 와 같은 칸이다: 그 자체가 능력을 여는 것은 리포에 싣지 않는다.
 SECRET_LOCATION_KEYS = ("external_secrets_path",)
+# **이 머신이 무엇을 자동 실행해도 되는가**는 그 머신의 주인만 정한다
+# (REQ-20260902-031, white-hacker 검토 시나리오 3). 이 키들이 추적 파일에 살면
+# 인스턴스 리포에 push 권한이 있는 누구나 남의 머신 워커 권한(편집 자동승인·gh)
+# 과 `s9 code` 기동 인자를 켤 수 있다 — 원격이 값을 밀어 넣을 수 있는 스위치는
+# 원격 코드 실행 스위치다. 그래서 비밀 위치 키와 같은 칸(local.json)으로 간다.
+LOCAL_ONLY_KEYS = ("s9code_args", "worker_worktree")
+LOCAL_ONLY_PREFIXES = ("auto_resume",)
+
+
+def _local_only_key(key):
+    """추적되지 않는 자리(config/local.json)에만 살아야 하는 키인가."""
+    k = str(key or "")
+    return (k in SECRET_LOCATION_KEYS or k in LOCAL_ONLY_KEYS
+            or any(k.startswith(pfx) for pfx in LOCAL_ONLY_PREFIXES))
 
 
 def user_config_local_path(name):
@@ -281,8 +295,41 @@ def user_config(name):
     알게 하면 부르는 자리마다 둘을 합치는 코드가 생기고, 한 곳이 빠지는 날이 온다.
     """
     cfg = _read_json(os.path.join(USERS, name, "config", "settings.json"))
+    # 추적 파일에 실려 온 자율 실행 키는 **읽지 않는다** (REQ-20260902-031) —
+    # 옮기는 것만으로는 원격이 다시 밀어 넣는 것을 못 막는다. 쓰는 자리를
+    # 가르는 것이 ①, 읽는 자리가 무시하는 것이 ②, 커밋 게이트가 ③이다.
+    cfg = {k: v for k, v in cfg.items() if not _local_only_key(k)}
     cfg.update(_read_json(user_config_local_path(name)))
     return cfg
+
+
+def migrate_local_only_config(name):
+    """추적 파일(settings.json)에 남은 자율 실행 키를 local.json 으로 옮긴다
+    (REQ-20260902-031). 멱등. 반환: 옮긴 키 목록.
+
+    `user_config` 가 그 키를 더는 읽지 않으므로, 이 갈래가 생기기 전에 저장된
+    값은 옮겨 주지 않으면 **조용히 꺼진 것처럼** 보인다. local.json 에 이미 있는
+    값이 이긴다 — 이 머신의 주인이 나중에 정한 값이다."""
+    if not name:
+        return []
+    cdir = os.path.join(USERS, name, "config")
+    spath = os.path.join(cdir, "settings.json")
+    tracked = _read_json(spath)
+    moving = {k: v for k, v in tracked.items() if _local_only_key(k)}
+    if not moving:
+        return []
+    lpath = user_config_local_path(name)
+    local = _read_json(lpath)
+    for k, v in moving.items():
+        local.setdefault(k, v)
+    os.makedirs(cdir, exist_ok=True)
+    fd = os.open(lpath, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(local, f, ensure_ascii=False, indent=1)
+    with open(spath, "w", encoding="utf-8") as f:
+        json.dump({k: v for k, v in tracked.items() if not _local_only_key(k)},
+                  f, ensure_ascii=False, indent=1)
+    return sorted(moving)
 
 
 def user_profile(name):
@@ -4986,11 +5033,14 @@ def secret_leak(staged_paths, blob, root=None, user=None):
                 cfg = _read_json(os.path.join(root or ROOT, q))
             except Exception:
                 cfg = {}
-            for k in SECRET_LOCATION_KEYS:
-                if cfg.get(k):
-                    hits.append(
-                        f"비밀이 있는 자리가 커밋에 들어 있다: {p} 의 {k} — "
-                        f"이 값은 config/local.json(비추적)으로 가야 한다")
+            for k in sorted(cfg):
+                if not (cfg.get(k) and _local_only_key(k)):
+                    continue
+                what = ("비밀이 있는 자리" if k in SECRET_LOCATION_KEYS
+                        else "자율 실행 스위치")      # REQ-20260902-031
+                hits.append(
+                    f"{what}가 커밋에 들어 있다: {p} 의 {k} — "
+                    f"이 값은 config/local.json(비추적)으로 가야 한다")
     users = [user] if user else []
     if not users:
         base = os.path.join(root or ROOT, "users")
@@ -13435,8 +13485,8 @@ def do_user_config_set(name, key, value, actor=""):
     # 비밀 위치 키는 **추적되지 않는 자리**로 간다 (REQ-20260828-028 부수 발견).
     cdir = os.path.join(USERS, name, "config")
     os.makedirs(cdir, exist_ok=True)
-    tracked = {k: v for k, v in cfg.items() if k not in SECRET_LOCATION_KEYS}
-    local = {k: v for k, v in cfg.items() if k in SECRET_LOCATION_KEYS}
+    tracked = {k: v for k, v in cfg.items() if not _local_only_key(k)}
+    local = {k: v for k, v in cfg.items() if _local_only_key(k)}
     with open(os.path.join(cdir, "settings.json"), "w", encoding="utf-8") as f:
         json.dump(tracked, f, ensure_ascii=False, indent=1)
     lpath = user_config_local_path(name)
@@ -14807,6 +14857,14 @@ def cmd_code(args):
                                 name], stdin=subprocess.DEVNULL)
             else:
                 print(f"◌ 미등록 사용자({u}) — 등록하려면: s9 user add {u}")
+    except Exception:
+        pass
+    # 추적 파일에 남은 자율 실행 키를 이 머신의 local.json 으로 (REQ-20260902-031)
+    try:
+        _moved = migrate_local_only_config(resolve_user(None))
+        if _moved:
+            print(f"◌ 자율 실행 설정 {len(_moved)}건을 이 컴퓨터의 "
+                  f"config/local.json 으로 옮겼다: {', '.join(_moved)}")
     except Exception:
         pass
     if not os.path.exists(os.path.join(claude_home(), ".credentials.json")):

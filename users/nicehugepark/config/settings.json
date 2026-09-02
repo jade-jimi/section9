@@ -1,14 +1,8 @@
 {
  "ui_skin": "calm",
  "ui_tone": "system",
- "auto_resume": "on",
  "ui_density": "normal",
- "auto_resume_apply": "on",
- "s9code_args": "--permission-mode auto --model opus",
- "auto_resume_model": "opus",
  "stream_mirror": "on",
- "auto_resume_gh": "on",
- "worker_worktree": "on",
  "timezone": "Asia/Seoul",
  "last_model_choice": "fable"
 }
