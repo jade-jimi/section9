@@ -9140,9 +9140,33 @@ def _sync_net_backoff(active):
         return False
 
 
-def sync_run(reason=""):
+_SYNC_QUEUE = os.path.join(ROOT, "state", ".sync-queue")
+SYNC_DEBOUNCE_SEC = 2.0          # 연속 이벤트를 한 push 로 묶는 창
+SYNC_POLL_ACTIVE_SEC = 10        # 라이브 세션이 있을 때 수신 폴링 주기
+SYNC_POLL_IDLE_SEC = 60          # 유휴 머신의 수신 폴링 주기
+_SYNC_POLL_TS = os.path.join(ROOT, "state", ".sync-poll.ts")
+
+
+def _serve_owner_alive():
+    """**이 저장소의** 대시보드 서버가 떠 있는가 — 전송의 주인이 있는가
+    (REQ-20260902-023). 포트를 두드리면 다른 루트(시험용 임시 루트)에서도 실서버가
+    답해 버린다 — 서버가 기동 시 남기는 지문(state/serve-code.json)의 pid 를 본다."""
+    try:
+        with open(os.path.join(ROOT, "state", "serve-code.json"), encoding="utf-8") as f:
+            info = json.load(f)
+    except (OSError, ValueError):
+        return False
+    pid = int((info or {}).get("pid") or 0)
+    return bool(pid) and pid_alive(pid)
+
+
+def sync_run(reason="", transport=True):
     """이벤트 동기화 1회: 데이터 경로 커밋 → pull --rebase → push (순차).
-    어떤 실패도 원래 작업을 막지 않는다 — state/sync.log에 기록하고 반환."""
+    어떤 실패도 원래 작업을 막지 않는다 — state/sync.log에 기록하고 반환.
+
+    transport=False 면 커밋까지만 하고 전송(pull·push)은 큐에 남긴다
+    (REQ-20260902-023) — 문서 이벤트 경로에서 네트워크를 뗀다. 큐는 serve 의
+    전송 루프가 디바운스해 한 push 로 묶는다."""
     import subprocess
     lock = os.path.join(ROOT, "state", ".sync.lock")
     try:
@@ -9190,6 +9214,14 @@ def sync_run(reason=""):
                     return "error"
             if sync_mode() != "remote":
                 return "local"      # 혼자 쓰는 자리 — 바깥으로 나가지 않는다
+            if not transport:
+                try:
+                    with open(_SYNC_QUEUE, "a"):
+                        pass
+                    os.utime(_SYNC_QUEUE, None)
+                except OSError:
+                    pass
+                return "queued"     # 전송은 serve 의 루프가 (REQ-20260902-023)
             if _sync_net_backoff(False):
                 _sync_log(f"skip(net-backoff) {reason}")
                 return "local"
@@ -9275,10 +9307,93 @@ def sync_run(reason=""):
 
 
 def maybe_sync(reason):
-    """문서 이벤트 훅 — 활성일 때만. 반환값은 참고용(호출부는 무시 가능)."""
+    """문서 이벤트 훅 — 활성일 때만. 반환값은 참고용(호출부는 무시 가능).
+
+    remote 모드에서 serve 가 떠 있으면 이 자리는 **로컬 커밋만** 하고 돌아온다
+    (REQ-20260902-023) — 종전엔 10곳의 문서 이벤트가 CLI 안에서 pull 8s·push 8s
+    를 동기로 물었다(하루 767~1464건). 전송은 serve 의 루프가 2초 디바운스로 묶어
+    민다. serve 가 없는 자리(제한 워커·CI)는 종전 경로 그대로다."""
     if not sync_enabled():
         return None
+    if sync_mode() == "remote" and _serve_owner_alive():
+        return sync_run(reason, transport=False)
     return sync_run(reason)
+
+
+def sync_poll(timeout=8):
+    """수신 — fetch + fast-forward 만 (REQ-20260902-023). 쓰지 않는 머신도 남의
+    변경을 본다. 로컬 커밋이 앞서 있어 ff 가 안 되면 조용히 건너뛴다(전송 루프의
+    rebase 가 푼다). 화면의 pull 손잡이와 **같은 git 명령**을 쓴다.
+    반환: "ok"(당김) · "none"(변경 없음) · "diverged" · "net"."""
+    import time as _time
+    if sync_mode() != "remote":
+        return "none"
+    try:
+        before = _sync_git("rev-parse", "HEAD").stdout.strip()
+        r = git_run(["pull", "--ff-only"], timeout=timeout)
+    except Exception:
+        return "net"
+    finally:
+        try:
+            os.makedirs(os.path.dirname(_SYNC_POLL_TS), exist_ok=True)
+            with open(_SYNC_POLL_TS, "w") as f:
+                f.write(str(_time.time()))
+        except OSError:
+            pass
+    if r.returncode != 0:
+        t = (r.stderr or "") + (r.stdout or "")
+        if re.search(r"Not possible to fast-forward|diverg|cannot fast-forward", t):
+            return "diverged"
+        return "net"
+    after = _sync_git("rev-parse", "HEAD").stdout.strip()
+    _sync_pull_stamp()
+    if after != before:
+        try:
+            rebuild_index(quiet=True)
+        except Exception:
+            pass
+        return "ok"
+    return "none"
+
+
+def sync_poll_due(now=None, active=None):
+    """수신 폴링 차례인가 — 라이브 세션이 있으면 10초, 없으면 60초."""
+    import time as _time
+    now = now or _time.time()
+    try:
+        last = float(open(_SYNC_POLL_TS).read().strip())
+    except (OSError, ValueError):
+        last = 0.0
+    if active is None:
+        try:
+            active = chat_target(None) is not None
+        except Exception:
+            active = False
+    every = SYNC_POLL_ACTIVE_SEC if active else SYNC_POLL_IDLE_SEC
+    return now - last >= every
+
+
+def sync_transport_tick(now=None):
+    """serve 의 전송 루프 한 틱 (REQ-20260902-023): 큐가 있고 디바운스 창을 지났으면
+    commit→pull→push 를 한 번 돌리고 큐를 지운다; 차례면 수신 폴링. 반환: 한 일."""
+    import time as _time
+    now = now or _time.time()
+    did = []
+    if sync_mode() != "remote":
+        return did
+    try:
+        qm = os.path.getmtime(_SYNC_QUEUE)
+    except OSError:
+        qm = None
+    if qm is not None and now - qm >= SYNC_DEBOUNCE_SEC:
+        try:
+            os.remove(_SYNC_QUEUE)
+        except OSError:
+            pass
+        did.append("push:" + str(sync_run("serve")))
+    elif sync_poll_due(now):
+        did.append("poll:" + sync_poll())
+    return did
 
 
 def cmd_sync(args):
@@ -19526,6 +19641,19 @@ def cmd_serve(args):
                     pass
                 time.sleep(30)
         threading.Thread(target=_rework_loop, daemon=True).start()
+
+    # 동기화 전송 루프 (REQ-20260902-023) — 문서 이벤트는 로컬 커밋만 하고, 밖과
+    # 오가는 것은 여기서 2초 디바운스로 묶어 민다. 쓰지 않는 머신도 여기서
+    # 10초/60초마다 남의 변경을 당긴다. 끄기: S9_SYNC_LOOP=off
+    if os.environ.get("S9_SYNC_LOOP", "").lower() != "off":
+        def _sync_loop():
+            while True:
+                try:
+                    sync_transport_tick()
+                except Exception:
+                    pass
+                time.sleep(2)
+        threading.Thread(target=_sync_loop, daemon=True).start()
 
     # 호스트 포트 감시 (REQ-20260825-102) — 2026-08-25 사고는 윈도우 동적
     # 포트가 마르며 OS 전체 인터넷이 끊긴 것이었고, 사람이 알아채기 전에는
