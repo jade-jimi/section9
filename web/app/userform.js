@@ -7,7 +7,7 @@ function showUserForm(u, host, isAdminEdit){
   /* 자리를 얻지 못한 값만 남긴다 (REQ-20260901-022).
      **자리를 얻은 키는 반드시 여기서 빠져야 한다** — 안 빼면 같은 값이 제 행과
      이 목록에 두 번 서고, 어느 쪽이 참인지 화면이 말하지 못한다. 그래서 목록을
-     손으로 늘리지 않고 `WCFG_KEYS`(무인 작업 판이 세우는 행의 키)와
+     손으로 늘리지 않고 `WCFG_KEYS`(백그라운드 작업 판이 세우는 행의 키)와
      `wcfgMine`(그 판이 데려가는 접두사)에서 받아 온다: 그 판에 행이 늘면 이
      제외도 저절로 는다. */
   const extraCfg = Object.entries(cfg).filter(([k]) =>
@@ -131,9 +131,9 @@ function showUserForm(u, host, isAdminEdit){
       </tr>`).join("")}
     </table>
     <div class="acts"><button id="xc-save">값 저장</button></div>` : ""}
-    ${isAdminEdit ? `<div class="cfg-h">무인 작업</div>${workerCfgHTML(u)}` : ""}
+    ${isAdminEdit ? `<div class="cfg-h">백그라운드 작업</div>${workerCfgHTML(u)}` : ""}
     <div class="path" style="margin-top:16px">변경은 profile.md Notes에 audit + git 동기화. 본인 또는 admin만 수정.</div>`;
-  /* admin 이 남의 무인 작업 설정을 만지는 자리 (REQ-20260901-022) — 내 판과
+  /* admin 이 남의 백그라운드 작업 설정을 만지는 자리 (REQ-20260901-022) — 내 판과
      **같은 부품 한 벌**이다. 서버가 대리를 받으므로(POST /api/user/config)
      가능하고, 확인 창과 사실 줄은 그 계정 이름을 말한다(REQ-20260901-017). */
   if (isAdminEdit) wireWorkerCfg(host, u);

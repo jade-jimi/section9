@@ -1,4 +1,4 @@
-"""설정을 화면에서 바꾼다 — 「무인 작업」 판의 계약 (REQ-20260901-022-62x6).
+"""설정을 화면에서 바꾼다 — 「백그라운드 작업」 판의 계약 (REQ-20260901-022-62x6).
 
 사용자 질문 QST-20260901-006: "깃헙에 푸시 여부에 대해서 옵션 설정을 바꿨는데
 어디서 하는거지?" 답이 없었던 이유는 화면에 자리가 없었기 때문이다 —
@@ -7,7 +7,7 @@
 
 이 시험이 지키는 계약:
 
-  ① **자리** — Settings 좌측 목록에 「무인 작업」이 「내 계정」 다음, 「사용자
+  ① **자리** — Settings 좌측 목록에 「백그라운드 작업」이 「내 계정」 다음, 「사용자
      관리」 앞에 선다(나 → 나 → 남 → 전체).
   ② **행 목록은 config 가 아니라 화면이 정한다** — 아는 키 열넷이 표에 있고,
      모르는 `auto_resume_*`/`worker_*` 는 접두사로 제 자리에 간다.
@@ -88,14 +88,14 @@ class WorkerSettings(unittest.TestCase):
         self.assertIsNotNone(m, "좌측 목록(SECTIONS)을 찾지 못했다")
         order = re.findall(r'\["(display|account|worker|users|about)"',
                            m.group(0))
-        self.assertIn("worker", order, "좌측 목록에 「무인 작업」 구역이 없다")
+        self.assertIn("worker", order, "좌측 목록에 「백그라운드 작업」 구역이 없다")
         i = order.index
         self.assertLess(i("account"), i("worker"),
-                        "「무인 작업」은 「내 계정」 다음이다")
+                        "「백그라운드 작업」은 「내 계정」 다음이다")
         self.assertLess(i("worker"), i("users"),
-                        "「무인 작업」은 「사용자 관리」 앞이다 (나 → 나 → 남)")
-        self.assertRegex(self.src, r'\["worker", "무인 작업"',
-                         "구역 이름은 「무인 작업」이다 (리드 판정 3)")
+                        "「백그라운드 작업」은 「사용자 관리」 앞이다 (나 → 나 → 남)")
+        self.assertRegex(self.src, r'\["worker", "백그라운드 작업"',
+                         "구역 이름은 「백그라운드 작업」이다 (REQ-20260902-005)")
 
     def test_route_and_render_reach_the_panel(self):
         # 주소(#settings/worker)로 바로 열리고, 그 갈래가 판을 그린다.
@@ -145,7 +145,9 @@ class WorkerSettings(unittest.TestCase):
         # 사용자가 반려했다(REQ-20260902-002): 남의 도구가 지은 이름은
         # 우리가 별명을 지어 주지 않는다. 별명은 두 사람 다 잃게 한다 —
         # git 을 모르는 사람은 여전히 못 읽고, 아는 사람은 잇지 못한다.
-        for label in ("무인 작업 맡기기", "파일 직접 고치기",
+        # 행 이름은 **술어만** 진다 (REQ-20260902-005) — 개체 이름은 판 제목이
+        # 한 번만 지고, 행이 그것을 되풀이하면 한 판에 이름이 열 번 선다.
+        for label in ("맡기기", "파일 직접 고치기",
                       "내 GitHub 계정 쓰게 하기", "worktree 쓰게 하기"):
             self.assertIn(label, self.words, "확정 낱말이 아니다: " + label)
         self.assertNotIn("자동 이어받기", self.words,
@@ -195,7 +197,7 @@ class WorkerSettings(unittest.TestCase):
         self.assertIn("지금 켜져 있습니다", self.words)
 
     def test_weight_is_ink_not_a_colour_field(self):
-        css = websrc.css_section(self, self.src, r"/\* -+ 무인 작업 설정")
+        css = websrc.css_section(self, self.src, r"/\* -+ 백그라운드 작업 설정")
         self.assertIn(".wfact", css, "사실 줄 규칙을 찾지 못했다")
         websrc.no_hex(self, css)
         # 색은 글자색 하나뿐 — 색면(배경 칠)도 좌측 세로 띠도 없다.
@@ -221,13 +223,13 @@ class WorkerSettings(unittest.TestCase):
 
     def test_message_shares_one_grid_cell_with_the_meaning(self):
         # 따로 줄을 내면 열 행이 저장할 때마다 아래가 밀린다.
-        css = websrc.css_section(self, self.src, r"/\* -+ 무인 작업 설정")
+        css = websrc.css_section(self, self.src, r"/\* -+ 백그라운드 작업 설정")
         self.assertRegex(css, r"\.wsay\{[^}]*display:grid")
         self.assertRegex(css, r"\.wsay>\*\{[^}]*grid-area:1/1")
 
     # ---- ⑦ 꺼진 줄과 그 예외 --------------------------------------------
     def test_off_rows_dim_but_the_fact_line_does_not(self):
-        css = websrc.css_section(self, self.src, r"/\* -+ 무인 작업 설정")
+        css = websrc.css_section(self, self.src, r"/\* -+ 백그라운드 작업 설정")
         m = re.search(r"tr\.woff [^{]*\{[^}]*opacity:\.45\}", css)
         self.assertIsNotNone(m, "꺼진 줄을 물리는 규칙이 없다")
         self.assertNotIn(".wfact", m.group(0),
@@ -240,8 +242,14 @@ class WorkerSettings(unittest.TestCase):
         self.assertNotIn("자동 이어가기가 꺼져", self.s9,
                          "화면에 없는 세 번째 이름")
         self.assertNotIn("auto_resume \"\n", self.s9)
-        self.assertIn("무인 작업 맡기기가 꺼져", self.s9)
-        i = self.s9.index("무인 작업 맡기기가 꺼져")
+        # 폐기된 행 이름이 서버 문장에 되살아나지 않는다 (REQ-20260902-005).
+        # 주석·docstring 은 이 잣대 밖이다 — 실사고를 적은 글은 반려어를
+        # 인용해야 쓸 수 있고, 그 근거를 지우면 다음 사람이 다시 짓는다
+        # (test_screen_lexicon 이 세운 규율). 화면 문장만 잰다.
+        self.assertNotIn("무인 작업 맡기기", self.s9,
+                         "폐기된 행 이름이 서버 문장에 남았다 (REQ-20260902-005)")
+        self.assertIn("「백그라운드 작업」에서 「맡기기」가 꺼져", self.s9)
+        i = self.s9.index("「백그라운드 작업」에서 「맡기기」가 꺼져")
         near = self.s9[i:i + 200]
         self.assertNotIn("auto_resume", near,
                          "사용자에게 원시 키를 외우게 하지 않는다")

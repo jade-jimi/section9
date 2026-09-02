@@ -1,4 +1,5 @@
-/* workercfg.js — Settings 「무인 작업」 판 (REQ-20260901-022)
+/* workercfg.js — Settings 「백그라운드 작업」 판 (REQ-20260901-022 · 이름은
+   REQ-20260902-005 에서 갈렸다)
 
    여태 이 값들은 「내 계정」 맨 끝의 `기타: {…}` **한 줄**이었다. 읽기만 되고,
    바꾸려면 터미널에서 `s9 user config <이름> auto_resume_gh on` 을 외워야 했다 —
@@ -20,10 +21,13 @@
       (userform.js:157 이 timezone 을 일괄 저장에서 뺀 이유). 열 스위치를 한 단추로
       묶으면 그 사고가 열 배가 된다.
 
-   낱말은 REQ-20260901-022 의 리드 판정이 확정한 것이다 — 「무인 작업 맡기기」
-   (「자동 이어받기」 아님: 카드의 요청별 정책과 범위가 다르고 이 스위치는 사람이
-   누른 ▶ 까지 막는다) · 「내 GitHub 계정 쓰게 하기」(「깃헙」 아님: 이 폼이 이미
-   `개인 GitHub 계정명` 을 쓴다) · 「worktree 쓰게 하기」.
+   낱말은 REQ-20260901-022 의 리드 판정이 세우고 REQ-20260902-005 의 4역 판정이
+   다시 손봤다. 개체의 이름은 「백그라운드 작업」이고(「무인 작업」·「무인 작업자」·
+   「워커」는 폐기 — 사용자가 같은 물건의 이름을 두 번 거부했다), **그 이름은 판
+   제목이 한 번만 진다**: 행은 술어만 져서 「맡기기」·「쓰는 모델」로 선다.
+   「자동 이어받기」와는 여전히 다른 것이다 — 카드의 요청별 정책과 범위가 다르고
+   이 스위치는 사람이 누른 ▶ 까지 막는다. 「내 GitHub 계정 쓰게 하기」(「깃헙」
+   아님: 이 폼이 이미 `개인 GitHub 계정명` 을 쓴다) · 「worktree 쓰게 하기」.
 
    **worktree 는 되돌아온 낱말이다** (REQ-20260902-002). 한때 「따로 떼어 놓고
    일하기」로 옮겼는데, 사용자가 반려했다: "고유 기능이고 기술 용어를 번역하지
@@ -37,34 +41,33 @@
 /* 스위치 넷 — 값이 둘뿐이라 손잡이는 `<select>` 이고, **옵션 글자가 상태를
    말한다**(대화 기록 행이 쓰는 그 형식). 색 없이 켬/끔이 읽힌다. */
 const WCFG_SWITCHES = [
-  {key: "auto_resume", name: "무인 작업 맡기기", master: true,
-   on: "켬 — 무인 작업이 떠서 이어받습니다",
-   off: "끔 — 요청은 사람이 직접 진행합니다",
+  {key: "auto_resume", name: "맡기기", master: true,
+   on: "켬 — 멈춘 요청을 저절로 이어받습니다",
+   off: "끔 — 사람이 직접 이어갑니다",
    mean: "반려하거나 승인한 뒤에 저절로 뜨는 것도, 카드의 「▶ 이어가기」로 "
        + "띄우는 것도 이 스위치가 엽니다.",
-   said: {on: "켰습니다 — 이제 무인 작업이 떠서 이어받습니다.",
-          off: "껐습니다 — 요청은 사람이 직접 진행합니다."}},
+   said: {on: "켰습니다 — 이제 멈춘 요청을 저절로 이어받습니다.",
+          off: "껐습니다 — 사람이 직접 이어갑니다."}},
   {key: "auto_resume_apply", name: "파일 직접 고치기",
    on: "켬 — 파일을 고치고 테스트까지 돌립니다",
    off: "끔 — 고칠 내용을 적어만 둡니다",
-   mean: "무인 작업이 web/ · vault/ · tests/ 안의 파일을 직접 고치고 테스트까지 "
+   mean: "web/ · vault/ · tests/ 안의 파일을 직접 고치고 테스트까지 "
        + "돌립니다. 끄면 고칠 내용을 문서에 적어 두고 사람을 기다립니다.",
-   said: {on: "켰습니다 — 이제 무인 작업이 파일을 고치고 테스트까지 돌립니다.",
+   said: {on: "켰습니다 — 이제 파일을 고치고 테스트까지 돌립니다.",
           off: "껐습니다 — 고칠 내용을 적어만 두고 사람을 기다립니다."}},
   {key: "auto_resume_gh", name: "내 GitHub 계정 쓰게 하기",
    on: "켬 — 내 GitHub 계정을 씁니다",
    off: "끔 — GitHub 은 건드리지 않습니다",
-   mean: "사람이 지키지 않는 자리에서 도는 무인 작업이 이 컴퓨터에 로그인된 "
-       + "GitHub 계정으로 명령을 씁니다. 저장소에 push 하는 것도 그중 하나입니다 — 같은 권한으로 "
+   mean: "이 컴퓨터에 로그인된 GitHub 계정으로 명령을 씁니다. 저장소에 push 하는 것도 그중 하나입니다 — 같은 권한으로 "
        + "저장소 설정을 바꾸거나 저장소를 지울 수도 있습니다.",
    /* 사실 줄은 **켜져 있는 동안에만** 선다 (카드 사실 줄 규칙의 재적용:
       「정상이 아니다」 또는 「당신이 할 일이 있다」일 때만 줄이 선다). */
-   fact: n => `지금 켜져 있습니다 — 사람이 지키지 않는 자리에서 도는 무인 작업이 `
+   fact: n => `지금 켜져 있습니다 — 백그라운드 작업이 사람 없는 사이에 `
             + `@${n} 계정으로 GitHub 저장소를 바꿀 수 있습니다.`,
    /* 마찰은 **켤 때만**. 끄는 쪽은 권한을 거두는 방향이라 확인이 손만 는다. */
    ask: n => ({kind: "confirm", stop: true, cap: "권한",
-     title: `@${n} 의 GitHub 계정 권한을 무인 작업에 주시겠습니까?`,
-     desc: "켜면 사람이 지키지 않는 자리에서 도는 무인 작업이 이 컴퓨터에 "
+     title: `@${n} 의 GitHub 계정 권한을 백그라운드 작업에 주시겠습니까?`,
+     desc: "켜면 이 창 밖에서 도는 작업이 이 컴퓨터에 "
          + "로그인된 GitHub 계정으로 명령을 씁니다. 저장소에 push 하는 것도 그중 하나입니다 — "
          + "같은 권한으로 저장소 설정을 바꾸거나 저장소를 지울 수도 있습니다. "
          + "여기서 언제든 다시 끌 수 있지만, 켜져 있는 동안 한 일까지 "
@@ -74,13 +77,13 @@ const WCFG_SWITCHES = [
         언제든 다시 끌 수 있지만, 켜져 있는 동안 한 일까지 되돌리지는 못합니다". */
      safe: true,
      ok: "권한 주기", cancel: "그만두기"}),
-   said: {on: "켰습니다 — 앞으로 뜨는 무인 작업이 GitHub 계정으로 명령을 씁니다.",
-          off: "껐습니다 — 앞으로 뜨는 무인 작업은 GitHub 없이 일합니다."}},
+   said: {on: "켰습니다 — 이제 GitHub 계정으로 명령을 씁니다.",
+          off: "껐습니다 — 앞으로는 GitHub 없이 일합니다."}},
   {key: "worker_worktree", name: "worktree 쓰게 하기",
    on: "켬 — 고친 내용은 작업이 끝난 뒤에 보입니다",
    off: "끔 — 고친 내용이 바로 보입니다",
    mean: "worktree 는 git 이 이 저장소 옆에 따로 띄우는 작업 폴더입니다. "
-       + "무인 작업을 거기서 돌리면, 아직 저장하지 않은 남의 편집이 보이지도 "
+       + "worktree 를 쓰면, 아직 저장하지 않은 남의 편집이 보이지도 "
        + "덮이지도 않습니다. 지금 이 저장소에 고치던 것이 있으면 폴더를 "
        + "나누지 않고 여기서 함께 일합니다.",
    said: {on: "켰습니다 — 고친 내용은 작업이 끝난 뒤에 보입니다.",
@@ -90,10 +93,10 @@ const WCFG_SWITCHES = [
 /* 자유 문자열 둘. 값 자체가 기계 글자라 한국어 이름만으로는 무엇을 넣을지
    알 수 없다 — 키 이름이 곧 설명의 절반이다. */
 const WCFG_TEXTS = [
-  {key: "auto_resume_model", name: "무인 작업이 쓰는 모델", w: "210px", needs: true,
+  {key: "auto_resume_model", name: "쓰는 모델", w: "210px", needs: true,
    ph: "비우면 이 컴퓨터의 기본 모델",
-   mean: "무인 작업이 이 모델로 생각하고 답합니다.",
-   said: v => v ? `이제 무인 작업이 ${v} 로 일합니다.`
+   mean: "이 모델로 생각하고 답합니다.",
+   said: v => v ? `이제 ${v} 로 일합니다.`
                 : "기본 모델로 되돌렸습니다."},
   {key: "s9code_args", name: "창을 열 때 붙일 인자", w: "330px",
    ph: "비우면 붙이지 않습니다",
@@ -179,23 +182,26 @@ const wcfgCapsBtn = () => (wcfgCapsOpen ? "− 한도 접기"
                                        : `+ 한도 ${WCFG_CAPS.length}개 보기`);
 
 /* 판 전체. `host` 어디에 꽂아도 되도록 문자열만 짓는다 — 내 판(Settings 좌측
-   목록의 「무인 작업」)과 admin 이 남의 것을 만지는 자리(사용자 관리 편집 판)가
+   목록의 「백그라운드 작업」)과 admin 이 남의 것을 만지는 자리(사용자 관리 편집 판)가
    **같은 부품 한 벌**을 쓴다. */
 function workerCfgHTML(u){
   const cfg = u.config || {};
   const known = new Set(WCFG_KEYS);
   const orphan = Object.keys(cfg).filter(k => wcfgMine(k) && !known.has(k)).sort();
-  return `<div class="path secnote">사람이 지키지 않는 자리에서 도는 무인 작업에게 `
-    + `무엇까지 맡길지 정합니다. <b>바꾸면 바로 저장됩니다.</b></div>
+  return `<div class="path secnote">아직 뜨지 않은 것에 미리 정해 둡니다 — `
+    + `뜨고 나면 들여다볼 창이 없습니다. <b>바꾸면 바로 저장됩니다.</b></div>
     <table class="metatbl wtbl">${wcfgSwitchHTML(WCFG_SWITCHES[0], cfg)}</table>
     <div class="cfg-h">일하는 범위</div>
-    <div class="path secnote wnote" id="w-offnote" hidden>무인 작업 맡기기를 끄면 `
+    <div class="path secnote wnote" id="w-offnote" hidden>맡기기를 끄면 `
     + `아래 값은 쓰이지 않습니다 — 지우지는 않습니다.</div>
     <table class="metatbl wtbl">
       ${WCFG_SWITCHES.slice(1).map(r => wcfgSwitchHTML(r, cfg)).join("")}</table>
-    <div class="cfg-h">모델과 인자</div>
+    <div class="cfg-h">모델</div>
     <table class="metatbl wtbl">
-      ${WCFG_TEXTS.map(r => wcfgTextHTML(r, cfg)).join("")}</table>
+      ${WCFG_TEXTS.filter(r => r.needs).map(r => wcfgTextHTML(r, cfg)).join("")}</table>
+    <div class="cfg-h">내 창</div>
+    <table class="metatbl wtbl">
+      ${WCFG_TEXTS.filter(r => !r.needs).map(r => wcfgTextHTML(r, cfg)).join("")}</table>
     <div class="cfg-h">한도</div>
     <div class="path wnote" id="w-capsfact">${esc(wcfgCapsSay(cfg))}</div>
     <button type="button" class="more wmore" id="w-capsbtn"
@@ -275,7 +281,7 @@ function wireWorkerCfg(host, u){
     const on = wcfgOn(cfg.auto_resume);
     const note = q("#w-offnote");
     if (note) note.hidden = on;
-    /* `s9code_args` 는 이 스위치에 딸리지 않는다 — 무인 작업을 안 맡겨도
+    /* `s9code_args` 는 이 스위치에 딸리지 않는다 — 백그라운드 작업을 안 맡겨도
        `s9 code` 로 여는 창은 그 인자를 쓴다. 잠그면 멀쩡한 설정을 못 고친다.
        그래서 「맡기기에 딸린 행」만 `needs` 로 표시해 물린다. */
     WCFG_SWITCHES.slice(1).concat(WCFG_TEXTS.filter(r => r.needs)).forEach(r => {
@@ -384,6 +390,6 @@ function workerNavSub(u){
 
 function showWorkerCfg(u, host){
   if (!host) return;
-  host.innerHTML = `<h1 style="margin:0 0 4px">무인 작업</h1>` + workerCfgHTML(u);
+  host.innerHTML = `<h1 style="margin:0 0 4px">백그라운드 작업</h1>` + workerCfgHTML(u);
   wireWorkerCfg(host, u);
 }

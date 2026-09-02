@@ -122,10 +122,16 @@ class ChipIsFindable(unittest.TestCase):
     def test_f8_only_the_answer_rises_to_ink(self):
         """한 창의 강조는 하나다(s9-design 2). 답만 잉크로 올리고, 사유·푸는 법은
         **흐리게 내리지 않는다** — 본문 대비 4.5:1 아래로 내려가는 문장을 만들지
-        않는다(s9-design 7)."""
-        self.assertIn("wsans", self.card, "답 줄에 표가 없다")
-        self.assertIn("color:var(--text)", rule(self.overlay, ".dlgbox .wsans"),
-                      "답이 잉크로 오르지 않는다")
+        않는다(s9-design 7).
+
+        답이 오르는 자리가 **첫 줄에서 제목으로** 바뀌었다 (REQ-20260902-005):
+        창머리가 문서 id 를 `doc:` 칸으로 받아 가면서 제목 자리가 비었고, 그
+        자리에 사람이 누르며 품은 질문의 답이 올라섰다. 강조가 하나인 것은
+        그대로다 — 제목은 이미 그 창에서 가장 굵은 글자다."""
+        body = re.search(r"(?m)^function wsOpen\(id\)\{.*?^\}", self.card,
+                         re.S).group(0)
+        self.assertRegex(body, r"title:\s*`\$\{WS_MEANS\[",
+                         "답이 제목으로 오르지 않는다")
         for sel in (".dlgbox .wsrow", ".dlgbox .wsfix"):
             self.assertNotIn("--faint", rule(self.overlay, sel),
                              f"{sel} 을 흐림으로 내렸다 — 본문 대비가 무너진다")
@@ -135,7 +141,7 @@ class ChipIsFindable(unittest.TestCase):
         다른 말이 서고, 그때부터 한 벌만 고쳐진다."""
         body = re.search(r"(?m)^function wsOpen\(id\)\{.*?^\}", self.card,
                          re.S).group(0)
-        self.assertEqual(body.count("wsans"), 1, "답 줄이 둘이다")
+        self.assertEqual(body.count("WS_MEANS["), 1, "답이 두 자리에 선다")
         self.assertNotIn("나타납니다", body,
                          "창이 답 문장을 손으로 다시 적었다 — WS_MEANS 와 두 벌이다")
 

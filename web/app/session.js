@@ -20,7 +20,7 @@ function sessItems(rows, cur){
        한 줄은 "어느 세션을 볼까" 하나만 말한다. */
     hint: [r.model && "모델 " + r.model,
            r.account && "계정 " + r.account,
-           r.worker && "무인 작업 진행 중",
+           r.worker && "백그라운드 작업 진행 중",
            r.reqs && r.reqs.length && "맡은 요청 " + r.reqs.join(" · "),
            r.last && "마지막 움직임 " + String(r.last).slice(0, 19).replace("T", " ")]
       .filter(Boolean).join(" · "),

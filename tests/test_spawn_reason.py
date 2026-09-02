@@ -1,4 +1,4 @@
-"""막 뜬 무인 작업은 **왜 떴는지**를 말한다 (REQ-20260831-025-62x6).
+"""막 뜬 백그라운드 작업은 **왜 떴는지**를 말한다 (REQ-20260831-025-62x6).
 
 사용자: "그냥 요청을 하고, 멈췄고, 다시 시작을 했을 뿐인데 자동 작업인가?"
 
@@ -260,7 +260,7 @@ class TheScreenSplitsTheSentence(unittest.TestCase):
                     {"live_age": 3, "spawn_reason": ""},
                     {"live_age": 3, "spawn_reason": "resume-item"}):
             t = self._tell(row)
-            self.assertIn("무인 작업이 3초 전에 시작됐습니다", t)
+            self.assertIn("3초 전에 다시 시작됐습니다", t)
             self.assertNotIn("저절로", t)
             self.assertNotIn("눌러", t)
 

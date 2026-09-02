@@ -136,7 +136,7 @@ header{background:var(--bg);border-bottom:1px solid var(--border);
 .svchip .sv-bad{color:var(--c-blocked)}
 .svchip .sv-bad .sv-m{color:var(--c-blocked)}
 /* 경고가 아닌 사실도 이 칩에 선다 (REQ-20260829-030). 색을 주지 않는 것이
-   설계다 — 무인 작업자가 본 저장소에 앉은 것은 고장이 아니라 상태라, 경고색을
+   설계다 — 백그라운드 작업이 본 저장소에 앉은 것은 고장이 아니라 상태라, 경고색을
    입히면 옆의 진짜 경고(▲)와 층위가 같아져 둘 다 안 읽힌다. 마크만 한 급
    흐리게 두고 낱말이 말하게 한다. */
 .svchip .sv-note .sv-m{color:var(--faint)}

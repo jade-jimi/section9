@@ -197,7 +197,7 @@ async function restartAfterStop(T, sid, req, what, cap){
 /* 부르는 자리는 둘(계정 창·모델 창)이고 들어오는 것은 세션 id 하나다.
    터미널 판(T)은 있으면 기록을 남기고 없으면 없는 대로 간다 — 예전에는 그것이
    없으면 아무 일도 일어나지 않았다. */
-/* 지금 도는 무인 작업자들 — 서버가 카탈로그 행에 실어 준 `worker` 하나가
+/* 지금 도는 백그라운드 작업들 — 서버가 카탈로그 행에 실어 준 `worker` 하나가
    조건이다 (REQ-20260829-024). 화면이 따로 세지 않는다. */
 function liveWorkerRows(){
   return (catalog || []).filter(r => r.type === "request" && r.worker);
@@ -213,7 +213,7 @@ async function sessionRestart(sid, req, T, cap){
   /* 바꾸는 것은 **이 창 하나**다 (REQ-20260829-024).
 
      사용자: "계정을 변경하면 기존에 진행 중이던 작업들을 중단하는게 맞지 싶다."
-     백그라운드에서 도는 무인 작업자는 이 재기동을 모른다 — 옛 계정·옛 모델로
+     이 창 밖에서 도는 작업은 이 재기동을 모른다 — 옛 계정·옛 모델로
      계속 돈다. 요금이 어느 계정에 붙는지도, 어느 모델이 쓰는지도 그때부터
      갈린다.
 
@@ -228,7 +228,7 @@ async function sessionRestart(sid, req, T, cap){
     // (REQ-20260830-008).
     const go = await s9dlg({kind: "confirm", cap: cap || "다시 시작",
       stop: false, safe: true,
-      title: `진행 중인 무인 작업 ${wk.length}건을 중단하고 ${what} 바꿉니다`,
+      title: `이 창 밖에서 도는 작업 ${wk.length}건을 중단하고 ${what} 바꿉니다`,
       desc: "이 재시작은 이 창만 바꿉니다 — 중단하지 않으면 그 작업들은 옛"
         + " 설정 그대로 계속 진행됩니다. 중단하면 각 문서에 중단한 사실과 사유가"
         + " 남고, 나중에 그 카드의 「이어가기」로 다시 맡길 수 있습니다.",

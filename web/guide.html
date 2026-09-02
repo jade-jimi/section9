@@ -279,7 +279,7 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
   <!-- 반려 루프 -->
   <path d="M 643 148 L 643 210 L 451 210 L 451 148" fill="none" stroke="#b45309" stroke-dasharray="4 3" marker-end="url(#ahr)"/>
   <text x="547" y="202" text-anchor="middle" font-size="10.5" fill="#b45309">↺ 반려 — 사유를 적어 되돌림</text>
-  <text x="547" y="230" text-anchor="middle" font-size="9.5" fill="#9096a0">~30초 내 무인 작업자가 기동해 반려 사유를 반영하고 다시 review로 올림</text>
+  <text x="547" y="230" text-anchor="middle" font-size="9.5" fill="#9096a0">~30초 내 백그라운드 작업이 떠서 반려 사유를 반영하고 다시 review로 올림</text>
   <!-- blocked 참고 -->
   <text x="451" y="52" text-anchor="middle" font-size="9.5" fill="#b91c1c">⛔ blocked = 다른 작업 완료 대기 (사유가 카드에 표시)</text>
   <line x1="451" y1="60" x2="451" y2="80" stroke="#b91c1c" stroke-dasharray="3 3"/>
@@ -290,7 +290,7 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
   <li><b>프롬프트 → 카드.</b> 터미널에서 일을 시키면 그 즉시 REQ 카드가 <span class="st" style="color:var(--c-open)">open</span> 상태로 만들어집니다. 여러분이 따로 등록할 것은 없습니다.</li>
   <li><b>착수.</b> AI가 작업을 시작하면 <span class="st" style="color:var(--c-inprogress)">in-progress</span>로 바뀝니다. 카드의 <span class="livedot on"></span> 녹색 점멸은 "지금 실제로 작업이 돌고 있음"이라는 실시간 신호입니다.</li>
   <li><b>사람 판정.</b> 방향 확인이 필요한 작업은 <span class="st" style="color:var(--c-review)">review</span>로 올라옵니다. 카드의 <b>✓ 승인</b>을 누르면 done, <b>↺ 반려</b>를 누르고 사유를 적으면 다시 작업으로 돌아갑니다.</li>
-  <li><b>무인 재작업.</b> 반려하면 약 30초 내에 무인 작업자가 기동해, 여러분이 적은 반려 사유를 반영해 다시 review로 올립니다. 자리를 지키고 있을 필요가 없습니다.</li>
+  <li><b>반려하면 저절로 다시 합니다.</b> 약 30초 안에 백그라운드 작업이 떠서, 적어 주신 반려 사유를 반영해 다시 review로 올립니다. 자리를 지키고 있을 필요가 없습니다.</li>
 </ol>
 
 <h3>카드 위의 실시간 신호 읽기</h3>
@@ -299,14 +299,14 @@ footer{margin-top:70px;padding-top:16px;border-top:1px solid var(--border);
   <tr><th style="width:120px">점</th><th style="width:180px">의미</th><th>해석</th></tr>
   <tr><td><span class="livedot on"></span> 녹색 점멸</td><td>일하는 중 · 기록도 나감</td><td>이 요청을 맡은 것이 2분 내에 실제로 움직였고, 문서에도 적히고 있습니다. 가장 확실한 신호.</td></tr>
   <tr><td><span class="livedot busy"></span> 초록 링 + 심</td><td>일하는 중 · 기록은 아직</td><td>붙어서 돌고는 있는데 문서에 아직 적힌 것이 없습니다. 숨이 한 박자 느린 것이 그 뜻입니다 — 기다리면 위 녹색으로 바뀝니다.</td></tr>
-  <tr><td><span class="livedot sess"></span> 초록 링</td><td>살아는 있으나 아직 안 맡음</td><td>두 가지가 이 얼굴을 씁니다 — 이 요청을 만든 창이 다른 일을 하는 중이거나, 무인 작업이 막 떠서 아직 문서를 집기 전이거나. 둘 다 여러분이 할 일은 같습니다: 잠깐 기다립니다. 어느 쪽인지는 점에 손을 얹으면 나옵니다.</td></tr>
+  <tr><td><span class="livedot sess"></span> 초록 링</td><td>살아는 있으나 아직 안 맡음</td><td>두 가지가 이 얼굴을 씁니다 — 이 요청을 만든 창이 다른 일을 하는 중이거나, 백그라운드 작업이 막 떠서 아직 문서를 집기 전이거나. 둘 다 여러분이 할 일은 같습니다: 잠깐 기다립니다. 어느 쪽인지는 점에 손을 얹으면 나옵니다.</td></tr>
   <tr><td><span class="livedot dot-stopped mild"></span> 속 빈 사각</td><td>멈춤</td><td>붙어 있는 것도 없고 문서도 한동안 그대로입니다. 카드의 <b>▶ 이어가기</b>로 멈춘 자리에서 이어받게 할 수 있습니다.</td></tr>
   <tr><td><span class="livedot dot-stopped"></span> 채운 사각</td><td>맡았던 것이 멎음</td><td>이 요청을 맡았던 작업이 도중에 죽었습니다. 까닭이 남아 있으면 점에 손을 얹었을 때 함께 보입니다.</td></tr>
-  <tr><td><span class="livedot dot-held"></span> 줄 그은 사각</td><td>사람이 중단해 둠</td><td>사람이 손으로 중단해 둔 요청입니다 — 사고가 아니라 뜻입니다. <b>▶ 이어가기</b>를 누르기 전에는 무인 작업이 이어받지 않습니다.</td></tr>
+  <tr><td><span class="livedot dot-held"></span> 줄 그은 사각</td><td>사람이 중단해 둠</td><td>사람이 손으로 중단해 둔 요청입니다 — 사고가 아니라 뜻입니다. <b>▶ 이어가기</b>를 누르기 전에는 저절로 이어지지 않습니다.</td></tr>
   <tr><td><span class="livedot off"></span> 작은 회색 링</td><td>모름</td><td>진행 중으로 기록돼 있지만 신호가 없습니다. 방치된 것일 수 있으니 눈여겨보세요.</td></tr>
 </table></div>
 <p class="dim">모양이 「무엇이 붙어 있나」, 채움이 「기록이 나가고 있나」를 말합니다 — 색은 둘째 신호라, 색을 못 보는 눈에도 일곱이 그대로 갈립니다.</p>
-<p>진행 중인 요청에 담당이 없으면, 서버가 무인 작업을 띄우고 그 무인 작업이 요청을 이어받습니다 — 요청은 여러분이 자리를 비워도 멈추지 않습니다. 요청마다 이것을 꺼 둘 수 있습니다: 문서 화면 맨 위의 <b>자동 이어받기 끄기</b>를 누르면 <b>▶ 이어가기</b>를 누를 때까지 무인 작업이 뜨지 않습니다.</p>
+<p>진행 중인 요청에 담당이 없으면, 서버가 백그라운드 작업을 띄우고 그 작업이 요청을 이어받습니다 — 요청은 여러분이 자리를 비워도 멈추지 않습니다. 요청마다 이것을 꺼 둘 수 있습니다: 문서 화면 맨 위의 <b>자동 이어받기 끄기</b>를 누르면 <b>▶ 이어가기</b>를 누를 때까지 이어지지 않습니다.</p>
 
 <h3>TDD 배지와 blocked 표시</h3>
 <ul>
@@ -425,7 +425,7 @@ WSL 사용자는 Windows 터미널에서 WSL 셸에 들어온 뒤 실행합니�
   <li><b>요청은 자동으로 기록·추적됩니다.</b> "결제 모듈 구현해줘"라고 치는 순간 카드가 생기고, 착수·완료 보고까지 문서에 자동으로 쌓입니다.</li>
   <li><b>질문이나 짧은 말은 카드가 되지 않습니다.</b> "이 함수 뭐 하는 거야?", "ㅇㅋ" 같은 것은 세션 로그에만 남아 보드를 어지럽히지 않습니다.</li>
   <li><b>선호는 말로 저장됩니다.</b> "앞으로 반말로 해줘", "보고는 세 줄 이내로" — 이런 말은 개인 선호로 자동 저장되어 다음 턴부터, 그리고 다음 세션에서도 계속 적용됩니다.</li>
-  <li><b>반려 후 자리를 비워도 됩니다.</b> 대시보드에서 반려하면 무인 작업자가 반려 사유를 읽고 알아서 재작업합니다.</li>
+  <li><b>반려 후 자리를 비워도 됩니다.</b> 대시보드에서 반려하면 백그라운드 작업이 반려 사유를 읽고 알아서 재작업합니다.</li>
   <li><b>새 세션을 열어도 이어집니다.</b> 어제 하던 작업이 궁금하면 새 세션에서 그냥 이어서 시키면 됩니다 — 세션이 시작될 때 진행 중 작업 요약(digest)을 자동으로 넘겨받습니다.</li>
 </ul>
 
@@ -451,7 +451,7 @@ WSL 사용자는 Windows 터미널에서 WSL 셸에 들어온 뒤 실행합니�
 카드를 만듭니다. 명령형으로("~해줘", "~구현해") 말하면 확실하게 카드가 됩니다.</div></div>
 
 <div class="faq"><div class="q">in-progress인데 녹색 점멸이 안 떠요.</div>
-<div class="a">점은 문서 상태가 아니라 실시간 동작 신호입니다. 초록 링이면 아직 이 요청을 맡기 전(다른 일을 하는 창이거나, 막 뜬 무인 작업),
+<div class="a">점은 문서 상태가 아니라 실시간 동작 신호입니다. 초록 링이면 아직 이 요청을 맡기 전(다른 일을 하는 창이거나, 막 뜬 백그라운드 작업),
 작은 회색 링이면 최근 2분간 아무 신호가 없는 것입니다.
 회색이 오래 가면 그 세션에 말을 걸거나 새 세션에서 이어받으세요 — 자동으로 이어집니다.</div></div>
 
@@ -482,7 +482,8 @@ WSL 사용자는 Windows 터미널에서 WSL 셸에 들어온 뒤 실행합니�
 현재 OS 계정을 그 계정에 연결하면 됩니다.</div></div>
 
 <div class="faq"><div class="q">반려했는데 아무 일도 안 일어나요.</div>
-<div class="a">무인 재작업은 계정별 옵션입니다 — <code>s9 user config &lt;이름&gt; auto_resume on</code> 으로 켭니다.
+<div class="a">이것은 계정별 설정입니다 — Settings 의 「백그라운드 작업」에서 「맡기기」를 켭니다
+(터미널에서는 <code>s9 user config &lt;이름&gt; auto_resume on</code>).
 꺼져 있어도 잃는 것은 없습니다: 반려된 요청은 그 세션에 다음 프롬프트가 입력되는 순간,
 또는 새 세션이 시작되는 순간 최우선으로 자동 재개됩니다.</div></div>
 </section>
@@ -550,7 +551,7 @@ AI가 카드를 기록하면서 그 프로젝트로 귀속시킵니다. 직접 �
 그 프로젝트 전용 역할 에이전트(<code>&lt;slug&gt;--이름</code>)로 쓸 수 있게 됩니다.
 세션 도중에 넣은 파일은 <b>다음 세션부터</b> 보입니다.</p>
 <ul>
-  <li><b><code>agents/worker.md</code> 는 특별합니다</b> — 반려 후 무인 재작업 워커가 뜰 때, 이 파일이 워커의 프롬프트 봉투로 자동 주입됩니다. "우리 프로젝트의 재작업은 이런 규칙으로 해라"를 적어 두는 자리입니다.</li>
+  <li><b><code>agents/worker.md</code> 는 특별합니다</b> — 반려 뒤 백그라운드 작업이 뜰 때, 이 파일이 그 프롬프트 봉투로 자동 주입됩니다. "우리 프로젝트의 재작업은 이런 규칙으로 해라"를 적어 두는 자리입니다.</li>
   <li>지금 상태 확인·즉시 동기화: <code>~/your-org-work/bin/s9 project agents ls</code> / <code>sync</code></li>
 </ul>
 

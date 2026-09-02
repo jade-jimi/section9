@@ -25,6 +25,7 @@
 
 실행: python3 tests/ screen_lexicon
 """
+import ast
 import glob
 import os
 import re
@@ -32,6 +33,7 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, "..", "web")
+S9 = os.path.join(HERE, "..", "bin", "s9")
 
 # 낱말 → 왜 반려됐고 무엇으로 바뀌었나. 메시지가 곧 다음 사람이 읽을 판정문이다.
 BANNED = {
@@ -46,14 +48,39 @@ BANNED = {
     "손잡이가 붙습니다": "사용자 창이 버튼을 손잡이라 부른다 — 「이 버튼이 다시 생깁니다」로",
     "저절로 이어지지 않게 하기": "3차 반려(REQ-20260901-005) — 부정형 데뷔 + "
         "무주어 자동사 + 「이어가기」 어간 충돌, 「자동 이어받기 끄기」로",
-    # ── 남의 도구 이름의 음차 (REQ-20260902-002) ────────────────────────
-    # 사용자 지적: "고유 기능이고 기술 용어를 번역하지 마라 — pull push commit
-    # worktree 등등 포함해서 전부." 여기 실은 것은 **음차뿐**이다: 한국어에
-    # 다른 뜻이 없어 오탐이 0 이고, 오탐 하나면 사람이 목록째 지운다.
-    # **넣지 않은 것과 그 까닭** — 「풀」(「한도가 풀립니다」) · 「가지」
-    # (「이어가지 않음」) · 「머지」(「머지않아」가 언제든 생긴다) ·
-    # 「올리기」·「받기」(정당한 자리가 여럿) · 「저장소」·「동기화」
-    # (빌려 온 명령 이름이 아니라 우리 말이다 — 무차별 원어도 결함이다).
+    # ── 「이 창 밖에서 도는 것」의 옛 이름들 (REQ-20260902-005) ──────────
+    # **같은 물건의 이름을 두 번 거부당했다.** 한 번은 취향일 수 있으나 두 번은
+    # 결함이다 — 2026-08-30 사용자가 깨우기 창을 캡처해 보내며 "일반 사용자는
+    # 무슨 내용인지 이해를 할 수가 없다"고 한 그 문장에 「무인 작업자」가 서
+    # 있었고(REQ-20260830-007), 그 뒤 개칭한 「무인 작업」이 또 걸렸다.
+    # 채택어는 「백그라운드 작업」이다: 사람들이 휴대폰·윈도우 설정에서 이미
+    # 배운 낱말이고, 「배경 작업」으로 옮기면 뜻을 잃으며, `git background`
+    # 라는 명령이 없어 남의 도구 이름 조항(위 음차 목록) 밖이다.
+    "무인 작업": "사람이 읽는 말이 아니다(두 번째 반려) — 「백그라운드 작업」으로",
+    "무인 작업자": "위와 같은 물건의 더 낡은 이름 — 「백그라운드 작업」으로",
+    "워커": "밖에서 그 글자를 다시 칠 일이 없는 원어의 음차다"
+            " (`s9 workers` 는 세는 명령이지 그 일을 하려고 치는 글자가 아니다)"
+            " — 「백그라운드 작업」으로",
+    "백그라운드 에이전트": "「에이전트」는 이 화면에서 나눠 맡은 일손에 배정돼"
+                     " 있다 — 한 낱말이 두 개념을 덮는다",
+}
+
+# ── 대시보드 화면에서만 재는 낱말 ────────────────────────────────────────
+#
+# **판정이 선 자리가 곧 게이트의 자리다.** 위 BANNED 는 개념에 내려온 판정이라
+# 사람이 읽는 곳이면 어디서나 걸리는데, 아래는 사용자가 **대시보드를 보며**
+# 내린 판정이다(REQ-20260902-002). `bin/s9` 를 함께 훑기 시작하며 이 구분이
+# 필요해졌다: 터미널만 쓰는 명령들(`s9 worktree`·`s9 sync`·`s9 doctor`)의
+# 출력 53자리가 여기 걸렸는데, 그 자리는 판정을 받은 적이 없다. 판정 없이
+# 게이트를 넓히면 다음 사람이 오탐으로 읽고 목록째 지운다 — 이 저장소가 가장
+# 두려워하는 그 결말이다. 그 53자리는 따로 요청으로 세웠다.
+#
+# 여기 실은 것은 **음차뿐**이다: 한국어에 다른 뜻이 없어 오탐이 0 이다.
+# **넣지 않은 것과 그 까닭** — 「풀」(「한도가 풀립니다」) · 「가지」
+# (「이어가지 않음」) · 「머지」(「머지않아」가 언제든 생긴다) ·
+# 「올리기」·「받기」(정당한 자리가 여럿) · 「저장소」·「동기화」
+# (빌려 온 명령 이름이 아니라 우리 말이다 — 무차별 원어도 결함이다).
+BANNED_WEB = {
     "푸시": "git 이 지은 이름의 음차 — `push` 로 (REQ-20260902-002)",
     "커밋": "git 이 지은 이름의 음차 — `commit` 으로",
     "워크트리": "git 이 지은 이름의 음차 — `worktree` 로",
@@ -66,6 +93,8 @@ BANNED = {
 # 낱말 하나가 두 표면에 살면 안 되는 것은 아니다 — 개발자만 보는 진단 출력은
 # 이 게이트 밖이다(진단은 코드 말이 오히려 정확하다). 파일 단위로 뺀다.
 DIAG_FILES = {"boot.js", "graph.js", "diag.js"}
+# 대시보드가 아닌 표면. 여기 실린 이름은 BANNED_WEB 의 잣대를 받지 않는다.
+NOT_THE_DASHBOARD = {"bin/s9"}
 
 # ── 「자동 작업」 — **낱말이 아니라 자리가 걸렸다** (DOC-20260831-005) ────────
 #
@@ -91,6 +120,15 @@ KEPT_AUTO = {
     # 이름을 더는 안 쓴다 — 정책의 이름은 「자동 이어받기」(명사구)다.
     # 뜻 A 로 참인 새 문장이 필요해지면 근거와 함께 여기 올려라: 목록이 빈
     # 것과 게이트가 없어진 것은 다르다.
+    #
+    # `bin/s9` 를 함께 훑기 시작하며 둘이 올랐다 (REQ-20260902-005). 둘 다
+    # **워처 전용 경로**의 문장이라 화면에 안 뜬다: 사람이 ▶ 를 눌러 온 걸음
+    # (`reason == "wake"`)은 이 판정 앞에서 되돌아 나가므로, 여기까지 오는 것은
+    # 사람이 안 시킨 걸음뿐이다 — 그 자리에서 「자동」은 뜻 A 로 참이다.
+    "오늘 쓸 수 있는 자동 작업 횟수":
+        "워처가 스스로 띄우는 횟수의 하루 상한 (bin/s9 _auto_cap_block)",
+    "이번 시간에 쓸 수 있는 자동 작업 횟수":
+        "같은 상한의 시간당 판 — 위와 한 함수, 한 갈래",
 }
 
 
@@ -119,9 +157,56 @@ def _html_text(src):
     return re.sub(r"<[^>]*>", " ", src) + "\n" + keep
 
 
+# `bin/s9` 안에서 **사람이 읽지 않는** 문자열. 파일 단위로 뺄 수 없어(한
+# 파일에 서버 문장과 기계 글자가 함께 산다) 자리마다 근거를 적어 뺀다 —
+# KEPT_AUTO 와 같은 방식이다. 오탐 하나가 목록째 지워지게 만들기 때문에
+# 넓힐 때 이 자리를 먼저 채운다.
+S9_NOT_SCREEN = {
+    "자동 ?재작업|무인|워커|스폰":
+        "분류기의 정규식이다 — 옛 낱말로 적힌 지난 요청을 계속 맞혀야 하므로"
+        " 폐기어가 **패턴 안에 살아 있어야** 한다 (bin/s9 topic 분류)",
+}
+
+
+def _py_strings(src):
+    """`bin/s9` 는 파이썬이라 **AST 로** 문자열만 뽑는다.
+
+    정규식으로 따옴표를 세면 주석 안의 인용을 문자열로 오인한다 — 이 저장소의
+    주석에는 반려어가 근거로 인용돼 있고(위 BANNED 주석이 그 예다), 그것을
+    걸면 다음 사람이 근거를 지우게 된다. docstring 도 뺀다: 그것은 다음
+    개발자에게 하는 말이지 사용자에게 하는 말이 아니다."""
+    tree = ast.parse(src)
+    docs = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)) and body:
+            first = body[0]
+            if (isinstance(first, ast.Expr)
+                    and isinstance(first.value, ast.Constant)
+                    and isinstance(first.value.value, str)):
+                docs.add(id(first.value))
+    out = []
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                and id(node) not in docs):
+            text = node.value
+            for skip in S9_NOT_SCREEN:
+                if skip in text:
+                    text = ""
+                    break
+            if text:
+                out.append(text)
+    return "\n".join(out)
+
+
 def _surfaces():
     """표시 이름 → 사람이 읽는 글자만. **훑는 눈은 한 벌이다** — 게이트가
-    둘로 늘 때 읽는 자리까지 복사하면 한 벌만 고쳐진다."""
+    둘로 늘 때 읽는 자리까지 복사하면 한 벌만 고쳐진다.
+
+    `bin/s9` 도 화면이다 (REQ-20260902-005). 「서버의 문장이 곧 팝업이다」 —
+    스폰 거부 사유·중단 결과는 서버가 지어 화면이 그대로 띄운다. 여기를 안
+    훑던 동안 폐기어가 서버 문장으로 계속 샜다."""
     out = {}
     for p in sorted(glob.glob(os.path.join(WEB, "app", "*.js"))):
         name = os.path.basename(p)
@@ -132,6 +217,8 @@ def _surfaces():
     for p in sorted(glob.glob(os.path.join(WEB, "*.html"))):
         with open(p, encoding="utf-8") as f:
             out[os.path.basename(p)] = _html_text(f.read())
+    with open(S9, encoding="utf-8") as f:
+        out["bin/s9"] = _py_strings(f.read())
     return out
 
 
@@ -163,6 +250,18 @@ class ScreenLexicon(unittest.TestCase):
         self.assertEqual([], hits,
                          "반려된 낱말이 화면에 남아 있다:\n  " + "\n  ".join(hits))
 
+    def test_no_rejected_word_lives_on_the_dashboard(self):
+        """대시보드에서 내려온 판정은 대시보드에서 잰다 — 잣대와 자리의 짝."""
+        hits = []
+        for word, why in BANNED_WEB.items():
+            for name, text in self.surfaces.items():
+                if name in NOT_THE_DASHBOARD:
+                    continue
+                if word in text:
+                    hits.append("%s: 「%s」 — %s" % (name, word, why))
+        self.assertEqual([], hits,
+                         "반려된 낱말이 화면에 남아 있다:\n  " + "\n  ".join(hits))
+
     def test_the_kept_words_are_not_swept_away(self):
         """유지 판정 낱말까지 함께 지우면 그것이 다음 사고다.
 
@@ -170,7 +269,7 @@ class ScreenLexicon(unittest.TestCase):
         낱말이며 늘 "나눠 맡은"을 달고 나온다 — 셋의 4역 합의로 유지가 확정됐다
         (REQ-20260830-039-62x6). 금지 목록이 이들을 삼키지 않았는지 못박는다."""
         for kept in ("맡은 창", "일손", "이어가기", "중단하기", "끝났는지 확인"):
-            for word in BANNED:
+            for word in list(BANNED) + list(BANNED_WEB):
                 self.assertNotIn(kept, word,
                                  "유지 판정 낱말 「%s」가 금지 목록의 「%s」에 "
                                  "삼켜졌다" % (kept, word))
@@ -226,7 +325,7 @@ class TheAutoNameOnlyStandsWhereItIsTrue(unittest.TestCase):
         self.assertEqual(
             [], hits,
             "지금 도는 것을 「자동 작업」이라 부르는 자리가 남았다 — 지금 도는 "
-            "것은 「무인 작업」이고 「자동·저절로」는 미래·정책 서술에만 쓴다 "
+            "것은 「백그라운드 작업」이고 「자동·저절로」는 미래·정책 서술에만 쓴다 "
             "(DOC-20260831-005). 뜻 A 로 참인 새 문장이라면 근거와 함께 "
             "KEPT_AUTO 에 올려라:\n  " + "\n  ".join(hits))
 
@@ -242,7 +341,7 @@ class TheAutoNameOnlyStandsWhereItIsTrue(unittest.TestCase):
     def test_the_new_words_actually_stand(self):
         """신설어가 실제로 서 있다 — 지우기만 하고 안 채우면 문장이 사라진다."""
         joined = "\n".join(self.surfaces.values())
-        for word in ("무인 작업", "이어받", "도는 일 ",
+        for word in ("백그라운드 작업", "이어받", "도는 일 ",
                      "자동 이어받기 끄기"):
             self.assertIn(word, joined,
                           "채택어 「%s」가 화면 어디에도 없다" % word.strip())
@@ -256,7 +355,8 @@ class TheAutoNameOnlyStandsWhereItIsTrue(unittest.TestCase):
         그대로 남는다 — 그래서 캡션 바로 뒤에 주체 낱말이 오는지 못박는다."""
         card = self.surfaces["app/card.js"]
         self.assertIn(">오래 걸림</span>", card, "「오래 걸림」 캡션이 사라졌다")
-        for bad in (">오래 걸림</span>자동 작업", ">오래 걸림</span>무인 작업"):
+        for bad in (">오래 걸림</span>자동 작업", ">오래 걸림</span>무인 작업",
+                    ">오래 걸림</span>백그라운드 작업"):
             self.assertNotIn(bad, card,
                              "사실 줄 본문이 주체를 다시 세웠다 (%s) — 신원은 "
                              "점과 툴팁의 몫이다" % bad)

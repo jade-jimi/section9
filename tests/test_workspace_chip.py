@@ -386,9 +386,14 @@ class WorkspaceChip(unittest.TestCase):
         r = self.run_js(
             "wsOpen('REQ-A'); const a = dlgSeen; wsOpen('REQ-B'); const b = dlgSeen;"
             "console.log(JSON.stringify({a, b}));", rows=rows)
-        # 누른 것이 그 카드라 답도 그 카드다 — 옆 카드가 섞이면 무엇을 눌렀는지 흐려진다
-        self.assertIn("REQ-A", r["a"]["title"])
-        self.assertNotIn("REQ-B", r["a"]["title"] + r["a"]["descHtml"])
+        # 어느 문서인지는 **창머리의 주소**가 말한다 (REQ-20260902-005) —
+        # 제목 자리는 답이 가져갔다. 옆 카드가 섞이면 무엇을 눌렀는지 흐려진다.
+        self.assertIn("REQ-A", r["a"]["doc"])
+        self.assertNotIn("REQ-B",
+                         r["a"]["doc"] + r["a"]["title"] + r["a"]["descHtml"])
+        # 답은 제목이 진다 — 첫 줄을 읽기 전에 물음이 답을 받는다
+        self.assertIn("바로 보입니다", r["a"]["title"])
+        self.assertIn("끝난 뒤에", r["b"]["title"])
         # 사유와 푸는 법이 **창 안 문장**으로 있다 (귀띔에만 있으면 못 찾은 사람에게 답이 아니다)
         # 말결은 창의 것이다 — 한 창 안에서 존댓말과 반말이 갈리지 않는다
         # (REQ-20260830-007).
@@ -396,13 +401,10 @@ class WorkspaceChip(unittest.TestCase):
         self.assertIn("commit 하면", r["a"]["descHtml"])
         # 그래서 나에게 무슨 뜻인가 — 자리가 다르면 답도 달라야 한다
         # (낱말은 REQ-20260830-048 판정 — 「바로 보임 / 끝나면 보임」의 결)
-        self.assertIn("바로 보입니다", r["a"]["descHtml"])
-        self.assertIn("끝난 뒤에", r["b"]["descHtml"])
-        # 워크트리는 어느 워크트리인지까지 말한다 (사람이 cd 해서 볼 자리다)
-        # 워크트리 이름은 제목에서 내렸다 (REQ-20260830-001) — 제목은
-        # 주소+대상만 지고, 답은 첫 줄(WS_MEANS)이 진다.
+        # worktree 이름은 제목에 안 싣는다 (REQ-20260830-001): 제목은 답만
+        # 지고, 어느 자리인지는 카드의 칩이 이미 말한다.
         self.assertNotIn("w-829-030-62x6", r["b"]["title"])
-        self.assertIn("끝난 뒤에 이 화면에 보입니다", r["b"]["descHtml"])
+        self.assertIn("끝난 뒤에 이 화면에 보입니다", r["b"]["title"])
         # 풀 것이 없는 자리에 할 일을 지어내지 않는다
         self.assertNotIn("commit 하면", r["b"]["descHtml"])
         # 대기·자리는 고장이 아니다 — 붉은 눈썹을 달지 않는다

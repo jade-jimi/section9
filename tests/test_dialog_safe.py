@@ -136,7 +136,7 @@ CENSUS = {
         (False, "값을 하나 넣을 뿐이고, 넣어도 쓰이지 않는다"),
     ("userform.js", "지우기", "그만두기"):
         (True, "지운 비밀 값은 되살릴 수 없고 그 키를 쓰는 도구가 멈춘다"),
-    # 세우기 창은 갈래(자동 작업·창·일손)마다 문안이 다르지만 **자리는 하나**다
+    # 세우기 창은 갈래(백그라운드 작업·창·일손)마다 문안이 다르지만 **자리는 하나**다
     # — 주 낱말이 표(STOP_KIND)에서 오므로 대장의 열쇠도 그 표를 읽는 이름이다
     # (REQ-20260830-035). 물러나는 낱말은 넷 다 「그대로 두기」로 같다.
     ("card.js", "stopAsk", "그대로 두기"):
@@ -146,7 +146,7 @@ CENSUS = {
     ("restart.js", "중단하고 바꾸기", "그대로 두기"):
         (True, "이 세션이 하던 일을 중단한다"),
     ("restart.js", "중단하고 바꾸기", "그만두기"):
-        (True, "도는 자동 작업 여러 건을 한꺼번에 중단한다"),
+        (True, "도는 백그라운드 작업 여러 건을 한꺼번에 중단한다"),
     # 한도로 막힌 자리의 탈출구 (REQ-20260901-014). 누르면 모델 고르는 창이
     # 열릴 뿐이고, 거기서 한 번 더 「다시 시작」을 눌러야 무엇이 바뀐다 —
     # 이 창에서는 잃는 것도 도는 것도 없다. 게다가 여기는 **막다른 길**이라
@@ -169,11 +169,11 @@ CENSUS = {
     # 넣어 주어야 하고, 그 사이 나는 이 프로젝트를 못 본다 (REQ-20260831-029).
     ("project.js", "leaveOk", "dlgCancel"):
         (True, "제 자리를 버리는 행위다 — 혼자서는 되돌릴 수 없다"),
-    # 무인 작업 설정 (REQ-20260901-022). 켜는 쪽에만 마찰이 선다 — 끄는 쪽은
+    # 백그라운드 작업 설정 (REQ-20260901-022). 켜는 쪽에만 마찰이 선다 — 끄는 쪽은
     # 권한을 거두는 방향이라 확인이 손만 는다. 창의 설명이 스스로 적는 대로,
     # 되돌려도 그 사이에 한 일은 못 되돌린다 (REQ-20260902-001).
     ("workercfg.js", "권한 주기", "그만두기"):
-        (True, "사람이 지키지 않는 자리에서 도는 무인 작업에 GitHub 계정 권한을"
+        (True, "이 창 밖에서 도는 백그라운드 작업에 GitHub 계정 권한을"
                " 준다 — 껐어도 켜져 있는 동안 한 일은 못 되돌린다"),
     # 진단이 세우는 거울 — 본 창과 같은 표를 따른다
     ("diag.js", "취소하기", "그만두기"): (False, "card.js 취소하기의 거울"),
@@ -252,6 +252,58 @@ class DialogSafeFocus(unittest.TestCase):
                       "바닥 힌트가 safe 를 읽지 않는다")
         self.assertIn("(o.safe && no ? no : yes).focus()", src,
                       "초점이 safe 를 읽지 않는다")
+
+    # ---- F6. 갈래마다 물어본다 (REQ-20260902-005 안전 함정) --------------
+    def test_f6_every_running_kind_still_carries_a_question(self):
+        """`ask` 가 없는 갈래는 **창 없이 곧장 중단한다**.
+
+            const go = !stopAsk || await s9dlg(...)   // card.js
+
+        이름을 갈면서 창 셋의 문안이 비슷해 보인다고 `STOP_KIND` 에서 갈래
+        하나를 지우면, 그 갈래는 `stopAsk` 가 undefined 가 되어 확인 없이
+        지나간다 — 되돌릴 수 없는 중단이 말없이 실행되는 길이다. `||` 의
+        기본값이 「묻지 않는다」 쪽이라 결함이 조용하다: 화면은 멀쩡히 돌고,
+        아무도 안 물어봤다는 사실만 사라진다.
+
+        갈래 이름은 서버(`stoppable_verdict`)가 정하고 화면은 그것을
+        `data-kind` 로 받아 읽는다. 그래서 목록을 여기 옮겨 적지 않고 **서버에서
+        읽어** 맞춘다 — 옮겨 적으면 서버가 갈래를 늘릴 때 이 시험만 옛 세상에
+        남는다."""
+        src = read(os.path.join(APP, "card.js"))
+        m = re.search(r"const STOP_KIND = \{([\s\S]*?)\n\};", src)
+        self.assertIsNotNone(m, "STOP_KIND 표를 못 찾았다")
+        body = m.group(1)
+        # 표의 한 급 들여쓴 이름만 = 갈래. 그 다음 갈래 전까지가 제 몫이다.
+        keys = [(mm.group(1), mm.start()) for mm in
+                re.finditer(r"(?m)^  (\w+): \{", body)]
+        self.assertTrue(keys, "갈래를 하나도 못 읽었다")
+        slices = {}
+        for i, (name, at) in enumerate(keys):
+            end = keys[i + 1][1] if i + 1 < len(keys) else len(body)
+            slices[name] = body[at:end]
+
+        with open(os.path.join(ROOT, "bin", "s9"), encoding="utf-8") as f:
+            s9 = f.read()
+        # 갈래를 내는 함수 하나만 본다 — 파일 전체를 훑으면 「자리」의
+        # main/worktree 같은 남의 kind 가 섞여 든다.
+        fn = re.search(r"\ndef stoppable_verdict\([\s\S]*?\n\ndef ", s9)
+        self.assertIsNotNone(fn, "stoppable_verdict 를 못 찾았다")
+        server = set(re.findall(r'return \{"kind": "(\w+)"', fn.group(0)))
+        self.assertTrue(server >= {"worker", "session", "agent", "idle"},
+                        "서버가 내는 갈래를 못 읽었다: %s" % sorted(server))
+        self.assertEqual(sorted(server), sorted(slices),
+                         "서버가 내는 갈래와 화면의 문안 표가 어긋난다 — "
+                         "빠진 갈래는 확인 창 없이 중단된다")
+
+        for kind in sorted(server - {"idle"}):
+            self.assertIn("ask: {", slices[kind],
+                          "「%s」 갈래에 확인 창이 없다 — 되돌릴 수 없는 중단이 "
+                          "말없이 실행된다 (card.js 의 `!stopAsk` 갈래)" % kind)
+        # idle 만 예외이고, 그것도 **까닭이 있어서** 예외다: 붙어 있는 손이
+        # 없어 잃는 것이 없고 「▶ 이어가기」 한 번으로 되돌아간다.
+        self.assertNotIn("ask: {", slices["idle"],
+                         "잃는 것이 없는 갈래에 확인 창을 세웠다 — 확인은 "
+                         "되돌릴 수 없을 때만이다 (s9-design 4절)")
 
 
 if __name__ == "__main__":

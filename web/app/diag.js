@@ -29,7 +29,7 @@
    아무도 눈으로 본 적이 없었다** — 사용자가 "붉게 뜨면 반려"라고 판정해야 하는
    그 창이다.
 
-   진행 중이 아닌 문서(done 등)를 대면 서버가 확실히 거절하므로 무인 작업자를
+   진행 중이 아닌 문서(done 등)를 대면 서버가 확실히 거절하므로 백그라운드 작업을
    띄우지 않고 창만 볼 수 있다. */
 (function stallPressProbe(){
   const m = /[?&]stallpress=([\w-]+)/.exec(location.search);
@@ -211,7 +211,7 @@
         + `<code class="dlgcmd">bin/s9 code --resume 01c62d83 --model sonnet</code>`,
       ok:"닫기"},
     /* 세션 고르기 (REQ-20260829-023) — 다섯 처지를 한 줄씩. 지금 보는 것 ·
-       듣고 있는 것 · 살아는 있으나 쉬는 것 · 무인 작업자 · 끝난 것.
+       듣고 있는 것 · 살아는 있으나 쉬는 것 · 백그라운드 작업 · 끝난 것.
        **서버가 주는 답 모양**을 넣고 실제 함수(sessShape → sessItems)가 창을
        짓는다 — 그림을 따로 그리면 보고 고친 것이 화면이 아니게 된다. */
     sessions: sessShape({sessions: [
