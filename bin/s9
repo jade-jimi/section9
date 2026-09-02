@@ -1221,6 +1221,12 @@ def catalog_row(meta, path, body=""):
         # 있는 것이 보통이고 user 가 곧 담당자다.
         "machine": meta.get("machine", ""),
         "assignee": meta.get("assignee", ""),
+        # 생성 출처 (REQ-20260902-018) — 카드가 "만든 사람·맡은 사람·기원"을
+        # 문서를 열지 않고 그린다. 옛 문서는 읽기 규칙(doc_creator)으로 같은 답.
+        "creator": doc_creator(meta),
+        "origin": doc_origin(meta),
+        "origin_actor": meta.get("origin_actor", ""),
+        "origin_req": meta.get("origin_req", ""),
         "project": meta.get("project", ""),
         "slug": meta.get("slug", ""),  # 프로젝트 문서를 slug로도 검색 (REQ-20260824-024)
         "parent": meta.get("parent", ""),
@@ -1487,6 +1493,53 @@ def _recent_duplicate(doc_type, title, body, window_sec=180):
     return None
 
 
+def request_origin(args, session=""):
+    """생성 행위의 출처 셋 → (origin, origin_actor, origin_req) (REQ-20260902-018).
+
+        origin        human | agent | derived | ""(모름 — 지어내지 않는다)
+        origin_actor  actor 규격 한 줄(lead:<model>·worker:<사유>·sub:<역할>), human 이면 빈 값
+        origin_req    에이전트가 **어느 REQ 를 처리하다** 만들었나 (derived 일 때)
+
+    사람 입구는 셋뿐이다 — 훅(auto-audit)·채팅·화면 폼 — 그 셋만 `--origin human`
+    을 붙인다. 나머지는 여기 한 곳이 가른다: 출처 REQ(--origin-req > --parent >
+    --derived-from > S9_JOB_REQ)가 있으면 derived, 에이전트 세션 안(S9_SESSION·
+    S9_AUTO_RESUME)이면 agent, 그 밖에 tty 면 사람이 셸에서 직접. "누구의 요청을
+    처리하다"의 **누구**는 origin_req 문서의 user 로 답한다 — 따로 두면 재할당 때
+    낡는다."""
+    explicit = (getattr(args, "origin", None) or "").strip()
+    oreq = (getattr(args, "origin_req", None) or getattr(args, "parent", None)
+            or getattr(args, "derived_from", None)
+            or os.environ.get("S9_JOB_REQ", "") or "").strip()
+    actor = normalize_actor(getattr(args, "agent", None) or "")
+    auto = bool(os.environ.get("S9_AUTO_RESUME"))
+    if explicit == "human":
+        return ("human", "", oreq)
+    if oreq:
+        origin = "derived"
+    elif session or auto or explicit == "agent":
+        origin = "agent"
+    else:
+        try:
+            origin = "human" if sys.stdin.isatty() else ""
+        except Exception:
+            origin = ""
+    if origin == "human":
+        return (origin, "", oreq)
+    if not actor:
+        actor = "worker:auto-resume" if auto else ("lead" if session else "")
+    return (origin, actor, oreq)
+
+
+def doc_creator(meta):
+    """생성자 — 필드가 없는 옛 문서는 user(생성자=담당자)로 읽는다."""
+    return str((meta or {}).get("creator") or (meta or {}).get("user") or "")
+
+
+def doc_origin(meta):
+    """생성 출처 — 옛 문서는 빈 값(미상). 표시 층이 "기록 없음"으로 말한다."""
+    return str((meta or {}).get("origin") or "")
+
+
 def cmd_new(args):
     # 관계에는 이유가 남는다 (REQ-20260827-030) — `s9 link` 와 같은 규칙이다.
     # 입구가 둘인데 한쪽만 막으면 다른 입구로 그대로 샌다.
@@ -1500,6 +1553,13 @@ def cmd_new(args):
     session = os.environ.get("S9_SESSION", "")
     ts = now_iso()
     original = read_body_arg(args)
+    # 누가 만들었나 — 사람인가, 에이전트인가, 누구의 요청을 처리하다 나왔나
+    # (REQ-20260902-018, DOC-20260902-001 D2). `user` 는 담당자다(코드 전반이
+    # 이미 그 뜻으로 읽는다); 생성 시 확정되는 넷은 따로 적고 바꾸지 않는다.
+    creator = user
+    origin, origin_actor, origin_req = request_origin(args, session)
+    if getattr(args, "assignee", None):
+        user = args.assignee            # 담당자 지정 — 생성자는 그대로 남는다
 
     # 프로젝트 매핑 + 인가 게이트(가드레일):
     # - 명시적 --project = 의도된 행동 → 등록 프로젝트면 contribute 권한 필요(없으면 거부).
@@ -1544,6 +1604,8 @@ def cmd_new(args):
             "status": args.status or default_status, "size": args.size or "",
             "priority": prio,
             "user": user, "machine": machine, "session": session,
+            "creator": creator, "origin": origin,
+            "origin_actor": origin_actor, "origin_req": origin_req,
             "project": proj,
             "parent": args.parent or "", "children": [],
             "derived_from": args.derived_from or "", "relates": args.relates or [],
@@ -7002,7 +7064,7 @@ def chat_audit(text, sender, sid8, doc="", anchor="", as_type=""):
                 for l in quoted) + "\n\n" + t)
         out = subprocess.run(
             [me, "new", "request", "--title", title, "--tag", "auto-audit",
-             "--user", sender or "dashboard"],
+             "--user", sender or "dashboard", "--origin", "human"],
             input=body, capture_output=True, text=True, env=env, timeout=15)
         if out.returncode != 0:
             return None
@@ -20243,6 +20305,12 @@ def main():
     np.add_argument("--tag", dest="tag_list", action="append")
     np.add_argument("--body")
     np.add_argument("--body-file")
+    # 생성 출처 (REQ-20260902-018): 사람 입구(훅·채팅·화면)만 --origin human
+    np.add_argument("--origin", choices=["human", "agent"],
+                    help="생성 주체 — 사람 입구만 human 을 붙인다")
+    np.add_argument("--agent", help="만든 에이전트 (lead:<model>·sub:<역할>·worker:<사유>)")
+    np.add_argument("--origin-req", help="어느 REQ 를 처리하다 만들었나 (기본: --parent)")
+    np.add_argument("--assignee", help="담당자 (기본: 만든 사람) — user 필드에 들어간다")
     np.set_defaults(fn=cmd_new)
 
     sp = sub.add_parser("show", help="print a document")

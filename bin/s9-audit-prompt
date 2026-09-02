@@ -713,7 +713,7 @@ def main():
         body += "\n\n[첨부]\n" + "\n".join(f"- {p}" for p in atts)
     # 원문은 stdin으로 전달 (s9 new가 비-tty stdin을 body로 읽음 — /dev/stdin 불요, Windows 호환)
     out = run(env, "new", "request", "--title", title,
-              "--tag", "auto-audit", inp=body)
+              "--tag", "auto-audit", "--origin", "human", inp=body)   # 사람 입구 (REQ-20260902-018)
     if out.returncode != 0:
         return  # audit 실패가 프롬프트를 막으면 안 됨
     doc_id = out.stdout.split()[0]

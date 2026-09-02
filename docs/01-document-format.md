@@ -41,7 +41,11 @@ flat key만 사용(중첩 금지). 리스트는 JSON 배열 표기. 빈 값은 �
 | goal | string | 요청의 목표 |
 | status | string | 상태머신 상태 (docs/03 참조) |
 | size | S \| M \| L | 요청 크기 (소/중/대) |
-| user | string | 요청자/작성자 계정. 코드는 이 값을 "이 일이 누구 몫인가"(담당자)로 읽는다 — `s9 next`·워커 오너·`--user` 필터. 생성자/담당자 분리와 `creator`·`origin` 필드는 DOC-20260902-001 결정(REQ-20260902-018)으로 진행 중 |
+| user | string | **현재 담당자**(변경 가능). 코드 전반이 이 값을 "이 일이 누구 몫인가"로 읽는다 — `s9 next`·워커 오너·`--user` 필터·실행 귀속(exec_verdict). 생성 시 `--assignee` 로 지정 가능, 기본은 만든 사람 (DOC-20260902-001 D2) |
+| creator | string | 만든 사람의 계정 (생성 시 확정, 불변). 없는 옛 문서는 `user` 로 읽는다 |
+| origin | human \| agent \| derived | 생성 주체 — 사람이 직접 / 에이전트가 스스로 / 에이전트가 어느 요청을 처리하다. 없는 옛 문서는 빈 값(미상) |
+| origin_actor | string | 만든 에이전트(actor 규격: `lead:<model>` `sub:<역할>` `worker:<사유>`), human 이면 빈 값 |
+| origin_req | id | 어느 요청을 처리하다 만들었나 (derived). "누구의 요청"은 이 문서의 `user` 로 답한다 |
 | machine | string | 작성된 머신 (hostname 또는 $S9_MACHINE). 생성 뒤 갱신되지 않는다 — 실행 귀속의 근거로는 쓰지 않기로 결정(DOC-20260902-001 D1) |
 | session | string | 작성된 세션 식별자 ($S9_SESSION) |
 | project | string | 소속 프로젝트 |
