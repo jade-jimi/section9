@@ -7450,18 +7450,29 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
         return block("error", f"이어가지 못했습니다: {e}")
 
 
+def _safe_fence(text, limit):
+    """<<참고>> 방벽 안에 넣는 **문서 유래 텍스트**의 유일한 세정 자리 (REQ-20260902-033).
+
+    제목은 REQ-20260830-018 에서 델리미터를 무력화했는데, 같은 방벽을 쓰는 반려
+    노트에는 그 치환이 옮겨지지 않았다 — "게이트가 두 벌이면 성긴 쪽으로 샌다"의
+    재현(white-hacker 검토 시나리오 1). 노트에 `<</참고>>` 를 넣으면 방벽이 그
+    자리에서 닫히고 뒤 문장이 명령 위치에 선다. 공유 리포에서는 남이 쓴 노트가
+    내 머신의 워커에 그대로 들어오므로 치환은 한 함수에서만 한다."""
+    t = re.sub(r"\s+", " ", str(text or "")).strip()
+    return t.replace("<<", "«").replace(">>", "»")[:limit]
+
+
 def _safe_title(meta):
     """워커 프롬프트에 넣는 문서 제목 — 델리미터 안 참고 텍스트로만 (REQ-20260830-018).
     재작업 노트는 <<참고>> 방벽이 있는데 제목은 무방비였다(REQ-20260830-017 검토):
     제목에 지시문을 심으면 git·s9 봉투를 쥔 워커가 그 문장을 명령 위치에서 읽는다."""
-    t = re.sub(r"\s+", " ", str(meta.get("title", "") or "")).strip()
-    return t.replace("<<", "«").replace(">>", "»")[:120]
+    return _safe_fence(meta.get("title", ""), 120)
 
 
 def _spawn_rework(doc_id, meta, note):
     """무인 재작업 스폰 — 반려된 REQ를 워커에 넘긴다.
     방어장치·봉투·Popen은 _spawn_worker 하나에만 있다 (경로 이중화 금지)."""
-    safe_note = re.sub(r"\s+", " ", note or "").strip()[:300]
+    safe_note = _safe_fence(note, 300)     # 제목과 같은 세정 (REQ-20260902-033)
     s9bin = os.path.join(ROOT, "bin", "s9")
     apply_mode = bool(user_config(meta.get("user", "")).get("auto_resume_apply"))
     # 후행 목록 (DOC-20260831-002 규칙3, REQ-20260831-015): 선행 반려의
@@ -13151,6 +13162,17 @@ _ROLE_CACHE = {}          # name -> (profile.md mtime_ns, role)
 _ROLE_LOCK = threading.Lock()
 
 
+def _any_admin():
+    """등록 사용자 중 admin 이 하나라도 있는가 — 역할 변경 게이트의 부트스트랩 예외
+    판정 (REQ-20260902-029). 없으면 아직 아무도 admin 을 못 세운 새 설치다."""
+    try:
+        names = [d for d in os.listdir(USERS)
+                 if os.path.isfile(os.path.join(USERS, d, "profile.md"))]
+    except OSError:
+        return False
+    return any(user_role(n) == "admin" for n in names)
+
+
 def user_role(name):
     """profile.md의 role (기본 member). admin만 harness(bin/web/claude/) 수정 가능.
 
@@ -13581,8 +13603,17 @@ def cmd_user(args):
         if new_role:
             if new_role not in ROLES:
                 die(f"invalid role: {new_role} (valid: {', '.join(ROLES)})")
-            meta["role"] = new_role
-            write_doc(ppath, meta, body)
+            # 역할 변경은 admin 만 (REQ-20260902-029). 대시보드(/api/user/update)
+            # 에는 이 검사가 있었는데 CLI 에는 없어 누구나 자신을 admin 으로
+            # 올릴 수 있었다(security-engineer 검토, 자기 승격 경로). 등록된
+            # admin 이 하나도 없는 부트스트랩만 예외 — 첫 admin 을 세울 길이
+            # 있어야 한다.
+            actor = resolve_user()
+            if user_role(actor) != "admin" and _any_admin():
+                die(f"role 변경은 admin 만 가능 (me={actor}, "
+                    f"role={user_role(actor) or '미등록'})")
+            # 쓰기는 대시보드와 같은 한 경로 — profile Notes 에 audit 이 남는다
+            do_user_update(name, role=new_role, actor=f"{actor} via cli")
             print(f"{name}: role = {new_role}")
         else:
             print(f"{name}: role = {meta.get('role', 'member')}")

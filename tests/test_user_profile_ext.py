@@ -135,6 +135,80 @@ class TestProfileExt(unittest.TestCase):
         self.assertIn("GitHub", r.stdout)          # github은 여전히 촉구
 
 
+class TestRoleChangeIsAdminOnly(unittest.TestCase):
+    """R1~R5 (REQ-20260902-029) — `s9 user role` 은 admin 만. 대시보드에는 있던
+    검사가 CLI 에 없어 누구나 자신을 admin 으로 올릴 수 있었다."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="s9role-")
+        cls.base = {**os.environ, "S9_ROOT": cls.tmp, "S9_MACHINE": "testbox"}
+        cls.base.pop("S9_SESSION", None)
+        cls.base.pop("S9_USER", None)
+        cls.cli("init")
+
+    @classmethod
+    def cli(cls, *argv, user=None, expect=0):
+        env = dict(cls.base)
+        if user:
+            env["S9_USER"] = user
+        r = subprocess.run([S9, *argv], capture_output=True, text=True,
+                           env=env, timeout=15, stdin=subprocess.DEVNULL)
+        if expect is not None and r.returncode != expect:
+            raise AssertionError(f"s9 {' '.join(argv)}: rc={r.returncode}\n"
+                                 f"{r.stdout}{r.stderr}")
+        return r
+
+    def role_of(self, name):
+        return self.cli("user", "role", name).stdout.strip()
+
+    def test_r4_bootstrap_without_any_admin_is_allowed(self):
+        # 등록된 admin 이 하나도 없는 **새 설치** — 첫 admin 을 세울 길은 열려 있어야
+        # 한다. 다른 케이스가 root 를 admin 으로 세우므로 여기는 제 루트를 쓴다.
+        fresh = tempfile.mkdtemp(prefix="s9role0-")
+        saved = self.base
+        try:
+            type(self).base = {**saved, "S9_ROOT": fresh}
+            self.cli("init")
+            self.cli("user", "add", "first")
+            self.cli("user", "role", "first", "admin", user="first")
+            self.assertIn("admin", self.role_of("first"))
+        finally:
+            type(self).base = saved
+
+    def test_r1_r2_member_cannot_change_roles(self):
+        self.cli("user", "add", "root", expect=None)
+        self.cli("user", "role", "root", "admin", user="root", expect=None)
+        self.cli("user", "add", "mallory")
+        self.cli("user", "add", "victim")
+        # R2 자기 승격
+        r = self.cli("user", "role", "mallory", "admin", user="mallory", expect=None)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("admin 만", r.stdout + r.stderr)
+        self.assertIn("member", self.role_of("mallory"))
+        # R1 남의 역할
+        r = self.cli("user", "role", "victim", "viewer", user="mallory", expect=None)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("member", self.role_of("victim"))
+
+    def test_r3_admin_changes_role_with_audit(self):
+        self.cli("user", "add", "root", expect=None)
+        self.cli("user", "role", "root", "admin", user="root", expect=None)
+        self.cli("user", "add", "carol")
+        self.cli("user", "role", "carol", "viewer", user="root")
+        self.assertIn("viewer", self.role_of("carol"))
+        with open(os.path.join(self.tmp, "users", "carol", "profile.md"),
+                  encoding="utf-8") as f:
+            self.assertIn("role=viewer", f.read())     # Notes audit (do_user_update)
+
+    def test_r5_reading_a_role_needs_no_admin(self):
+        self.cli("user", "add", "root", expect=None)
+        self.cli("user", "role", "root", "admin", user="root", expect=None)
+        self.cli("user", "add", "dave")
+        r = self.cli("user", "role", "root", user="dave")
+        self.assertIn("admin", r.stdout)
+
+
 class TestProfileWarnScope(unittest.TestCase):
     """프로필 경고 범위 (REQ-20260825-046): 조직 GitHub은 비필수(사용자 확정,
     REQ-038) — 헤더 ⚠ 배지·"필수" 문구 경로에서 제외돼야 한다."""
