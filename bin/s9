@@ -1216,6 +1216,11 @@ def catalog_row(meta, path, body=""):
         "size": meta.get("size", ""),
         "priority": doc_priority(meta),
         "user": meta.get("user", ""),
+        # 실행 귀속 판정의 원재료 (REQ-20260902-016): 목록 필터가 문서를 다시
+        # 열지 않고 행만으로 "내 것인가"를 가른다. assignee 는 D2 에 따라 비어
+        # 있는 것이 보통이고 user 가 곧 담당자다.
+        "machine": meta.get("machine", ""),
+        "assignee": meta.get("assignee", ""),
         "project": meta.get("project", ""),
         "slug": meta.get("slug", ""),  # 프로젝트 문서를 slug로도 검색 (REQ-20260824-024)
         "parent": meta.get("parent", ""),
@@ -1608,6 +1613,15 @@ def update_active_reqs(doc_id, new_status):
         sess = os.environ.get("S9_SESSION", "")
         if not sess:
             return  # 실행 세션을 모름(대시보드/외부) — 등록하지 않는다
+        # 남의 문서를 전이했다고 내 세션이 그 실행자가 되지는 않는다
+        # (REQ-20260902-016) — 검토자의 반려가 검토자 세션의 클레임이 되면
+        # 담당자의 자리가 "이미 누가 잡았다"로 물러선다.
+        try:
+            _p = locate(doc_id)
+            if _p and not exec_verdict(read_doc(_p)[0], want="claim")[0]:
+                return
+        except Exception:
+            pass
         acquire_lock()
         try:
             machine = current_machine()
@@ -3561,6 +3575,88 @@ def worker_running(req_id, win=WORKER_WIN, now=None, alias=None):
         if _worker_alive(m.get("pid")) else None
 
 
+# ----------------------------------------------------------------------------
+# 실행 귀속 — 판정은 한 함수다 (REQ-20260902-016, DOC-20260902-001 D1·D2)
+#
+# 종전에는 가드가 세 곳·세 기준이었다: 워처는 문서를 **만든 머신**(7247), `s9 next`
+# 는 user, 훅이 매 프롬프트 주입하는 reopened/stalled/blocked/approvals 는 필터
+# 없음. 공유 리포에서 남의 반려 REQ 가 pull 되면 내 리드가 워처보다 먼저 "지금
+# 이어서 작업하라"를 받았다(deep-diver 격리 재현). 게이트가 여럿이면 성긴 쪽으로
+# 샌다 — 그래서 아홉 자리가 이 함수 하나를 부른다.
+#
+# 담당자는 `user` 다(D2: 코드 전반이 이미 그 뜻으로 읽는다). 잠정 키로 `machine`
+# 을 함께 보는데, 이는 REQ-20260902-020 이 문서 리스(lease)로 바꾼다 — 그때까지
+# 같은 사람의 두 번째 머신은 목록·스폰에서 elsewhere 이고, 사람의 명시 이어받기
+# (want="claim")만 통과한다.
+
+def doc_owner(meta):
+    """담당자 — `assignee` 가 있으면 그것, 없으면 `user`(=담당자)."""
+    return str((meta or {}).get("assignee") or (meta or {}).get("user") or "")
+
+
+def local_facts(user=None):
+    """판정에 쓰는 이 자리의 사실: 누가, 어느 컴퓨터에서, 어떤 역할로."""
+    u = user or resolve_user(None)
+    return {"user": u, "machine": current_machine(), "role": user_role(u)}
+
+
+def is_mine(meta, local=None, want="list"):
+    """(참, "") 또는 (거짓, 사유코드) — 상태를 보지 않는 소유 판정만."""
+    local = local or local_facts()
+    if local.get("role") == "viewer":
+        return (False, "observer")
+    owner = doc_owner(meta)
+    # 무인 워처(want="spawn")는 사람이 아니라 **담당자를 대신해** 그 사람의 설정
+    # (auto_resume)으로 띄우는 자리다 — 서버를 띄운 계정과 담당자가 달라도(한
+    # 머신에 여러 등록 사용자) 남의 일을 뺏는 것이 아니다. 그래서 잠정 키인
+    # 머신만 본다. 사람의 자리(list·claim)는 담당자를 본다. 020 이 리스를 들이면
+    # spawn 도 리스(담당자+머신)로 판정한다.
+    if want != "spawn" and owner and local.get("user") and owner != local["user"]:
+        return (False, "not-mine")
+    if want != "claim":
+        m = str((meta or {}).get("machine") or "")
+        if m and local.get("machine") and m != local["machine"]:
+            return (False, "elsewhere")
+    return (True, "")
+
+
+def exec_verdict(meta, local=None, want="list"):
+    """이 문서를 지금 이 자리가 집어도 되는가 → (allow, code, why).
+
+    want: "list"(훅 목록·next) · "spawn"(무인 워처) · "claim"(사람의 명시 이어받기).
+    순서는 싼 것부터, 첫 거부에서 멈춘다: 타입 → 종결 → 관찰 계정 → 담당자 →
+    (잠정) 머신. 상태(in-progress 여부)는 부르는 쪽의 몫이다."""
+    meta = meta or {}
+    if meta.get("type", "request") != "request":
+        return (True, "free", "")
+    st = str(meta.get("status") or "")
+    if st in TERMINAL_STATUSES:
+        return (False, "closed", f"이미 {st}")
+    local = local or local_facts()
+    ok, code = is_mine(meta, local, want)
+    if not ok:
+        why = {"observer": "관찰 계정은 실행하지 않는다",
+               "not-mine": f"담당 {doc_owner(meta)}",
+               "elsewhere": f"다른 컴퓨터({meta.get('machine')})의 것"}[code]
+        return (False, code, why)
+    return (True, "free", "")
+
+
+def _mine_rows(rows, local=None, want="list"):
+    """카탈로그 행 목록에서 내 것만 — 훅 목록·next 가 쓰는 한 필터.
+    행에 user/machine 이 없으면(파생 목록) 카탈로그에서 채워 판정한다."""
+    local = local or local_facts()
+    need = [r for r in rows if "machine" not in r or "user" not in r]
+    if need:
+        by_id = {c["id"]: c for c in load_catalog()}
+        for r in need:
+            c = by_id.get(r.get("id"), {})
+            r.setdefault("user", c.get("user", ""))
+            r.setdefault("machine", c.get("machine", ""))
+            r.setdefault("assignee", c.get("assignee", ""))
+    return [r for r in rows if is_mine(r, local, want)[0]]
+
+
 def rework_claimed(req_id, win=120):
     """클레임 판정: 이 REQ를 등록한 세션이 **살아 있는가** (REQ-20260826-013).
 
@@ -4371,9 +4467,10 @@ def chat_compacting(b, win=COMPACT_MAX):
     return 0 <= (now - started).total_seconds() < win
 
 
-def chat_target(sid8=None):
+def chat_target(sid8=None, user=None):
     """채팅 대상 바인딩 선택 — sid 지정 시 그 세션, 아니면 살아있는
-    세션(chat_live) 중 활동이 가장 최근인 세션. 없으면 None."""
+    세션(chat_live) 중 활동이 가장 최근인 세션. 없으면 None.
+    user 를 주면 그 사용자의 세션만 후보다 (REQ-20260902-016 — 담당자 통지)."""
     import glob as _glob
     best, best_ts = None, (-1, -1, -1, -1.0)
     for bp in _glob.glob(os.path.join(STATE, "*.json")):
@@ -4388,6 +4485,8 @@ def chat_target(sid8=None):
         if sid8:
             if sid == sid8:
                 return b
+            continue
+        if user and (b.get("user") or "") != user:
             continue
         if b.get("ended") or not chat_live(b):
             continue  # 종료된 세션(SessionEnd)·죽은 세션 제외
@@ -7158,7 +7257,11 @@ def chat_notify_transition(doc_id, old, new, note, actor):
     # 리드가 없으면 조용히 None(워처가 유예 후 무인 스폰 — 폴백 불변).
     if old == "open" and new == "in-progress":
         try:
-            b = chat_target(None)
+            # 착수 지시는 **담당자의** 라이브 세션에만 (REQ-20260902-016) —
+            # 이 머신의 아무 리드나 집으면 남의 요청을 내 세션이 시작한다.
+            _p = locate(doc_id)
+            _owner = doc_owner(read_doc(_p)[0]) if _p else ""
+            b = chat_target(None, user=_owner or None)
             sid = (b or {}).get("session", "")
             if not sid or not _inbox_watch_alive(sid):
                 return None
@@ -7309,11 +7412,15 @@ def _spawn_worker(doc_id, meta, prompt, reason, allow_resume=False, out=None):
         return block("off", f"{owner or '이'} 계정은 Settings 의 "
                             f"「백그라운드 작업」에서 「맡기기」가 꺼져 "
                             f"있습니다 — 거기서 켜 주세요")
-    if meta.get("machine") != current_machine():
-        return block("elsewhere",
-                     f"이 요청은 다른 컴퓨터({meta.get('machine') or '미상'})의 "
-                     f"것입니다 — 여기({current_machine()})서는 시작할 수 "
-                     f"없습니다")
+    # 실행 귀속은 한 함수가 판정한다 (REQ-20260902-016) — 종전의 "만든 머신"
+    # 한 줄 비교를 담당자 기준으로 바꾸고, 막힌 사실을 spawn.log 에 남긴다
+    # (종전엔 PENDING 만 남아 막힌 것이 보이지 않았다).
+    _ok, _code, _why = exec_verdict(meta, want="spawn")
+    if not _ok and _code != "closed":
+        _auto_log(f"SKIP({_code}) {doc_id} {reason} {_why}")
+        return block(_code,
+                     f"이 요청은 {_why}입니다 — 여기({current_machine()}, "
+                     f"{resolve_user(None)})서는 시작할 수 없습니다")
     # 캡은 **세지 않고 먼저 본다.** 아래 자리 판정이 git 을 두 번 부르는데,
     # 어차피 한도에 막힐 후보에 30초마다 그 값을 치를 이유가 없다. 세는 것은
     # 여전히 `_auto_caps_ok` 한 곳뿐이라 대기가 예산을 깎지 않는다(L6).
@@ -8396,6 +8503,20 @@ def review_family(rows):
     return rows
 
 
+def _append_auto_note(doc_id, text):
+    """History 한 줄 — 전이 없이 사실만 남긴다 (REQ-20260902-016)."""
+    path = locate(doc_id)
+    if not path:
+        return
+    acquire_lock()
+    try:
+        meta, body = read_doc(path)
+        body = body.rstrip("\n") + f"\n- {now_iso()} note: {text} [auto]\n"
+        write_doc(path, meta, body)
+    finally:
+        release_lock()
+
+
 def trigger_dependents(done_id):
     """REQ가 done되면 그 REQ를 기다리던 요청의 blocked_by에서 지우고, 남은
     선행이 없으면 자동 재개한다. 선행 기록은 blocked_by 관계가 진실이고,
@@ -8422,6 +8543,20 @@ def trigger_dependents(done_id):
                     release_lock()
             if rest or r["status"] != "blocked":
                 continue   # 아직 기다릴 것이 남았거나 애초에 막힌 상태가 아니다
+            # 재개는 **담당자의 자리**에서만 (REQ-20260902-016). 선행이 끝났다는
+            # 사실(blocked_by 정리)은 어느 머신이 적어도 같지만, 남의 문서를 내
+            # 머신에서 in-progress 로 되살리면 그 사람의 워처·리드가 아니라 내
+            # 것이 집는다. 여기서는 사실만 남긴다 — 담당자의 훅 목록(blocked)이
+            # "선행 완료" 를 싣고, 그쪽이 이어간다.
+            _ok, _code, _why = exec_verdict(r, want="list")
+            if not _ok:
+                try:
+                    _append_auto_note(r["id"],
+                                      f"선행 {done_id} 완료 — 담당자의 자리에서 "
+                                      f"재개한다 (여기는 {_why})")
+                except Exception:
+                    pass
+                continue
             try:
                 do_transition(r["id"], "in-progress",
                               note=f"의존 해제: {done_id} 완료로 자동 재개", auto=True)
@@ -10659,15 +10794,19 @@ def cmd_bind(args):
                          ensure_ascii=False, indent=1))
 
 
-def reopened_requests():
+def reopened_requests(mine=False):
     """대시보드에서 반려/재개된 뒤 아직 아무 전이도 없는 요청.
 
     판정: in-progress 이면서 마지막 status History 라인이
     '-> in-progress ... [via dashboard]' — 다음 전이가 일어나면 자동 해제된다.
+    mine=True 면 이 자리가 집어도 되는 것만 (REQ-20260902-016) — 훅 주입 경로.
     """
     out = []
+    local = local_facts() if mine else None
     for r in load_catalog():
         if r["type"] != "request" or r["status"] != "in-progress":
+            continue
+        if mine and not is_mine(r, local)[0]:
             continue
         try:
             with open(os.path.join(ROOT, r["path"]), encoding="utf-8") as f:
@@ -11035,7 +11174,9 @@ def stalled_requests(win=None, states=("stalled",)):
         if mins is None:
             mins = r.get("quiet_mins") or 0
         out.append({"id": r["id"], "title": r.get("title", ""),
-                    "user": r.get("user", ""), "mins": mins, "state": st,
+                    "user": r.get("user", ""), "machine": r.get("machine", ""),
+                    "assignee": r.get("assignee", ""),   # 귀속 판정 원재료 (REQ-20260902-016)
+                    "mins": mins, "state": st,
                     "why": r.get("stall_why", ""),
                     "reason": r.get("live_reason", "")})
     out.sort(key=lambda x: -x["mins"])
@@ -11197,6 +11338,8 @@ def cmd_loose(args):
 def cmd_stalled(args):
     # 색인은 한 번만 읽는다 — 이 명령은 매 턴 프롬프트 훅이 부른다.
     all_rows = stalled_requests(states=("stalled", "waiting", "unknown"))
+    if not getattr(args, "all", False):
+        all_rows = _mine_rows(all_rows)      # 기본은 내 것만 (REQ-20260902-016)
     rows = [r for r in all_rows if r["state"] == "stalled"]
     other = [r for r in all_rows if r["state"] != "stalled"]
     for r in rows[:STALLED_SHOW]:
@@ -11235,8 +11378,9 @@ def next_pickup(user=None, all_users=False):
     # 기동 세션이 같은 문서를 동시에 집는다.
     rows = [r for r in stalled_requests(win=0) if not rework_claimed(r["id"])]
     if not all_users:
-        u = user or resolve_user(None)
-        rows = [r for r in rows if (r.get("user") or u) == u]
+        # 담당자·머신 판정은 한 함수 (REQ-20260902-016) — 종전 user 비교는
+        # 남의 머신에서 만든 내 문서까지 권했고, 워처와 다른 답을 냈다.
+        rows = _mine_rows(rows, local_facts(user))
     if not rows:
         return None
     stall = {r["id"]: r for r in rows}
@@ -11277,7 +11421,9 @@ def cmd_next(args):
 
 
 def cmd_reopened(args):
-    rows = reopened_requests()
+    # 기본은 내 것만 (REQ-20260902-016) — 훅 주입도 사람의 조회도 "내가 집을 것"
+    # 을 묻는 자리다. 전부 보려면 --all.
+    rows = reopened_requests(mine=not getattr(args, "all", False))
     for r in rows:
         extra = f" — 사유: {r['reason']}" if r["reason"] else ""
         print(f"- {r['id']} {r['title']} (by {r['by']}, {r['at']}){extra}")
@@ -11301,7 +11447,7 @@ def review_requests():
     return rows
 
 
-def approvals_unseen(consume=False, days=2):
+def approvals_unseen(consume=False, days=2, mine=False):
     """승인(review→done) 전이의 메모 중 미확인 목록 (REQ-20260824-028).
     승인 메모에 질문·후속 지시가 담겨도 리드에게 전달되지 않던 유실(025 실측)을
     막는다 — 훅이 --quiet로 1회 소비(주입)하면 다시 나오지 않는다.
@@ -11315,10 +11461,13 @@ def approvals_unseen(consume=False, days=2):
     except (OSError, ValueError):
         seen = {}
     out, cutoff = [], _time.time() - days * 86400
+    local = local_facts() if mine else None
     for r in load_catalog():
         if r.get("type") != "request" or r.get("status") != "done":
             continue
         if r["id"] in seen:
+            continue
+        if mine and not is_mine(r, local)[0]:
             continue
         try:
             ts = datetime.datetime.fromisoformat(r.get("updated", "")).timestamp()
@@ -11353,7 +11502,10 @@ def approvals_unseen(consume=False, days=2):
 
 
 def cmd_approvals(args):
-    rows = approvals_unseen(consume=args.quiet)
+    # 승인 메모는 담당자의 것이다 — 남의 것은 여기서 소비하지 않는다(그 사람의
+    # 자리가 소비한다) (REQ-20260902-016).
+    rows = approvals_unseen(consume=args.quiet,
+                            mine=not getattr(args, "all", False))
     for r in rows:
         print(f"- {r['id']} {r['title']} — 승인 메모: {r['memo']}")
     if not rows and not args.quiet:
@@ -11378,6 +11530,8 @@ def blocked_requests():
 
 def cmd_blocked(args):
     rows = blocked_requests()
+    if not getattr(args, "all", False):
+        rows = _mine_rows(rows)              # 기본은 내 것만 (REQ-20260902-016)
     titles = {x["id"]: x["title"] for x in load_catalog()}
     for r in rows:
         br = f"\n    사유: {r['block_reason']}" if r.get("block_reason") else ""
@@ -11459,7 +11613,7 @@ def cmd_digest(args):
         return (f"- {r['id']} !{doc_priority(r)} [{r['status']}] {r['title']} "
                 f"({r['user']}, {r['updated'][:10]})")
 
-    reopened = reopened_requests()
+    reopened = reopened_requests(mine=True)   # 세션 주입 — 내 것만 (REQ-20260902-016)
     review = review_requests()
     # 내 프로젝트의 컨텍스트 진입점 (DOC-20260824-001 1단계 — 경로만, 내용 주입은 3단계)
     ctxs = [f"- {p['slug']}: projects/{p['slug']}/CONTEXT.md"
@@ -12537,6 +12691,18 @@ def _claim_req(machine, session, doc_id, agent_transcript="",
         doc_id_terminal = True
     else:
         doc_id_terminal = False
+    # 사람의 명시 이어받기는 막지 않되 말한다 (REQ-20260902-016): 담당자가 아닌
+    # 문서를 집으면 그 사실을 알려 준다 — 담당자 이관(`s9 assign`, REQ-20260902-019)
+    # 이 생기면 그 명령으로 안내한다.
+    try:
+        _p = locate(doc_id)
+        if _p:
+            _ok, _code, _why = exec_verdict(read_doc(_p)[0], want="claim")
+            if not _ok and _code == "not-mine":
+                print(f"◌ {doc_id} 는 {_why} 의 요청이다 — 이어받되 담당은 그대로다",
+                      file=sys.stderr)
+    except Exception:
+        pass
     acquire_lock()
     try:
         b = read_binding(machine, session) or {
@@ -20138,8 +20304,9 @@ def main():
     ip = sub.add_parser("init", help="create directory skeleton")
     ip.set_defaults(fn=cmd_init)
 
-    ro = sub.add_parser("reopened", help="대시보드 반려/재개 후 미착수 요청 목록")
+    ro = sub.add_parser("reopened", help="대시보드 반려/재개 후 미착수 요청 목록 (기본: 내 것)")
     ro.add_argument("--quiet", action="store_true")
+    ro.add_argument("--all", action="store_true", help="담당·머신 무관 전부")
     ro.set_defaults(fn=cmd_reopened)
 
     sn = sub.add_parser("snapshot",
@@ -20168,10 +20335,12 @@ def main():
 
     bl = sub.add_parser("blocked", help="대기(blocked) 요청 목록 + 사유")
     bl.add_argument("--quiet", action="store_true")
+    bl.add_argument("--all", action="store_true", help="담당·머신 무관 전부")
     bl.set_defaults(fn=cmd_blocked)
 
     av = sub.add_parser("approvals", help="미확인 승인 메모 목록 (--quiet=1회 소비)")
     av.add_argument("--quiet", action="store_true")
+    av.add_argument("--all", action="store_true", help="담당·머신 무관 전부")
     av.set_defaults(fn=cmd_approvals)
 
     nx = sub.add_parser("next", help="아무도 붙어 있지 않은 미완 중 다음에 집을 것 1건")
@@ -20475,6 +20644,7 @@ def main():
     sl = sub.add_parser("stalled",
                         help="클레임해 놓고 진전이 멈춘 in-progress 요청")
     sl.add_argument("--quiet", action="store_true")
+    sl.add_argument("--all", action="store_true", help="담당·머신 무관 전부")
     sl.set_defaults(fn=cmd_stalled)
 
     wt = sub.add_parser("worktree",

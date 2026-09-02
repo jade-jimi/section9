@@ -147,7 +147,6 @@ class TestHookListsAcrossMachines(unittest.TestCase):
     def tearDownClass(cls):
         cls.fx.close()
 
-    @unittest.expectedFailure   # 현행 결함 — 고치는 REQ 가 이 줄을 뗀다 (unexpected success 가 강제한다)
     def test_s5a_reopened_list_of_bob_at_beta_excludes_alice_doc(self):
         """(c) 빨강 — bob@beta 의 `s9 reopened` 에 alice 의 반려 문서가 오른다.
 
@@ -162,7 +161,6 @@ class TestHookListsAcrossMachines(unittest.TestCase):
         nxt = fx.cli("beta", "next", "--json", user="bob")
         self.assertNotIn(X, nxt)
 
-    @unittest.expectedFailure   # 현행 결함 — 고치는 REQ 가 이 줄을 뗀다 (unexpected success 가 강제한다)
     def test_s5b_next_of_alice_at_beta_does_not_offer_alpha_doc(self):
         """(c) 빨강 — alice@beta 의 `s9 next` 가 alpha 에서 alice 가 하던 문서를 준다.
 
@@ -196,7 +194,6 @@ class TestDependentsAcrossMachines(unittest.TestCase):
     def tearDownClass(cls):
         cls.fx.close()
 
-    @unittest.expectedFailure   # 현행 결함 — 고치는 REQ 가 이 줄을 뗀다 (unexpected success 가 강제한다)
     def test_s6_beta_does_not_resume_alpha_blocked_doc(self):
         """(d) 빨강 — beta 에서 X 를 닫으면 alpha 의 Y 가 beta 에서 in-progress 로 살아난다.
 
