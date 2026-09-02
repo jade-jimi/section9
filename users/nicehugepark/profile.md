@@ -6,7 +6,7 @@ role: admin
 emails: ["claude01.pfe@example.invalid"]
 github: nicehugepark
 os_accounts: ["sjpark1"]
-machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-09-01T18:06:46+09:00"}]
+machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpark1", "first": "2026-08-27T21:58:53+09:00", "last": "2026-09-02T13:00:44+09:00"}]
 ---
 
 ## Notes
@@ -141,3 +141,9 @@ machine_accounts: [{"machine": "DESKTOP-TEHV1KR", "os": "WSL", "account": "sjpar
 - 2026-09-01T19:55:25+09:00 config auto_resume_gh=on (by nicehugepark via dashboard)
 - 2026-09-01T19:55:43+09:00 config auto_resume_gh=off (by nicehugepark via dashboard)
 - 2026-09-01T19:55:46+09:00 config auto_resume_gh=on (by nicehugepark via dashboard)
+- 2026-09-02T07:03:19+09:00 config pref_용어=pull·push·commit·worktree 처럼 외부 도구(git·GitHub·CLI)의 고유 기능·명령·설정 키 이름은 화면에서도 문서에서도 번역하지 않는다 — 원어 그대로 세운다. 억지 한국어 옮김(「받기」·「올리기」·「따로 떼어 놓고 일하기」)은 반려 사유다. 사용자 지적 2026-09-02 (by nicehugepark)
+- 2026-09-02T07:49:29+09:00 config pref_작업방식=무언가 돌고 있는 중이면 중간에 끊거나 재촉하지 말고 무사히 끝날 때까지 지켜본 뒤 판정한다. 폴링·중복 스폰·SIGINT 로 흔들지 않는다 — 끝나면 알림이 온다. 사용자 지적 2026-09-01 (by nicehugepark)
+- 2026-09-02T08:39:50+09:00 config pref_말투=(삭제) (by nicehugepark)
+- 2026-09-02T08:39:51+09:00 config pref_용어=(삭제) (by nicehugepark)
+- 2026-09-02T08:39:51+09:00 config pref_작업방식=(삭제) (by nicehugepark)
+- 2026-09-02T10:11:12+09:00 config last_model_choice=fable (by dashboard model change)

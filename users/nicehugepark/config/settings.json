@@ -9,5 +9,6 @@
  "stream_mirror": "on",
  "auto_resume_gh": "on",
  "worker_worktree": "on",
- "timezone": "Asia/Seoul"
+ "timezone": "Asia/Seoul",
+ "last_model_choice": "fable"
 }
