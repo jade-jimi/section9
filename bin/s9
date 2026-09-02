@@ -1206,6 +1206,82 @@ def set_doc_priority(doc_id, value, user=None, via=""):
             "message": f"{cid}: 우선순위 {old} → {new}"}
 
 
+def do_assign(doc_id, new_user, actor="", why="", via=""):
+    """담당자를 바꾼다 — CLI(`s9 assign`)와 화면(`POST /api/assign`)이 지나는 한 문
+    (REQ-20260902-019, DOC-20260902-001 D1·D2).
+
+    담당자는 `user` 다. 바꾸면 ① 생성자(creator)는 그대로 ② History 한 줄
+    (누가·언제·누구→누구·사유) ③ 문서 리스가 있으면 지운다(옛 자리의 실행권 회수)
+    ④ 이 머신 바인딩의 클레임을 걷는다. 권한: 생성자·현 담당자·admin·프로젝트
+    maintainer 이상. 담당은 등록 사용자여야 하고 관찰 계정(viewer)은 맡을 수 없다.
+    반환: {"ok","id","old","new","changed","message"} — 같은 사람이면 changed=False.
+    """
+    path = locate(doc_id) or locate(canon_id(doc_id))
+    if not path:
+        raise ValueError(f"document not found: {doc_id}")
+    meta, body = read_doc(path)
+    if meta.get("type") != "request":
+        raise ValueError("담당자는 요청 문서의 축이다")
+    cid = meta.get("id") or canon_id(doc_id)
+    if str(meta.get("status") or "") in TERMINAL_STATUSES:
+        raise ValueError(f"{cid} 는 이미 {meta.get('status')} — 끝난 요청은 담당을 바꾸지 않는다")
+    new_user = (new_user or "").strip()
+    if not new_user or not user_role(new_user):
+        raise ValueError(f"등록되지 않은 사용자: {new_user or '(빈 값)'}")
+    if user_role(new_user) == "viewer":
+        raise ValueError(f"{new_user} 는 관찰 계정(viewer)이라 담당을 맡을 수 없다")
+    actor = actor or resolve_user(None)
+    old = doc_owner(meta)
+    allowed = (actor in (old, doc_creator(meta))
+               or user_role(actor) == "admin"
+               or (meta.get("project")
+                   and project_can(meta["project"], actor, "manage")))
+    if not allowed:
+        raise ValueError(f"권한 없음: {actor} 는 {cid} 의 담당을 바꿀 수 없다 "
+                         f"(생성자·현 담당자·admin·프로젝트 maintainer 이상)")
+    if old == new_user:
+        return {"ok": True, "id": cid, "old": old, "new": new_user,
+                "changed": False, "message": f"{cid}: 담당 {old} 그대로"}
+    ts = now_iso()
+    meta["user"] = new_user
+    if meta.get("assignee"):
+        meta["assignee"] = new_user
+    meta.pop("lease", None)              # 옛 자리의 실행권은 여기서 끝난다
+    meta["updated"] = ts
+    line = (f"- {ts} assignee: {old or '(없음)'} -> {new_user} (by {actor}"
+            + (f" via {via}" if via else "") + ")"
+            + (f" — {why.strip()}" if (why or "").strip() else "") + "\n")
+    if "## History" in body:
+        body = body.rstrip("\n") + "\n" + line
+    else:
+        body = body.rstrip("\n") + "\n\n## History\n" + line
+    acquire_lock()
+    try:
+        write_doc(path, meta, body)
+        rebuild_index(quiet=True)
+    finally:
+        release_lock()
+    try:
+        update_active_reqs(cid, "assigned")   # 이 머신 바인딩의 클레임을 걷는다
+    except Exception:
+        pass
+    try:
+        maybe_sync(f"assign {cid}")
+    except Exception:
+        pass
+    return {"ok": True, "id": cid, "old": old, "new": new_user, "changed": True,
+            "message": f"{cid}: 담당 {old or '(없음)'} → {new_user}"}
+
+
+def cmd_assign(args):
+    try:
+        res = do_assign(args.id, args.assignee, actor=resolve_user(args.user),
+                        why=args.why or "", via="")
+    except ValueError as e:
+        die(str(e))
+    print(res["message"])
+
+
 def catalog_row(meta, path, body=""):
     return {
         "id": meta.get("id", ""),
@@ -18891,6 +18967,13 @@ def cmd_serve(args):
                     self._json({"ok": True, "id": req.get("id"),
                                 "old": old, "new": tto, "freed": freed,
                                 "auto_resume": spawned, "notified": notified})
+                elif parsed.path == "/api/assign":
+                    # 담당자 변경 — CLI 와 같은 문(do_assign) (REQ-20260902-019)
+                    res = do_assign(str(req.get("id") or ""),
+                                    str(req.get("user") or ""),
+                                    actor=actor, why=str(req.get("why") or ""),
+                                    via="dashboard")
+                    self._json(res)
                 elif parsed.path == "/api/priority":
                     # 화면에서 순서를 바꾸는 자리 (REQ-20260829-029). 해석·검증·
                     # 근거 기록은 CLI 와 같은 문(set_doc_priority)을 지난다 —
@@ -20312,6 +20395,13 @@ def main():
     np.add_argument("--origin-req", help="어느 REQ 를 처리하다 만들었나 (기본: --parent)")
     np.add_argument("--assignee", help="담당자 (기본: 만든 사람) — user 필드에 들어간다")
     np.set_defaults(fn=cmd_new)
+
+    asg = sub.add_parser("assign", help="담당자를 바꾼다 (REQ-20260902-019) — user 필드")
+    asg.add_argument("id")
+    asg.add_argument("assignee", help="새 담당자(등록 사용자)")
+    asg.add_argument("--why", help="한 줄 사유 (History 에 남는다)")
+    asg.add_argument("--user", help="행위자(기본: 현재 사용자)")
+    asg.set_defaults(fn=cmd_assign)
 
     sp = sub.add_parser("show", help="print a document")
     sp.add_argument("id")
