@@ -613,6 +613,47 @@ class TheLineageIsAJournal(unittest.TestCase):
             self.assertEqual(rec["done"], "same-sid")
             self.assertEqual(mod.lineage_link(), [], "닫힌 기록이 다시 후보가 됐다")
 
+    # T5 (REQ-20260902-013). 이을 때 기록의 model·ts 가 새 바인딩에
+    # launch_model·launch_ts 로 남는다 — 첫 응답 전의 모델 표기가 이것을 본다
+    def test_t5_link_stamps_launch_model(self):
+        make_binding("lmnew", attach_pid="7801", transcript_path="")
+        mod._lineage_write(self.WRAP, "lmold", from_pid=7000,
+                           model="claude-fable-5-1")
+        with mock.patch.object(mod, "current_machine", lambda: "testbox"), \
+                mock.patch.object(mod, "pid_alive", lambda p: True), \
+                mock.patch.object(mod, "pid_ppid",
+                                  lambda p: self.WRAP if p == 7801 else 1):
+            self.assertEqual(mod.lineage_link(), [("lmold", "lmnew")])
+        rec = mod._lineage_read(mod._lineage_path(self.WRAP))[-1]
+        b = read_binding("lmnew")
+        self.assertEqual(b.get("launch_model"), "claude-fable-5-1")
+        self.assertEqual(b.get("launch_ts"), rec["ts"])
+
+    # T6 (REQ-20260902-013). 같은 sid 로 돌아와도 띄운 모델은 남는다
+    def test_t6_same_sid_return_stamps_launch_model(self):
+        make_binding("lmsame", attach_pid="8901", transcript_path="")
+        mod._lineage_write(self.WRAP, "lmsame", from_pid=8900,
+                           model="claude-fable-5-1")
+        with mock.patch.object(mod, "current_machine", lambda: "testbox"), \
+                mock.patch.object(mod, "pid_alive", lambda p: True), \
+                mock.patch.object(mod, "pid_ppid",
+                                  lambda p: self.WRAP if p == 8901 else 1):
+            self.assertEqual(mod.lineage_link(), [])
+        rec = mod._lineage_read(mod._lineage_path(self.WRAP))[-1]
+        self.assertEqual(rec["done"], "same-sid")
+        b = read_binding("lmsame")
+        self.assertEqual(b.get("launch_model"), "claude-fable-5-1")
+        self.assertEqual(b.get("launch_ts"), rec["ts"])
+        # 「유지」(빈 model)는 아는 척하지 않는다
+        make_binding("lmkeep", attach_pid="8911", transcript_path="")
+        mod._lineage_write(self.WRAP, "lmkeep", from_pid=8910, model="")
+        with mock.patch.object(mod, "current_machine", lambda: "testbox"), \
+                mock.patch.object(mod, "pid_alive", lambda p: True), \
+                mock.patch.object(mod, "pid_ppid",
+                                  lambda p: self.WRAP if p == 8911 else 1):
+            mod.lineage_link()
+        self.assertNotIn("launch_model", read_binding("lmkeep"))
+
     # 아직 안 뜬 재시작은 닫지 않는다 — 같은 pid 면 그 세션은 옛 세션이다
     def test_a_restart_that_has_not_landed_stays_open(self):
         make_binding("notyet", attach_pid="9900", transcript_path="")

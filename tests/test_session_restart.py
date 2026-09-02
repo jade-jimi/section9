@@ -69,6 +69,53 @@ class TestSessionModel(unittest.TestCase):
                          "claude-fable-5")
         self.assertEqual(mod.session_model({"transcript_path": "/no/file"}), "")
 
+    # --- 재시작 직후에는 띄운 모델이 이긴다 (REQ-20260902-013) ---------------
+    # 실사고 2026-09-02 13:00: opus→fable 재시작 8초 뒤 「opus-5으로 이어집니다」.
+    # 새 프로세스의 첫 응답(27초 뒤)까지 트랜스크립트는 옛 모델만 안다.
+
+    @staticmethod
+    def _stamped(stop, model, ts):
+        e = asst(stop, model)
+        e["timestamp"] = ts
+        return e
+
+    # T1. 마지막 모델 이벤트가 launch_ts 이전 → launch_model
+    def test_t1_launch_model_wins_before_first_reply(self):
+        tp = write_jsonl([self._stamped("end_turn", "claude-opus-5",
+                                        "2026-09-02T04:00:23.008Z")],
+                         "lm1-full.jsonl")
+        b = {"transcript_path": tp, "launch_model": "claude-fable-5-1",
+             "launch_ts": mod._epoch_of("2026-09-02T04:00:40.000Z")}
+        self.assertEqual(mod.session_model(b), "claude-fable-5-1")
+
+    # T2. launch_ts 이후의 새 응답이 붙으면 실제로 말한 모델이 이긴다
+    def test_t2_spoken_model_wins_after_first_reply(self):
+        tp = write_jsonl([self._stamped("end_turn", "claude-opus-5",
+                                        "2026-09-02T04:00:23.008Z"),
+                          self._stamped("end_turn", "claude-sonnet-5",
+                                        "2026-09-02T04:00:50.233Z")],
+                         "lm2-full.jsonl")
+        b = {"transcript_path": tp, "launch_model": "claude-fable-5-1",
+             "launch_ts": mod._epoch_of("2026-09-02T04:00:40.000Z")}
+        # --model 이 안 먹은 경우까지 덮지 않는다 — 말한 모델이 최종이다
+        self.assertEqual(mod.session_model(b), "claude-sonnet-5")
+
+    # T3. launch_model 이 없으면 종전대로 트랜스크립트 마지막 모델
+    def test_t3_no_launch_model_falls_back_to_transcript(self):
+        tp = write_jsonl([self._stamped("end_turn", "claude-opus-5",
+                                        "2026-09-02T04:00:23.008Z")],
+                         "lm3-full.jsonl")
+        self.assertEqual(mod.session_model({"transcript_path": tp}),
+                         "claude-opus-5")
+
+    # T4. timestamp 없는 옛 형식 → model_ts=0 → launch_model 이 이긴다
+    def test_t4_unstamped_event_yields_to_launch_model(self):
+        tp = write_jsonl([asst("end_turn", "claude-opus-5")], "lm4-full.jsonl")
+        self.assertEqual(mod.transcript_read(tp).get("model_ts"), 0.0)
+        b = {"transcript_path": tp, "launch_model": "claude-fable-5-1",
+             "launch_ts": 1.0}
+        self.assertEqual(mod.session_model(b), "claude-fable-5-1")
+
 
 class TestRestartMarker(unittest.TestCase):
     # R2. 내 pid를 지목한 신선한 마커만 소비(반환+삭제), 낡은 것은 정리
